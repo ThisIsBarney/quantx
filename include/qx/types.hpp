@@ -31,6 +31,7 @@ struct EvolutionConfig {
   double total_time{1.0};
   double dt{0.01};
   std::string method{"trotter"};
+  std::uint32_t krylov_dim{6};
 };
 
 struct HamiltonianTerm {

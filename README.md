@@ -53,6 +53,6 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 
 ## Notes
 
-- Statevector supports Trotter and Krylov evolution with one-body and two-body Pauli-string terms.
+- Statevector supports Trotter and Arnoldi-Krylov evolution (configurable `krylov_dim`) with one-body and two-body Pauli-string terms.
 - MPI/CUDA/pybind11 flags are prepared at CMake level; full HPC kernels are next milestone.
 - Quantum-computing backend roadmap is tracked in `docs/ROADMAP.md` and `docs/QUANTUM_COMPUTING_BACKEND.md`.

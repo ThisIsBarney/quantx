@@ -4,6 +4,7 @@
   "total_time": 1.57079632679,
   "dt": 0.01,
   "method": "krylov",
+  "krylov_dim": 8,
   "hamiltonian_terms": [
     { "label": "X0", "coefficient": 1.0 }
   ]

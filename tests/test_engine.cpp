@@ -55,6 +55,7 @@ int main() {
   expect(std::abs(rt.observables.at("population_1") - 1.0) < 2e-2, "trotter x-drive should reach near |1>");
 
   rabi.evolution.method = "krylov";
+  rabi.evolution.krylov_dim = 8;
   const auto rk = qx::run(rabi, o);
   expect(std::abs(rk.observables.at("population_1") - 1.0) < 5e-2, "krylov x-drive should reach near |1>");
 

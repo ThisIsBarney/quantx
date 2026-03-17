@@ -4,6 +4,7 @@
 #include <cmath>
 #include <complex>
 #include <fstream>
+#include <limits>
 #include <regex>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@ namespace qx {
 namespace {
 
 using Complex = std::complex<double>;
+using CMatrix = std::vector<std::vector<Complex>>;
 
 struct ParsedTerm {
   std::vector<char> paulis{};
@@ -137,6 +139,145 @@ void axpy(std::vector<Complex>& y, Complex alpha, const std::vector<Complex>& x)
   }
 }
 
+CMatrix eye(std::size_t n) {
+  CMatrix I(n, std::vector<Complex>(n, Complex{0.0, 0.0}));
+  for (std::size_t i = 0; i < n; ++i) {
+    I[i][i] = Complex{1.0, 0.0};
+  }
+  return I;
+}
+
+double matrix_one_norm(const CMatrix& A) {
+  if (A.empty()) return 0.0;
+  const std::size_t n = A.size();
+  double max_col = 0.0;
+  for (std::size_t j = 0; j < n; ++j) {
+    double col_sum = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+      col_sum += std::abs(A[i][j]);
+    }
+    max_col = std::max(max_col, col_sum);
+  }
+  return max_col;
+}
+
+CMatrix mat_mul(const CMatrix& A, const CMatrix& B) {
+  const std::size_t n = A.size();
+  CMatrix C(n, std::vector<Complex>(n, Complex{0.0, 0.0}));
+  for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t k = 0; k < n; ++k) {
+      const Complex aik = A[i][k];
+      if (std::abs(aik) < 1e-15) continue;
+      for (std::size_t j = 0; j < n; ++j) {
+        C[i][j] += aik * B[k][j];
+      }
+    }
+  }
+  return C;
+}
+
+CMatrix mat_add(const CMatrix& A, const CMatrix& B) {
+  const std::size_t n = A.size();
+  CMatrix C = A;
+  for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t j = 0; j < n; ++j) {
+      C[i][j] += B[i][j];
+    }
+  }
+  return C;
+}
+
+CMatrix mat_scale(const CMatrix& A, Complex alpha) {
+  CMatrix C = A;
+  for (auto& row : C) {
+    for (auto& x : row) {
+      x *= alpha;
+    }
+  }
+  return C;
+}
+
+CMatrix mat_exp_taylor_scaled(const CMatrix& A) {
+  const std::size_t n = A.size();
+  if (n == 0) return {};
+  if (n == 1) return CMatrix{{std::exp(A[0][0])}};
+
+  const double n1 = matrix_one_norm(A);
+  int s = 0;
+  if (n1 > 0.5) {
+    s = static_cast<int>(std::ceil(std::log2(n1 / 0.5)));
+  }
+  const double scale = std::ldexp(1.0, s);
+  const CMatrix As = mat_scale(A, Complex{1.0 / scale, 0.0});
+
+  CMatrix term = eye(n);
+  CMatrix result = eye(n);
+  for (int k = 1; k <= 40; ++k) {
+    term = mat_mul(term, As);
+    const double invk = 1.0 / static_cast<double>(k);
+    for (std::size_t i = 0; i < n; ++i) {
+      for (std::size_t j = 0; j < n; ++j) {
+        term[i][j] *= invk;
+        result[i][j] += term[i][j];
+      }
+    }
+    if (matrix_one_norm(term) < 1e-13) {
+      break;
+    }
+  }
+
+  for (int i = 0; i < s; ++i) {
+    result = mat_mul(result, result);
+  }
+  return result;
+}
+
+std::vector<Complex> mat_vec_mul(const CMatrix& A, const std::vector<Complex>& x) {
+  const std::size_t n = A.size();
+  std::vector<Complex> y(n, Complex{0.0, 0.0});
+  for (std::size_t i = 0; i < n; ++i) {
+    for (std::size_t j = 0; j < n; ++j) {
+      y[i] += A[i][j] * x[j];
+    }
+  }
+  return y;
+}
+
+std::size_t arnoldi(
+    const std::vector<Complex>& v0,
+    std::size_t m,
+    const std::vector<ParsedTerm>& terms,
+    std::vector<std::vector<Complex>>& V,
+    CMatrix& H) {
+  const std::size_t n = v0.size();
+  V.clear();
+  V.reserve(m + 1);
+  V.push_back(v0);
+  H.assign(m + 1, std::vector<Complex>(m, Complex{0.0, 0.0}));
+
+  std::vector<Complex> w(n, Complex{0.0, 0.0});
+  std::size_t used = 1;
+  for (std::size_t j = 0; j < m; ++j) {
+    apply_hamiltonian(V[j], w, terms);
+    for (std::size_t i = 0; i <= j; ++i) {
+      H[i][j] = dot(V[i], w);
+      axpy(w, -H[i][j], V[i]);
+    }
+    const double beta = std::sqrt(std::max(0.0, norm_sq(w)));
+    H[j + 1][j] = Complex{beta, 0.0};
+    used = j + 1;
+    if (beta < 1e-13) {
+      break;
+    }
+    for (auto& x : w) {
+      x /= beta;
+    }
+    V.push_back(w);
+    used = j + 2;
+  }
+  return std::min<std::size_t>(m, used);
+}
+
 class StatevectorBackend final : public IBackend {
  public:
   std::string name() const override { return "statevector"; }
@@ -174,54 +315,44 @@ class StatevectorBackend final : public IBackend {
 
     for (std::size_t s = 0; s < steps; ++s) {
       if (method == "krylov") {
-        apply_hamiltonian(state_, hpsi, terms_);
-        std::vector<Complex> v1 = state_;
-        normalize(v1);
+        std::vector<Complex> v0 = state_;
+        const double psi_norm = std::sqrt(std::max(0.0, norm_sq(v0)));
+        if (psi_norm < 1e-15) {
+          continue;
+        }
+        for (auto& x : v0) {
+          x /= psi_norm;
+        }
 
-        Complex alpha = dot(v1, hpsi);
-        std::vector<Complex> w = hpsi;
-        axpy(w, -alpha, v1);
-        const double beta = std::sqrt(std::max(0.0, norm_sq(w)));
-
-        if (beta < 1e-14) {
-          const Complex phase = std::exp(Complex{0.0, -problem.evolution.dt} * alpha);
-          for (std::size_t i = 0; i < state_.size(); ++i) {
-            state_[i] = phase * v1[i];
-          }
+        const std::size_t max_dim =
+            std::max<std::size_t>(1, std::min<std::size_t>(problem.evolution.krylov_dim, static_cast<std::size_t>(32)));
+        std::vector<std::vector<Complex>> V;
+        CMatrix Hfull;
+        const std::size_t k = arnoldi(v0, max_dim, terms_, V, Hfull);
+        if (k == 0 || V.empty()) {
           continue;
         }
 
-        for (auto& x : w) {
-          x /= beta;
-        }
-        std::vector<Complex> hw(state_.size(), Complex{0.0, 0.0});
-        apply_hamiltonian(w, hw, terms_);
-        Complex gamma = dot(w, hw);
-
-        const Complex tr = alpha + gamma;
-        const Complex det = alpha * gamma - Complex{beta * beta, 0.0};
-        const Complex disc = std::sqrt(tr * tr / Complex{4.0, 0.0} - det);
-        const Complex l1 = tr / Complex{2.0, 0.0} + disc;
-        const Complex l2 = tr / Complex{2.0, 0.0} - disc;
-
-        auto coeff = [&](Complex lambda) {
-          return std::exp(Complex{0.0, -problem.evolution.dt} * lambda);
-        };
-        const Complex e1 = coeff(l1);
-        const Complex e2 = coeff(l2);
-
-        const Complex denom = (l1 - l2);
-        Complex c1{0.0, 0.0};
-        Complex c2{0.0, 0.0};
-        if (std::abs(denom) > 1e-14) {
-          c1 = ((alpha - l2) * e1 - (alpha - l1) * e2) / denom;
-          c2 = Complex{beta, 0.0} * (e1 - e2) / denom;
-        } else {
-          c1 = std::exp(Complex{0.0, -problem.evolution.dt} * alpha);
+        CMatrix Hk(k, std::vector<Complex>(k, Complex{0.0, 0.0}));
+        for (std::size_t i = 0; i < k; ++i) {
+          for (std::size_t j = 0; j < k; ++j) {
+            Hk[i][j] = Hfull[i][j];
+          }
         }
 
-        for (std::size_t i = 0; i < state_.size(); ++i) {
-          tmp[i] = c1 * v1[i] + c2 * w[i];
+        const CMatrix A = mat_scale(Hk, Complex{0.0, -problem.evolution.dt});
+        const CMatrix expA = mat_exp_taylor_scaled(A);
+
+        std::vector<Complex> e1(k, Complex{0.0, 0.0});
+        e1[0] = Complex{1.0, 0.0};
+        const std::vector<Complex> y = mat_vec_mul(expA, e1);
+
+        std::fill(tmp.begin(), tmp.end(), Complex{0.0, 0.0});
+        for (std::size_t j = 0; j < k; ++j) {
+          axpy(tmp, y[j], V[j]);
+        }
+        for (auto& x : tmp) {
+          x *= psi_norm;
         }
         state_.swap(tmp);
         normalize(state_);

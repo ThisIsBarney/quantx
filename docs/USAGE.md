@@ -89,6 +89,7 @@ Or call directly:
 from quantx_engine import Engine
 e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
 res = e.run({"qubits": 1, "method": "krylov", "total_time": 1.57, "dt": 0.01,
+             "krylov_dim": 8,
              "hamiltonian_terms":[{"label":"X0","coefficient":1.0}]},
             {"enable_checkpoint": False})
 print(res)

@@ -184,6 +184,7 @@ QuantumProblem problem_from_json(const std::string& json) {
   p.evolution.total_time = extract_double(json, "total_time", p.evolution.total_time);
   p.evolution.dt = extract_double(json, "dt", p.evolution.dt);
   p.evolution.method = extract_string(json, "method", p.evolution.method);
+  p.evolution.krylov_dim = extract_uint(json, "krylov_dim", p.evolution.krylov_dim);
   p.target_error = extract_double(json, "target_error", p.target_error);
   p.noisy = extract_bool(json, "noisy", p.noisy);
   p.expected_circuit_depth = extract_uint(json, "expected_circuit_depth", p.expected_circuit_depth);
