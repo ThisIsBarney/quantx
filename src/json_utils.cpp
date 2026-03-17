@@ -192,6 +192,9 @@ QuantumCircuit circuit_from_json(const std::string& json) {
   QuantumCircuit c;
   c.qubits = extract_uint(json, "qubits", c.qubits);
   c.shots = extract_uint(json, "shots", c.shots);
+  c.depolarizing_prob = extract_double(json, "depolarizing_prob", c.depolarizing_prob);
+  c.amplitude_damping_gamma = extract_double(json, "amplitude_damping_gamma", c.amplitude_damping_gamma);
+  c.seed = static_cast<std::uint64_t>(extract_uint(json, "seed", static_cast<std::uint32_t>(c.seed)));
   c.operations = extract_circuit_operations(json);
   if (c.operations.empty()) {
     throw std::runtime_error("circuit must contain at least one operation");

@@ -16,3 +16,6 @@ if ($LASTEXITCODE -ne 0) { throw "qx_cli explain failed: exit code $LASTEXITCODE
 
 & .\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell.json --options .\examples\options_default.json
 if ($LASTEXITCODE -ne 0) { throw "qx_cli circuit failed: exit code $LASTEXITCODE" }
+
+& .\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell_noisy.json --options .\examples\options_default.json
+if ($LASTEXITCODE -ne 0) { throw "qx_cli noisy circuit failed: exit code $LASTEXITCODE" }

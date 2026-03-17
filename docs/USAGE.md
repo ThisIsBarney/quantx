@@ -20,6 +20,12 @@ Run circuit:
 .\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell.json --options .\examples\options_default.json
 ```
 
+Run noisy circuit:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell_noisy.json --options .\examples\options_default.json
+```
+
 Explain backend selection:
 
 ```powershell
@@ -57,6 +63,9 @@ e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
 cres = e.run_circuit({
     "qubits": 2,
     "shots": 1000,
+    "depolarizing_prob": 0.01,
+    "amplitude_damping_gamma": 0.01,
+    "seed": 42,
     "operations": [
       {"name": "H", "targets": [0]},
       {"name": "CNOT", "controls": [0], "targets": [1]}

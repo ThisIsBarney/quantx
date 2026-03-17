@@ -92,6 +92,14 @@ int main() {
   expect(cb_shots.counts.count("00") == 1, "bell sampling should contain 00");
   expect(cb_shots.counts.count("11") == 1, "bell sampling should contain 11");
 
+  qx::QuantumCircuit damp;
+  damp.qubits = 1;
+  damp.operations = {qx::CircuitOp{"X", {0}, {}, {}}};
+  damp.amplitude_damping_gamma = 1.0;
+  const auto cd = qx::run_circuit(damp, o);
+  expect(std::abs(std::norm(cd.state[0]) - 1.0) < 1e-8, "full amplitude damping should relax |1> to |0>");
+  expect(std::abs(std::norm(cd.state[1])) < 1e-8, "full amplitude damping should clear |1> population");
+
   std::cout << "qx_smoke passed\n";
   return 0;
 }

@@ -99,6 +99,90 @@ std::string bitstring(std::size_t idx, std::uint32_t qubits) {
   return out;
 }
 
+double qubit_one_population(const std::vector<Complex>& state, std::uint32_t qubit) {
+  const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
+  double p1 = 0.0;
+  for (std::size_t i = 0; i < state.size(); ++i) {
+    if ((i & mask) != 0) {
+      p1 += std::norm(state[i]);
+    }
+  }
+  return p1;
+}
+
+void renormalize(std::vector<Complex>& state) {
+  double n = 0.0;
+  for (const auto& a : state) {
+    n += std::norm(a);
+  }
+  const double inv = n > 0.0 ? 1.0 / std::sqrt(n) : 1.0;
+  for (auto& a : state) {
+    a *= inv;
+  }
+}
+
+void apply_amplitude_damping(
+    std::vector<Complex>& state, std::uint32_t qubit, double gamma, std::mt19937_64& rng) {
+  if (gamma <= 0.0) return;
+  gamma = std::clamp(gamma, 0.0, 1.0);
+
+  const std::size_t n = state.size();
+  const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
+  const double p1 = qubit_one_population(state, qubit);
+  const double p_jump = gamma * p1;
+
+  std::uniform_real_distribution<double> u01(0.0, 1.0);
+  const bool jumped = (p_jump > 0.0) && (u01(rng) < p_jump);
+
+  std::vector<Complex> out(n, Complex{0.0, 0.0});
+  if (jumped) {
+    // E1 = sqrt(gamma) |0><1|; after normalization -> divide by sqrt(p1).
+    const double inv = p1 > 0.0 ? 1.0 / std::sqrt(p1) : 1.0;
+    for (std::size_t i = 0; i < n; ++i) {
+      if ((i & mask) == 0) {
+        const std::size_t j = i | mask;
+        out[i] = state[j] * inv;
+      }
+    }
+  } else {
+    // E0 = |0><0| + sqrt(1-gamma)|1><1|
+    const double s = std::sqrt(std::max(0.0, 1.0 - gamma));
+    out = state;
+    for (std::size_t i = 0; i < n; ++i) {
+      if ((i & mask) != 0) {
+        out[i] *= s;
+      }
+    }
+    renormalize(out);
+  }
+
+  state.swap(out);
+}
+
+void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
+  if (p <= 0.0) return;
+  p = std::clamp(p, 0.0, 1.0);
+  std::uniform_real_distribution<double> u01(0.0, 1.0);
+  if (u01(rng) >= p) return;
+
+  std::uniform_int_distribution<int> pick(0, 2);
+  const int pauli = pick(rng);
+  if (pauli == 0) {  // X
+    apply_single_qubit(state, qubit, {0.0, 0.0}, {1.0, 0.0}, {1.0, 0.0}, {0.0, 0.0});
+  } else if (pauli == 1) {  // Y
+    apply_single_qubit(state, qubit, {0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.0, 0.0});
+  } else {  // Z
+    apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
+  }
+}
+
+void apply_noise_after_gate(std::vector<Complex>& state, const QuantumCircuit& circuit, std::mt19937_64& rng) {
+  for (std::uint32_t q = 0; q < circuit.qubits; ++q) {
+    apply_depolarizing(state, q, circuit.depolarizing_prob, rng);
+    apply_amplitude_damping(state, q, circuit.amplitude_damping_gamma, rng);
+  }
+}
+
 }  // namespace
 
 void register_builtin_backends() {
@@ -158,6 +242,8 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
     throw std::runtime_error("circuit execution currently supports qubits < 26");
   }
 
+  std::mt19937_64 rng(circuit.seed);
+
   const std::size_t n = static_cast<std::size_t>(1ULL << circuit.qubits);
   std::vector<Complex> state(n, Complex{0.0, 0.0});
   state[0] = Complex{1.0, 0.0};
@@ -202,6 +288,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
         apply_single_qubit(state, t, std::exp(Complex{0.0, -theta * 0.5}), {0.0, 0.0}, {0.0, 0.0},
                            std::exp(Complex{0.0, theta * 0.5}));
       }
+      apply_noise_after_gate(state, circuit, rng);
       continue;
     }
 
@@ -214,6 +301,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
       require_qubit(c, circuit.qubits, g);
       require_qubit(t, circuit.qubits, g);
       apply_cnot(state, c, t);
+      apply_noise_after_gate(state, circuit, rng);
       continue;
     }
 
@@ -226,6 +314,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
       require_qubit(c, circuit.qubits, g);
       require_qubit(t, circuit.qubits, g);
       apply_cz(state, c, t);
+      apply_noise_after_gate(state, circuit, rng);
       continue;
     }
 
@@ -238,6 +327,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
       require_qubit(q0, circuit.qubits, g);
       require_qubit(q1, circuit.qubits, g);
       apply_swap(state, q0, q1);
+      apply_noise_after_gate(state, circuit, rng);
       continue;
     }
 
@@ -255,7 +345,6 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
     for (std::size_t i = 0; i < state.size(); ++i) {
       probs[i] = std::norm(state[i]);
     }
-    std::mt19937_64 rng(42);
     std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
     for (std::uint32_t s = 0; s < circuit.shots; ++s) {
       const std::size_t idx = dist(rng);

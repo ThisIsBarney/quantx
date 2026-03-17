@@ -1,0 +1,11 @@
+{
+  "qubits": 2,
+  "shots": 2000,
+  "depolarizing_prob": 0.02,
+  "amplitude_damping_gamma": 0.01,
+  "seed": 42,
+  "operations": [
+    { "name": "H", "targets": [0] },
+    { "name": "CNOT", "controls": [0], "targets": [1] }
+  ]
+}

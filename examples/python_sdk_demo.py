@@ -46,6 +46,9 @@ def main():
   bell = {
       "qubits": 2,
       "shots": 1000,
+      "depolarizing_prob": 0.01,
+      "amplitude_damping_gamma": 0.01,
+      "seed": 42,
       "operations": [
           {"name": "H", "targets": [0]},
           {"name": "CNOT", "controls": [0], "targets": [1]},

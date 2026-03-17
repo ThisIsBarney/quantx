@@ -80,6 +80,9 @@ struct QuantumCircuit {
   std::uint32_t qubits{1};
   std::vector<CircuitOp> operations{};
   std::uint32_t shots{0};
+  double depolarizing_prob{0.0};
+  double amplitude_damping_gamma{0.0};
+  std::uint64_t seed{42};
 };
 
 struct CircuitResult {
