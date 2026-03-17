@@ -13,3 +13,5 @@ Expected output format:
 - `reports/<date>/environment.json`
 
 All runs should pin random seeds and include hardware/software versions.
+
+Current report metadata includes `engine_version` for reproducibility and regression triage.

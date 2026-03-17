@@ -48,11 +48,15 @@ def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: i
       "max_abs_error_mean": statistics.fmean(max_abs_errors) if max_abs_errors else None,
       "mean_abs_error_mean": statistics.fmean(mean_abs_errors) if mean_abs_errors else None,
   }
+  engine_version = None
+  if runs:
+    engine_version = runs[0]["result"].get("engine_version")
 
   return {
       "id": case["id"],
       "circuit_file": case["circuit_file"],
       "gates": dict(case.get("gates", {})),
+      "engine_version": engine_version,
       "aggregate": aggregate,
       "runs": runs,
   }
@@ -64,6 +68,8 @@ def write_markdown_summary(report: dict, output_path: Path) -> None:
   lines.append("")
   lines.append(f"- generated_at: {report['generated_at']}")
   lines.append(f"- repeats: {report['repeats']}")
+  if report.get("engine_version"):
+    lines.append(f"- engine_version: {report['engine_version']}")
   gate_status = report.get("gate", {}).get("status")
   if gate_status is not None:
     lines.append(f"- gate_status: {gate_status}")
@@ -146,11 +152,14 @@ def main() -> None:
   for case in suite.get("cases", []):
     report_cases.append(run_case(engine, root, case, options, repeats))
   gate = evaluate_gates(report_cases, gates)
+  case_versions = {c.get("engine_version") for c in report_cases if c.get("engine_version")}
+  report_engine_version = sorted(case_versions)[0] if case_versions else None
 
   report = {
       "suite": suite.get("name", "unnamed_suite"),
       "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
       "repeats": repeats,
+      "engine_version": report_engine_version,
       "cases": report_cases,
       "gate": gate,
   }
