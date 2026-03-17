@@ -149,6 +149,20 @@ cres = e.run_circuit({
 print(cres)
 ```
 
+Framework-adapter call (Qiskit-like request):
+
+```python
+qiskit_req = {
+  "num_qubits": 2,
+  "shots": 1000,
+  "operations": [
+    {"name": "h", "qubits": [0]},
+    {"name": "cx", "qubits": [0, 1]}
+  ]
+}
+print(e.run_qiskit_like(qiskit_req, {"enable_checkpoint": False}))
+```
+
 Output includes:
 
 - `expectation_exact`: exact expectation from final statevector

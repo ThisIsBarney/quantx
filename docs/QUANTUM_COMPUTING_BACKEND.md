@@ -33,6 +33,8 @@ C ABI:
 Python:
 
 - `engine.run_circuit(circuit, options)`
+- `engine.run_qiskit_like(request, options)` (minimal adapter payload)
+- `engine.run_cirq_like(request, options)` (minimal adapter payload)
 
 ## 3) Result model
 
