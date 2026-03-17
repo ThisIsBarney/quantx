@@ -1,0 +1,10 @@
+{
+  "qubits": 1,
+  "equation": "Schrodinger",
+  "total_time": 1.57079632679,
+  "dt": 0.01,
+  "method": "krylov",
+  "hamiltonian_terms": [
+    { "label": "X0", "coefficient": 1.0 }
+  ]
+}

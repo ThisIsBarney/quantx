@@ -1,0 +1,95 @@
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
+
+#include "qx/engine.hpp"
+#include "qx/json_utils.hpp"
+
+namespace {
+
+std::string read_text_file(const std::string& path) {
+  std::ifstream is(path, std::ios::binary);
+  if (!is.good()) {
+    throw std::runtime_error("failed to open file: " + path);
+  }
+  std::ostringstream os;
+  os << is.rdbuf();
+  return os.str();
+}
+
+void write_text_file(const std::string& path, const std::string& data) {
+  std::ofstream os(path, std::ios::binary);
+  if (!os.good()) {
+    throw std::runtime_error("failed to write file: " + path);
+  }
+  os << data;
+}
+
+void print_usage() {
+  std::cout
+      << "Usage:\n"
+      << "  qx_cli --problem <problem.json> [--options <options.json>] [--out <result.json>]\n"
+      << "  qx_cli --problem <problem.json> [--options <options.json>] --explain [--out <explain.json>]\n";
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+  try {
+    std::string problem_path;
+    std::string options_path;
+    std::string out_path;
+    bool explain = false;
+
+    for (int i = 1; i < argc; ++i) {
+      const std::string arg = argv[i];
+      if (arg == "--problem" && i + 1 < argc) {
+        problem_path = argv[++i];
+      } else if (arg == "--options" && i + 1 < argc) {
+        options_path = argv[++i];
+      } else if (arg == "--out" && i + 1 < argc) {
+        out_path = argv[++i];
+      } else if (arg == "--explain") {
+        explain = true;
+      } else if (arg == "--help" || arg == "-h") {
+        print_usage();
+        return 0;
+      } else {
+        std::cerr << "Unknown arg: " << arg << "\n";
+        print_usage();
+        return 2;
+      }
+    }
+
+    if (problem_path.empty()) {
+      std::cerr << "Missing required --problem\n";
+      print_usage();
+      return 2;
+    }
+
+    const std::string problem_json = read_text_file(problem_path);
+    const std::string options_json = options_path.empty() ? "{}" : read_text_file(options_path);
+
+    const qx::QuantumProblem problem = qx::problem_from_json(problem_json);
+    const qx::RunOptions options = qx::options_from_json(options_json);
+
+    std::string output_json;
+    if (explain) {
+      output_json = qx::backend_info_to_json(qx::explain_backend_choice(problem, options));
+    } else {
+      output_json = qx::result_to_json(qx::run(problem, options));
+    }
+
+    if (out_path.empty()) {
+      std::cout << output_json << "\n";
+    } else {
+      write_text_file(out_path, output_json);
+      std::cout << "wrote: " << out_path << "\n";
+    }
+    return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "qx_cli error: " << ex.what() << "\n";
+    return 1;
+  }
+}

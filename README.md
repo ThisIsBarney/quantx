@@ -15,6 +15,7 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 .\scripts\build.ps1
 .\scripts\test.ps1
 .\scripts\demo.ps1
+.\scripts\run_cli.ps1
 ```
 
 ## Architecture
@@ -38,6 +39,7 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 - `tests/` smoke tests
 - `examples/` runnable demos
 - `scripts/` convenience scripts for build/test/demo
+- `docs/USAGE.md` quick usage cookbook (CLI/Python/C ABI)
 
 ## Notes
 

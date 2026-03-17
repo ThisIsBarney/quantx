@@ -19,3 +19,9 @@
 ```powershell
 .\scripts\test.ps1
 ```
+
+CLI sanity:
+
+```powershell
+.\scripts\run_cli.ps1
+```

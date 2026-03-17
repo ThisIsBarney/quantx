@@ -1,0 +1,10 @@
+{
+  "qubits": 2,
+  "equation": "Schrodinger",
+  "total_time": 1.57079632679,
+  "dt": 0.005,
+  "method": "trotter",
+  "hamiltonian_terms": [
+    { "label": "X0X1", "coefficient": 1.0 }
+  ]
+}

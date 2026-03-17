@@ -55,6 +55,9 @@ set_target_properties(qx_capi PROPERTIES OUTPUT_NAME quantx)
 add_executable(qx_smoke tests/test_engine.cpp)
 target_link_libraries(qx_smoke PRIVATE qx_core)
 
+add_executable(qx_cli src/qx_cli.cpp)
+target_link_libraries(qx_cli PRIVATE qx_core)
+
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
 
