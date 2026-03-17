@@ -35,3 +35,10 @@
 - Replaced custom small-matrix exponential code with `Eigen` `MatrixFunctions` to reduce numerical maintenance burden.
 - Added `spdlog` for production-grade logging instead of custom logger implementation.
 - Replaced manual CLI parsing with `CLI11` to reduce argument-handling bugs and improve maintainability.
+
+## CI enforcement
+
+- workflow: `.github/workflows/benchmark-gate.yml`
+- gates include:
+  - CLI argument contract checks
+  - dependency license policy checks

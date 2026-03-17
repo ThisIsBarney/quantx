@@ -27,6 +27,14 @@ jobs:
       - name: Test
         run: ctest --test-dir build-vs -C Debug --output-on-failure
 
+      - name: CLI Argument Contract
+        shell: pwsh
+        run: .\scripts\test_cli_args.ps1
+
+      - name: Dependency License Policy
+        shell: pwsh
+        run: .\scripts\check_dependency_policy.ps1
+
       - name: Benchmark Accuracy
         shell: pwsh
         run: .\scripts\run_benchmark.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
