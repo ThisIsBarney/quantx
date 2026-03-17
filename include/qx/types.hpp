@@ -32,6 +32,8 @@ struct EvolutionConfig {
   double dt{0.01};
   std::string method{"trotter"};
   std::uint32_t krylov_dim{6};
+  std::uint32_t mps_max_bond{1024};
+  double mps_trunc_tol{1e-8};
 };
 
 struct HamiltonianTerm {

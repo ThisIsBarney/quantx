@@ -1,0 +1,14 @@
+{
+  "qubits": 64,
+  "equation": "Schrodinger",
+  "total_time": 1.0,
+  "dt": 0.05,
+  "method": "tebd",
+  "mps_max_bond": 16,
+  "mps_trunc_tol": 1e-6,
+  "expected_circuit_depth": 200,
+  "hamiltonian_terms": [
+    { "label": "X0X1", "coefficient": 1.0 },
+    { "label": "Z0", "coefficient": 0.2 }
+  ]
+}

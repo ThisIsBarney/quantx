@@ -12,6 +12,8 @@
     "dt": { "type": "number", "exclusiveMinimum": 0 },
     "method": { "type": "string" },
     "krylov_dim": { "type": "integer", "minimum": 1 },
+    "mps_max_bond": { "type": "integer", "minimum": 2 },
+    "mps_trunc_tol": { "type": "number", "exclusiveMinimum": 0 },
     "target_error": { "type": "number", "exclusiveMinimum": 0 },
     "expected_circuit_depth": { "type": "integer", "minimum": 0 },
     "noisy": { "type": "boolean" },

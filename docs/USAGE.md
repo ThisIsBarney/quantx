@@ -14,6 +14,12 @@ Run simulation:
 .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --options .\examples\options_default.json
 ```
 
+Run MPS simulation with explicit TEBD controls:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --problem .\examples\problem_mps_tebd.json --options .\examples\options_default.json
+```
+
 Run circuit:
 
 ```powershell
@@ -36,6 +42,12 @@ Run canned CLI examples:
 
 ```powershell
 .\scripts\run_cli.ps1
+```
+
+Run only the MPS control example:
+
+```powershell
+.\scripts\run_mps_example.ps1
 ```
 
 ## 1.1) Benchmark usage
@@ -140,3 +152,18 @@ Exports:
 - `qx_free_string(ptr)`
 
 Use `quantx.dll` in `build-vs/Debug`.
+
+## 4) Problem JSON fields (core)
+
+- `qubits`: number of qubits.
+- `equation`: equation family (v1 uses `Schrodinger`).
+- `total_time`: total evolution time.
+- `dt`: timestep size.
+- `method`: evolution method.
+- statevector methods: `trotter`, `krylov`.
+- MPS methods: `tebd`, `tdvp`.
+- `krylov_dim`: Arnoldi/Krylov subspace dimension for `krylov`.
+- `mps_max_bond`: MPS max bond dimension cap (>=2).
+- `mps_trunc_tol`: MPS truncation tolerance (>0).
+- `hamiltonian_terms`: array of terms like `{ "label": "X0X1", "coefficient": 1.0 }`.
+- floating-point fields support scientific notation, e.g. `1e-6`.

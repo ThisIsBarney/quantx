@@ -4,6 +4,7 @@
 #include <numbers>
 
 #include "qx/engine.hpp"
+#include "qx/json_utils.hpp"
 
 namespace {
 
@@ -36,11 +37,40 @@ int main() {
   expect(std::abs(r.observables.at("norm") - 1.0) < 1e-8, "norm should be conserved");
 
   p.qubits = 64;
+  p.evolution.method = "tebd";
+  p.evolution.mps_max_bond = 16;
+  p.evolution.mps_trunc_tol = 1e-6;
   const auto info2 = qx::explain_backend_choice(p, o);
   expect(info2.selected_backend == "mps", "large problem should choose mps");
   const auto r2 = qx::run(p, o);
   expect(r2.backend == "mps", "backend should be mps");
   expect(r2.observables.count("bond_dim") == 1, "mps should report bond_dim");
+  expect(r2.observables.count("truncation_error") == 1, "mps should report truncation_error");
+  expect(r2.observables.count("mps_max_bond") == 1, "mps should report mps_max_bond");
+  expect(r2.observables.count("mps_trunc_tol") == 1, "mps should report mps_trunc_tol");
+  expect(r2.observables.count("entanglement_entropy_estimate") == 1, "mps should report entropy estimate");
+  expect(r2.observables.at("bond_dim") <= 16.0 + 1e-9, "bond_dim should respect mps_max_bond");
+  expect(std::abs(r2.observables.at("mps_max_bond") - 16.0) < 1e-9, "reported mps_max_bond should match input");
+  expect(std::abs(r2.observables.at("mps_trunc_tol") - 1e-6) < 1e-12, "reported mps_trunc_tol should match input");
+  expect(r2.observables.at("truncation_error") > 0.0, "truncation_error should accumulate");
+
+  p.evolution.method = "tdvp";
+  const auto r2_tdvp = qx::run(p, o);
+  expect(r2_tdvp.backend == "mps", "tdvp large problem should run on mps");
+  expect(r2_tdvp.observables.at("bond_dim") <= 16.0 + 1e-9, "tdvp bond_dim should respect mps_max_bond");
+  expect(r2_tdvp.observables.at("truncation_error") < r2.observables.at("truncation_error"),
+         "tdvp should have smaller truncation_error than tebd in this surrogate model");
+
+  const auto parsed = qx::problem_from_json(R"({
+    "qubits": 64,
+    "method": "tebd",
+    "mps_max_bond": 16,
+    "mps_trunc_tol": 1e-6,
+    "hamiltonian_terms": [{"label": "Z0", "coefficient": 1e-3}]
+  })");
+  expect(std::abs(parsed.evolution.mps_trunc_tol - 1e-6) < 1e-12, "json scientific notation should parse for mps_trunc_tol");
+  expect(std::abs(parsed.hamiltonian_terms.at(0).coefficient - 1e-3) < 1e-12,
+         "json scientific notation should parse for Hamiltonian coefficient");
 
   qx::QuantumProblem rabi;
   rabi.qubits = 1;

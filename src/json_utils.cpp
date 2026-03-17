@@ -7,6 +7,8 @@
 namespace qx {
 namespace {
 
+constexpr const char* kJsonNumberPattern = "(-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)";
+
 std::string extract_string(const std::string& json, const std::string& key, const std::string& def) {
   std::regex rg("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
   std::smatch m;
@@ -17,7 +19,7 @@ std::string extract_string(const std::string& json, const std::string& key, cons
 }
 
 double extract_double(const std::string& json, const std::string& key, double def) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)");
+  std::regex rg("\"" + key + "\"\\s*:\\s*" + std::string(kJsonNumberPattern));
   std::smatch m;
   if (std::regex_search(json, m, rg) && m.size() > 1) {
     return std::stod(m[1].str());
@@ -56,7 +58,7 @@ std::vector<std::uint32_t> parse_uint_array_body(const std::string& body) {
 
 std::vector<double> parse_double_array_body(const std::string& body) {
   std::vector<double> out;
-  std::regex num_rg("(-?[0-9]+(?:\\.[0-9]+)?)");
+  std::regex num_rg(kJsonNumberPattern);
   auto begin = std::sregex_iterator(body.begin(), body.end(), num_rg);
   auto end = std::sregex_iterator();
   for (auto it = begin; it != end; ++it) {
@@ -104,7 +106,7 @@ std::vector<HamiltonianTerm> extract_hamiltonian_terms(const std::string& json) 
   std::vector<HamiltonianTerm> out;
   std::regex object_rg("\\{[^\\{\\}]*\\}");
   std::regex label_rg("\"label\"\\s*:\\s*\"([^\"]+)\"");
-  std::regex coeff_rg("\"coefficient\"\\s*:\\s*(-?[0-9]+(?:\\.[0-9]+)?)");
+  std::regex coeff_rg("\"coefficient\"\\s*:\\s*" + std::string(kJsonNumberPattern));
   auto begin = std::sregex_iterator(json.begin(), json.end(), object_rg);
   auto end = std::sregex_iterator();
   for (auto it = begin; it != end; ++it) {
@@ -185,6 +187,8 @@ QuantumProblem problem_from_json(const std::string& json) {
   p.evolution.dt = extract_double(json, "dt", p.evolution.dt);
   p.evolution.method = extract_string(json, "method", p.evolution.method);
   p.evolution.krylov_dim = extract_uint(json, "krylov_dim", p.evolution.krylov_dim);
+  p.evolution.mps_max_bond = extract_uint(json, "mps_max_bond", p.evolution.mps_max_bond);
+  p.evolution.mps_trunc_tol = extract_double(json, "mps_trunc_tol", p.evolution.mps_trunc_tol);
   p.target_error = extract_double(json, "target_error", p.target_error);
   p.noisy = extract_bool(json, "noisy", p.noisy);
   p.expected_circuit_depth = extract_uint(json, "expected_circuit_depth", p.expected_circuit_depth);
