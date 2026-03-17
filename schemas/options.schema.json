@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RunOptions",
+  "type": "object",
+  "properties": {
+    "use_gpu": { "type": "boolean" },
+    "allow_mpi": { "type": "boolean" },
+    "enable_checkpoint": { "type": "boolean" },
+    "checkpoint_path": { "type": "string" },
+    "max_threads": { "type": "integer", "minimum": 0 },
+    "max_gpus": { "type": "integer", "minimum": 0 },
+    "mpi_ranks": { "type": "integer", "minimum": 1 },
+    "max_memory_mb": { "type": "integer", "minimum": 0 }
+  },
+  "additionalProperties": true
+}

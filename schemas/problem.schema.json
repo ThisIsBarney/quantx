@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuantumProblem",
+  "type": "object",
+  "properties": {
+    "qubits": { "type": "integer", "minimum": 1 },
+    "equation": {
+      "type": "string",
+      "enum": ["Schrodinger", "Lindblad", "Dirac", "KleinGordon"]
+    },
+    "total_time": { "type": "number", "minimum": 0 },
+    "dt": { "type": "number", "exclusiveMinimum": 0 },
+    "method": { "type": "string" },
+    "target_error": { "type": "number", "exclusiveMinimum": 0 },
+    "expected_circuit_depth": { "type": "integer", "minimum": 0 },
+    "noisy": { "type": "boolean" },
+    "hamiltonian_terms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "coefficient": { "type": "number" }
+        },
+        "required": ["label", "coefficient"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["qubits"],
+  "additionalProperties": true
+}
