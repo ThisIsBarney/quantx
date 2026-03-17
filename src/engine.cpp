@@ -21,6 +21,7 @@ namespace {
 
 using Complex = std::complex<double>;
 
+// Ensure built-in backends are registered exactly once.
 void ensure_builtin_backends() {
   static bool initialized = false;
   if (initialized) {
@@ -30,12 +31,14 @@ void ensure_builtin_backends() {
   initialized = true;
 }
 
+// Validate one qubit index against circuit width.
 void require_qubit(std::uint32_t q, std::uint32_t n, const std::string& opname) {
   if (q >= n) {
     throw std::runtime_error("gate " + opname + " references out-of-range qubit");
   }
 }
 
+// Apply an arbitrary 2x2 single-qubit unitary to the full statevector.
 void apply_single_qubit(
     std::vector<Complex>& state,
     std::uint32_t qubit,
@@ -56,6 +59,7 @@ void apply_single_qubit(
   }
 }
 
+// Apply controlled-NOT gate.
 void apply_cnot(std::vector<Complex>& state, std::uint32_t control, std::uint32_t target) {
   const std::size_t n = state.size();
   const std::size_t cm = static_cast<std::size_t>(1ULL << control);
@@ -67,6 +71,7 @@ void apply_cnot(std::vector<Complex>& state, std::uint32_t control, std::uint32_
   }
 }
 
+// Apply controlled-Z gate.
 void apply_cz(std::vector<Complex>& state, std::uint32_t control, std::uint32_t target) {
   const std::size_t n = state.size();
   const std::size_t cm = static_cast<std::size_t>(1ULL << control);
@@ -78,6 +83,7 @@ void apply_cz(std::vector<Complex>& state, std::uint32_t control, std::uint32_t 
   }
 }
 
+// Apply SWAP gate.
 void apply_swap(std::vector<Complex>& state, std::uint32_t q0, std::uint32_t q1) {
   if (q0 == q1) return;
   const std::size_t n = state.size();
@@ -93,6 +99,7 @@ void apply_swap(std::vector<Complex>& state, std::uint32_t q0, std::uint32_t q1)
   }
 }
 
+// Convert basis index to big-endian bitstring.
 std::string bitstring(std::size_t idx, std::uint32_t qubits) {
   std::string out(qubits, '0');
   for (std::uint32_t q = 0; q < qubits; ++q) {
@@ -103,6 +110,7 @@ std::string bitstring(std::size_t idx, std::uint32_t qubits) {
   return out;
 }
 
+// Compute probability that selected qubit is in |1>.
 double qubit_one_population(const std::vector<Complex>& state, std::uint32_t qubit) {
   const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
   double p1 = 0.0;
@@ -114,6 +122,7 @@ double qubit_one_population(const std::vector<Complex>& state, std::uint32_t qub
   return p1;
 }
 
+// Normalize statevector to unit norm.
 void renormalize(std::vector<Complex>& state) {
   double n = 0.0;
   for (const auto& a : state) {
@@ -125,6 +134,7 @@ void renormalize(std::vector<Complex>& state) {
   }
 }
 
+// Apply one-qubit amplitude damping channel via quantum trajectories.
 void apply_amplitude_damping(
     std::vector<Complex>& state, std::uint32_t qubit, double gamma, std::mt19937_64& rng) {
   if (gamma <= 0.0) return;
@@ -163,6 +173,7 @@ void apply_amplitude_damping(
   state.swap(out);
 }
 
+// Apply one-qubit depolarizing channel via random Pauli kick.
 void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
   if (p <= 0.0) return;
   p = std::clamp(p, 0.0, 1.0);
@@ -180,6 +191,7 @@ void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double
   }
 }
 
+// Apply configured noise channels after each gate.
 void apply_noise_after_gate(std::vector<Complex>& state, const QuantumCircuit& circuit, std::mt19937_64& rng) {
   for (std::uint32_t q = 0; q < circuit.qubits; ++q) {
     apply_depolarizing(state, q, circuit.depolarizing_prob, rng);
@@ -187,17 +199,20 @@ void apply_noise_after_gate(std::vector<Complex>& state, const QuantumCircuit& c
   }
 }
 
+// Parsed Pauli operator on a target qubit.
 struct PauliTarget {
   char pauli{'Z'};
   std::uint32_t qubit{0};
 };
 
+// Mean/variance/std-error for shot-based expectation estimate.
 struct ShotStats {
   double mean{0.0};
   double variance{0.0};
   double std_err{0.0};
 };
 
+// Parse labels like "Z0X2Y5" to Pauli targets with validation.
 std::vector<PauliTarget> parse_pauli_observable(const std::string& label, std::uint32_t qubits) {
   std::vector<PauliTarget> targets;
   std::regex rg("([XYZxyz])([0-9]+)");
@@ -222,6 +237,7 @@ std::vector<PauliTarget> parse_pauli_observable(const std::string& label, std::u
   return targets;
 }
 
+// Compute exact expectation value <psi|P|psi> for Pauli string P.
 Complex exact_pauli_expectation(const std::vector<Complex>& state, const std::vector<PauliTarget>& obs) {
   Complex value{0.0, 0.0};
   for (std::size_t i = 0; i < state.size(); ++i) {
@@ -244,19 +260,23 @@ Complex exact_pauli_expectation(const std::vector<Complex>& state, const std::ve
   return value;
 }
 
+// Apply Hadamard gate.
 void apply_h_gate(std::vector<Complex>& state, std::uint32_t qubit) {
   const double inv_sqrt2 = 0.7071067811865475244;
   apply_single_qubit(state, qubit, {inv_sqrt2, 0.0}, {inv_sqrt2, 0.0}, {inv_sqrt2, 0.0}, {-inv_sqrt2, 0.0});
 }
 
+// Apply S phase gate.
 void apply_s_gate(std::vector<Complex>& state, std::uint32_t qubit) {
   apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
 }
 
+// Apply S-dagger phase gate.
 void apply_sdg_gate(std::vector<Complex>& state, std::uint32_t qubit) {
   apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, -1.0});
 }
 
+// Rotate measurement basis so Pauli string can be sampled in Z basis.
 void rotate_for_pauli_measurement(std::vector<Complex>& state, const std::vector<PauliTarget>& obs) {
   for (const auto& t : obs) {
     if (t.pauli == 'X') {
@@ -269,6 +289,7 @@ void rotate_for_pauli_measurement(std::vector<Complex>& state, const std::vector
   }
 }
 
+// Return +/-1 eigenvalue sign for Z-string on sampled basis index.
 double z_sign_from_index(std::size_t idx, const std::vector<PauliTarget>& obs) {
   double sign = 1.0;
   for (const auto& t : obs) {
@@ -279,6 +300,7 @@ double z_sign_from_index(std::size_t idx, const std::vector<PauliTarget>& obs) {
   return sign;
 }
 
+// Check if observable is purely Z-type (can use direct counts).
 bool observable_all_z(const std::vector<PauliTarget>& obs) {
   for (const auto& t : obs) {
     if (t.pauli != 'Z') return false;
@@ -286,6 +308,7 @@ bool observable_all_z(const std::vector<PauliTarget>& obs) {
   return true;
 }
 
+// Estimate observable stats directly from sampled bitstring counts.
 ShotStats shot_stats_from_counts(
     const std::map<std::string, std::uint64_t>& counts, const std::vector<PauliTarget>& obs, std::uint32_t qubits) {
   std::uint64_t total = 0;
@@ -314,6 +337,7 @@ ShotStats shot_stats_from_counts(
   return out;
 }
 
+// Estimate observable stats by rotating state and Monte-Carlo sampling.
 ShotStats shot_stats_rotated_state(
     const std::vector<Complex>& state, const std::vector<PauliTarget>& obs, std::uint32_t shots, std::mt19937_64& rng) {
   ShotStats out;
@@ -347,17 +371,20 @@ ShotStats shot_stats_rotated_state(
 
 }  // namespace
 
+// Register built-in backends into global registry.
 void register_builtin_backends() {
   auto& registry = BackendRegistry::instance();
   registry.register_backend("statevector", &make_statevector_backend, make_statevector_backend()->capabilities());
   registry.register_backend("mps", &make_mps_backend, make_mps_backend()->capabilities());
 }
 
+// Public API: explain backend choice.
 BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptions& options) {
   ensure_builtin_backends();
   return explain_backend_choice_internal(problem, options);
 }
 
+// Public API: run Hamiltonian simulation.
 SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   ensure_builtin_backends();
   const auto t0 = std::chrono::high_resolution_clock::now();
@@ -400,6 +427,7 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   return result;
 }
 
+// Public API: run gate-level circuit simulation.
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   const auto t0 = std::chrono::high_resolution_clock::now();
   if (circuit.qubits == 0) {

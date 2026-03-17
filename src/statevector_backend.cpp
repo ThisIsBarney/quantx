@@ -17,6 +17,7 @@ namespace {
 using Complex = std::complex<double>;
 using CMatrix = std::vector<std::vector<Complex>>;
 
+// Parsed and precompiled Pauli term for fast Hamiltonian application.
 struct ParsedTerm {
   std::vector<char> paulis{};
   std::vector<std::uint32_t> qubits{};
@@ -26,6 +27,7 @@ struct ParsedTerm {
   Complex y_global_phase{1.0, 0.0};
 };
 
+// Parse Hamiltonian Pauli strings into bitmask-based representation.
 std::vector<ParsedTerm> parse_terms(const QuantumProblem& problem) {
   std::vector<ParsedTerm> out;
   if (problem.hamiltonian_terms.empty()) {
@@ -107,6 +109,7 @@ std::vector<ParsedTerm> parse_terms(const QuantumProblem& problem) {
   return out;
 }
 
+// Apply one parsed Pauli term to psi and accumulate into out.
 void apply_pauli_term(const std::vector<Complex>& psi, std::vector<Complex>& out, const ParsedTerm& term) {
   if (psi.empty()) {
     return;
@@ -127,6 +130,7 @@ void apply_pauli_term(const std::vector<Complex>& psi, std::vector<Complex>& out
   }
 }
 
+// Apply full Hamiltonian H to vector psi and write to out.
 void apply_hamiltonian(
     const std::vector<Complex>& psi, std::vector<Complex>& out, const std::vector<ParsedTerm>& terms) {
   std::fill(out.begin(), out.end(), Complex{0.0, 0.0});
@@ -135,6 +139,7 @@ void apply_hamiltonian(
   }
 }
 
+// Compute squared L2 norm.
 double norm_sq(const std::vector<Complex>& v) {
   double n = 0.0;
   for (const auto& x : v) {
@@ -143,6 +148,7 @@ double norm_sq(const std::vector<Complex>& v) {
   return n;
 }
 
+// Normalize vector in-place.
 void normalize(std::vector<Complex>& v) {
   const double n = std::sqrt(std::max(0.0, norm_sq(v)));
   if (n <= 0.0) {
@@ -153,6 +159,7 @@ void normalize(std::vector<Complex>& v) {
   }
 }
 
+// Conjugate inner product <a|b>.
 Complex dot(const std::vector<Complex>& a, const std::vector<Complex>& b) {
   Complex d{0.0, 0.0};
   const std::size_t n = std::min(a.size(), b.size());
@@ -162,6 +169,7 @@ Complex dot(const std::vector<Complex>& a, const std::vector<Complex>& b) {
   return d;
 }
 
+// BLAS-like y += alpha * x.
 void axpy(std::vector<Complex>& y, Complex alpha, const std::vector<Complex>& x) {
   const std::size_t n = std::min(y.size(), x.size());
   for (std::size_t i = 0; i < n; ++i) {
@@ -169,6 +177,7 @@ void axpy(std::vector<Complex>& y, Complex alpha, const std::vector<Complex>& x)
   }
 }
 
+// Identity matrix.
 CMatrix eye(std::size_t n) {
   CMatrix I(n, std::vector<Complex>(n, Complex{0.0, 0.0}));
   for (std::size_t i = 0; i < n; ++i) {
@@ -177,6 +186,7 @@ CMatrix eye(std::size_t n) {
   return I;
 }
 
+// Matrix one-norm (max absolute column sum).
 double matrix_one_norm(const CMatrix& A) {
   if (A.empty()) return 0.0;
   const std::size_t n = A.size();
@@ -191,6 +201,7 @@ double matrix_one_norm(const CMatrix& A) {
   return max_col;
 }
 
+// Matrix-matrix multiplication.
 CMatrix mat_mul(const CMatrix& A, const CMatrix& B) {
   const std::size_t n = A.size();
   CMatrix C(n, std::vector<Complex>(n, Complex{0.0, 0.0}));
@@ -206,6 +217,7 @@ CMatrix mat_mul(const CMatrix& A, const CMatrix& B) {
   return C;
 }
 
+// Matrix addition.
 CMatrix mat_add(const CMatrix& A, const CMatrix& B) {
   const std::size_t n = A.size();
   CMatrix C = A;
@@ -217,6 +229,7 @@ CMatrix mat_add(const CMatrix& A, const CMatrix& B) {
   return C;
 }
 
+// Matrix scaling by scalar alpha.
 CMatrix mat_scale(const CMatrix& A, Complex alpha) {
   CMatrix C = A;
   for (auto& row : C) {
@@ -227,6 +240,7 @@ CMatrix mat_scale(const CMatrix& A, Complex alpha) {
   return C;
 }
 
+// Matrix exponential using scaled Taylor series.
 CMatrix mat_exp_taylor_scaled(const CMatrix& A) {
   const std::size_t n = A.size();
   if (n == 0) return {};
@@ -262,6 +276,7 @@ CMatrix mat_exp_taylor_scaled(const CMatrix& A) {
   return result;
 }
 
+// Matrix-vector multiplication.
 std::vector<Complex> mat_vec_mul(const CMatrix& A, const std::vector<Complex>& x) {
   const std::size_t n = A.size();
   std::vector<Complex> y(n, Complex{0.0, 0.0});
@@ -273,6 +288,7 @@ std::vector<Complex> mat_vec_mul(const CMatrix& A, const std::vector<Complex>& x
   return y;
 }
 
+// Build Arnoldi basis and Hessenberg matrix for Krylov time evolution.
 std::size_t arnoldi(
     const std::vector<Complex>& v0,
     std::size_t m,
@@ -308,10 +324,13 @@ std::size_t arnoldi(
   return std::min<std::size_t>(m, used);
 }
 
+// Dense statevector backend with trotter and Krylov propagators.
 class StatevectorBackend final : public IBackend {
  public:
+  // Return backend name.
   std::string name() const override { return "statevector"; }
 
+  // Return static statevector backend capability metadata.
   BackendCapabilities capabilities() const override {
     BackendCapabilities c;
     c.kind = BackendKind::Statevector;
@@ -323,6 +342,7 @@ class StatevectorBackend final : public IBackend {
     return c;
   }
 
+  // Initialize dense state and parsed Hamiltonian terms.
   void initialize(const QuantumProblem& problem, const RunOptions&) override {
     std::size_t n = static_cast<std::size_t>(1ULL << problem.qubits);
     if (problem.qubits >= 26) {
@@ -334,6 +354,7 @@ class StatevectorBackend final : public IBackend {
     terms_ = parse_terms(problem);
   }
 
+  // Evolve state by selected method ("krylov" or trotter-like product formula).
   void evolve(const QuantumProblem& problem, const RunOptions&) override {
     const std::size_t steps = static_cast<std::size_t>(problem.evolution.total_time / problem.evolution.dt);
     if (steps == 0 || state_.empty()) {
@@ -402,6 +423,7 @@ class StatevectorBackend final : public IBackend {
     }
   }
 
+  // Return basic normalization/population observables.
   std::map<std::string, double> measure(const QuantumProblem&) override {
     double norm = 0.0;
     for (const auto& a : state_) {
@@ -413,6 +435,7 @@ class StatevectorBackend final : public IBackend {
     return {{"norm", norm}, {"population_0", p0}, {"population_1", p1}, {"population_last", plast}};
   }
 
+  // Persist dense state to binary checkpoint file.
   void checkpoint(const std::string& path) override {
     std::ofstream os(path + "/statevector.chk", std::ios::binary);
     const std::size_t size = state_.size();
@@ -423,6 +446,7 @@ class StatevectorBackend final : public IBackend {
     }
   }
 
+  // Restore dense state from binary checkpoint file if present.
   void restore(const std::string& path) override {
     std::ifstream is(path + "/statevector.chk", std::ios::binary);
     if (!is.good()) {
@@ -437,6 +461,7 @@ class StatevectorBackend final : public IBackend {
     }
   }
 
+  // Expose current dense statevector.
   std::vector<std::complex<double>> current_state() const override { return state_; }
 
  private:
@@ -446,6 +471,7 @@ class StatevectorBackend final : public IBackend {
 
 }  // namespace
 
+// Construct statevector backend instance.
 std::unique_ptr<IBackend> make_statevector_backend() {
   return std::make_unique<StatevectorBackend>();
 }

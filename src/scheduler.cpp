@@ -4,6 +4,7 @@
 
 namespace qx {
 
+// Compute backend selection explanation from problem size/physics/runtime hints.
 BackendInfo explain_backend_choice_internal(const QuantumProblem& problem, const RunOptions& options) {
   BackendInfo info;
   info.candidates = BackendRegistry::instance().names();
@@ -31,6 +32,7 @@ BackendInfo explain_backend_choice_internal(const QuantumProblem& problem, const
   return info;
 }
 
+// Return only selected backend name from explanation output.
 std::string choose_backend(const QuantumProblem& problem, const RunOptions& options) {
   return explain_backend_choice_internal(problem, options).selected_backend;
 }

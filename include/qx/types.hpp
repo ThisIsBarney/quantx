@@ -8,6 +8,7 @@
 
 namespace qx {
 
+// Equation family selector for present/future solver tracks.
 enum class EquationType {
   Schrodinger,
   Lindblad,
@@ -15,11 +16,13 @@ enum class EquationType {
   KleinGordon
 };
 
+// Backend categories currently supported by the runtime.
 enum class BackendKind {
   Statevector,
   MPS
 };
 
+// Runtime resource budget and hard limits.
 struct ResourceConstraints {
   // 0 means "runtime decides"; non-zero values are hard limits from caller.
   std::uint32_t max_threads{0};
@@ -28,6 +31,7 @@ struct ResourceConstraints {
   std::uint64_t max_memory_mb{0};
 };
 
+// Time-evolution algorithm and numeric controls.
 struct EvolutionConfig {
   // Time-domain evolution settings shared by statevector and tensor-network backends.
   double total_time{1.0};
@@ -41,11 +45,13 @@ struct EvolutionConfig {
   double mps_trunc_tol{1e-8};
 };
 
+// One Pauli-string Hamiltonian term.
 struct HamiltonianTerm {
   std::string label;
   double coefficient{0.0};
 };
 
+// Node in operator graph representation reserved for advanced equations.
 struct OperatorNode {
   std::string id;
   std::string op_type;
@@ -53,11 +59,13 @@ struct OperatorNode {
   std::map<std::string, double> params;
 };
 
+// Graph-structured operator container for v2+ solvers.
 struct OperatorGraph {
   // Reserved for v2+ operator-centric formulations (Dirac/Klein-Gordon etc.).
   std::vector<OperatorNode> nodes;
 };
 
+// Canonical simulation problem description used across API boundaries.
 struct QuantumProblem {
   std::uint32_t qubits{1};
   EquationType equation{EquationType::Schrodinger};
@@ -71,6 +79,7 @@ struct QuantumProblem {
   std::uint32_t expected_circuit_depth{0};
 };
 
+// Runtime execution options independent of physical model.
 struct RunOptions {
   bool use_gpu{false};
   bool allow_mpi{false};
@@ -79,6 +88,7 @@ struct RunOptions {
   ResourceConstraints resources{};
 };
 
+// One gate operation in circuit IR.
 struct CircuitOp {
   std::string name;
   std::vector<std::uint32_t> targets{};
@@ -86,6 +96,7 @@ struct CircuitOp {
   std::vector<double> params{};
 };
 
+// Quantum circuit input for gate-model simulation path.
 struct QuantumCircuit {
   std::uint32_t qubits{1};
   std::vector<CircuitOp> operations{};
@@ -97,6 +108,7 @@ struct QuantumCircuit {
   std::uint64_t seed{42};
 };
 
+// Circuit execution output including exact and shot-based estimators.
 struct CircuitResult {
   bool ok{true};
   std::string backend;
@@ -112,11 +124,13 @@ struct CircuitResult {
   std::string message;
 };
 
+// Runtime event record with metric payload.
 struct Event {
   std::string name;
   std::map<std::string, double> metrics;
 };
 
+// Hamiltonian simulation output.
 struct SimulationResult {
   bool ok{true};
   std::string backend;
@@ -127,12 +141,14 @@ struct SimulationResult {
   std::string message;
 };
 
+// Scheduler explanation artifact for backend selection.
 struct BackendInfo {
   std::string selected_backend;
   std::vector<std::string> candidates;
   std::vector<std::string> reasons;
 };
 
+// Static capability descriptor for each backend.
 struct BackendCapabilities {
   BackendKind kind{BackendKind::Statevector};
   bool supports_gpu{false};

@@ -6,11 +6,17 @@
 
 namespace qx {
 
+// Parse simulation problem JSON into strongly-typed IR.
 QuantumProblem problem_from_json(const std::string& json);
+// Parse runtime options JSON into execution options.
 RunOptions options_from_json(const std::string& json);
+// Parse circuit JSON into gate-level circuit representation.
 QuantumCircuit circuit_from_json(const std::string& json);
+// Serialize simulation result to JSON string.
 std::string result_to_json(const SimulationResult& result);
+// Serialize circuit execution result to JSON string.
 std::string circuit_result_to_json(const CircuitResult& result);
+// Serialize backend selection explanation to JSON string.
 std::string backend_info_to_json(const BackendInfo& info);
 
 }  // namespace qx

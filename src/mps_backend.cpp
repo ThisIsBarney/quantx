@@ -7,10 +7,13 @@
 namespace qx {
 namespace {
 
+// Lightweight MPS backend scaffold with configurable truncation controls.
 class MpsBackend final : public IBackend {
  public:
+  // Return backend name.
   std::string name() const override { return "mps"; }
 
+  // Return static MPS backend capability metadata.
   BackendCapabilities capabilities() const override {
     BackendCapabilities c;
     c.kind = BackendKind::MPS;
@@ -22,6 +25,7 @@ class MpsBackend final : public IBackend {
     return c;
   }
 
+  // Initialize MPS surrogate state from problem configuration.
   void initialize(const QuantumProblem& problem, const RunOptions&) override {
     qubits_ = problem.qubits;
     // Start from a small bond and let runtime growth model decide expansion.
@@ -33,6 +37,7 @@ class MpsBackend final : public IBackend {
     observable_cache_.clear();
   }
 
+  // Evolve surrogate MPS statistics across timesteps.
   void evolve(const QuantumProblem& problem, const RunOptions&) override {
     const std::size_t steps = static_cast<std::size_t>(problem.evolution.total_time / problem.evolution.dt);
     // Surrogate entanglement-growth factors used in v1 before full tensor contractions land.
@@ -64,8 +69,10 @@ class MpsBackend final : public IBackend {
         std::log2(std::max(2.0, static_cast<double>(bond_dim_)));
   }
 
+  // Return cached observables emitted by this backend.
   std::map<std::string, double> measure(const QuantumProblem&) override { return observable_cache_; }
 
+  // Persist surrogate MPS state for restart.
   void checkpoint(const std::string& path) override {
     // Persist model controls too, so restore is behaviorally consistent.
     std::ofstream os(path + "/mps.chk");
@@ -73,6 +80,7 @@ class MpsBackend final : public IBackend {
        << method_ << "\n";
   }
 
+  // Restore surrogate MPS state from checkpoint if it exists.
   void restore(const std::string& path) override {
     std::ifstream is(path + "/mps.chk");
     if (!is.good()) {
@@ -89,6 +97,7 @@ class MpsBackend final : public IBackend {
     observable_cache_["mps_trunc_tol"] = trunc_tol_;
   }
 
+  // Dense state is not exposed for compressed MPS backend.
   std::vector<std::complex<double>> current_state() const override { return {}; }
 
  private:
@@ -103,6 +112,7 @@ class MpsBackend final : public IBackend {
 
 }  // namespace
 
+// Construct MPS backend instance.
 std::unique_ptr<IBackend> make_mps_backend() {
   return std::make_unique<MpsBackend>();
 }

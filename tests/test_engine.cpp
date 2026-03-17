@@ -8,6 +8,7 @@
 
 namespace {
 
+// Minimal assertion helper for smoke-test binary.
 void expect(bool cond, const char* msg) {
   if (!cond) {
     std::cerr << "FAIL: " << msg << "\n";
@@ -17,6 +18,7 @@ void expect(bool cond, const char* msg) {
 
 }  // namespace
 
+// End-to-end smoke test for simulation and circuit APIs.
 int main() {
   qx::QuantumProblem p;
   p.qubits = 8;

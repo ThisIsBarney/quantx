@@ -9,18 +9,21 @@
 
 namespace {
 
+// Copy std::string payload to C-ABI heap string.
 const char* copy_to_cstr(const std::string& s) {
   char* out = new char[s.size() + 1];
   std::memcpy(out, s.c_str(), s.size() + 1);
   return out;
 }
 
+// Wrap exception message into a minimal JSON error object.
 std::string wrap_error(const std::string& message) {
   return std::string("{\"ok\":false,\"error\":\"") + message + "\"}";
 }
 
 }  // namespace
 
+// C entrypoint for Hamiltonian simulation.
 extern "C" const char* qx_run(const char* problem_json, const char* options_json) {
   try {
     const std::string p = problem_json ? problem_json : "{}";
@@ -34,6 +37,7 @@ extern "C" const char* qx_run(const char* problem_json, const char* options_json
   }
 }
 
+// C entrypoint for backend-selection explanation.
 extern "C" const char* qx_explain_backend_choice(const char* problem_json, const char* options_json) {
   try {
     const std::string p = problem_json ? problem_json : "{}";
@@ -47,6 +51,7 @@ extern "C" const char* qx_explain_backend_choice(const char* problem_json, const
   }
 }
 
+// C entrypoint for circuit execution.
 extern "C" const char* qx_run_circuit(const char* circuit_json, const char* options_json) {
   try {
     const std::string c = circuit_json ? circuit_json : "{}";
@@ -60,6 +65,7 @@ extern "C" const char* qx_run_circuit(const char* circuit_json, const char* opti
   }
 }
 
+// Free C strings returned by C API calls.
 extern "C" void qx_free_string(const char* ptr) {
   delete[] ptr;
 }

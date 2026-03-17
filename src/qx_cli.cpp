@@ -9,6 +9,7 @@
 
 namespace {
 
+// Read full text file.
 std::string read_text_file(const std::string& path) {
   std::ifstream is(path, std::ios::binary);
   if (!is.good()) {
@@ -19,6 +20,7 @@ std::string read_text_file(const std::string& path) {
   return os.str();
 }
 
+// Write full text file.
 void write_text_file(const std::string& path, const std::string& data) {
   std::ofstream os(path, std::ios::binary);
   if (!os.good()) {
@@ -27,6 +29,7 @@ void write_text_file(const std::string& path, const std::string& data) {
   os << data;
 }
 
+// Print CLI usage help.
 void print_usage() {
   std::cout
       << "Usage:\n"
@@ -37,6 +40,7 @@ void print_usage() {
 
 }  // namespace
 
+// CLI entrypoint for problem/circuit execution.
 int main(int argc, char** argv) {
   try {
     std::string problem_path;

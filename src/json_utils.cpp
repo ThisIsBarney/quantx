@@ -1,165 +1,18 @@
 #include "qx/json_utils.hpp"
 
-#include <regex>
-#include <sstream>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 namespace qx {
 namespace {
 
-// Lightweight numeric matcher for our minimal JSON parser.
-// Supports integers/decimals/scientific notation (e.g. 1e-6, -2.5E+3).
-constexpr const char* kJsonNumberPattern = "(-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)";
+using json = nlohmann::json;
 
-std::string extract_string(const std::string& json, const std::string& key, const std::string& def) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
-  std::smatch m;
-  if (std::regex_search(json, m, rg) && m.size() > 1) {
-    return m[1].str();
-  }
-  return def;
-}
-
-double extract_double(const std::string& json, const std::string& key, double def) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*" + std::string(kJsonNumberPattern));
-  std::smatch m;
-  if (std::regex_search(json, m, rg) && m.size() > 1) {
-    return std::stod(m[1].str());
-  }
-  return def;
-}
-
-std::uint32_t extract_uint(const std::string& json, const std::string& key, std::uint32_t def) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*([0-9]+)");
-  std::smatch m;
-  if (std::regex_search(json, m, rg) && m.size() > 1) {
-    return static_cast<std::uint32_t>(std::stoul(m[1].str()));
-  }
-  return def;
-}
-
-bool extract_bool(const std::string& json, const std::string& key, bool def) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*(true|false)");
-  std::smatch m;
-  if (std::regex_search(json, m, rg) && m.size() > 1) {
-    return m[1].str() == "true";
-  }
-  return def;
-}
-
-std::vector<std::uint32_t> parse_uint_array_body(const std::string& body) {
-  std::vector<std::uint32_t> out;
-  std::regex num_rg("([0-9]+)");
-  auto begin = std::sregex_iterator(body.begin(), body.end(), num_rg);
-  auto end = std::sregex_iterator();
-  for (auto it = begin; it != end; ++it) {
-    out.push_back(static_cast<std::uint32_t>(std::stoul((*it)[1].str())));
-  }
-  return out;
-}
-
-std::vector<double> parse_double_array_body(const std::string& body) {
-  std::vector<double> out;
-  std::regex num_rg(kJsonNumberPattern);
-  auto begin = std::sregex_iterator(body.begin(), body.end(), num_rg);
-  auto end = std::sregex_iterator();
-  for (auto it = begin; it != end; ++it) {
-    out.push_back(std::stod((*it)[1].str()));
-  }
-  return out;
-}
-
-std::vector<std::string> extract_string_array(const std::string& json, const std::string& key) {
-  std::vector<std::string> out;
-  std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
-  std::smatch m;
-  if (!std::regex_search(json, m, rg) || m.size() < 2) {
-    return out;
-  }
-  const std::string body = m[1].str();
-  std::regex item_rg("\"([^\"]+)\"");
-  auto begin = std::sregex_iterator(body.begin(), body.end(), item_rg);
-  auto end = std::sregex_iterator();
-  for (auto it = begin; it != end; ++it) {
-    out.push_back((*it)[1].str());
-  }
-  return out;
-}
-
-std::vector<std::uint32_t> extract_uint_array(const std::string& json, const std::string& key) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
-  std::smatch m;
-  if (!std::regex_search(json, m, rg) || m.size() < 2) {
-    return {};
-  }
-  return parse_uint_array_body(m[1].str());
-}
-
-std::vector<double> extract_double_array(const std::string& json, const std::string& key) {
-  std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
-  std::smatch m;
-  if (!std::regex_search(json, m, rg) || m.size() < 2) {
-    return {};
-  }
-  return parse_double_array_body(m[1].str());
-}
-
-std::vector<HamiltonianTerm> extract_hamiltonian_terms(const std::string& json) {
-  std::vector<HamiltonianTerm> out;
-  // v1 parser intentionally handles flat objects only; nested term payloads are ignored.
-  std::regex object_rg("\\{[^\\{\\}]*\\}");
-  std::regex label_rg("\"label\"\\s*:\\s*\"([^\"]+)\"");
-  std::regex coeff_rg("\"coefficient\"\\s*:\\s*" + std::string(kJsonNumberPattern));
-  auto begin = std::sregex_iterator(json.begin(), json.end(), object_rg);
-  auto end = std::sregex_iterator();
-  for (auto it = begin; it != end; ++it) {
-    const std::string obj = (*it).str();
-    std::smatch lm;
-    std::smatch cm;
-    if (!std::regex_search(obj, lm, label_rg) || !std::regex_search(obj, cm, coeff_rg)) {
-      continue;
-    }
-    HamiltonianTerm t;
-    t.label = lm[1].str();
-    t.coefficient = std::stod(cm[1].str());
-    out.push_back(t);
-  }
-  return out;
-}
-
-std::vector<CircuitOp> extract_circuit_operations(const std::string& json) {
-  std::vector<CircuitOp> out;
-  // Same flat-object assumption as Hamiltonian parsing.
-  std::regex rg("\\{[^\\{\\}]*\"name\"\\s*:\\s*\"[^\"]+\"[^\\{\\}]*\\}");
-  auto begin = std::sregex_iterator(json.begin(), json.end(), rg);
-  auto end = std::sregex_iterator();
-  for (auto it = begin; it != end; ++it) {
-    const std::string obj = (*it).str();
-    CircuitOp op;
-    op.name = extract_string(obj, "name", "");
-    if (op.name.empty()) {
-      continue;
-    }
-    op.targets = extract_uint_array(obj, "targets");
-    op.controls = extract_uint_array(obj, "controls");
-    op.params = extract_double_array(obj, "params");
-    out.push_back(op);
-  }
-  return out;
-}
-
-std::string escape(const std::string& s) {
-  std::string out;
-  out.reserve(s.size());
-  for (const char c : s) {
-    if (c == '"' || c == '\\') {
-      out.push_back('\\');
-    }
-    out.push_back(c);
-  }
-  return out;
-}
-
+// Convert equation enum to stable JSON token.
 std::string equation_to_string(EquationType t) {
   switch (t) {
     case EquationType::Schrodinger:
@@ -174,6 +27,7 @@ std::string equation_to_string(EquationType t) {
   return "Schrodinger";
 }
 
+// Parse equation token to enum with Schrodinger fallback.
 EquationType equation_from_string(const std::string& s) {
   if (s == "Lindblad") return EquationType::Lindblad;
   if (s == "Dirac") return EquationType::Dirac;
@@ -181,168 +35,171 @@ EquationType equation_from_string(const std::string& s) {
   return EquationType::Schrodinger;
 }
 
+// Parse JSON text and throw a clear error message on invalid input.
+json parse_json_or_throw(const std::string& text) {
+  try {
+    return json::parse(text.empty() ? "{}" : text);
+  } catch (const json::parse_error& ex) {
+    throw std::runtime_error(std::string("invalid json: ") + ex.what());
+  }
+}
+
+// Read typed field if present, otherwise keep caller-supplied default.
+template <typename T>
+T get_or(const json& j, const char* key, const T& def) {
+  auto it = j.find(key);
+  if (it == j.end() || it->is_null()) {
+    return def;
+  }
+  return it->get<T>();
+}
+
+// Parse one Hamiltonian term object.
+HamiltonianTerm parse_hamiltonian_term(const json& item) {
+  HamiltonianTerm t;
+  t.label = get_or<std::string>(item, "label", "");
+  t.coefficient = get_or<double>(item, "coefficient", 0.0);
+  return t;
+}
+
+// Parse one circuit operation object.
+CircuitOp parse_circuit_op(const json& item) {
+  CircuitOp op;
+  op.name = get_or<std::string>(item, "name", "");
+  op.targets = get_or<std::vector<std::uint32_t>>(item, "targets", {});
+  op.controls = get_or<std::vector<std::uint32_t>>(item, "controls", {});
+  op.params = get_or<std::vector<double>>(item, "params", {});
+  return op;
+}
+
+// Serialize events to JSON array.
+json events_to_json(const std::vector<Event>& events) {
+  json out = json::array();
+  for (const auto& ev : events) {
+    out.push_back({{"name", ev.name}});
+  }
+  return out;
+}
+
 }  // namespace
 
-QuantumProblem problem_from_json(const std::string& json) {
+// Parse simulation problem JSON into IR.
+QuantumProblem problem_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
+
   QuantumProblem p;
-  p.qubits = extract_uint(json, "qubits", p.qubits);
-  p.equation = equation_from_string(extract_string(json, "equation", equation_to_string(p.equation)));
-  p.evolution.total_time = extract_double(json, "total_time", p.evolution.total_time);
-  p.evolution.dt = extract_double(json, "dt", p.evolution.dt);
-  p.evolution.method = extract_string(json, "method", p.evolution.method);
-  p.evolution.krylov_dim = extract_uint(json, "krylov_dim", p.evolution.krylov_dim);
-  p.evolution.mps_max_bond = extract_uint(json, "mps_max_bond", p.evolution.mps_max_bond);
-  p.evolution.mps_trunc_tol = extract_double(json, "mps_trunc_tol", p.evolution.mps_trunc_tol);
-  p.target_error = extract_double(json, "target_error", p.target_error);
-  p.noisy = extract_bool(json, "noisy", p.noisy);
-  p.expected_circuit_depth = extract_uint(json, "expected_circuit_depth", p.expected_circuit_depth);
-  p.hamiltonian_terms = extract_hamiltonian_terms(json);
+  p.qubits = get_or<std::uint32_t>(j, "qubits", p.qubits);
+  p.equation = equation_from_string(get_or<std::string>(j, "equation", equation_to_string(p.equation)));
+  p.evolution.total_time = get_or<double>(j, "total_time", p.evolution.total_time);
+  p.evolution.dt = get_or<double>(j, "dt", p.evolution.dt);
+  p.evolution.method = get_or<std::string>(j, "method", p.evolution.method);
+  p.evolution.krylov_dim = get_or<std::uint32_t>(j, "krylov_dim", p.evolution.krylov_dim);
+  p.evolution.mps_max_bond = get_or<std::uint32_t>(j, "mps_max_bond", p.evolution.mps_max_bond);
+  p.evolution.mps_trunc_tol = get_or<double>(j, "mps_trunc_tol", p.evolution.mps_trunc_tol);
+  p.target_error = get_or<double>(j, "target_error", p.target_error);
+  p.noisy = get_or<bool>(j, "noisy", p.noisy);
+  p.expected_circuit_depth = get_or<std::uint32_t>(j, "expected_circuit_depth", p.expected_circuit_depth);
+  p.observables = get_or<std::vector<std::string>>(j, "observables", p.observables);
+
+  auto h_it = j.find("hamiltonian_terms");
+  if (h_it != j.end() && h_it->is_array()) {
+    p.hamiltonian_terms.clear();
+    for (const auto& item : *h_it) {
+      if (!item.is_object()) {
+        continue;
+      }
+      const HamiltonianTerm t = parse_hamiltonian_term(item);
+      if (!t.label.empty()) {
+        p.hamiltonian_terms.push_back(t);
+      }
+    }
+  }
   return p;
 }
 
-RunOptions options_from_json(const std::string& json) {
+// Parse runtime options JSON.
+RunOptions options_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
   RunOptions o;
-  o.use_gpu = extract_bool(json, "use_gpu", o.use_gpu);
-  o.allow_mpi = extract_bool(json, "allow_mpi", o.allow_mpi);
-  o.enable_checkpoint = extract_bool(json, "enable_checkpoint", o.enable_checkpoint);
-  o.checkpoint_path = extract_string(json, "checkpoint_path", o.checkpoint_path);
-  o.resources.max_threads = extract_uint(json, "max_threads", o.resources.max_threads);
-  o.resources.max_gpus = extract_uint(json, "max_gpus", o.resources.max_gpus);
-  o.resources.mpi_ranks = extract_uint(json, "mpi_ranks", o.resources.mpi_ranks);
-  o.resources.max_memory_mb =
-      static_cast<std::uint64_t>(extract_uint(json, "max_memory_mb", static_cast<std::uint32_t>(o.resources.max_memory_mb)));
+  o.use_gpu = get_or<bool>(j, "use_gpu", o.use_gpu);
+  o.allow_mpi = get_or<bool>(j, "allow_mpi", o.allow_mpi);
+  o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
+  o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
+  o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
+  o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
+  o.resources.mpi_ranks = get_or<std::uint32_t>(j, "mpi_ranks", o.resources.mpi_ranks);
+  o.resources.max_memory_mb = get_or<std::uint64_t>(j, "max_memory_mb", o.resources.max_memory_mb);
   return o;
 }
 
-QuantumCircuit circuit_from_json(const std::string& json) {
+// Parse circuit JSON and enforce at least one operation.
+QuantumCircuit circuit_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
   QuantumCircuit c;
-  c.qubits = extract_uint(json, "qubits", c.qubits);
-  c.observables = extract_string_array(json, "observables");
-  c.shots = extract_uint(json, "shots", c.shots);
-  c.depolarizing_prob = extract_double(json, "depolarizing_prob", c.depolarizing_prob);
-  c.amplitude_damping_gamma = extract_double(json, "amplitude_damping_gamma", c.amplitude_damping_gamma);
-  c.seed = static_cast<std::uint64_t>(extract_uint(json, "seed", static_cast<std::uint32_t>(c.seed)));
-  c.operations = extract_circuit_operations(json);
+  c.qubits = get_or<std::uint32_t>(j, "qubits", c.qubits);
+  c.observables = get_or<std::vector<std::string>>(j, "observables", c.observables);
+  c.shots = get_or<std::uint32_t>(j, "shots", c.shots);
+  c.depolarizing_prob = get_or<double>(j, "depolarizing_prob", c.depolarizing_prob);
+  c.amplitude_damping_gamma = get_or<double>(j, "amplitude_damping_gamma", c.amplitude_damping_gamma);
+  c.seed = get_or<std::uint64_t>(j, "seed", c.seed);
+
+  auto ops_it = j.find("operations");
+  if (ops_it != j.end() && ops_it->is_array()) {
+    c.operations.clear();
+    for (const auto& item : *ops_it) {
+      if (!item.is_object()) {
+        continue;
+      }
+      CircuitOp op = parse_circuit_op(item);
+      if (!op.name.empty()) {
+        c.operations.push_back(std::move(op));
+      }
+    }
+  }
   if (c.operations.empty()) {
     throw std::runtime_error("circuit must contain at least one operation");
   }
   return c;
 }
 
+// Serialize Hamiltonian simulation result as compact JSON.
 std::string result_to_json(const SimulationResult& result) {
-  // Keep serializer deterministic for easier diffing in benchmarks/tests.
-  std::ostringstream os;
-  os << "{";
-  os << "\"ok\":" << (result.ok ? "true" : "false") << ",";
-  os << "\"backend\":\"" << escape(result.backend) << "\",";
-  os << "\"elapsed_ms\":" << result.elapsed_ms << ",";
-  os << "\"message\":\"" << escape(result.message) << "\",";
-  os << "\"state_size\":" << result.state.size() << ",";
-  os << "\"observables\":{";
-  bool first = true;
-  for (const auto& [k, v] : result.observables) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"events\":[";
-  for (std::size_t i = 0; i < result.events.size(); ++i) {
-    if (i > 0) os << ",";
-    os << "{\"name\":\"" << escape(result.events[i].name) << "\"}";
-  }
-  os << "]";
-  os << "}";
-  return os.str();
+  json j;
+  j["ok"] = result.ok;
+  j["backend"] = result.backend;
+  j["elapsed_ms"] = result.elapsed_ms;
+  j["message"] = result.message;
+  j["state_size"] = result.state.size();
+  j["observables"] = result.observables;
+  j["events"] = events_to_json(result.events);
+  return j.dump();
 }
 
+// Serialize circuit execution result as compact JSON.
 std::string circuit_result_to_json(const CircuitResult& result) {
-  // Include exact/shot/error blocks together to simplify downstream analysis.
-  std::ostringstream os;
-  os << "{";
-  os << "\"ok\":" << (result.ok ? "true" : "false") << ",";
-  os << "\"backend\":\"" << escape(result.backend) << "\",";
-  os << "\"elapsed_ms\":" << result.elapsed_ms << ",";
-  os << "\"message\":\"" << escape(result.message) << "\",";
-  os << "\"state_size\":" << result.state.size() << ",";
-  os << "\"counts\":{";
-  bool first = true;
-  for (const auto& [k, v] : result.counts) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"expectation_exact\":{";
-  first = true;
-  for (const auto& [k, v] : result.expectation_exact) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"expectation_shot\":{";
-  first = true;
-  for (const auto& [k, v] : result.expectation_shot) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"estimation_error\":{";
-  first = true;
-  for (const auto& [k, v] : result.estimation_error) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"shot_variance\":{";
-  first = true;
-  for (const auto& [k, v] : result.shot_variance) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"shot_stderr\":{";
-  first = true;
-  for (const auto& [k, v] : result.shot_stderr) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "},";
-  os << "\"error_summary\":{";
-  first = true;
-  for (const auto& [k, v] : result.error_summary) {
-    if (!first) os << ",";
-    first = false;
-    os << "\"" << escape(k) << "\":" << v;
-  }
-  os << "}";
-  os << "}";
-  return os.str();
+  json j;
+  j["ok"] = result.ok;
+  j["backend"] = result.backend;
+  j["elapsed_ms"] = result.elapsed_ms;
+  j["message"] = result.message;
+  j["state_size"] = result.state.size();
+  j["counts"] = result.counts;
+  j["expectation_exact"] = result.expectation_exact;
+  j["expectation_shot"] = result.expectation_shot;
+  j["estimation_error"] = result.estimation_error;
+  j["shot_variance"] = result.shot_variance;
+  j["shot_stderr"] = result.shot_stderr;
+  j["error_summary"] = result.error_summary;
+  return j.dump();
 }
 
+// Serialize backend explanation as compact JSON.
 std::string backend_info_to_json(const BackendInfo& info) {
-  std::ostringstream os;
-  os << "{";
-  os << "\"selected_backend\":\"" << escape(info.selected_backend) << "\",";
-  os << "\"candidates\":[";
-  for (std::size_t i = 0; i < info.candidates.size(); ++i) {
-    if (i > 0) os << ",";
-    os << "\"" << escape(info.candidates[i]) << "\"";
-  }
-  os << "],";
-  os << "\"reasons\":[";
-  for (std::size_t i = 0; i < info.reasons.size(); ++i) {
-    if (i > 0) os << ",";
-    os << "\"" << escape(info.reasons[i]) << "\"";
-  }
-  os << "]";
-  os << "}";
-  return os.str();
+  json j;
+  j["selected_backend"] = info.selected_backend;
+  j["candidates"] = info.candidates;
+  j["reasons"] = info.reasons;
+  return j.dump();
 }
 
 }  // namespace qx
