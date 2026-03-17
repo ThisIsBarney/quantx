@@ -52,6 +52,12 @@ Show engine version:
 .\build-vs\Debug\qx_cli.exe --version
 ```
 
+Validate input JSON only (no simulation run):
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --validate-only
+```
+
 Run canned CLI examples:
 
 ```powershell

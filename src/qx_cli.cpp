@@ -47,6 +47,7 @@ int main(int argc, char** argv) {
     std::string log_level{"warn"};
     bool explain = false;
     bool show_version = false;
+    bool validate_only = false;
 
     CLI::App app{"QuantX CLI"};
     app.add_option("--problem", problem_path, "problem json path");
@@ -57,6 +58,7 @@ int main(int argc, char** argv) {
         ->check(CLI::IsMember({"trace", "debug", "info", "warn", "error", "off"}, CLI::ignore_case));
     app.add_flag("--explain", explain, "explain backend selection (problem mode only)");
     app.add_flag("--version", show_version, "print engine version and exit");
+    app.add_flag("--validate-only", validate_only, "validate input json and exit without execution");
 
     try {
       app.parse(argc, argv);
@@ -87,7 +89,9 @@ int main(int argc, char** argv) {
       const std::string problem_json = read_text_file(problem_path);
       const qx::QuantumProblem problem = qx::problem_from_json(problem_json);
       qx::log::info("loaded problem file: " + problem_path);
-      if (explain) {
+      if (validate_only) {
+        output_json = std::string("{\"ok\":true,\"validated\":\"problem\"}");
+      } else if (explain) {
         output_json = qx::backend_info_to_json(qx::explain_backend_choice(problem, options));
       } else {
         output_json = qx::result_to_json(qx::run(problem, options));
@@ -99,7 +103,11 @@ int main(int argc, char** argv) {
       const std::string circuit_json = read_text_file(circuit_path);
       const qx::QuantumCircuit circuit = qx::circuit_from_json(circuit_json);
       qx::log::info("loaded circuit file: " + circuit_path);
-      output_json = qx::circuit_result_to_json(qx::run_circuit(circuit, options));
+      if (validate_only) {
+        output_json = std::string("{\"ok\":true,\"validated\":\"circuit\"}");
+      } else {
+        output_json = qx::circuit_result_to_json(qx::run_circuit(circuit, options));
+      }
     }
 
     if (out_path.empty()) {

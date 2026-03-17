@@ -26,3 +26,8 @@ if ($LASTEXITCODE -eq 0) { throw "qx_cli with both --problem and --circuit shoul
 # valid path should still work.
 & .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --options .\examples\options_default.json --log-level warn | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "qx_cli valid problem run failed: exit code $LASTEXITCODE" }
+
+# validate-only should pass without execution.
+$validate = & .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --validate-only
+if ($LASTEXITCODE -ne 0) { throw "qx_cli --validate-only failed: exit code $LASTEXITCODE" }
+if ((($validate | Out-String) -notmatch '"validated":"problem"')) { throw "qx_cli --validate-only output mismatch" }
