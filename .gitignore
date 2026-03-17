@@ -17,3 +17,4 @@ __pycache__/
 *.obj
 *.pdb
 checkpoints/
+benchmarks/reports/

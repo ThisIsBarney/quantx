@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <complex>
 #include <filesystem>
 #include <functional>
@@ -331,7 +332,14 @@ ShotStats shot_stats_rotated_state(
     const std::size_t idx = dist(rng);
     acc += z_sign_from_index(idx, obs);
   }
-  out.mean = acc / static_cast<double>(shots);
+  std::uint32_t y_count = 0;
+  for (const auto& t : obs) {
+    if (t.pauli == 'Y') {
+      ++y_count;
+    }
+  }
+  const double sign_correction = (y_count % 2 == 0) ? 1.0 : -1.0;
+  out.mean = sign_correction * (acc / static_cast<double>(shots));
   out.variance = std::max(0.0, 1.0 - out.mean * out.mean);
   out.std_err = std::sqrt(out.variance / static_cast<double>(shots));
   return out;
@@ -352,6 +360,7 @@ BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptio
 
 SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   ensure_builtin_backends();
+  const auto t0 = std::chrono::high_resolution_clock::now();
 
   SimulationResult result;
   RuntimeContext runtime(options);
@@ -385,10 +394,14 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
     result.events.push_back(Event{"checkpoint_saved", {{"enabled", 1.0}}});
   }
 
+  const auto t1 = std::chrono::high_resolution_clock::now();
+  result.elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+
   return result;
 }
 
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
+  const auto t0 = std::chrono::high_resolution_clock::now();
   if (circuit.qubits == 0) {
     throw std::runtime_error("circuit must have at least 1 qubit");
   }
@@ -540,6 +553,9 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
     out.error_summary["max_abs_error"] = max_abs;
     out.error_summary["num_observables"] = static_cast<double>(out.estimation_error.size());
   }
+
+  const auto t1 = std::chrono::high_resolution_clock::now();
+  out.elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
   return out;
 }

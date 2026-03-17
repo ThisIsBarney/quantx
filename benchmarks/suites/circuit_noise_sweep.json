@@ -1,0 +1,25 @@
+{
+  "name": "circuit_noise_sweep",
+  "repeats": 3,
+  "options": {
+    "enable_checkpoint": false
+  },
+  "cases": [
+    {
+      "id": "noise_000",
+      "circuit_file": "benchmarks/templates/circuit_bell_noise_000.json"
+    },
+    {
+      "id": "noise_002",
+      "circuit_file": "benchmarks/templates/circuit_bell_noise_002.json"
+    },
+    {
+      "id": "noise_005",
+      "circuit_file": "benchmarks/templates/circuit_bell_noise_005.json"
+    },
+    {
+      "id": "noise_010",
+      "circuit_file": "benchmarks/templates/circuit_bell_noise_010.json"
+    }
+  ]
+}

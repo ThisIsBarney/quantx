@@ -38,6 +38,26 @@ Run canned CLI examples:
 .\scripts\run_cli.ps1
 ```
 
+## 1.1) Benchmark usage
+
+Run accuracy smoke benchmark:
+
+```powershell
+.\scripts\run_benchmark.ps1
+```
+
+Run both accuracy + noise sweep and regenerate index:
+
+```powershell
+.\scripts\benchmark_all.ps1 -NoiseSweep
+```
+
+Reports are written to `benchmarks/reports/`:
+
+- suite JSON report: `*.json`
+- suite markdown summary: `*.md`
+- cumulative index: `INDEX.md`
+
 ## 2) Python SDK
 
 ```powershell

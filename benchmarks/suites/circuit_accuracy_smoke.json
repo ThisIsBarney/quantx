@@ -1,0 +1,17 @@
+{
+  "name": "circuit_accuracy_smoke",
+  "repeats": 3,
+  "options": {
+    "enable_checkpoint": false
+  },
+  "cases": [
+    {
+      "id": "bell_clean",
+      "circuit_file": "examples/circuit_bell.json"
+    },
+    {
+      "id": "bell_noisy",
+      "circuit_file": "examples/circuit_bell_noisy.json"
+    }
+  ]
+}

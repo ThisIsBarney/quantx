@@ -89,6 +89,7 @@ struct QuantumCircuit {
 struct CircuitResult {
   bool ok{true};
   std::string backend;
+  double elapsed_ms{0.0};
   std::vector<std::complex<double>> state{};
   std::map<std::string, std::uint64_t> counts{};
   std::map<std::string, double> expectation_exact{};
@@ -108,6 +109,7 @@ struct Event {
 struct SimulationResult {
   bool ok{true};
   std::string backend;
+  double elapsed_ms{0.0};
   std::vector<std::complex<double>> state{};
   std::map<std::string, double> observables{};
   std::vector<Event> events{};

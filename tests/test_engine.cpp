@@ -31,6 +31,7 @@ int main() {
   const auto r = qx::run(p, o);
   expect(r.ok, "simulation should be ok");
   expect(r.backend == "statevector", "backend should be statevector");
+  expect(r.elapsed_ms >= 0.0, "simulation elapsed_ms should be available");
   expect(r.observables.count("norm") == 1, "norm observable should exist");
   expect(std::abs(r.observables.at("norm") - 1.0) < 1e-8, "norm should be conserved");
 
@@ -78,6 +79,7 @@ int main() {
   const auto cb = qx::run_circuit(bell, o);
   expect(cb.ok, "bell circuit should be ok");
   expect(cb.state.size() == 4, "bell statevector size should be 4");
+  expect(cb.elapsed_ms >= 0.0, "circuit elapsed_ms should be available");
   expect(std::abs(std::norm(cb.state[0]) - 0.5) < 2e-2, "bell p00 should be near 0.5");
   expect(std::abs(std::norm(cb.state[3]) - 0.5) < 2e-2, "bell p11 should be near 0.5");
   expect(std::abs(cb.expectation_exact.at("Z0")) < 2e-2, "bell <Z0> should be near 0");

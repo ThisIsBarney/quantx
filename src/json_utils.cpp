@@ -225,6 +225,7 @@ std::string result_to_json(const SimulationResult& result) {
   os << "{";
   os << "\"ok\":" << (result.ok ? "true" : "false") << ",";
   os << "\"backend\":\"" << escape(result.backend) << "\",";
+  os << "\"elapsed_ms\":" << result.elapsed_ms << ",";
   os << "\"message\":\"" << escape(result.message) << "\",";
   os << "\"state_size\":" << result.state.size() << ",";
   os << "\"observables\":{";
@@ -250,6 +251,7 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   os << "{";
   os << "\"ok\":" << (result.ok ? "true" : "false") << ",";
   os << "\"backend\":\"" << escape(result.backend) << "\",";
+  os << "\"elapsed_ms\":" << result.elapsed_ms << ",";
   os << "\"message\":\"" << escape(result.message) << "\",";
   os << "\"state_size\":" << result.state.size() << ",";
   os << "\"counts\":{";
