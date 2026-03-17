@@ -9,6 +9,7 @@
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
 #include "qx/logging.hpp"
+#include "qx/version.hpp"
 
 namespace {
 
@@ -45,6 +46,7 @@ int main(int argc, char** argv) {
     std::string out_path;
     std::string log_level{"warn"};
     bool explain = false;
+    bool show_version = false;
 
     CLI::App app{"QuantX CLI"};
     app.add_option("--problem", problem_path, "problem json path");
@@ -54,6 +56,7 @@ int main(int argc, char** argv) {
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
         ->check(CLI::IsMember({"trace", "debug", "info", "warn", "error", "off"}, CLI::ignore_case));
     app.add_flag("--explain", explain, "explain backend selection (problem mode only)");
+    app.add_flag("--version", show_version, "print engine version and exit");
 
     try {
       app.parse(argc, argv);
@@ -62,6 +65,11 @@ int main(int argc, char** argv) {
     }
 
     qx::log::set_log_level(log_level);
+
+    if (show_version) {
+      std::cout << qx::version_string() << "\n";
+      return 0;
+    }
 
     if (problem_path.empty() && circuit_path.empty()) {
       throw std::runtime_error("missing required --problem or --circuit");

@@ -10,6 +10,11 @@ Set-Location $root
 & .\build-vs\Debug\qx_cli.exe --help | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "qx_cli --help failed: exit code $LASTEXITCODE" }
 
+# --version should succeed and print a non-empty string.
+$version = & .\build-vs\Debug\qx_cli.exe --version
+if ($LASTEXITCODE -ne 0) { throw "qx_cli --version failed: exit code $LASTEXITCODE" }
+if ([string]::IsNullOrWhiteSpace(($version | Out-String))) { throw "qx_cli --version returned empty output" }
+
 # invalid --log-level should fail.
 cmd /c ".\\build-vs\\Debug\\qx_cli.exe --problem .\\examples\\problem_rabi.json --log-level invalid >NUL 2>NUL"
 if ($LASTEXITCODE -eq 0) { throw "qx_cli invalid --log-level should fail" }

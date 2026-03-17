@@ -71,6 +71,7 @@ add_library(qx_core
   src/runtime.cpp
   src/scheduler.cpp
   src/logging.cpp
+  src/version.cpp
   src/statevector_backend.cpp
   src/mps_backend.cpp
   src/engine.cpp

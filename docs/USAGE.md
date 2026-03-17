@@ -46,6 +46,12 @@ Explain backend selection:
 .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_xx.json --options .\examples\options_default.json --explain
 ```
 
+Show engine version:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --version
+```
+
 Run canned CLI examples:
 
 ```powershell

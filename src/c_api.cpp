@@ -6,6 +6,7 @@
 
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
+#include "qx/version.hpp"
 
 namespace {
 
@@ -68,4 +69,9 @@ extern "C" const char* qx_run_circuit(const char* circuit_json, const char* opti
 // Free C strings returned by C API calls.
 extern "C" void qx_free_string(const char* ptr) {
   delete[] ptr;
+}
+
+// Return engine semantic version string for integration diagnostics.
+extern "C" const char* qx_version(void) {
+  return qx::version_string().c_str();
 }
