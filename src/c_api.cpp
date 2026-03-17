@@ -47,6 +47,19 @@ extern "C" const char* qx_explain_backend_choice(const char* problem_json, const
   }
 }
 
+extern "C" const char* qx_run_circuit(const char* circuit_json, const char* options_json) {
+  try {
+    const std::string c = circuit_json ? circuit_json : "{}";
+    const std::string o = options_json ? options_json : "{}";
+    auto result = qx::run_circuit(qx::circuit_from_json(c), qx::options_from_json(o));
+    return copy_to_cstr(qx::circuit_result_to_json(result));
+  } catch (const std::exception& ex) {
+    return copy_to_cstr(wrap_error(ex.what()));
+  } catch (...) {
+    return copy_to_cstr(wrap_error("unknown exception"));
+  }
+}
+
 extern "C" void qx_free_string(const char* ptr) {
   delete[] ptr;
 }

@@ -30,9 +30,9 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 - `Backend`: unified interface `initialize/evolve/measure/checkpoint/restore`
 - `Runtime`: events and resource metadata
 - `API`:
-  - C++: `qx::run`, `qx::explain_backend_choice`
-  - C ABI: `qx_run`, `qx_explain_backend_choice`
-  - Python: `Engine.run`, `Engine.explain`
+  - C++: `qx::run`, `qx::run_circuit`, `qx::explain_backend_choice`
+  - C ABI: `qx_run`, `qx_run_circuit`, `qx_explain_backend_choice`
+  - Python: `Engine.run`, `Engine.run_circuit`, `Engine.explain`
 
 ## Repository Layout
 
@@ -45,6 +45,7 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 - `examples/` runnable demos
 - `scripts/` convenience scripts for build/test/demo
 - `docs/USAGE.md` quick usage cookbook (CLI/Python/C ABI)
+- `docs/ML_LLM_INTEGRATION.md` P2 ML/LLM roadmap and guardrails
 
 ## Notes
 

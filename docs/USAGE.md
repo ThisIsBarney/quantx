@@ -14,6 +14,12 @@ Run simulation:
 .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --options .\examples\options_default.json
 ```
 
+Run circuit:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell.json --options .\examples\options_default.json
+```
+
 Explain backend selection:
 
 ```powershell
@@ -43,11 +49,28 @@ res = e.run({"qubits": 1, "method": "krylov", "total_time": 1.57, "dt": 0.01,
 print(res)
 ```
 
+Circuit call:
+
+```python
+from quantx_engine import Engine
+e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
+cres = e.run_circuit({
+    "qubits": 2,
+    "shots": 1000,
+    "operations": [
+      {"name": "H", "targets": [0]},
+      {"name": "CNOT", "controls": [0], "targets": [1]}
+    ]
+}, {"enable_checkpoint": False})
+print(cres)
+```
+
 ## 3) C ABI
 
 Exports:
 
 - `qx_run(problem_json, options_json)`
+- `qx_run_circuit(circuit_json, options_json)`
 - `qx_explain_backend_choice(problem_json, options_json)`
 - `qx_free_string(ptr)`
 

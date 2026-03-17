@@ -69,6 +69,27 @@ struct RunOptions {
   ResourceConstraints resources{};
 };
 
+struct CircuitOp {
+  std::string name;
+  std::vector<std::uint32_t> targets{};
+  std::vector<std::uint32_t> controls{};
+  std::vector<double> params{};
+};
+
+struct QuantumCircuit {
+  std::uint32_t qubits{1};
+  std::vector<CircuitOp> operations{};
+  std::uint32_t shots{0};
+};
+
+struct CircuitResult {
+  bool ok{true};
+  std::string backend;
+  std::vector<std::complex<double>> state{};
+  std::map<std::string, std::uint64_t> counts{};
+  std::string message;
+};
+
 struct Event {
   std::string name;
   std::map<std::string, double> metrics;

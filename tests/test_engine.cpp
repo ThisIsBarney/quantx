@@ -68,6 +68,30 @@ int main() {
   expect(rxx.observables.count("population_last") == 1, "population_last should exist");
   expect(std::abs(rxx.observables.at("population_last") - 1.0) < 2e-2, "xx at pi/2 should reach near |11>");
 
+  qx::QuantumCircuit bell;
+  bell.qubits = 2;
+  bell.operations = {
+      qx::CircuitOp{"H", {0}, {}, {}},
+      qx::CircuitOp{"CNOT", {1}, {0}, {}},
+  };
+  const auto cb = qx::run_circuit(bell, o);
+  expect(cb.ok, "bell circuit should be ok");
+  expect(cb.state.size() == 4, "bell statevector size should be 4");
+  expect(std::abs(std::norm(cb.state[0]) - 0.5) < 2e-2, "bell p00 should be near 0.5");
+  expect(std::abs(std::norm(cb.state[3]) - 0.5) < 2e-2, "bell p11 should be near 0.5");
+
+  qx::QuantumCircuit rx;
+  rx.qubits = 1;
+  rx.operations = {qx::CircuitOp{"RX", {0}, {}, {std::numbers::pi}}};
+  const auto crx = qx::run_circuit(rx, o);
+  expect(std::abs(std::norm(crx.state[1]) - 1.0) < 2e-2, "rx(pi) should rotate |0> near |1>");
+
+  bell.shots = 2000;
+  const auto cb_shots = qx::run_circuit(bell, o);
+  expect(cb_shots.counts.size() >= 2, "bell sampling should have at least two outcomes");
+  expect(cb_shots.counts.count("00") == 1, "bell sampling should contain 00");
+  expect(cb_shots.counts.count("11") == 1, "bell sampling should contain 11");
+
   std::cout << "qx_smoke passed\n";
   return 0;
 }

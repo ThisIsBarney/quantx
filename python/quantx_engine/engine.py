@@ -12,6 +12,8 @@ class Engine:
     self._lib.qx_run.restype = c_void_p
     self._lib.qx_explain_backend_choice.argtypes = [c_char_p, c_char_p]
     self._lib.qx_explain_backend_choice.restype = c_void_p
+    self._lib.qx_run_circuit.argtypes = [c_char_p, c_char_p]
+    self._lib.qx_run_circuit.restype = c_void_p
     self._lib.qx_free_string.argtypes = [c_void_p]
     self._lib.qx_free_string.restype = None
 
@@ -22,6 +24,10 @@ class Engine:
   def explain(self, problem: dict, options: dict | None = None) -> dict:
     options = options or {}
     return self._call(self._lib.qx_explain_backend_choice, problem, options)
+
+  def run_circuit(self, circuit: dict, options: dict | None = None) -> dict:
+    options = options or {}
+    return self._call(self._lib.qx_run_circuit, circuit, options)
 
   def _call(self, fn, problem: dict, options: dict) -> dict:
     p = json.dumps(problem).encode("utf-8")

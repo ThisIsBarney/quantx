@@ -1,0 +1,8 @@
+{
+  "qubits": 2,
+  "shots": 2000,
+  "operations": [
+    { "name": "H", "targets": [0] },
+    { "name": "CNOT", "controls": [0], "targets": [1] }
+  ]
+}

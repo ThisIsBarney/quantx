@@ -2,6 +2,7 @@
 
 #include <regex>
 #include <sstream>
+#include <stdexcept>
 
 namespace qx {
 namespace {
@@ -42,6 +43,46 @@ bool extract_bool(const std::string& json, const std::string& key, bool def) {
   return def;
 }
 
+std::vector<std::uint32_t> parse_uint_array_body(const std::string& body) {
+  std::vector<std::uint32_t> out;
+  std::regex num_rg("([0-9]+)");
+  auto begin = std::sregex_iterator(body.begin(), body.end(), num_rg);
+  auto end = std::sregex_iterator();
+  for (auto it = begin; it != end; ++it) {
+    out.push_back(static_cast<std::uint32_t>(std::stoul((*it)[1].str())));
+  }
+  return out;
+}
+
+std::vector<double> parse_double_array_body(const std::string& body) {
+  std::vector<double> out;
+  std::regex num_rg("(-?[0-9]+(?:\\.[0-9]+)?)");
+  auto begin = std::sregex_iterator(body.begin(), body.end(), num_rg);
+  auto end = std::sregex_iterator();
+  for (auto it = begin; it != end; ++it) {
+    out.push_back(std::stod((*it)[1].str()));
+  }
+  return out;
+}
+
+std::vector<std::uint32_t> extract_uint_array(const std::string& json, const std::string& key) {
+  std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
+  std::smatch m;
+  if (!std::regex_search(json, m, rg) || m.size() < 2) {
+    return {};
+  }
+  return parse_uint_array_body(m[1].str());
+}
+
+std::vector<double> extract_double_array(const std::string& json, const std::string& key) {
+  std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
+  std::smatch m;
+  if (!std::regex_search(json, m, rg) || m.size() < 2) {
+    return {};
+  }
+  return parse_double_array_body(m[1].str());
+}
+
 std::vector<HamiltonianTerm> extract_hamiltonian_terms(const std::string& json) {
   std::vector<HamiltonianTerm> out;
   std::regex object_rg("\\{[^\\{\\}]*\\}");
@@ -60,6 +101,26 @@ std::vector<HamiltonianTerm> extract_hamiltonian_terms(const std::string& json) 
     t.label = lm[1].str();
     t.coefficient = std::stod(cm[1].str());
     out.push_back(t);
+  }
+  return out;
+}
+
+std::vector<CircuitOp> extract_circuit_operations(const std::string& json) {
+  std::vector<CircuitOp> out;
+  std::regex rg("\\{[^\\{\\}]*\"name\"\\s*:\\s*\"[^\"]+\"[^\\{\\}]*\\}");
+  auto begin = std::sregex_iterator(json.begin(), json.end(), rg);
+  auto end = std::sregex_iterator();
+  for (auto it = begin; it != end; ++it) {
+    const std::string obj = (*it).str();
+    CircuitOp op;
+    op.name = extract_string(obj, "name", "");
+    if (op.name.empty()) {
+      continue;
+    }
+    op.targets = extract_uint_array(obj, "targets");
+    op.controls = extract_uint_array(obj, "controls");
+    op.params = extract_double_array(obj, "params");
+    out.push_back(op);
   }
   return out;
 }
@@ -127,6 +188,17 @@ RunOptions options_from_json(const std::string& json) {
   return o;
 }
 
+QuantumCircuit circuit_from_json(const std::string& json) {
+  QuantumCircuit c;
+  c.qubits = extract_uint(json, "qubits", c.qubits);
+  c.shots = extract_uint(json, "shots", c.shots);
+  c.operations = extract_circuit_operations(json);
+  if (c.operations.empty()) {
+    throw std::runtime_error("circuit must contain at least one operation");
+  }
+  return c;
+}
+
 std::string result_to_json(const SimulationResult& result) {
   std::ostringstream os;
   os << "{";
@@ -148,6 +220,25 @@ std::string result_to_json(const SimulationResult& result) {
     os << "{\"name\":\"" << escape(result.events[i].name) << "\"}";
   }
   os << "]";
+  os << "}";
+  return os.str();
+}
+
+std::string circuit_result_to_json(const CircuitResult& result) {
+  std::ostringstream os;
+  os << "{";
+  os << "\"ok\":" << (result.ok ? "true" : "false") << ",";
+  os << "\"backend\":\"" << escape(result.backend) << "\",";
+  os << "\"message\":\"" << escape(result.message) << "\",";
+  os << "\"state_size\":" << result.state.size() << ",";
+  os << "\"counts\":{";
+  bool first = true;
+  for (const auto& [k, v] : result.counts) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
+  os << "}";
   os << "}";
   return os.str();
 }

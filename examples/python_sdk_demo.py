@@ -43,6 +43,16 @@ def main():
   }
   print("xx:", engine.run(xx, {"enable_checkpoint": False})["observables"])
 
+  bell = {
+      "qubits": 2,
+      "shots": 1000,
+      "operations": [
+          {"name": "H", "targets": [0]},
+          {"name": "CNOT", "controls": [0], "targets": [1]},
+      ],
+  }
+  print("bell counts:", engine.run_circuit(bell, {"enable_checkpoint": False})["counts"])
+
 
 if __name__ == "__main__":
   main()
