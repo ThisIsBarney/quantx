@@ -8,3 +8,4 @@ ctest --test-dir build-vs -C Debug --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "ctest failed: exit code $LASTEXITCODE" }
 .\build-vs\Debug\qx_smoke.exe
 if ($LASTEXITCODE -ne 0) { throw "qx_smoke failed: exit code $LASTEXITCODE" }
+.\scripts\test_cli_args.ps1

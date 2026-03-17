@@ -34,3 +34,9 @@ CLI sanity:
 ```powershell
 .\scripts\run_cli.ps1
 ```
+
+CLI argument contract sanity:
+
+```powershell
+.\scripts\test_cli_args.ps1
+```
