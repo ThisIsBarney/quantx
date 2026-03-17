@@ -11,11 +11,14 @@
 #include <unordered_set>
 #include <vector>
 
+#include <Eigen/Dense>
+#include <unsupported/Eigen/MatrixFunctions>
+
 namespace qx {
 namespace {
 
 using Complex = std::complex<double>;
-using CMatrix = std::vector<std::vector<Complex>>;
+using Hessenberg = std::vector<std::vector<Complex>>;
 
 // Parsed and precompiled Pauli term for fast Hamiltonian application.
 struct ParsedTerm {
@@ -177,115 +180,15 @@ void axpy(std::vector<Complex>& y, Complex alpha, const std::vector<Complex>& x)
   }
 }
 
-// Identity matrix.
-CMatrix eye(std::size_t n) {
-  CMatrix I(n, std::vector<Complex>(n, Complex{0.0, 0.0}));
-  for (std::size_t i = 0; i < n; ++i) {
-    I[i][i] = Complex{1.0, 0.0};
-  }
-  return I;
-}
-
-// Matrix one-norm (max absolute column sum).
-double matrix_one_norm(const CMatrix& A) {
-  if (A.empty()) return 0.0;
-  const std::size_t n = A.size();
-  double max_col = 0.0;
-  for (std::size_t j = 0; j < n; ++j) {
-    double col_sum = 0.0;
-    for (std::size_t i = 0; i < n; ++i) {
-      col_sum += std::abs(A[i][j]);
-    }
-    max_col = std::max(max_col, col_sum);
-  }
-  return max_col;
-}
-
-// Matrix-matrix multiplication.
-CMatrix mat_mul(const CMatrix& A, const CMatrix& B) {
-  const std::size_t n = A.size();
-  CMatrix C(n, std::vector<Complex>(n, Complex{0.0, 0.0}));
-  for (std::size_t i = 0; i < n; ++i) {
-    for (std::size_t k = 0; k < n; ++k) {
-      const Complex aik = A[i][k];
-      if (std::abs(aik) < 1e-15) continue;
-      for (std::size_t j = 0; j < n; ++j) {
-        C[i][j] += aik * B[k][j];
-      }
+// Convert Hessenberg matrix to Eigen matrix for robust matrix functions.
+Eigen::MatrixXcd to_eigen_matrix(const Hessenberg& h, std::size_t k) {
+  Eigen::MatrixXcd out = Eigen::MatrixXcd::Zero(static_cast<Eigen::Index>(k), static_cast<Eigen::Index>(k));
+  for (std::size_t i = 0; i < k; ++i) {
+    for (std::size_t j = 0; j < k; ++j) {
+      out(static_cast<Eigen::Index>(i), static_cast<Eigen::Index>(j)) = h[i][j];
     }
   }
-  return C;
-}
-
-// Matrix addition.
-CMatrix mat_add(const CMatrix& A, const CMatrix& B) {
-  const std::size_t n = A.size();
-  CMatrix C = A;
-  for (std::size_t i = 0; i < n; ++i) {
-    for (std::size_t j = 0; j < n; ++j) {
-      C[i][j] += B[i][j];
-    }
-  }
-  return C;
-}
-
-// Matrix scaling by scalar alpha.
-CMatrix mat_scale(const CMatrix& A, Complex alpha) {
-  CMatrix C = A;
-  for (auto& row : C) {
-    for (auto& x : row) {
-      x *= alpha;
-    }
-  }
-  return C;
-}
-
-// Matrix exponential using scaled Taylor series.
-CMatrix mat_exp_taylor_scaled(const CMatrix& A) {
-  const std::size_t n = A.size();
-  if (n == 0) return {};
-  if (n == 1) return CMatrix{{std::exp(A[0][0])}};
-
-  const double n1 = matrix_one_norm(A);
-  int s = 0;
-  if (n1 > 0.5) {
-    s = static_cast<int>(std::ceil(std::log2(n1 / 0.5)));
-  }
-  const double scale = std::ldexp(1.0, s);
-  const CMatrix As = mat_scale(A, Complex{1.0 / scale, 0.0});
-
-  CMatrix term = eye(n);
-  CMatrix result = eye(n);
-  for (int k = 1; k <= 40; ++k) {
-    term = mat_mul(term, As);
-    const double invk = 1.0 / static_cast<double>(k);
-    for (std::size_t i = 0; i < n; ++i) {
-      for (std::size_t j = 0; j < n; ++j) {
-        term[i][j] *= invk;
-        result[i][j] += term[i][j];
-      }
-    }
-    if (matrix_one_norm(term) < 1e-13) {
-      break;
-    }
-  }
-
-  for (int i = 0; i < s; ++i) {
-    result = mat_mul(result, result);
-  }
-  return result;
-}
-
-// Matrix-vector multiplication.
-std::vector<Complex> mat_vec_mul(const CMatrix& A, const std::vector<Complex>& x) {
-  const std::size_t n = A.size();
-  std::vector<Complex> y(n, Complex{0.0, 0.0});
-  for (std::size_t i = 0; i < n; ++i) {
-    for (std::size_t j = 0; j < n; ++j) {
-      y[i] += A[i][j] * x[j];
-    }
-  }
-  return y;
+  return out;
 }
 
 // Build Arnoldi basis and Hessenberg matrix for Krylov time evolution.
@@ -294,7 +197,7 @@ std::size_t arnoldi(
     std::size_t m,
     const std::vector<ParsedTerm>& terms,
     std::vector<std::vector<Complex>>& V,
-    CMatrix& H) {
+    Hessenberg& H) {
   const std::size_t n = v0.size();
   V.clear();
   V.reserve(m + 1);
@@ -378,29 +281,24 @@ class StatevectorBackend final : public IBackend {
         const std::size_t max_dim =
             std::max<std::size_t>(1, std::min<std::size_t>(problem.evolution.krylov_dim, static_cast<std::size_t>(32)));
         std::vector<std::vector<Complex>> V;
-        CMatrix Hfull;
+        Hessenberg Hfull;
         const std::size_t k = arnoldi(v0, max_dim, terms_, V, Hfull);
         if (k == 0 || V.empty()) {
           continue;
         }
 
-        CMatrix Hk(k, std::vector<Complex>(k, Complex{0.0, 0.0}));
-        for (std::size_t i = 0; i < k; ++i) {
-          for (std::size_t j = 0; j < k; ++j) {
-            Hk[i][j] = Hfull[i][j];
-          }
-        }
+        // Reuse Eigen's tested matrix exponential instead of maintaining custom approximants.
+        const Eigen::MatrixXcd Hk = to_eigen_matrix(Hfull, k);
+        const Eigen::MatrixXcd A = Complex{0.0, -problem.evolution.dt} * Hk;
+        const Eigen::MatrixXcd expA = A.exp();
 
-        const CMatrix A = mat_scale(Hk, Complex{0.0, -problem.evolution.dt});
-        const CMatrix expA = mat_exp_taylor_scaled(A);
-
-        std::vector<Complex> e1(k, Complex{0.0, 0.0});
-        e1[0] = Complex{1.0, 0.0};
-        const std::vector<Complex> y = mat_vec_mul(expA, e1);
+        Eigen::VectorXcd e1 = Eigen::VectorXcd::Zero(static_cast<Eigen::Index>(k));
+        e1(0) = Complex{1.0, 0.0};
+        const Eigen::VectorXcd y = expA * e1;
 
         std::fill(tmp.begin(), tmp.end(), Complex{0.0, 0.0});
         for (std::size_t j = 0; j < k; ++j) {
-          axpy(tmp, y[j], V[j]);
+          axpy(tmp, y(static_cast<Eigen::Index>(j)), V[j]);
         }
         for (auto& x : tmp) {
           x *= psi_norm;

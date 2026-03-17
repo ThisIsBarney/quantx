@@ -11,6 +11,11 @@ Priority bands:
 - P1: quantum computing backend interoperability and production usability
 - P2: ML/LLM-assisted optimization and workflow acceleration
 
+Engineering policy:
+
+- Prefer license-friendly mature OSS components for non-differentiating infrastructure (JSON/CLI/linear algebra/tooling).
+- Avoid rebuilding generic infrastructure in-house unless there is a measured bottleneck or compatibility blocker.
+
 ## M1 (Week 1-2): Scaffold and API freeze
 
 - finalize IR types (`QuantumProblem`, `RunOptions`, `OperatorGraph`, `EquationType`)

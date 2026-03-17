@@ -20,6 +20,22 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
+include(FetchContent)
+FetchContent_Declare(
+  eigen
+  URL https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_GetProperties(eigen)
+if(NOT eigen_POPULATED)
+  if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+  endif()
+  FetchContent_Populate(eigen)
+endif()
+add_library(qx_eigen INTERFACE)
+target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
+
 if(QX_ENABLE_OPENMP)
   find_package(OpenMP)
 endif()
@@ -43,6 +59,7 @@ target_include_directories(qx_core
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 target_link_libraries(qx_core PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(qx_core PUBLIC qx_eigen)
 
 if(OpenMP_CXX_FOUND)
   target_link_libraries(qx_core PUBLIC OpenMP::OpenMP_CXX)
