@@ -46,3 +46,9 @@ Dependency license policy check:
 ```powershell
 .\scripts\check_dependency_policy.ps1
 ```
+
+Visualization smoke test:
+
+```powershell
+python .\scripts\test_visualization.py
+```

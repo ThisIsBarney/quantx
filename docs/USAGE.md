@@ -70,6 +70,17 @@ Run only the MPS control example:
 .\scripts\run_mps_example.ps1
 ```
 
+Generate visualization pages (HTML + SVG):
+
+```powershell
+.\scripts\run_visualization.ps1
+```
+
+Generated files:
+
+- `out/visualizations/rabi_population.html`
+- `out/visualizations/mps_diagnostics.html`
+
 ## 1.1) Benchmark usage
 
 Run accuracy smoke benchmark:
