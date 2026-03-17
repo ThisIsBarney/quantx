@@ -25,8 +25,13 @@
 - License: MIT
 - Purpose: unified runtime/CLI logging with configurable verbosity.
 
+4. `CLI11` (`v2.4.2`)
+- License: BSD-3-Clause
+- Purpose: robust command-line parsing for `qx_cli`, replacing custom argument parsing.
+
 ## Selection rationale (current iteration)
 
 - Replaced custom JSON parser with `nlohmann/json` to reduce parsing edge-case bugs.
 - Replaced custom small-matrix exponential code with `Eigen` `MatrixFunctions` to reduce numerical maintenance burden.
 - Added `spdlog` for production-grade logging instead of custom logger implementation.
+- Replaced manual CLI parsing with `CLI11` to reduce argument-handling bugs and improve maintainability.

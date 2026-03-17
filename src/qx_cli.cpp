@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <CLI/CLI.hpp>
+
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
 #include "qx/logging.hpp"
@@ -30,22 +32,13 @@ void write_text_file(const std::string& path, const std::string& data) {
   os << data;
 }
 
-// Print CLI usage help.
-void print_usage() {
-  std::cout
-      << "Usage:\n"
-      << "  qx_cli --problem <problem.json> [--options <options.json>] [--out <result.json>] [--log-level <lvl>]\n"
-      << "  qx_cli --circuit <circuit.json> [--options <options.json>] [--out <result.json>] [--log-level <lvl>]\n"
-      << "  qx_cli --problem <problem.json> [--options <options.json>] --explain [--out <explain.json>] [--log-level <lvl>]\n"
-      << "  levels: trace|debug|info|warn|error|off (default: warn)\n";
-}
-
 }  // namespace
 
 // CLI entrypoint for problem/circuit execution.
 int main(int argc, char** argv) {
   try {
     qx::log::init_logging();
+
     std::string problem_path;
     std::string circuit_path;
     std::string options_path;
@@ -53,40 +46,28 @@ int main(int argc, char** argv) {
     std::string log_level{"warn"};
     bool explain = false;
 
-    for (int i = 1; i < argc; ++i) {
-      const std::string arg = argv[i];
-      if (arg == "--problem" && i + 1 < argc) {
-        problem_path = argv[++i];
-      } else if (arg == "--circuit" && i + 1 < argc) {
-        circuit_path = argv[++i];
-      } else if (arg == "--options" && i + 1 < argc) {
-        options_path = argv[++i];
-      } else if (arg == "--out" && i + 1 < argc) {
-        out_path = argv[++i];
-      } else if (arg == "--log-level" && i + 1 < argc) {
-        log_level = argv[++i];
-      } else if (arg == "--explain") {
-        explain = true;
-      } else if (arg == "--help" || arg == "-h") {
-        print_usage();
-        return 0;
-      } else {
-        std::cerr << "Unknown arg: " << arg << "\n";
-        print_usage();
-        return 2;
-      }
+    CLI::App app{"QuantX CLI"};
+    app.add_option("--problem", problem_path, "problem json path");
+    app.add_option("--circuit", circuit_path, "circuit json path");
+    app.add_option("--options", options_path, "options json path");
+    app.add_option("--out", out_path, "output json path");
+    app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
+        ->check(CLI::IsMember({"trace", "debug", "info", "warn", "error", "off"}, CLI::ignore_case));
+    app.add_flag("--explain", explain, "explain backend selection (problem mode only)");
+
+    try {
+      app.parse(argc, argv);
+    } catch (const CLI::ParseError& e) {
+      return app.exit(e);
     }
+
     qx::log::set_log_level(log_level);
 
     if (problem_path.empty() && circuit_path.empty()) {
-      std::cerr << "Missing required --problem or --circuit\n";
-      print_usage();
-      return 2;
+      throw std::runtime_error("missing required --problem or --circuit");
     }
     if (!problem_path.empty() && !circuit_path.empty()) {
-      std::cerr << "Use either --problem or --circuit, not both\n";
-      print_usage();
-      return 2;
+      throw std::runtime_error("use either --problem or --circuit, not both");
     }
 
     const std::string options_json = options_path.empty() ? "{}" : read_text_file(options_path);

@@ -31,6 +31,17 @@ if(NOT spdlog_FOUND)
   FetchContent_MakeAvailable(spdlog)
 endif()
 
+find_package(CLI11 CONFIG QUIET)
+if(NOT CLI11_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    CLI11
+    URL https://github.com/CLIUtils/CLI11/archive/refs/tags/v2.4.2.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(CLI11)
+endif()
+
 include(FetchContent)
 FetchContent_Declare(
   eigen
@@ -103,6 +114,11 @@ target_link_libraries(qx_smoke PRIVATE qx_core)
 
 add_executable(qx_cli src/qx_cli.cpp)
 target_link_libraries(qx_cli PRIVATE qx_core)
+if(TARGET CLI11::CLI11)
+  target_link_libraries(qx_cli PRIVATE CLI11::CLI11)
+else()
+  target_link_libraries(qx_cli PRIVATE CLI11)
+endif()
 
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
