@@ -40,3 +40,9 @@ CLI argument contract sanity:
 ```powershell
 .\scripts\test_cli_args.ps1
 ```
+
+Dependency license policy check:
+
+```powershell
+.\scripts\check_dependency_policy.ps1
+```
