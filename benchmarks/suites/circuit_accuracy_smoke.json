@@ -1,6 +1,11 @@
 {
   "name": "circuit_accuracy_smoke",
   "repeats": 3,
+  "gates": {
+    "max_abs_error_mean_max": 0.12,
+    "mean_abs_error_mean_max": 0.08,
+    "core_elapsed_ms_mean_max": 10.0
+  },
   "options": {
     "enable_checkpoint": false
   },

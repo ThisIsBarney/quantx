@@ -63,19 +63,58 @@ def write_markdown_summary(report: dict, output_path: Path) -> None:
   lines.append("")
   lines.append(f"- generated_at: {report['generated_at']}")
   lines.append(f"- repeats: {report['repeats']}")
+  gate_status = report.get("gate", {}).get("status")
+  if gate_status is not None:
+    lines.append(f"- gate_status: {gate_status}")
   lines.append("")
-  lines.append("| case | elapsed_ms_mean | core_elapsed_ms_mean | max_abs_error_mean | mean_abs_error_mean |")
-  lines.append("|---|---:|---:|---:|---:|")
+  lines.append("| case | status | elapsed_ms_mean | core_elapsed_ms_mean | max_abs_error_mean | mean_abs_error_mean |")
+  lines.append("|---|---|---:|---:|---:|---:|")
   for case in report["cases"]:
     agg = case["aggregate"]
+    status = case.get("gate", {}).get("status", "N/A")
     max_err = "n/a" if agg["max_abs_error_mean"] is None else f"{agg['max_abs_error_mean']:.6f}"
     mean_err = "n/a" if agg["mean_abs_error_mean"] is None else f"{agg['mean_abs_error_mean']:.6f}"
     core_elapsed = "n/a" if agg["core_elapsed_ms_mean"] is None else f"{agg['core_elapsed_ms_mean']:.3f}"
     lines.append(
-        f"| {case['id']} | {agg['elapsed_ms_mean']:.3f} | "
+        f"| {case['id']} | {status} | {agg['elapsed_ms_mean']:.3f} | "
         f"{core_elapsed} | {max_err} | {mean_err} |"
     )
   output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def evaluate_gates(report_cases: list[dict], gates: dict) -> dict:
+  if not gates:
+    for case in report_cases:
+      case["gate"] = {"status": "SKIPPED", "reasons": []}
+    return {"status": "SKIPPED", "failures": []}
+
+  failures = []
+  for case in report_cases:
+    case_failures = []
+    agg = case.get("aggregate", {})
+
+    def check_le(metric: str, threshold_key: str) -> None:
+      threshold = gates.get(threshold_key)
+      if threshold is None:
+        return
+      value = agg.get(metric)
+      if value is None:
+        case_failures.append(f"missing metric {metric}")
+        return
+      if float(value) > float(threshold):
+        case_failures.append(f"{metric}={value:.6f} > {threshold_key}={threshold:.6f}")
+
+    check_le("max_abs_error_mean", "max_abs_error_mean_max")
+    check_le("mean_abs_error_mean", "mean_abs_error_mean_max")
+    check_le("core_elapsed_ms_mean", "core_elapsed_ms_mean_max")
+
+    if case_failures:
+      case["gate"] = {"status": "FAIL", "reasons": case_failures}
+      failures.append({"case": case["id"], "reasons": case_failures})
+    else:
+      case["gate"] = {"status": "PASS", "reasons": []}
+
+  return {"status": "FAIL" if failures else "PASS", "failures": failures}
 
 
 def main() -> None:
@@ -99,15 +138,18 @@ def main() -> None:
 
   repeats = int(suite.get("repeats", 1))
   options = dict(suite.get("options", {}))
+  gates = dict(suite.get("gates", {}))
   report_cases = []
   for case in suite.get("cases", []):
     report_cases.append(run_case(engine, root, case, options, repeats))
+  gate = evaluate_gates(report_cases, gates)
 
   report = {
       "suite": suite.get("name", "unnamed_suite"),
       "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
       "repeats": repeats,
       "cases": report_cases,
+      "gate": gate,
   }
 
   out_dir = root / "benchmarks" / "reports"

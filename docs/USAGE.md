@@ -52,11 +52,23 @@ Run both accuracy + noise sweep and regenerate index:
 .\scripts\benchmark_all.ps1 -NoiseSweep
 ```
 
+Run with threshold gating (fails if any suite breaches configured gates):
+
+```powershell
+.\scripts\benchmark_all.ps1 -NoiseSweep -EnforceGate
+```
+
 Reports are written to `benchmarks/reports/`:
 
 - suite JSON report: `*.json`
 - suite markdown summary: `*.md`
 - cumulative index: `INDEX.md`
+- suite trend report: `*_TREND.md`
+
+CI integration:
+
+- workflow file: `.github/workflows/benchmark-gate.yml`
+- runs build + tests + accuracy benchmark + gate check on Windows
 
 ## 2) Python SDK
 
