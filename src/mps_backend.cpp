@@ -24,6 +24,7 @@ class MpsBackend final : public IBackend {
 
   void initialize(const QuantumProblem& problem, const RunOptions&) override {
     qubits_ = problem.qubits;
+    // Start from a small bond and let runtime growth model decide expansion.
     bond_dim_ = 4;
     truncation_error_ = 0.0;
     method_ = problem.evolution.method.empty() ? "tebd" : problem.evolution.method;
@@ -34,6 +35,7 @@ class MpsBackend final : public IBackend {
 
   void evolve(const QuantumProblem& problem, const RunOptions&) override {
     const std::size_t steps = static_cast<std::size_t>(problem.evolution.total_time / problem.evolution.dt);
+    // Surrogate entanglement-growth factors used in v1 before full tensor contractions land.
     const double term_factor = 1.0 + static_cast<double>(std::max<std::size_t>(1, problem.hamiltonian_terms.size())) * 0.05;
     const double depth_factor = 1.0 + static_cast<double>(problem.expected_circuit_depth) * 0.002;
     const double method_factor = (method_ == "tdvp") ? 0.65 : 1.0;  // tdvp: smoother growth / less truncation
@@ -44,6 +46,7 @@ class MpsBackend final : public IBackend {
       const double clipped = std::min<double>(static_cast<double>(max_bond_), candidate);
       const double overflow = std::max(0.0, candidate - clipped);
 
+      // Bound effective bond dimension by user contract.
       bond_dim_ = static_cast<std::uint32_t>(std::max(2.0, std::round(clipped)));
 
       // Truncation increases when bond growth is clipped by max_bond.
@@ -64,6 +67,7 @@ class MpsBackend final : public IBackend {
   std::map<std::string, double> measure(const QuantumProblem&) override { return observable_cache_; }
 
   void checkpoint(const std::string& path) override {
+    // Persist model controls too, so restore is behaviorally consistent.
     std::ofstream os(path + "/mps.chk");
     os << qubits_ << "\n" << bond_dim_ << "\n" << truncation_error_ << "\n" << max_bond_ << "\n" << trunc_tol_ << "\n"
        << method_ << "\n";
@@ -76,6 +80,7 @@ class MpsBackend final : public IBackend {
     }
     is >> qubits_ >> bond_dim_ >> truncation_error_ >> max_bond_ >> trunc_tol_;
     if (!(is >> method_)) {
+      // Backward compatibility for older checkpoints without method field.
       method_ = "tebd";
     }
     observable_cache_["bond_dim"] = static_cast<double>(bond_dim_);

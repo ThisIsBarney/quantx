@@ -49,6 +49,7 @@ int main() {
   expect(r2.observables.count("mps_max_bond") == 1, "mps should report mps_max_bond");
   expect(r2.observables.count("mps_trunc_tol") == 1, "mps should report mps_trunc_tol");
   expect(r2.observables.count("entanglement_entropy_estimate") == 1, "mps should report entropy estimate");
+  // Contract test: backend must honor user-provided bond cap in outputs.
   expect(r2.observables.at("bond_dim") <= 16.0 + 1e-9, "bond_dim should respect mps_max_bond");
   expect(std::abs(r2.observables.at("mps_max_bond") - 16.0) < 1e-9, "reported mps_max_bond should match input");
   expect(std::abs(r2.observables.at("mps_trunc_tol") - 1e-6) < 1e-12, "reported mps_trunc_tol should match input");
@@ -58,9 +59,11 @@ int main() {
   const auto r2_tdvp = qx::run(p, o);
   expect(r2_tdvp.backend == "mps", "tdvp large problem should run on mps");
   expect(r2_tdvp.observables.at("bond_dim") <= 16.0 + 1e-9, "tdvp bond_dim should respect mps_max_bond");
+  // In our v1 surrogate model, tdvp is expected to accumulate less truncation than tebd.
   expect(r2_tdvp.observables.at("truncation_error") < r2.observables.at("truncation_error"),
          "tdvp should have smaller truncation_error than tebd in this surrogate model");
 
+  // Regression for scientific notation parsing from JSON inputs.
   const auto parsed = qx::problem_from_json(R"({
     "qubits": 64,
     "method": "tebd",

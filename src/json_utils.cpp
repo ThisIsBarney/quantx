@@ -7,6 +7,8 @@
 namespace qx {
 namespace {
 
+// Lightweight numeric matcher for our minimal JSON parser.
+// Supports integers/decimals/scientific notation (e.g. 1e-6, -2.5E+3).
 constexpr const char* kJsonNumberPattern = "(-?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?)";
 
 std::string extract_string(const std::string& json, const std::string& key, const std::string& def) {
@@ -104,6 +106,7 @@ std::vector<double> extract_double_array(const std::string& json, const std::str
 
 std::vector<HamiltonianTerm> extract_hamiltonian_terms(const std::string& json) {
   std::vector<HamiltonianTerm> out;
+  // v1 parser intentionally handles flat objects only; nested term payloads are ignored.
   std::regex object_rg("\\{[^\\{\\}]*\\}");
   std::regex label_rg("\"label\"\\s*:\\s*\"([^\"]+)\"");
   std::regex coeff_rg("\"coefficient\"\\s*:\\s*" + std::string(kJsonNumberPattern));
@@ -126,6 +129,7 @@ std::vector<HamiltonianTerm> extract_hamiltonian_terms(const std::string& json) 
 
 std::vector<CircuitOp> extract_circuit_operations(const std::string& json) {
   std::vector<CircuitOp> out;
+  // Same flat-object assumption as Hamiltonian parsing.
   std::regex rg("\\{[^\\{\\}]*\"name\"\\s*:\\s*\"[^\"]+\"[^\\{\\}]*\\}");
   auto begin = std::sregex_iterator(json.begin(), json.end(), rg);
   auto end = std::sregex_iterator();
@@ -226,6 +230,7 @@ QuantumCircuit circuit_from_json(const std::string& json) {
 }
 
 std::string result_to_json(const SimulationResult& result) {
+  // Keep serializer deterministic for easier diffing in benchmarks/tests.
   std::ostringstream os;
   os << "{";
   os << "\"ok\":" << (result.ok ? "true" : "false") << ",";
@@ -252,6 +257,7 @@ std::string result_to_json(const SimulationResult& result) {
 }
 
 std::string circuit_result_to_json(const CircuitResult& result) {
+  // Include exact/shot/error blocks together to simplify downstream analysis.
   std::ostringstream os;
   os << "{";
   os << "\"ok\":" << (result.ok ? "true" : "false") << ",";

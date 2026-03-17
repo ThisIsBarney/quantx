@@ -21,6 +21,7 @@ enum class BackendKind {
 };
 
 struct ResourceConstraints {
+  // 0 means "runtime decides"; non-zero values are hard limits from caller.
   std::uint32_t max_threads{0};
   std::uint32_t max_gpus{0};
   std::uint32_t mpi_ranks{1};
@@ -28,10 +29,14 @@ struct ResourceConstraints {
 };
 
 struct EvolutionConfig {
+  // Time-domain evolution settings shared by statevector and tensor-network backends.
   double total_time{1.0};
   double dt{0.01};
+  // statevector: trotter/krylov; mps: tebd/tdvp.
   std::string method{"trotter"};
+  // Krylov subspace dimension for Arnoldi-based short-time propagation.
   std::uint32_t krylov_dim{6};
+  // MPS controls: cap bond growth and control truncation accumulation.
   std::uint32_t mps_max_bond{1024};
   double mps_trunc_tol{1e-8};
 };
@@ -49,6 +54,7 @@ struct OperatorNode {
 };
 
 struct OperatorGraph {
+  // Reserved for v2+ operator-centric formulations (Dirac/Klein-Gordon etc.).
   std::vector<OperatorNode> nodes;
 };
 
@@ -61,6 +67,7 @@ struct QuantumProblem {
   std::vector<std::string> observables{"norm"};
   double target_error{1e-8};
   bool noisy{false};
+  // Hint for scheduler/backend heuristics, not a strict execution bound.
   std::uint32_t expected_circuit_depth{0};
 };
 
@@ -83,6 +90,7 @@ struct QuantumCircuit {
   std::uint32_t qubits{1};
   std::vector<CircuitOp> operations{};
   std::vector<std::string> observables{};
+  // 0 means exact expectation only; >0 enables sampling statistics.
   std::uint32_t shots{0};
   double depolarizing_prob{0.0};
   double amplitude_damping_gamma{0.0};
