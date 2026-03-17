@@ -5,6 +5,7 @@
 
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
+#include "qx/version.hpp"
 
 namespace {
 
@@ -37,6 +38,10 @@ int main() {
   expect(r.elapsed_ms >= 0.0, "simulation elapsed_ms should be available");
   expect(r.observables.count("norm") == 1, "norm observable should exist");
   expect(std::abs(r.observables.at("norm") - 1.0) < 1e-8, "norm should be conserved");
+  expect(!qx::version_string().empty(), "version string should not be empty");
+
+  const std::string run_json = qx::result_to_json(r);
+  expect(run_json.find("\"engine_version\"") != std::string::npos, "result json should include engine_version");
 
   p.qubits = 64;
   p.evolution.method = "tebd";
@@ -124,6 +129,8 @@ int main() {
   expect(std::abs(cb.expectation_exact.at("X0X1") - 1.0) < 2e-2, "bell <X0X1> should be near 1");
   expect(std::abs(cb.expectation_exact.at("Y0Y1") + 1.0) < 2e-2, "bell <Y0Y1> should be near -1");
   expect(std::abs(cb.expectation_exact.at("X0Y1")) < 2e-2, "bell <X0Y1> should be near 0");
+  const std::string circuit_json = qx::circuit_result_to_json(cb);
+  expect(circuit_json.find("\"engine_version\"") != std::string::npos, "circuit result json should include engine_version");
 
   qx::QuantumCircuit rx;
   rx.qubits = 1;
