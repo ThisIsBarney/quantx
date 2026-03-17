@@ -70,7 +70,7 @@ int main() {
 
   qx::QuantumCircuit bell;
   bell.qubits = 2;
-  bell.observables = {"Z0", "Z1", "Z0Z1", "X0X1"};
+  bell.observables = {"Z0", "Z1", "Z0Z1", "X0X1", "Y0Y1", "X0Y1"};
   bell.operations = {
       qx::CircuitOp{"H", {0}, {}, {}},
       qx::CircuitOp{"CNOT", {1}, {0}, {}},
@@ -84,6 +84,8 @@ int main() {
   expect(std::abs(cb.expectation_exact.at("Z1")) < 2e-2, "bell <Z1> should be near 0");
   expect(std::abs(cb.expectation_exact.at("Z0Z1") - 1.0) < 2e-2, "bell <Z0Z1> should be near 1");
   expect(std::abs(cb.expectation_exact.at("X0X1") - 1.0) < 2e-2, "bell <X0X1> should be near 1");
+  expect(std::abs(cb.expectation_exact.at("Y0Y1") + 1.0) < 2e-2, "bell <Y0Y1> should be near -1");
+  expect(std::abs(cb.expectation_exact.at("X0Y1")) < 2e-2, "bell <X0Y1> should be near 0");
 
   qx::QuantumCircuit rx;
   rx.qubits = 1;
@@ -100,6 +102,12 @@ int main() {
   expect(std::abs(cb_shots.expectation_shot.at("Z1")) < 0.1, "shot <Z1> should be near 0");
   expect(std::abs(cb_shots.expectation_shot.at("Z0Z1") - 1.0) < 0.1, "shot <Z0Z1> should be near 1");
   expect(std::abs(cb_shots.expectation_shot.at("X0X1") - 1.0) < 0.1, "shot <X0X1> should be near 1");
+  expect(std::abs(cb_shots.expectation_shot.at("Y0Y1") + 1.0) < 0.1, "shot <Y0Y1> should be near -1");
+  expect(std::abs(cb_shots.expectation_shot.at("X0Y1")) < 0.1, "shot <X0Y1> should be near 0");
+  expect(cb_shots.shot_stderr.count("Z0") == 1, "shot stderr should include Z0");
+  expect(cb_shots.shot_variance.count("Z0") == 1, "shot variance should include Z0");
+  expect(cb_shots.error_summary.count("mean_abs_error") == 1, "error summary should include mean_abs_error");
+  expect(cb_shots.error_summary.count("max_abs_error") == 1, "error summary should include max_abs_error");
 
   qx::QuantumCircuit damp;
   damp.qubits = 1;

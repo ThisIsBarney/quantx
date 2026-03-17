@@ -46,7 +46,7 @@ def main():
   bell = {
       "qubits": 2,
       "shots": 1000,
-      "observables": ["Z0", "Z1", "Z0Z1", "X0X1"],
+      "observables": ["Z0", "Z1", "Z0Z1", "X0X1", "Y0Y1", "X0Y1"],
       "depolarizing_prob": 0.01,
       "amplitude_damping_gamma": 0.01,
       "seed": 42,
@@ -59,6 +59,8 @@ def main():
   print("bell counts:", bell_res["counts"])
   print("bell exact:", bell_res["expectation_exact"])
   print("bell shot :", bell_res["expectation_shot"])
+  print("bell stderr:", bell_res["shot_stderr"])
+  print("bell summary:", bell_res["error_summary"])
 
 
 if __name__ == "__main__":

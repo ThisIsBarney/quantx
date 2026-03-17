@@ -80,10 +80,14 @@ Output includes:
 - `expectation_exact`: exact expectation from final statevector
 - `expectation_shot`: estimated expectation from sampled counts
 - `estimation_error`: `expectation_shot - expectation_exact`
+- `shot_variance`: per-observable Bernoulli variance estimate (`1 - mean^2`)
+- `shot_stderr`: per-observable standard error (`sqrt(variance/shots)`)
+- `error_summary`: aggregate error stats (`mean_abs_error`, `max_abs_error`, count)
 
 Observable support:
 
 - currently supports Pauli-string observables such as `Z0`, `Z0Z1`, `X0X1`, `Y0`
+- multi-body combinations are supported, e.g. `Y0Y1`, `X0Y1`
 - for `X/Y` observables, shot estimation is done via basis rotation + sampling
 
 ## 3) C ABI

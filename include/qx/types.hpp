@@ -94,6 +94,9 @@ struct CircuitResult {
   std::map<std::string, double> expectation_exact{};
   std::map<std::string, double> expectation_shot{};
   std::map<std::string, double> estimation_error{};
+  std::map<std::string, double> shot_variance{};
+  std::map<std::string, double> shot_stderr{};
+  std::map<std::string, double> error_summary{};
   std::string message;
 };
 

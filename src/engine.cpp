@@ -191,6 +191,12 @@ struct PauliTarget {
   std::uint32_t qubit{0};
 };
 
+struct ShotStats {
+  double mean{0.0};
+  double variance{0.0};
+  double std_err{0.0};
+};
+
 std::vector<PauliTarget> parse_pauli_observable(const std::string& label, std::uint32_t qubits) {
   std::vector<PauliTarget> targets;
   std::regex rg("([XYZxyz])([0-9]+)");
@@ -246,13 +252,17 @@ void apply_s_gate(std::vector<Complex>& state, std::uint32_t qubit) {
   apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
 }
 
+void apply_sdg_gate(std::vector<Complex>& state, std::uint32_t qubit) {
+  apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, -1.0});
+}
+
 void rotate_for_pauli_measurement(std::vector<Complex>& state, const std::vector<PauliTarget>& obs) {
   for (const auto& t : obs) {
     if (t.pauli == 'X') {
       apply_h_gate(state, t.qubit);
     } else if (t.pauli == 'Y') {
-      // U = H*S  => aligns shot-basis Y estimation with current Pauli convention.
-      apply_s_gate(state, t.qubit);
+      // U = H*S^\dagger => U^\dagger Z U = Y
+      apply_sdg_gate(state, t.qubit);
       apply_h_gate(state, t.qubit);
     }
   }
@@ -275,7 +285,7 @@ bool observable_all_z(const std::vector<PauliTarget>& obs) {
   return true;
 }
 
-double shot_expectation_from_counts(
+ShotStats shot_stats_from_counts(
     const std::map<std::string, std::uint64_t>& counts, const std::vector<PauliTarget>& obs, std::uint32_t qubits) {
   std::uint64_t total = 0;
   double acc = 0.0;
@@ -293,16 +303,21 @@ double shot_expectation_from_counts(
     acc += sign * static_cast<double>(c);
     total += c;
   }
+  ShotStats out;
   if (total == 0) {
-    return 0.0;
+    return out;
   }
-  return acc / static_cast<double>(total);
+  out.mean = acc / static_cast<double>(total);
+  out.variance = std::max(0.0, 1.0 - out.mean * out.mean);
+  out.std_err = std::sqrt(out.variance / static_cast<double>(total));
+  return out;
 }
 
-double shot_expectation_rotated_state(
+ShotStats shot_stats_rotated_state(
     const std::vector<Complex>& state, const std::vector<PauliTarget>& obs, std::uint32_t shots, std::mt19937_64& rng) {
+  ShotStats out;
   if (shots == 0) {
-    return 0.0;
+    return out;
   }
   std::vector<Complex> rotated = state;
   rotate_for_pauli_measurement(rotated, obs);
@@ -316,14 +331,10 @@ double shot_expectation_rotated_state(
     const std::size_t idx = dist(rng);
     acc += z_sign_from_index(idx, obs);
   }
-  std::uint32_t y_count = 0;
-  for (const auto& t : obs) {
-    if (t.pauli == 'Y') {
-      ++y_count;
-    }
-  }
-  const double sign_correction = (y_count % 2 == 0) ? 1.0 : -1.0;
-  return sign_correction * (acc / static_cast<double>(shots));
+  out.mean = acc / static_cast<double>(shots);
+  out.variance = std::max(0.0, 1.0 - out.mean * out.mean);
+  out.std_err = std::sqrt(out.variance / static_cast<double>(shots));
+  return out;
 }
 
 }  // namespace
@@ -500,16 +511,34 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
     const double exact = exact_pauli_expectation(state, parsed).real();
     out.expectation_exact[obs] = exact;
     if (circuit.shots > 0) {
-      double shot = 0.0;
+      ShotStats stats;
       if (observable_all_z(parsed)) {
-        shot = shot_expectation_from_counts(out.counts, parsed, circuit.qubits);
+        stats = shot_stats_from_counts(out.counts, parsed, circuit.qubits);
       } else {
         std::mt19937_64 obs_rng(circuit.seed + static_cast<std::uint64_t>(std::hash<std::string>{}(obs)));
-        shot = shot_expectation_rotated_state(state, parsed, circuit.shots, obs_rng);
+        stats = shot_stats_rotated_state(state, parsed, circuit.shots, obs_rng);
       }
+      const double shot = stats.mean;
       out.expectation_shot[obs] = shot;
       out.estimation_error[obs] = shot - exact;
+      out.shot_variance[obs] = stats.variance;
+      out.shot_stderr[obs] = stats.std_err;
     }
+  }
+
+  if (!out.estimation_error.empty()) {
+    double sum_abs = 0.0;
+    double max_abs = 0.0;
+    for (const auto& [_, e] : out.estimation_error) {
+      const double a = std::abs(e);
+      sum_abs += a;
+      if (a > max_abs) {
+        max_abs = a;
+      }
+    }
+    out.error_summary["mean_abs_error"] = sum_abs / static_cast<double>(out.estimation_error.size());
+    out.error_summary["max_abs_error"] = max_abs;
+    out.error_summary["num_observables"] = static_cast<double>(out.estimation_error.size());
   }
 
   return out;

@@ -283,6 +283,30 @@ std::string circuit_result_to_json(const CircuitResult& result) {
     first = false;
     os << "\"" << escape(k) << "\":" << v;
   }
+  os << "},";
+  os << "\"shot_variance\":{";
+  first = true;
+  for (const auto& [k, v] : result.shot_variance) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
+  os << "},";
+  os << "\"shot_stderr\":{";
+  first = true;
+  for (const auto& [k, v] : result.shot_stderr) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
+  os << "},";
+  os << "\"error_summary\":{";
+  first = true;
+  for (const auto& [k, v] : result.error_summary) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
   os << "}";
   os << "}";
   return os.str();

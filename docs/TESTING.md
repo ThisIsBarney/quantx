@@ -17,8 +17,9 @@
   - shot sampling returns expected Bell-support outcomes (`00`, `11`)
   - amplitude damping (`gamma=1`) drives `|1>` to `|0>`
 - expectation estimation:
-    - exact and shot estimates for `Z0`, `Z1`, `Z0Z1`, `X0X1` on Bell circuit are consistent
+    - exact and shot estimates for `Z0`, `Z1`, `Z0Z1`, `X0X1`, `Y0Y1`, `X0Y1` on Bell circuit are consistent
     - exact and shot estimates for `Y0` on a prepared Y-eigenstate are consistent
+    - per-observable stderr/variance and aggregate error summary are emitted
 - norm conservation:
   - `|psi|^2` stays near 1.0 in smoke scenarios
 
