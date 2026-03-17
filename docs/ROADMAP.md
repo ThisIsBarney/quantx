@@ -1,5 +1,10 @@
 # QuantX v1 Delivery Roadmap (12 Weeks)
 
+Dual-track objective:
+
+- Track A: high-performance quantum dynamics simulation
+- Track B: become a reusable execution backend for quantum computing frameworks
+
 ## M1 (Week 1-2): Scaffold and API freeze
 
 - finalize IR types (`QuantumProblem`, `RunOptions`, `OperatorGraph`, `EquationType`)
@@ -29,3 +34,23 @@
 - benchmark harness and reproducibility scripts
 - compare reference results against QuTiP/QuEST/ITensor
 - produce release candidate artifacts
+
+## Next milestones (post-v1, quantum-computing backend track)
+
+## M6: Circuit IR and gate execution
+
+- add `QuantumCircuit` IR (gates, parameters, measurement ops)
+- map standard gates (X, Y, Z, H, S, T, RX/RY/RZ, CNOT, CZ, SWAP) to statevector backend
+- add circuit-to-Hamiltonian simulation bridge APIs
+
+## M7: Sampling and noise
+
+- support shot-based sampling outputs (counts and expectation estimates)
+- add basic noise channels (depolarizing, amplitude damping, phase damping)
+- add deterministic seeded sampling path for reproducible tests
+
+## M8: Framework adapter layer
+
+- add adapter API for external frameworks (Qiskit/Cirq-style execution request)
+- normalize result schema for transpiler/runtime integration
+- publish backend capability descriptor (supported gates, max qubits, noise support)

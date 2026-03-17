@@ -9,6 +9,11 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 - C ABI (`qx_run`, `qx_explain_backend_choice`)
 - Python SDK wrapper (ctypes)
 
+## Product Goals
+
+- quantum many-body and dynamics simulation engine
+- core execution backend for quantum computing frameworks
+
 ## Quick Start
 
 ```powershell
@@ -45,3 +50,4 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 
 - Statevector supports Trotter and Krylov evolution with one-body and two-body Pauli-string terms.
 - MPI/CUDA/pybind11 flags are prepared at CMake level; full HPC kernels are next milestone.
+- Quantum-computing backend roadmap is tracked in `docs/ROADMAP.md` and `docs/QUANTUM_COMPUTING_BACKEND.md`.
