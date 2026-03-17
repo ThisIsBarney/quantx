@@ -32,8 +32,10 @@ def main() -> int:
     if not path.exists():
       raise RuntimeError(f"missing visualization file: {path}")
     content = path.read_text(encoding="utf-8")
-    if "<svg" not in content:
-      raise RuntimeError(f"visualization file missing svg: {path}")
+    if "createSvgEl" not in content:
+      raise RuntimeError(f"visualization file missing svg renderer script: {path}")
+    if "Play" not in content or 'type = "range"' not in content:
+      raise RuntimeError(f"visualization file missing animation controls: {path}")
 
   print("visualization smoke passed")
   return 0

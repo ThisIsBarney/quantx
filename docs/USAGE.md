@@ -81,6 +81,8 @@ Generated files:
 - `out/visualizations/rabi_population.html`
 - `out/visualizations/mps_diagnostics.html`
 
+Each page includes animation controls (`Play`, `Pause`, timeline slider).
+
 ## 1.1) Benchmark usage
 
 Run accuracy smoke benchmark:
