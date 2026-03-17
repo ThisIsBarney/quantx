@@ -52,6 +52,7 @@ def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: i
   return {
       "id": case["id"],
       "circuit_file": case["circuit_file"],
+      "gates": dict(case.get("gates", {})),
       "aggregate": aggregate,
       "runs": runs,
   }
@@ -92,9 +93,11 @@ def evaluate_gates(report_cases: list[dict], gates: dict) -> dict:
   for case in report_cases:
     case_failures = []
     agg = case.get("aggregate", {})
+    effective_gates = dict(gates)
+    effective_gates.update(case.get("gates", {}))
 
     def check_le(metric: str, threshold_key: str) -> None:
-      threshold = gates.get(threshold_key)
+      threshold = effective_gates.get(threshold_key)
       if threshold is None:
         return
       value = agg.get(metric)

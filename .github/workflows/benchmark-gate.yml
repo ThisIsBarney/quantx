@@ -34,3 +34,22 @@ jobs:
       - name: Gate Accuracy
         shell: pwsh
         run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
+
+      - name: Benchmark Noise Sweep
+        shell: pwsh
+        run: .\scripts\run_benchmark.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json
+
+      - name: Gate Noise Sweep
+        shell: pwsh
+        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json
+
+      - name: Build Benchmark Index and Trends
+        shell: pwsh
+        run: .\scripts\benchmark_all.ps1 -NoiseSweep
+
+      - name: Upload Benchmark Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-reports
+          path: benchmarks/reports/
+          if-no-files-found: error

@@ -58,6 +58,12 @@ Run with threshold gating (fails if any suite breaches configured gates):
 .\scripts\benchmark_all.ps1 -NoiseSweep -EnforceGate
 ```
 
+Run a single suite with gate in one command:
+
+```powershell
+.\scripts\run_benchmark_and_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
+```
+
 Reports are written to `benchmarks/reports/`:
 
 - suite JSON report: `*.json`
@@ -68,7 +74,8 @@ Reports are written to `benchmarks/reports/`:
 CI integration:
 
 - workflow file: `.github/workflows/benchmark-gate.yml`
-- runs build + tests + accuracy benchmark + gate check on Windows
+- runs build + tests + both benchmark suites + gate checks on Windows
+- uploads `benchmarks/reports/` as CI artifact
 
 ## 2) Python SDK
 

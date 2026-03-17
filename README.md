@@ -24,6 +24,7 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 .\scripts\run_benchmark.ps1
 .\scripts\benchmark_all.ps1 -NoiseSweep
 .\scripts\benchmark_all.ps1 -NoiseSweep -EnforceGate
+.\scripts\run_benchmark_and_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
 ```
 
 ## Architecture
