@@ -1,12 +1,14 @@
 #include "qx/backends.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <complex>
 #include <fstream>
 #include <limits>
 #include <regex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace qx {
@@ -19,6 +21,9 @@ struct ParsedTerm {
   std::vector<char> paulis{};
   std::vector<std::uint32_t> qubits{};
   double coefficient{0.0};
+  std::size_t flip_mask{0};
+  std::size_t yz_sign_mask{0};
+  Complex y_global_phase{1.0, 0.0};
 };
 
 std::vector<ParsedTerm> parse_terms(const QuantumProblem& problem) {
@@ -35,16 +40,64 @@ std::vector<ParsedTerm> parse_terms(const QuantumProblem& problem) {
     }
     ParsedTerm parsed;
     parsed.coefficient = t.coefficient;
+    std::unordered_set<std::uint32_t> seen_qubits;
     auto begin = std::sregex_iterator(t.label.begin(), t.label.end(), token);
     auto end = std::sregex_iterator();
     for (auto it = begin; it != end; ++it) {
       const char p = static_cast<char>(std::toupper(static_cast<unsigned char>((*it)[1].str()[0])));
       const std::uint32_t q = static_cast<std::uint32_t>(std::stoul((*it)[2].str()));
+      if (seen_qubits.find(q) != seen_qubits.end()) {
+        parsed.paulis.clear();
+        parsed.qubits.clear();
+        break;
+      }
+      seen_qubits.insert(q);
       parsed.paulis.push_back(p);
       parsed.qubits.push_back(q);
     }
     if (parsed.paulis.empty()) {
       continue;
+    }
+    std::size_t y_count = 0;
+    for (std::size_t i = 0; i < parsed.paulis.size(); ++i) {
+      const char p = parsed.paulis[i];
+      const std::uint32_t q = parsed.qubits[i];
+      if (q >= 63) {
+        parsed.paulis.clear();
+        parsed.qubits.clear();
+        break;
+      }
+      const std::size_t m = static_cast<std::size_t>(1ULL << q);
+      if (p == 'X') {
+        parsed.flip_mask |= m;
+      } else if (p == 'Y') {
+        parsed.flip_mask |= m;
+        parsed.yz_sign_mask |= m;
+        ++y_count;
+      } else if (p == 'Z') {
+        parsed.yz_sign_mask |= m;
+      } else {
+        parsed.paulis.clear();
+        parsed.qubits.clear();
+        break;
+      }
+    }
+    if (parsed.paulis.empty()) {
+      continue;
+    }
+    switch (y_count % 4U) {
+      case 0:
+        parsed.y_global_phase = Complex{1.0, 0.0};
+        break;
+      case 1:
+        parsed.y_global_phase = Complex{0.0, 1.0};
+        break;
+      case 2:
+        parsed.y_global_phase = Complex{-1.0, 0.0};
+        break;
+      default:
+        parsed.y_global_phase = Complex{0.0, -1.0};
+        break;
     }
     out.push_back(parsed);
   }
@@ -59,41 +112,18 @@ void apply_pauli_term(const std::vector<Complex>& psi, std::vector<Complex>& out
     return;
   }
   const std::size_t n = psi.size();
-  const std::size_t k = term.paulis.size();
-  if (k == 0 || k != term.qubits.size()) {
+  if (term.paulis.empty()) {
     return;
   }
 
   for (std::size_t src = 0; src < n; ++src) {
-    std::size_t dst = src;
-    Complex phase{1.0, 0.0};
-    bool valid = true;
-
-    for (std::size_t idx = 0; idx < k; ++idx) {
-      const std::uint32_t q = term.qubits[idx];
-      const std::size_t mask = static_cast<std::size_t>(1ULL << q);
-      if (mask >= n) {
-        valid = false;
-        break;
-      }
-      const bool bit = (dst & mask) != 0;
-      const char p = term.paulis[idx];
-      if (p == 'X') {
-        dst ^= mask;
-      } else if (p == 'Y') {
-        phase *= bit ? Complex{0.0, -1.0} : Complex{0.0, 1.0};
-        dst ^= mask;
-      } else if (p == 'Z') {
-        phase *= bit ? Complex{-1.0, 0.0} : Complex{1.0, 0.0};
-      } else {
-        valid = false;
-        break;
-      }
-    }
-
-    if (valid) {
-      out[dst] += term.coefficient * phase * psi[src];
-    }
+    const std::size_t dst = src ^ term.flip_mask;
+    if (dst >= n) continue;
+    const std::size_t sign_bits = src & term.yz_sign_mask;
+    const bool odd = (std::popcount(sign_bits) & 1U) != 0U;
+    const double sign = odd ? -1.0 : 1.0;
+    const Complex phase = term.y_global_phase * sign;
+    out[dst] += term.coefficient * phase * psi[src];
   }
 }
 
