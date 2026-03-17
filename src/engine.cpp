@@ -4,9 +4,11 @@
 #include <cctype>
 #include <complex>
 #include <filesystem>
+#include <functional>
 #include <random>
 #include <regex>
 #include <stdexcept>
+#include <unordered_set>
 
 #include "qx/backend.hpp"
 #include "qx/backends.hpp"
@@ -184,44 +186,97 @@ void apply_noise_after_gate(std::vector<Complex>& state, const QuantumCircuit& c
   }
 }
 
-std::vector<std::uint32_t> parse_z_observable(const std::string& label, std::uint32_t qubits) {
-  std::vector<std::uint32_t> targets;
-  std::regex rg("Z([0-9]+)");
+struct PauliTarget {
+  char pauli{'Z'};
+  std::uint32_t qubit{0};
+};
+
+std::vector<PauliTarget> parse_pauli_observable(const std::string& label, std::uint32_t qubits) {
+  std::vector<PauliTarget> targets;
+  std::regex rg("([XYZxyz])([0-9]+)");
+  std::unordered_set<std::uint32_t> seen;
   auto begin = std::sregex_iterator(label.begin(), label.end(), rg);
   auto end = std::sregex_iterator();
   for (auto it = begin; it != end; ++it) {
-    const std::uint32_t q = static_cast<std::uint32_t>(std::stoul((*it)[1].str()));
+    const char p = static_cast<char>(std::toupper(static_cast<unsigned char>((*it)[1].str()[0])));
+    const std::uint32_t q = static_cast<std::uint32_t>(std::stoul((*it)[2].str()));
     if (q >= qubits) {
       throw std::runtime_error("observable references out-of-range qubit: " + label);
     }
-    targets.push_back(q);
+    if (seen.find(q) != seen.end()) {
+      throw std::runtime_error("observable repeats qubit index: " + label);
+    }
+    seen.insert(q);
+    targets.push_back(PauliTarget{p, q});
   }
   if (targets.empty()) {
-    throw std::runtime_error("unsupported observable (only Z strings supported): " + label);
+    throw std::runtime_error("unsupported observable (expected Pauli string): " + label);
   }
   return targets;
 }
 
-double z_string_value_from_index(std::size_t idx, const std::vector<std::uint32_t>& qs) {
+Complex exact_pauli_expectation(const std::vector<Complex>& state, const std::vector<PauliTarget>& obs) {
+  Complex value{0.0, 0.0};
+  for (std::size_t i = 0; i < state.size(); ++i) {
+    std::size_t j = i;
+    Complex phase{1.0, 0.0};
+    for (const auto& t : obs) {
+      const std::size_t mask = static_cast<std::size_t>(1ULL << t.qubit);
+      const bool bit = (j & mask) != 0;
+      if (t.pauli == 'X') {
+        j ^= mask;
+      } else if (t.pauli == 'Y') {
+        phase *= bit ? Complex{0.0, -1.0} : Complex{0.0, 1.0};
+        j ^= mask;
+      } else {  // Z
+        phase *= bit ? Complex{-1.0, 0.0} : Complex{1.0, 0.0};
+      }
+    }
+    value += std::conj(state[i]) * phase * state[j];
+  }
+  return value;
+}
+
+void apply_h_gate(std::vector<Complex>& state, std::uint32_t qubit) {
+  const double inv_sqrt2 = 0.7071067811865475244;
+  apply_single_qubit(state, qubit, {inv_sqrt2, 0.0}, {inv_sqrt2, 0.0}, {inv_sqrt2, 0.0}, {-inv_sqrt2, 0.0});
+}
+
+void apply_s_gate(std::vector<Complex>& state, std::uint32_t qubit) {
+  apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
+}
+
+void rotate_for_pauli_measurement(std::vector<Complex>& state, const std::vector<PauliTarget>& obs) {
+  for (const auto& t : obs) {
+    if (t.pauli == 'X') {
+      apply_h_gate(state, t.qubit);
+    } else if (t.pauli == 'Y') {
+      // U = H*S  => aligns shot-basis Y estimation with current Pauli convention.
+      apply_s_gate(state, t.qubit);
+      apply_h_gate(state, t.qubit);
+    }
+  }
+}
+
+double z_sign_from_index(std::size_t idx, const std::vector<PauliTarget>& obs) {
   double sign = 1.0;
-  for (const auto q : qs) {
-    if (((idx >> q) & 1ULL) != 0) {
+  for (const auto& t : obs) {
+    if (((idx >> t.qubit) & 1ULL) != 0) {
       sign = -sign;
     }
   }
   return sign;
 }
 
-double exact_expectation_z(const std::vector<Complex>& state, const std::vector<std::uint32_t>& qs) {
-  double value = 0.0;
-  for (std::size_t i = 0; i < state.size(); ++i) {
-    value += std::norm(state[i]) * z_string_value_from_index(i, qs);
+bool observable_all_z(const std::vector<PauliTarget>& obs) {
+  for (const auto& t : obs) {
+    if (t.pauli != 'Z') return false;
   }
-  return value;
+  return true;
 }
 
-double shot_expectation_z(
-    const std::map<std::string, std::uint64_t>& counts, const std::vector<std::uint32_t>& qs, std::uint32_t qubits) {
+double shot_expectation_from_counts(
+    const std::map<std::string, std::uint64_t>& counts, const std::vector<PauliTarget>& obs, std::uint32_t qubits) {
   std::uint64_t total = 0;
   double acc = 0.0;
   for (const auto& [bits, c] : counts) {
@@ -229,8 +284,8 @@ double shot_expectation_z(
       continue;
     }
     double sign = 1.0;
-    for (const auto q : qs) {
-      const std::size_t pos = static_cast<std::size_t>(qubits - 1U - q);
+    for (const auto& t : obs) {
+      const std::size_t pos = static_cast<std::size_t>(qubits - 1U - t.qubit);
       if (bits[pos] == '1') {
         sign = -sign;
       }
@@ -242,6 +297,33 @@ double shot_expectation_z(
     return 0.0;
   }
   return acc / static_cast<double>(total);
+}
+
+double shot_expectation_rotated_state(
+    const std::vector<Complex>& state, const std::vector<PauliTarget>& obs, std::uint32_t shots, std::mt19937_64& rng) {
+  if (shots == 0) {
+    return 0.0;
+  }
+  std::vector<Complex> rotated = state;
+  rotate_for_pauli_measurement(rotated, obs);
+  std::vector<double> probs(rotated.size(), 0.0);
+  for (std::size_t i = 0; i < rotated.size(); ++i) {
+    probs[i] = std::norm(rotated[i]);
+  }
+  std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
+  double acc = 0.0;
+  for (std::uint32_t s = 0; s < shots; ++s) {
+    const std::size_t idx = dist(rng);
+    acc += z_sign_from_index(idx, obs);
+  }
+  std::uint32_t y_count = 0;
+  for (const auto& t : obs) {
+    if (t.pauli == 'Y') {
+      ++y_count;
+    }
+  }
+  const double sign_correction = (y_count % 2 == 0) ? 1.0 : -1.0;
+  return sign_correction * (acc / static_cast<double>(shots));
 }
 
 }  // namespace
@@ -309,7 +391,6 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   std::vector<Complex> state(n, Complex{0.0, 0.0});
   state[0] = Complex{1.0, 0.0};
 
-  const double inv_sqrt2 = 0.7071067811865475244;
   for (const auto& op : circuit.operations) {
     std::string g = op.name;
     std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
@@ -329,10 +410,11 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
       } else if (g == "Z") {
         apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
       } else if (g == "H") {
-        apply_single_qubit(state, t, {inv_sqrt2, 0.0}, {inv_sqrt2, 0.0}, {inv_sqrt2, 0.0}, {-inv_sqrt2, 0.0});
+        apply_h_gate(state, t);
       } else if (g == "S") {
         apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
       } else if (g == "T") {
+        const double inv_sqrt2 = 0.7071067811865475244;
         apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {inv_sqrt2, inv_sqrt2});
       } else if (g == "RX") {
         const double theta = op.params.empty() ? 0.0 : op.params[0];
@@ -414,11 +496,17 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   }
 
   for (const auto& obs : circuit.observables) {
-    const auto qs = parse_z_observable(obs, circuit.qubits);
-    const double exact = exact_expectation_z(state, qs);
+    const auto parsed = parse_pauli_observable(obs, circuit.qubits);
+    const double exact = exact_pauli_expectation(state, parsed).real();
     out.expectation_exact[obs] = exact;
     if (circuit.shots > 0) {
-      const double shot = shot_expectation_z(out.counts, qs, circuit.qubits);
+      double shot = 0.0;
+      if (observable_all_z(parsed)) {
+        shot = shot_expectation_from_counts(out.counts, parsed, circuit.qubits);
+      } else {
+        std::mt19937_64 obs_rng(circuit.seed + static_cast<std::uint64_t>(std::hash<std::string>{}(obs)));
+        shot = shot_expectation_rotated_state(state, parsed, circuit.shots, obs_rng);
+      }
       out.expectation_shot[obs] = shot;
       out.estimation_error[obs] = shot - exact;
     }

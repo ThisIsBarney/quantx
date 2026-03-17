@@ -70,7 +70,7 @@ int main() {
 
   qx::QuantumCircuit bell;
   bell.qubits = 2;
-  bell.observables = {"Z0", "Z1", "Z0Z1"};
+  bell.observables = {"Z0", "Z1", "Z0Z1", "X0X1"};
   bell.operations = {
       qx::CircuitOp{"H", {0}, {}, {}},
       qx::CircuitOp{"CNOT", {1}, {0}, {}},
@@ -83,6 +83,7 @@ int main() {
   expect(std::abs(cb.expectation_exact.at("Z0")) < 2e-2, "bell <Z0> should be near 0");
   expect(std::abs(cb.expectation_exact.at("Z1")) < 2e-2, "bell <Z1> should be near 0");
   expect(std::abs(cb.expectation_exact.at("Z0Z1") - 1.0) < 2e-2, "bell <Z0Z1> should be near 1");
+  expect(std::abs(cb.expectation_exact.at("X0X1") - 1.0) < 2e-2, "bell <X0X1> should be near 1");
 
   qx::QuantumCircuit rx;
   rx.qubits = 1;
@@ -98,6 +99,7 @@ int main() {
   expect(std::abs(cb_shots.expectation_shot.at("Z0")) < 0.1, "shot <Z0> should be near 0");
   expect(std::abs(cb_shots.expectation_shot.at("Z1")) < 0.1, "shot <Z1> should be near 0");
   expect(std::abs(cb_shots.expectation_shot.at("Z0Z1") - 1.0) < 0.1, "shot <Z0Z1> should be near 1");
+  expect(std::abs(cb_shots.expectation_shot.at("X0X1") - 1.0) < 0.1, "shot <X0X1> should be near 1");
 
   qx::QuantumCircuit damp;
   damp.qubits = 1;
@@ -106,6 +108,19 @@ int main() {
   const auto cd = qx::run_circuit(damp, o);
   expect(std::abs(std::norm(cd.state[0]) - 1.0) < 1e-8, "full amplitude damping should relax |1> to |0>");
   expect(std::abs(std::norm(cd.state[1])) < 1e-8, "full amplitude damping should clear |1> population");
+
+  qx::QuantumCircuit y_eigen;
+  y_eigen.qubits = 1;
+  y_eigen.shots = 1500;
+  y_eigen.observables = {"Y0"};
+  y_eigen.operations = {
+      qx::CircuitOp{"H", {0}, {}, {}},
+      qx::CircuitOp{"Z", {0}, {}, {}},
+      qx::CircuitOp{"S", {0}, {}, {}},
+  };
+  const auto cy = qx::run_circuit(y_eigen, o);
+  expect(std::abs(cy.expectation_exact.at("Y0") - 1.0) < 2e-2, "|+i> should satisfy <Y>=1");
+  expect(std::abs(cy.expectation_shot.at("Y0") - 1.0) < 0.1, "shot <Y> should be near 1");
 
   std::cout << "qx_smoke passed\n";
   return 0;

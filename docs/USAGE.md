@@ -81,6 +81,11 @@ Output includes:
 - `expectation_shot`: estimated expectation from sampled counts
 - `estimation_error`: `expectation_shot - expectation_exact`
 
+Observable support:
+
+- currently supports Pauli-string observables such as `Z0`, `Z0Z1`, `X0X1`, `Y0`
+- for `X/Y` observables, shot estimation is done via basis rotation + sampling
+
 ## 3) C ABI
 
 Exports:

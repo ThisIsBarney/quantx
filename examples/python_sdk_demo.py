@@ -46,7 +46,7 @@ def main():
   bell = {
       "qubits": 2,
       "shots": 1000,
-      "observables": ["Z0", "Z1", "Z0Z1"],
+      "observables": ["Z0", "Z1", "Z0Z1", "X0X1"],
       "depolarizing_prob": 0.01,
       "amplitude_damping_gamma": 0.01,
       "seed": 42,

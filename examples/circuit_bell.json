@@ -1,7 +1,7 @@
 {
   "qubits": 2,
   "shots": 2000,
-  "observables": ["Z0", "Z1", "Z0Z1"],
+  "observables": ["Z0", "Z1", "Z0Z1", "X0X1"],
   "operations": [
     { "name": "H", "targets": [0] },
     { "name": "CNOT", "controls": [0], "targets": [1] }
