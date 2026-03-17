@@ -63,6 +63,7 @@ e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
 cres = e.run_circuit({
     "qubits": 2,
     "shots": 1000,
+    "observables": ["Z0", "Z1", "Z0Z1"],
     "depolarizing_prob": 0.01,
     "amplitude_damping_gamma": 0.01,
     "seed": 42,
@@ -73,6 +74,12 @@ cres = e.run_circuit({
 }, {"enable_checkpoint": False})
 print(cres)
 ```
+
+Output includes:
+
+- `expectation_exact`: exact expectation from final statevector
+- `expectation_shot`: estimated expectation from sampled counts
+- `estimation_error`: `expectation_shot - expectation_exact`
 
 ## 3) C ABI
 

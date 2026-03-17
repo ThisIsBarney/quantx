@@ -79,6 +79,7 @@ struct CircuitOp {
 struct QuantumCircuit {
   std::uint32_t qubits{1};
   std::vector<CircuitOp> operations{};
+  std::vector<std::string> observables{};
   std::uint32_t shots{0};
   double depolarizing_prob{0.0};
   double amplitude_damping_gamma{0.0};
@@ -90,6 +91,9 @@ struct CircuitResult {
   std::string backend;
   std::vector<std::complex<double>> state{};
   std::map<std::string, std::uint64_t> counts{};
+  std::map<std::string, double> expectation_exact{};
+  std::map<std::string, double> expectation_shot{};
+  std::map<std::string, double> estimation_error{};
   std::string message;
 };
 

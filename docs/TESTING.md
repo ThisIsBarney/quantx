@@ -16,6 +16,8 @@
   - `RX(pi)` on `|0>` rotates near `|1>`
   - shot sampling returns expected Bell-support outcomes (`00`, `11`)
   - amplitude damping (`gamma=1`) drives `|1>` to `|0>`
+  - expectation estimation:
+    - exact and shot estimates for `Z0`, `Z1`, `Z0Z1` on Bell circuit are consistent
 - norm conservation:
   - `|psi|^2` stays near 1.0 in smoke scenarios
 

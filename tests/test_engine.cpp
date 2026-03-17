@@ -70,6 +70,7 @@ int main() {
 
   qx::QuantumCircuit bell;
   bell.qubits = 2;
+  bell.observables = {"Z0", "Z1", "Z0Z1"};
   bell.operations = {
       qx::CircuitOp{"H", {0}, {}, {}},
       qx::CircuitOp{"CNOT", {1}, {0}, {}},
@@ -79,6 +80,9 @@ int main() {
   expect(cb.state.size() == 4, "bell statevector size should be 4");
   expect(std::abs(std::norm(cb.state[0]) - 0.5) < 2e-2, "bell p00 should be near 0.5");
   expect(std::abs(std::norm(cb.state[3]) - 0.5) < 2e-2, "bell p11 should be near 0.5");
+  expect(std::abs(cb.expectation_exact.at("Z0")) < 2e-2, "bell <Z0> should be near 0");
+  expect(std::abs(cb.expectation_exact.at("Z1")) < 2e-2, "bell <Z1> should be near 0");
+  expect(std::abs(cb.expectation_exact.at("Z0Z1") - 1.0) < 2e-2, "bell <Z0Z1> should be near 1");
 
   qx::QuantumCircuit rx;
   rx.qubits = 1;
@@ -91,6 +95,9 @@ int main() {
   expect(cb_shots.counts.size() >= 2, "bell sampling should have at least two outcomes");
   expect(cb_shots.counts.count("00") == 1, "bell sampling should contain 00");
   expect(cb_shots.counts.count("11") == 1, "bell sampling should contain 11");
+  expect(std::abs(cb_shots.expectation_shot.at("Z0")) < 0.1, "shot <Z0> should be near 0");
+  expect(std::abs(cb_shots.expectation_shot.at("Z1")) < 0.1, "shot <Z1> should be near 0");
+  expect(std::abs(cb_shots.expectation_shot.at("Z0Z1") - 1.0) < 0.1, "shot <Z0Z1> should be near 1");
 
   qx::QuantumCircuit damp;
   damp.qubits = 1;

@@ -46,6 +46,7 @@ def main():
   bell = {
       "qubits": 2,
       "shots": 1000,
+      "observables": ["Z0", "Z1", "Z0Z1"],
       "depolarizing_prob": 0.01,
       "amplitude_damping_gamma": 0.01,
       "seed": 42,
@@ -54,7 +55,10 @@ def main():
           {"name": "CNOT", "controls": [0], "targets": [1]},
       ],
   }
-  print("bell counts:", engine.run_circuit(bell, {"enable_checkpoint": False})["counts"])
+  bell_res = engine.run_circuit(bell, {"enable_checkpoint": False})
+  print("bell counts:", bell_res["counts"])
+  print("bell exact:", bell_res["expectation_exact"])
+  print("bell shot :", bell_res["expectation_shot"])
 
 
 if __name__ == "__main__":

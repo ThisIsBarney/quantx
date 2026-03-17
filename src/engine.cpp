@@ -5,6 +5,7 @@
 #include <complex>
 #include <filesystem>
 #include <random>
+#include <regex>
 #include <stdexcept>
 
 #include "qx/backend.hpp"
@@ -183,6 +184,66 @@ void apply_noise_after_gate(std::vector<Complex>& state, const QuantumCircuit& c
   }
 }
 
+std::vector<std::uint32_t> parse_z_observable(const std::string& label, std::uint32_t qubits) {
+  std::vector<std::uint32_t> targets;
+  std::regex rg("Z([0-9]+)");
+  auto begin = std::sregex_iterator(label.begin(), label.end(), rg);
+  auto end = std::sregex_iterator();
+  for (auto it = begin; it != end; ++it) {
+    const std::uint32_t q = static_cast<std::uint32_t>(std::stoul((*it)[1].str()));
+    if (q >= qubits) {
+      throw std::runtime_error("observable references out-of-range qubit: " + label);
+    }
+    targets.push_back(q);
+  }
+  if (targets.empty()) {
+    throw std::runtime_error("unsupported observable (only Z strings supported): " + label);
+  }
+  return targets;
+}
+
+double z_string_value_from_index(std::size_t idx, const std::vector<std::uint32_t>& qs) {
+  double sign = 1.0;
+  for (const auto q : qs) {
+    if (((idx >> q) & 1ULL) != 0) {
+      sign = -sign;
+    }
+  }
+  return sign;
+}
+
+double exact_expectation_z(const std::vector<Complex>& state, const std::vector<std::uint32_t>& qs) {
+  double value = 0.0;
+  for (std::size_t i = 0; i < state.size(); ++i) {
+    value += std::norm(state[i]) * z_string_value_from_index(i, qs);
+  }
+  return value;
+}
+
+double shot_expectation_z(
+    const std::map<std::string, std::uint64_t>& counts, const std::vector<std::uint32_t>& qs, std::uint32_t qubits) {
+  std::uint64_t total = 0;
+  double acc = 0.0;
+  for (const auto& [bits, c] : counts) {
+    if (bits.size() != qubits) {
+      continue;
+    }
+    double sign = 1.0;
+    for (const auto q : qs) {
+      const std::size_t pos = static_cast<std::size_t>(qubits - 1U - q);
+      if (bits[pos] == '1') {
+        sign = -sign;
+      }
+    }
+    acc += sign * static_cast<double>(c);
+    total += c;
+  }
+  if (total == 0) {
+    return 0.0;
+  }
+  return acc / static_cast<double>(total);
+}
+
 }  // namespace
 
 void register_builtin_backends() {
@@ -349,6 +410,17 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
     for (std::uint32_t s = 0; s < circuit.shots; ++s) {
       const std::size_t idx = dist(rng);
       out.counts[bitstring(idx, circuit.qubits)] += 1;
+    }
+  }
+
+  for (const auto& obs : circuit.observables) {
+    const auto qs = parse_z_observable(obs, circuit.qubits);
+    const double exact = exact_expectation_z(state, qs);
+    out.expectation_exact[obs] = exact;
+    if (circuit.shots > 0) {
+      const double shot = shot_expectation_z(out.counts, qs, circuit.qubits);
+      out.expectation_shot[obs] = shot;
+      out.estimation_error[obs] = shot - exact;
     }
   }
 

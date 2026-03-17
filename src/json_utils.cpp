@@ -65,6 +65,23 @@ std::vector<double> parse_double_array_body(const std::string& body) {
   return out;
 }
 
+std::vector<std::string> extract_string_array(const std::string& json, const std::string& key) {
+  std::vector<std::string> out;
+  std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
+  std::smatch m;
+  if (!std::regex_search(json, m, rg) || m.size() < 2) {
+    return out;
+  }
+  const std::string body = m[1].str();
+  std::regex item_rg("\"([^\"]+)\"");
+  auto begin = std::sregex_iterator(body.begin(), body.end(), item_rg);
+  auto end = std::sregex_iterator();
+  for (auto it = begin; it != end; ++it) {
+    out.push_back((*it)[1].str());
+  }
+  return out;
+}
+
 std::vector<std::uint32_t> extract_uint_array(const std::string& json, const std::string& key) {
   std::regex rg("\"" + key + "\"\\s*:\\s*\\[([^\\]]*)\\]");
   std::smatch m;
@@ -191,6 +208,7 @@ RunOptions options_from_json(const std::string& json) {
 QuantumCircuit circuit_from_json(const std::string& json) {
   QuantumCircuit c;
   c.qubits = extract_uint(json, "qubits", c.qubits);
+  c.observables = extract_string_array(json, "observables");
   c.shots = extract_uint(json, "shots", c.shots);
   c.depolarizing_prob = extract_double(json, "depolarizing_prob", c.depolarizing_prob);
   c.amplitude_damping_gamma = extract_double(json, "amplitude_damping_gamma", c.amplitude_damping_gamma);
@@ -237,6 +255,30 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   os << "\"counts\":{";
   bool first = true;
   for (const auto& [k, v] : result.counts) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
+  os << "},";
+  os << "\"expectation_exact\":{";
+  first = true;
+  for (const auto& [k, v] : result.expectation_exact) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
+  os << "},";
+  os << "\"expectation_shot\":{";
+  first = true;
+  for (const auto& [k, v] : result.expectation_shot) {
+    if (!first) os << ",";
+    first = false;
+    os << "\"" << escape(k) << "\":" << v;
+  }
+  os << "},";
+  os << "\"estimation_error\":{";
+  first = true;
+  for (const auto& [k, v] : result.estimation_error) {
     if (!first) os << ",";
     first = false;
     os << "\"" << escape(k) << "\":" << v;

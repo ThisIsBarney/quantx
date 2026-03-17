@@ -5,6 +5,10 @@
   "properties": {
     "qubits": { "type": "integer", "minimum": 1 },
     "shots": { "type": "integer", "minimum": 0 },
+    "observables": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "depolarizing_prob": { "type": "number", "minimum": 0, "maximum": 1 },
     "amplitude_damping_gamma": { "type": "number", "minimum": 0, "maximum": 1 },
     "seed": { "type": "integer", "minimum": 0 },
