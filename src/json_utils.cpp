@@ -1,4 +1,5 @@
 #include "qx/json_utils.hpp"
+#include "qx/version.hpp"
 
 #include <stdexcept>
 #include <string>
@@ -170,6 +171,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["elapsed_ms"] = result.elapsed_ms;
   j["message"] = result.message;
   j["state_size"] = result.state.size();
+  j["engine_version"] = version_string();
   j["observables"] = result.observables;
   j["events"] = events_to_json(result.events);
   return j.dump();
@@ -183,6 +185,7 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   j["elapsed_ms"] = result.elapsed_ms;
   j["message"] = result.message;
   j["state_size"] = result.state.size();
+  j["engine_version"] = version_string();
   j["counts"] = result.counts;
   j["expectation_exact"] = result.expectation_exact;
   j["expectation_shot"] = result.expectation_shot;
@@ -199,6 +202,7 @@ std::string backend_info_to_json(const BackendInfo& info) {
   j["selected_backend"] = info.selected_backend;
   j["candidates"] = info.candidates;
   j["reasons"] = info.reasons;
+  j["engine_version"] = version_string();
   return j.dump();
 }
 

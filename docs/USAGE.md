@@ -149,6 +149,7 @@ Output includes:
 - `shot_variance`: per-observable Bernoulli variance estimate (`1 - mean^2`)
 - `shot_stderr`: per-observable standard error (`sqrt(variance/shots)`)
 - `error_summary`: aggregate error stats (`mean_abs_error`, `max_abs_error`, count)
+- `engine_version`: producing engine version string (for reproducibility/audit)
 
 Observable support:
 
