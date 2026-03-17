@@ -120,11 +120,13 @@ Or call directly:
 ```python
 from quantx_engine import Engine
 e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
+print("engine version:", e.version())
 res = e.run({"qubits": 1, "method": "krylov", "total_time": 1.57, "dt": 0.01,
              "krylov_dim": 8,
              "hamiltonian_terms":[{"label":"X0","coefficient":1.0}]},
             {"enable_checkpoint": False})
 print(res)
+print(e.validate_problem({"qubits": 1, "hamiltonian_terms":[{"label":"Z0","coefficient":1.0}]}))
 ```
 
 Circuit call:

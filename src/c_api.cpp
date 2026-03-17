@@ -66,6 +66,32 @@ extern "C" const char* qx_run_circuit(const char* circuit_json, const char* opti
   }
 }
 
+// C entrypoint for problem JSON validation.
+extern "C" const char* qx_validate_problem(const char* problem_json) {
+  try {
+    const std::string p = problem_json ? problem_json : "{}";
+    (void)qx::problem_from_json(p);
+    return copy_to_cstr("{\"ok\":true,\"validated\":\"problem\"}");
+  } catch (const std::exception& ex) {
+    return copy_to_cstr(wrap_error(ex.what()));
+  } catch (...) {
+    return copy_to_cstr(wrap_error("unknown exception"));
+  }
+}
+
+// C entrypoint for circuit JSON validation.
+extern "C" const char* qx_validate_circuit(const char* circuit_json) {
+  try {
+    const std::string c = circuit_json ? circuit_json : "{}";
+    (void)qx::circuit_from_json(c);
+    return copy_to_cstr("{\"ok\":true,\"validated\":\"circuit\"}");
+  } catch (const std::exception& ex) {
+    return copy_to_cstr(wrap_error(ex.what()));
+  } catch (...) {
+    return copy_to_cstr(wrap_error("unknown exception"));
+  }
+}
+
 // Free C strings returned by C API calls.
 extern "C" void qx_free_string(const char* ptr) {
   delete[] ptr;
