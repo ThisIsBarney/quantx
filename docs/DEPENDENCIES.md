@@ -8,7 +8,8 @@
 - license is business-friendly and compatible with project distribution
 - Keep dependencies pinned by version in build logic.
 - Record license type and usage scope for each dependency.
-- Do not introduce copyleft dependencies that would force relicensing of the core without explicit approval.
+- Default allow-list is permissive licenses suitable for closed-source commercial distribution (`MIT`, `BSD`, `Apache-2.0`, `Zlib`, `BSL`).
+- Any weak/strong copyleft dependency requires explicit review and approval before adoption.
 
 ## Current dependencies
 
@@ -20,7 +21,12 @@
 - License: MPL-2.0
 - Purpose: robust linear algebra primitives in Krylov path (matrix exponential for reduced Hessenberg system).
 
+3. `spdlog` (`v1.14.1`)
+- License: MIT
+- Purpose: unified runtime/CLI logging with configurable verbosity.
+
 ## Selection rationale (current iteration)
 
 - Replaced custom JSON parser with `nlohmann/json` to reduce parsing edge-case bugs.
 - Replaced custom small-matrix exponential code with `Eigen` `MatrixFunctions` to reduce numerical maintenance burden.
+- Added `spdlog` for production-grade logging instead of custom logger implementation.

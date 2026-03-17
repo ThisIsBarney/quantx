@@ -8,11 +8,13 @@
 #include <functional>
 #include <random>
 #include <regex>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_set>
 
 #include "qx/backend.hpp"
 #include "qx/backends.hpp"
+#include "qx/logging.hpp"
 #include "qx/runtime.hpp"
 #include "qx/scheduler.hpp"
 
@@ -381,13 +383,18 @@ void register_builtin_backends() {
 // Public API: explain backend choice.
 BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptions& options) {
   ensure_builtin_backends();
-  return explain_backend_choice_internal(problem, options);
+  log::init_logging();
+  const BackendInfo info = explain_backend_choice_internal(problem, options);
+  log::debug("backend explain selected: " + info.selected_backend);
+  return info;
 }
 
 // Public API: run Hamiltonian simulation.
 SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   ensure_builtin_backends();
+  log::init_logging();
   const auto t0 = std::chrono::high_resolution_clock::now();
+  log::info("run started: qubits=" + std::to_string(problem.qubits));
 
   SimulationResult result;
   RuntimeContext runtime(options);
@@ -396,12 +403,14 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
                       {"mpi_ranks", static_cast<double>(runtime.effective_mpi_ranks())}});
 
   const std::string backend_name = choose_backend(problem, options);
+  log::info("scheduler selected backend: " + backend_name);
   auto backend = BackendRegistry::instance().create(backend_name);
 
   if (options.enable_checkpoint) {
     std::filesystem::create_directories(options.checkpoint_path);
     backend->restore(options.checkpoint_path);
     runtime.emit_event("checkpoint_restore_attempt", {{"success", 1.0}});
+    log::debug("checkpoint restore attempted at: " + options.checkpoint_path);
   }
 
   backend->initialize(problem, options);
@@ -419,17 +428,25 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   if (options.enable_checkpoint) {
     backend->checkpoint(options.checkpoint_path);
     result.events.push_back(Event{"checkpoint_saved", {{"enabled", 1.0}}});
+    log::debug("checkpoint saved at: " + options.checkpoint_path);
   }
 
   const auto t1 = std::chrono::high_resolution_clock::now();
   result.elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  {
+    std::ostringstream os;
+    os << "run finished: backend=" << result.backend << ", elapsed_ms=" << result.elapsed_ms;
+    log::info(os.str());
+  }
 
   return result;
 }
 
 // Public API: run gate-level circuit simulation.
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
+  log::init_logging();
   const auto t0 = std::chrono::high_resolution_clock::now();
+  log::info("circuit run started: qubits=" + std::to_string(circuit.qubits));
   if (circuit.qubits == 0) {
     throw std::runtime_error("circuit must have at least 1 qubit");
   }
@@ -584,6 +601,11 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
 
   const auto t1 = std::chrono::high_resolution_clock::now();
   out.elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  {
+    std::ostringstream os;
+    os << "circuit run finished: elapsed_ms=" << out.elapsed_ms;
+    log::info(os.str());
+  }
 
   return out;
 }

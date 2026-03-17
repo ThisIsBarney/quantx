@@ -14,6 +14,14 @@ Run simulation:
 .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --options .\examples\options_default.json
 ```
 
+Run with explicit log level:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --options .\examples\options_default.json --log-level debug
+```
+
+`--log-level` supports `trace|debug|info|warn|error|off` (default: `warn`).
+
 Run MPS simulation with explicit TEBD controls:
 
 ```powershell

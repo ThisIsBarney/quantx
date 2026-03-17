@@ -20,6 +20,17 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
+find_package(spdlog CONFIG QUIET)
+if(NOT spdlog_FOUND)
+  include(FetchContent)
+  FetchContent_Declare(
+    spdlog
+    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.tar.gz
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+  )
+  FetchContent_MakeAvailable(spdlog)
+endif()
+
 include(FetchContent)
 FetchContent_Declare(
   eigen
@@ -48,6 +59,7 @@ add_library(qx_core
   src/backend_registry.cpp
   src/runtime.cpp
   src/scheduler.cpp
+  src/logging.cpp
   src/statevector_backend.cpp
   src/mps_backend.cpp
   src/engine.cpp
@@ -60,6 +72,11 @@ target_include_directories(qx_core
 )
 target_link_libraries(qx_core PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(qx_core PUBLIC qx_eigen)
+if(TARGET spdlog::spdlog_header_only)
+  target_link_libraries(qx_core PUBLIC spdlog::spdlog_header_only)
+else()
+  target_link_libraries(qx_core PUBLIC spdlog::spdlog)
+endif()
 
 if(OpenMP_CXX_FOUND)
   target_link_libraries(qx_core PUBLIC OpenMP::OpenMP_CXX)

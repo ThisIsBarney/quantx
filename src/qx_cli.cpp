@@ -6,6 +6,7 @@
 
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
+#include "qx/logging.hpp"
 
 namespace {
 
@@ -33,9 +34,10 @@ void write_text_file(const std::string& path, const std::string& data) {
 void print_usage() {
   std::cout
       << "Usage:\n"
-      << "  qx_cli --problem <problem.json> [--options <options.json>] [--out <result.json>]\n"
-      << "  qx_cli --circuit <circuit.json> [--options <options.json>] [--out <result.json>]\n"
-      << "  qx_cli --problem <problem.json> [--options <options.json>] --explain [--out <explain.json>]\n";
+      << "  qx_cli --problem <problem.json> [--options <options.json>] [--out <result.json>] [--log-level <lvl>]\n"
+      << "  qx_cli --circuit <circuit.json> [--options <options.json>] [--out <result.json>] [--log-level <lvl>]\n"
+      << "  qx_cli --problem <problem.json> [--options <options.json>] --explain [--out <explain.json>] [--log-level <lvl>]\n"
+      << "  levels: trace|debug|info|warn|error|off (default: warn)\n";
 }
 
 }  // namespace
@@ -43,10 +45,12 @@ void print_usage() {
 // CLI entrypoint for problem/circuit execution.
 int main(int argc, char** argv) {
   try {
+    qx::log::init_logging();
     std::string problem_path;
     std::string circuit_path;
     std::string options_path;
     std::string out_path;
+    std::string log_level{"warn"};
     bool explain = false;
 
     for (int i = 1; i < argc; ++i) {
@@ -59,6 +63,8 @@ int main(int argc, char** argv) {
         options_path = argv[++i];
       } else if (arg == "--out" && i + 1 < argc) {
         out_path = argv[++i];
+      } else if (arg == "--log-level" && i + 1 < argc) {
+        log_level = argv[++i];
       } else if (arg == "--explain") {
         explain = true;
       } else if (arg == "--help" || arg == "-h") {
@@ -70,6 +76,7 @@ int main(int argc, char** argv) {
         return 2;
       }
     }
+    qx::log::set_log_level(log_level);
 
     if (problem_path.empty() && circuit_path.empty()) {
       std::cerr << "Missing required --problem or --circuit\n";
@@ -84,11 +91,13 @@ int main(int argc, char** argv) {
 
     const std::string options_json = options_path.empty() ? "{}" : read_text_file(options_path);
     const qx::RunOptions options = qx::options_from_json(options_json);
+    qx::log::debug("options loaded");
 
     std::string output_json;
     if (!problem_path.empty()) {
       const std::string problem_json = read_text_file(problem_path);
       const qx::QuantumProblem problem = qx::problem_from_json(problem_json);
+      qx::log::info("loaded problem file: " + problem_path);
       if (explain) {
         output_json = qx::backend_info_to_json(qx::explain_backend_choice(problem, options));
       } else {
@@ -100,6 +109,7 @@ int main(int argc, char** argv) {
       }
       const std::string circuit_json = read_text_file(circuit_path);
       const qx::QuantumCircuit circuit = qx::circuit_from_json(circuit_json);
+      qx::log::info("loaded circuit file: " + circuit_path);
       output_json = qx::circuit_result_to_json(qx::run_circuit(circuit, options));
     }
 
@@ -111,6 +121,7 @@ int main(int argc, char** argv) {
     }
     return 0;
   } catch (const std::exception& ex) {
+    qx::log::error(std::string("qx_cli error: ") + ex.what());
     std::cerr << "qx_cli error: " << ex.what() << "\n";
     return 1;
   }
