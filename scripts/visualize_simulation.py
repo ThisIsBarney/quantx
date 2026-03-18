@@ -402,6 +402,198 @@ def _spatial_wavepacket_page(data: dict) -> str:
 </html>"""
 
 
+def _spatial_wavepacket_2d_frames(samples_t: int, nx: int, ny: int, potential_type: str) -> dict:
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("2D spatial visualization requires numpy") from ex
+
+  x_min, x_max = -8.0, 8.0
+  y_min, y_max = -8.0, 8.0
+  t_min, t_max = 0.0, 3.0
+  nx = max(32, nx)
+  ny = max(32, ny)
+  nt = max(16, samples_t)
+
+  xs = np.linspace(x_min, x_max, nx)
+  ys = np.linspace(y_min, y_max, ny)
+  dx = float(xs[1] - xs[0])
+  dy = float(ys[1] - ys[0])
+  dt = (t_max - t_min) / (nt - 1)
+
+  X, Y = np.meshgrid(xs, ys, indexing="xy")
+
+  # Initial 2D Gaussian packet with momentum.
+  x0, y0 = -4.5, -2.0
+  sigma = 0.7
+  kx0, ky0 = 2.2, 1.1
+  envelope = np.exp(-((X - x0) ** 2 + (Y - y0) ** 2) / (4.0 * sigma * sigma))
+  phase = np.exp(1j * (kx0 * X + ky0 * Y))
+  psi = envelope * phase
+
+  if potential_type == "free":
+    V = np.zeros_like(X)
+  elif potential_type == "harmonic":
+    omega = 0.28
+    V = 0.5 * (omega * omega) * (X * X + Y * Y)
+  elif potential_type == "well":
+    wall = 5.0
+    V = np.where((np.abs(X) <= 6.0) & (np.abs(Y) <= 6.0), 0.0, wall)
+  else:  # barrier
+    V = 0.9 * np.exp(-(X * X) / (2.0 * 0.6 * 0.6))
+
+  kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
+  ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
+  KX, KY = np.meshgrid(kx, ky, indexing="xy")
+  kinetic_phase = np.exp(-1j * 0.5 * (KX * KX + KY * KY) * dt)
+  potential_half = np.exp(-1j * V * dt * 0.5)
+
+  def normalize(a):
+    nrm = float(np.sum(np.abs(a) ** 2) * dx * dy)
+    if nrm > 0:
+      a /= math.sqrt(nrm)
+    return a
+
+  psi = normalize(psi)
+  frames = []
+  dens_max = 1e-12
+
+  for it in range(nt):
+    t = t_min + (t_max - t_min) * it / max(1, nt - 1)
+    dens = np.abs(psi) ** 2
+    dens_max = max(dens_max, float(np.max(dens)))
+    exp_x = float(np.sum(X * dens) * dx * dy)
+    exp_y = float(np.sum(Y * dens) * dx * dy)
+    frames.append(
+        {
+            "t": t,
+            "density": dens.tolist(),
+            "exp_x": exp_x,
+            "exp_y": exp_y,
+        }
+    )
+    if it == nt - 1:
+      break
+
+    # Strang splitting: V/2 -> T -> V/2
+    psi = potential_half * psi
+    psi_k = np.fft.fft2(psi)
+    psi = np.fft.ifft2(kinetic_phase * psi_k)
+    psi = potential_half * psi
+    psi = normalize(psi)
+
+  return {
+      "x_min": x_min,
+      "x_max": x_max,
+      "y_min": y_min,
+      "y_max": y_max,
+      "potential_type": potential_type,
+      "frames": frames,
+      "dens_max": dens_max,
+  }
+
+
+def _spatial_wavepacket_2d_page(data: dict) -> str:
+  payload = json.dumps(data, ensure_ascii=False)
+  return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>QuantX Animation - 2D Spatial Wavepacket ({data.get("potential_type","barrier")})</title>
+  <style>
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 8px; }}
+    button {{ padding: 4px 10px; }}
+  </style>
+</head>
+<body>
+  <h1>QuantX Animation - 2D Spatial Wavepacket ({data.get("potential_type","barrier")})</h1>
+  <p>Numerical 2D Schrodinger evolution (split-step Fourier): heatmap of |psi(x,y,t)|^2 with center-of-mass marker.</p>
+  <canvas id="cv" width="640" height="640" style="border:1px solid #ccc"></canvas>
+  <div class="controls">
+    <button id="play">Play</button>
+    <button id="pause">Pause</button>
+    <input id="slider" type="range" min="1" step="1" style="width:520px"/>
+    <span id="label"></span>
+  </div>
+  <script>
+  const DATA = {payload};
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const slider = document.getElementById("slider");
+  const label = document.getElementById("label");
+  const play = document.getElementById("play");
+  const pause = document.getElementById("pause");
+  slider.max = String(DATA.frames.length);
+  slider.value = "1";
+
+  function colorMap(v) {{
+    const t = Math.max(0, Math.min(1, v));
+    const r = Math.floor(255 * Math.sqrt(t));
+    const g = Math.floor(255 * (t * t));
+    const b = Math.floor(255 * (1 - t));
+    return [r, g, b, 255];
+  }}
+
+  function render(frameIdx) {{
+    const f = DATA.frames[frameIdx - 1];
+    const ny = f.density.length;
+    const nx = f.density[0].length;
+    const img = ctx.createImageData(nx, ny);
+    let p = 0;
+    for (let j = 0; j < ny; j++) {{
+      for (let i = 0; i < nx; i++) {{
+        const v = f.density[j][i] / DATA.dens_max;
+        const c = colorMap(v);
+        img.data[p++] = c[0];
+        img.data[p++] = c[1];
+        img.data[p++] = c[2];
+        img.data[p++] = c[3];
+      }}
+    }}
+    const tmp = document.createElement("canvas");
+    tmp.width = nx; tmp.height = ny;
+    tmp.getContext("2d").putImageData(img, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(tmp, 0, 0, cv.width, cv.height);
+
+    const sx = x => (x - DATA.x_min) / (DATA.x_max - DATA.x_min) * cv.width;
+    const sy = y => cv.height - (y - DATA.y_min) / (DATA.y_max - DATA.y_min) * cv.height;
+    ctx.beginPath();
+    ctx.arc(sx(f.exp_x), sy(f.exp_y), 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+
+    label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
+    slider.value = String(frameIdx);
+  }}
+
+  let timer = null;
+  function doPlay() {{
+    if (timer) return;
+    timer = setInterval(() => {{
+      let f = Number(slider.value);
+      f = f >= DATA.frames.length ? 1 : f + 1;
+      render(f);
+    }}, 90);
+  }}
+  function doPause() {{
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  }}
+  play.onclick = doPlay;
+  pause.onclick = doPause;
+  slider.oninput = () => render(Number(slider.value));
+  render(1);
+  </script>
+</body>
+</html>"""
+
+
 def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
   pts_sim = []
   pts_ref = []
@@ -447,13 +639,17 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
 
 def main() -> int:
   parser = argparse.ArgumentParser(description="Generate QuantX visualization HTML.")
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "all"], default="all")
   parser.add_argument("--spatial-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
+  parser.add_argument("--spatial2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
   parser.add_argument("--samples-spatial-t", type=int, default=120)
   parser.add_argument("--samples-spatial-x", type=int, default=220)
+  parser.add_argument("--samples-spatial2d-t", type=int, default=90)
+  parser.add_argument("--samples-spatial2d-x", type=int, default=72)
+  parser.add_argument("--samples-spatial2d-y", type=int, default=72)
   args = parser.parse_args()
 
   root = Path(__file__).resolve().parents[1]
@@ -503,6 +699,14 @@ def main() -> int:
     spatial_data = _spatial_wavepacket_frames(args.samples_spatial_t, args.samples_spatial_x, args.spatial_potential)
     path = out_dir / f"quantum_spatial_wavepacket_{args.spatial_potential}.html"
     path.write_text(_spatial_wavepacket_page(spatial_data), encoding="utf-8")
+    generated.append(path)
+
+  if args.scenario in {"spatial2d", "all"}:
+    spatial2d = _spatial_wavepacket_2d_frames(
+        args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y, args.spatial2d_potential
+    )
+    path = out_dir / f"quantum_spatial2d_wavepacket_{args.spatial2d_potential}.html"
+    path.write_text(_spatial_wavepacket_2d_page(spatial2d), encoding="utf-8")
     generated.append(path)
 
   for p in generated:

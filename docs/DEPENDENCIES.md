@@ -29,6 +29,10 @@
 - License: BSD-3-Clause
 - Purpose: robust command-line parsing for `qx_cli`, replacing custom argument parsing.
 
+5. `NumPy` (runtime, optional for 2D visualization)
+- License: BSD-3-Clause
+- Purpose: numerical kernel for 2D split-step Fourier spatial wavepacket visualization.
+
 ## Selection rationale (current iteration)
 
 - Replaced custom JSON parser with `nlohmann/json` to reduce parsing edge-case bugs.

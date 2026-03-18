@@ -97,6 +97,12 @@ Gallery outputs:
 - `out/visualizations/quantum_spatial_wavepacket_barrier.html`
 - `out/visualizations/quantum_spatial_wavepacket_harmonic.html`
 - `out/visualizations/quantum_spatial_wavepacket_well.html`
+- `out/visualizations/quantum_spatial2d_wavepacket_free.html`
+- `out/visualizations/quantum_spatial2d_wavepacket_barrier.html`
+- `out/visualizations/quantum_spatial2d_wavepacket_harmonic.html`
+- `out/visualizations/quantum_spatial2d_wavepacket_well.html`
+
+2D pages use a numerical split-step Fourier solver and render `|psi(x,y,t)|^2` as animated heatmaps.
 
 ## 1.1) Benchmark usage
 

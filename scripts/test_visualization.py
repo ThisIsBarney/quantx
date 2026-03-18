@@ -28,7 +28,15 @@ def main() -> int:
       "40",
       "--samples-spatial-x",
       "120",
+      "--samples-spatial2d-t",
+      "24",
+      "--samples-spatial2d-x",
+      "40",
+      "--samples-spatial2d-y",
+      "40",
       "--spatial-potential",
+      "barrier",
+      "--spatial2d-potential",
       "barrier",
   ]
   subprocess.run(cmd, check=True)
@@ -37,6 +45,7 @@ def main() -> int:
       out_dir / "rabi_population.html",
       out_dir / "mps_diagnostics.html",
       out_dir / "quantum_spatial_wavepacket_barrier.html",
+      out_dir / "quantum_spatial2d_wavepacket_barrier.html",
   ]
   for path in files:
     if not path.exists():
