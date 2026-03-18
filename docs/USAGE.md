@@ -80,8 +80,10 @@ Generated files:
 
 - `out/visualizations/rabi_population.html`
 - `out/visualizations/mps_diagnostics.html`
+- `out/visualizations/quantum_spatial_wavepacket.html`
 
 Each page includes animation controls (`Play`, `Pause`, timeline slider).
+`quantum_spatial_wavepacket.html` shows a 1D spatial wavepacket evolution (`|psi(x,t)|^2`) with phase color and sampled position cloud.
 
 ## 1.1) Benchmark usage
 

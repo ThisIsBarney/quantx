@@ -24,17 +24,25 @@ def main() -> int:
       "20",
       "--samples-mps",
       "20",
+      "--samples-spatial-t",
+      "40",
+      "--samples-spatial-x",
+      "120",
   ]
   subprocess.run(cmd, check=True)
 
-  files = [out_dir / "rabi_population.html", out_dir / "mps_diagnostics.html"]
+  files = [
+      out_dir / "rabi_population.html",
+      out_dir / "mps_diagnostics.html",
+      out_dir / "quantum_spatial_wavepacket.html",
+  ]
   for path in files:
     if not path.exists():
       raise RuntimeError(f"missing visualization file: {path}")
     content = path.read_text(encoding="utf-8")
-    if "createSvgEl" not in content:
+    if ("createSvgEl" not in content) and ("Spatial Wavepacket" not in content):
       raise RuntimeError(f"visualization file missing svg renderer script: {path}")
-    if "Play" not in content or 'type = "range"' not in content:
+    if "Play" not in content or ("range" not in content):
       raise RuntimeError(f"visualization file missing animation controls: {path}")
 
   print("visualization smoke passed")

@@ -166,6 +166,188 @@ def _make_engine(root: Path):
   return Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
 
 
+def _spatial_wavepacket_frames(samples_t: int, samples_x: int) -> dict:
+  # Dimensionless free-particle Gaussian wavepacket (hbar=m=1).
+  x_min, x_max = -10.0, 10.0
+  t_min, t_max = 0.0, 4.0
+  sigma0 = 0.6
+  x0 = -5.0
+  k0 = 2.2
+  v = k0
+  xs = [x_min + (x_max - x_min) * i / max(1, samples_x - 1) for i in range(samples_x)]
+  ts = [t_min + (t_max - t_min) * i / max(1, samples_t - 1) for i in range(samples_t)]
+
+  frames = []
+  for t in ts:
+    tau = t / (2.0 * sigma0 * sigma0)
+    denom = complex(1.0, tau)
+    norm = (1.0 / ((2.0 * math.pi * sigma0 * sigma0) ** 0.25)) * (1.0 / (abs(denom) ** 0.5))
+    density = []
+    phase = []
+    for x in xs:
+      dx = x - x0 - v * t
+      exponent = -(dx * dx) / (4.0 * sigma0 * sigma0 * denom) + 1j * (k0 * (x - x0 - 0.5 * v * t))
+      psi = norm * complex(math.e) ** exponent
+      p = (psi.real * psi.real) + (psi.imag * psi.imag)
+      density.append(p)
+      phase.append(math.atan2(psi.imag, psi.real))
+
+    # Normalize density and compute <x>.
+    dx_grid = (x_max - x_min) / max(1, samples_x - 1)
+    z = sum(density) * dx_grid
+    if z > 0.0:
+      density = [p / z for p in density]
+    exp_x = sum(x * p for x, p in zip(xs, density)) * dx_grid
+
+    # Deterministic "particle cloud" from CDF quantiles for intuitive motion view.
+    cdf = []
+    acc = 0.0
+    for p in density:
+      acc += p * dx_grid
+      cdf.append(acc)
+    n_particles = 56
+    cloud = []
+    j = 0
+    for i in range(n_particles):
+      q = (i + 0.5) / n_particles
+      while j < len(cdf) - 1 and cdf[j] < q:
+        j += 1
+      cloud.append(xs[j])
+
+    frames.append(
+        {
+            "t": t,
+            "density": density,
+            "phase": phase,
+            "exp_x": exp_x,
+            "cloud": cloud,
+        }
+    )
+  return {"xs": xs, "frames": frames, "x_min": x_min, "x_max": x_max}
+
+
+def _spatial_wavepacket_page(data: dict) -> str:
+  payload = json.dumps(data, ensure_ascii=False)
+  return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>QuantX Animation - Spatial Wavepacket</title>
+  <style>
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 8px; }}
+    button {{ padding: 4px 10px; }}
+  </style>
+</head>
+<body>
+  <h1>QuantX Animation - Spatial Wavepacket</h1>
+  <p>1D free Gaussian wavepacket: showing spatial probability density |psi(x,t)|^2, phase color, and sampled particle cloud.</p>
+  <svg id="svg" viewBox="0 0 1000 520" width="1000" height="520" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="controls">
+    <button id="play">Play</button>
+    <button id="pause">Pause</button>
+    <input id="slider" type="range" min="1" step="1" style="width:520px"/>
+    <span id="label"></span>
+  </div>
+  <script>
+  const DATA = {payload};
+  const svg = document.getElementById("svg");
+  const play = document.getElementById("play");
+  const pause = document.getElementById("pause");
+  const slider = document.getElementById("slider");
+  const label = document.getElementById("label");
+
+  const W=1000,H=520,L=80,R=30,T=40,B=120;
+  const PW=W-L-R, PH=H-T-B;
+  const xMin=DATA.x_min, xMax=DATA.x_max;
+  const yMax=Math.max(...DATA.frames.flatMap(f=>f.density)) * 1.1;
+
+  const sx=x=>L+(x-xMin)/(xMax-xMin)*PW;
+  const sy=y=>T+(1-y/yMax)*PH;
+
+  function el(tag, attrs) {{
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [k,v] of Object.entries(attrs||{{}})) e.setAttribute(k,v);
+    return e;
+  }}
+  function phaseColor(phi) {{
+    const h = ((phi + Math.PI) / (2*Math.PI)) * 360;
+    return `hsl(${{h}},85%,50%)`;
+  }}
+
+  svg.appendChild(el("line",{{x1:L,y1:T+PH,x2:L+PW,y2:T+PH,stroke:"#333","stroke-width":"1.5"}}));
+  svg.appendChild(el("line",{{x1:L,y1:T,x2:L,y2:T+PH,stroke:"#333","stroke-width":"1.5"}}));
+  for(let i=0;i<=5;i++) {{
+    const gx=L+PW*i/5, gy=T+PH*i/5;
+    svg.appendChild(el("line",{{x1:gx,y1:T,x2:gx,y2:T+PH,stroke:"#ddd"}}));
+    svg.appendChild(el("line",{{x1:L,y1:gy,x2:L+PW,y2:gy,stroke:"#ddd"}}));
+    const tx=el("text",{{x:gx,y:T+PH+20,"text-anchor":"middle","font-size":"12"}}); tx.textContent=(xMin+(xMax-xMin)*i/5).toPrecision(3); svg.appendChild(tx);
+    const ty=el("text",{{x:L-8,y:gy+4,"text-anchor":"end","font-size":"12"}}); ty.textContent=(yMax-yMax*i/5).toPrecision(3); svg.appendChild(ty);
+  }}
+  const xl=el("text",{{x:L+PW/2,y:H-26,"text-anchor":"middle","font-size":"12"}}); xl.textContent="position x"; svg.appendChild(xl);
+  const yl=el("text",{{x:20,y:T+PH/2,transform:`rotate(-90 20 ${{T+PH/2}})`,"text-anchor":"middle","font-size":"12"}}); yl.textContent="|psi(x,t)|^2"; svg.appendChild(yl);
+
+  const probPath = el("path",{{fill:"none",stroke:"#0b84f3","stroke-width":"2.5"}}); svg.appendChild(probPath);
+  const expLine = el("line",{{x1:L,y1:T,x2:L,y2:T+PH,stroke:"#f39c12","stroke-width":"2","stroke-dasharray":"6 4"}}); svg.appendChild(expLine);
+  const phaseDots = [];
+  for(let i=0;i<DATA.xs.length;i+=4) {{
+    const c = el("circle",{{cx:L,cy:T+PH,r:2.1,fill:"#999"}});
+    phaseDots.push(c); svg.appendChild(c);
+  }}
+  const cloudDots = [];
+  for(let i=0;i<56;i++) {{
+    const c = el("circle",{{cx:L,cy:T+PH+55,r:4,fill:"#2e8b57",opacity:"0.78"}});
+    cloudDots.push(c); svg.appendChild(c);
+  }}
+  const cloudAxis = el("line",{{x1:L,y1:T+PH+55,x2:L+PW,y2:T+PH+55,stroke:"#555","stroke-width":"1"}}); svg.appendChild(cloudAxis);
+  const cloudLabel = el("text",{{x:L,y:T+PH+84,"font-size":"12"}}); cloudLabel.textContent="sampled position cloud (from |psi|^2)"; svg.appendChild(cloudLabel);
+
+  slider.max = String(DATA.frames.length);
+  slider.value = "1";
+
+  let timer = null;
+  function render(frameIdx) {{
+    const f = DATA.frames[frameIdx-1];
+    const d = DATA.xs.map((x,i)=>`${{i===0?"M":"L"}}${{sx(x).toFixed(2)}} ${{sy(f.density[i]).toFixed(2)}}`).join(" ");
+    probPath.setAttribute("d", d);
+    const ex = sx(f.exp_x);
+    expLine.setAttribute("x1", ex); expLine.setAttribute("x2", ex);
+
+    let di = 0;
+    for(let i=0;i<DATA.xs.length;i+=4) {{
+      phaseDots[di].setAttribute("cx", sx(DATA.xs[i]));
+      phaseDots[di].setAttribute("cy", sy(f.density[i]));
+      phaseDots[di].setAttribute("fill", phaseColor(f.phase[i]));
+      di++;
+    }}
+    for(let i=0;i<cloudDots.length;i++) {{
+      cloudDots[i].setAttribute("cx", sx(f.cloud[i]));
+    }}
+    label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
+    slider.value = String(frameIdx);
+  }}
+  function doPlay() {{
+    if (timer) return;
+    timer = setInterval(()=>{{
+      let f = Number(slider.value);
+      f = f >= DATA.frames.length ? 1 : f + 1;
+      render(f);
+    }}, 85);
+  }}
+  function doPause() {{
+    if(!timer) return;
+    clearInterval(timer);
+    timer = null;
+  }}
+  play.onclick = doPlay;
+  pause.onclick = doPause;
+  slider.oninput = ()=>render(Number(slider.value));
+  render(1);
+  </script>
+</body>
+</html>"""
+
+
 def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
   pts_sim = []
   pts_ref = []
@@ -211,10 +393,12 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
 
 def main() -> int:
   parser = argparse.ArgumentParser(description="Generate QuantX visualization HTML.")
-  parser.add_argument("--scenario", choices=["rabi", "mps", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "all"], default="all")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
+  parser.add_argument("--samples-spatial-t", type=int, default=120)
+  parser.add_argument("--samples-spatial-x", type=int, default=220)
   args = parser.parse_args()
 
   root = Path(__file__).resolve().parents[1]
@@ -258,6 +442,12 @@ def main() -> int:
     ]
     path = out_dir / "mps_diagnostics.html"
     path.write_text(_animated_page("QuantX Animation - MPS", charts), encoding="utf-8")
+    generated.append(path)
+
+  if args.scenario in {"spatial", "all"}:
+    spatial_data = _spatial_wavepacket_frames(args.samples_spatial_t, args.samples_spatial_x)
+    path = out_dir / "quantum_spatial_wavepacket.html"
+    path.write_text(_spatial_wavepacket_page(spatial_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:
