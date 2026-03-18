@@ -80,10 +80,23 @@ Generated files:
 
 - `out/visualizations/rabi_population.html`
 - `out/visualizations/mps_diagnostics.html`
-- `out/visualizations/quantum_spatial_wavepacket.html`
+- `out/visualizations/quantum_spatial_wavepacket_barrier.html`
 
 Each page includes animation controls (`Play`, `Pause`, timeline slider).
-`quantum_spatial_wavepacket.html` shows a 1D spatial wavepacket evolution (`|psi(x,t)|^2`) solved by finite difference + Crank-Nicolson, with phase color and sampled position cloud.
+`quantum_spatial_wavepacket_barrier.html` shows a 1D spatial wavepacket evolution (`|psi(x,t)|^2`) solved by finite difference + Crank-Nicolson, with phase color, potential profile, and sampled position cloud.
+
+Generate a spatial potential gallery:
+
+```powershell
+.\scripts\run_spatial_gallery.ps1
+```
+
+Gallery outputs:
+
+- `out/visualizations/quantum_spatial_wavepacket_free.html`
+- `out/visualizations/quantum_spatial_wavepacket_barrier.html`
+- `out/visualizations/quantum_spatial_wavepacket_harmonic.html`
+- `out/visualizations/quantum_spatial_wavepacket_well.html`
 
 ## 1.1) Benchmark usage
 

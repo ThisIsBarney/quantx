@@ -166,7 +166,7 @@ def _make_engine(root: Path):
   return Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
 
 
-def _spatial_wavepacket_frames(samples_t: int, samples_x: int) -> dict:
+def _spatial_wavepacket_frames(samples_t: int, samples_x: int, potential_type: str) -> dict:
   # Finite-difference + Crank-Nicolson for 1D Schrodinger equation (hbar=m=1).
   x_min, x_max = -12.0, 12.0
   t_min, t_max = 0.0, 4.0
@@ -184,9 +184,18 @@ def _spatial_wavepacket_frames(samples_t: int, samples_x: int) -> dict:
     phase = complex(math.cos(k0 * x), math.sin(k0 * x))
     psi.append(amp * phase)
 
-  # Mild Gaussian barrier to reveal reflection/transmission behavior.
-  v0, vb_w = 0.8, 0.7
-  potential = [v0 * math.exp(-(x * x) / (2.0 * vb_w * vb_w)) for x in xs]
+  # Potential profiles for different spatial scenarios.
+  if potential_type == "free":
+    potential = [0.0 for _ in xs]
+  elif potential_type == "harmonic":
+    omega = 0.35
+    potential = [0.5 * (omega * omega) * (x * x) for x in xs]
+  elif potential_type == "well":
+    wall = 5.0
+    potential = [0.0 if abs(x) <= 6.0 else wall for x in xs]
+  else:  # barrier
+    v0, vb_w = 0.8, 0.7
+    potential = [v0 * math.exp(-(x * x) / (2.0 * vb_w * vb_w)) for x in xs]
 
   # Tridiagonal coefficients for A psi_{n+1} = d (interior points only).
   off_a = complex(0.0, -dt / (4.0 * dx * dx))
@@ -260,7 +269,7 @@ def _spatial_wavepacket_frames(samples_t: int, samples_x: int) -> dict:
     psi = [0j] + interior + [0j]
     normalize(psi)
 
-  return {"xs": xs, "frames": frames, "x_min": x_min, "x_max": x_max}
+  return {"xs": xs, "frames": frames, "x_min": x_min, "x_max": x_max, "potential": potential, "potential_type": potential_type}
 
 
 def _spatial_wavepacket_page(data: dict) -> str:
@@ -269,7 +278,7 @@ def _spatial_wavepacket_page(data: dict) -> str:
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>QuantX Animation - Spatial Wavepacket</title>
+  <title>QuantX Animation - Spatial Wavepacket ({data.get("potential_type","barrier")})</title>
   <style>
     body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; }}
     .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 8px; }}
@@ -277,8 +286,8 @@ def _spatial_wavepacket_page(data: dict) -> str:
   </style>
 </head>
 <body>
-  <h1>QuantX Animation - Spatial Wavepacket</h1>
-  <p>1D Schrodinger solver (finite difference + Crank-Nicolson): showing spatial probability density |psi(x,t)|^2, phase color, and sampled particle cloud.</p>
+  <h1>QuantX Animation - Spatial Wavepacket ({data.get("potential_type","barrier")})</h1>
+  <p>1D Schrodinger solver (finite difference + Crank-Nicolson): showing spatial probability density |psi(x,t)|^2, phase color, potential profile, and sampled particle cloud.</p>
   <svg id="svg" viewBox="0 0 1000 520" width="1000" height="520" xmlns="http://www.w3.org/2000/svg"></svg>
   <div class="controls">
     <button id="play">Play</button>
@@ -298,6 +307,7 @@ def _spatial_wavepacket_page(data: dict) -> str:
   const PW=W-L-R, PH=H-T-B;
   const xMin=DATA.x_min, xMax=DATA.x_max;
   const yMax=Math.max(...DATA.frames.flatMap(f=>f.density)) * 1.1;
+  const vMax=Math.max(1e-12, ...DATA.potential.map(v=>Math.abs(v)));
 
   const sx=x=>L+(x-xMin)/(xMax-xMin)*PW;
   const sy=y=>T+(1-y/yMax)*PH;
@@ -325,6 +335,7 @@ def _spatial_wavepacket_page(data: dict) -> str:
   const yl=el("text",{{x:20,y:T+PH/2,transform:`rotate(-90 20 ${{T+PH/2}})`,"text-anchor":"middle","font-size":"12"}}); yl.textContent="|psi(x,t)|^2"; svg.appendChild(yl);
 
   const probPath = el("path",{{fill:"none",stroke:"#0b84f3","stroke-width":"2.5"}}); svg.appendChild(probPath);
+  const potPath = el("path",{{fill:"none",stroke:"#8e44ad","stroke-width":"2","stroke-dasharray":"5 4"}}); svg.appendChild(potPath);
   const expLine = el("line",{{x1:L,y1:T,x2:L,y2:T+PH,stroke:"#f39c12","stroke-width":"2","stroke-dasharray":"6 4"}}); svg.appendChild(expLine);
   const phaseDots = [];
   for(let i=0;i<DATA.xs.length;i+=4) {{
@@ -338,6 +349,7 @@ def _spatial_wavepacket_page(data: dict) -> str:
   }}
   const cloudAxis = el("line",{{x1:L,y1:T+PH+55,x2:L+PW,y2:T+PH+55,stroke:"#555","stroke-width":"1"}}); svg.appendChild(cloudAxis);
   const cloudLabel = el("text",{{x:L,y:T+PH+84,"font-size":"12"}}); cloudLabel.textContent="sampled position cloud (from |psi|^2)"; svg.appendChild(cloudLabel);
+  const potLabel = el("text",{{x:L+PW-6,y:T+16,"text-anchor":"end","font-size":"12",fill:"#8e44ad"}}); potLabel.textContent="potential V(x) (scaled)"; svg.appendChild(potLabel);
 
   slider.max = String(DATA.frames.length);
   slider.value = "1";
@@ -347,6 +359,11 @@ def _spatial_wavepacket_page(data: dict) -> str:
     const f = DATA.frames[frameIdx-1];
     const d = DATA.xs.map((x,i)=>`${{i===0?"M":"L"}}${{sx(x).toFixed(2)}} ${{sy(f.density[i]).toFixed(2)}}`).join(" ");
     probPath.setAttribute("d", d);
+    const dp = DATA.xs.map((x,i)=>{{
+      const pv = (DATA.potential[i] / vMax) * (0.85 * yMax);
+      return `${{i===0?"M":"L"}}${{sx(x).toFixed(2)}} ${{sy(pv).toFixed(2)}}`;
+    }}).join(" ");
+    potPath.setAttribute("d", dp);
     const ex = sx(f.exp_x);
     expLine.setAttribute("x1", ex); expLine.setAttribute("x2", ex);
 
@@ -431,6 +448,7 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
 def main() -> int:
   parser = argparse.ArgumentParser(description="Generate QuantX visualization HTML.")
   parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "all"], default="all")
+  parser.add_argument("--spatial-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -482,8 +500,8 @@ def main() -> int:
     generated.append(path)
 
   if args.scenario in {"spatial", "all"}:
-    spatial_data = _spatial_wavepacket_frames(args.samples_spatial_t, args.samples_spatial_x)
-    path = out_dir / "quantum_spatial_wavepacket.html"
+    spatial_data = _spatial_wavepacket_frames(args.samples_spatial_t, args.samples_spatial_x, args.spatial_potential)
+    path = out_dir / f"quantum_spatial_wavepacket_{args.spatial_potential}.html"
     path.write_text(_spatial_wavepacket_page(spatial_data), encoding="utf-8")
     generated.append(path)
 
