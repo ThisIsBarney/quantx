@@ -40,6 +40,12 @@ Run noisy circuit:
 .\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell_noisy.json --options .\examples\options_default.json
 ```
 
+Run continuous-space 2D problem:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --problem .\examples\problem_continuous2d_free.json --options .\examples\options_default.json
+```
+
 Explain backend selection:
 
 ```powershell
@@ -110,6 +116,12 @@ Run accuracy smoke benchmark:
 
 ```powershell
 .\scripts\run_benchmark.ps1
+```
+
+Run continuous-space 2D smoke benchmark (uses `Engine.run(...)` with problem JSON):
+
+```powershell
+.\scripts\run_problem_benchmark.ps1
 ```
 
 Run both accuracy + noise sweep and regenerate index:

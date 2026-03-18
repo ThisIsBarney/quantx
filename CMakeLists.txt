@@ -74,6 +74,7 @@ add_library(qx_core
   src/version.cpp
   src/statevector_backend.cpp
   src/mps_backend.cpp
+  src/continuous2d_backend.cpp
   src/engine.cpp
   src/json_utils.cpp
 )

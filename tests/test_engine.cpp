@@ -82,6 +82,56 @@ int main() {
   expect(std::abs(parsed.hamiltonian_terms.at(0).coefficient - 1e-3) < 1e-12,
          "json scientific notation should parse for Hamiltonian coefficient");
 
+  const auto c2d = qx::problem_from_json(R"({
+    "kind": "continuous_space_2d",
+    "continuous_space_2d": {
+      "nx": 64,
+      "ny": 32,
+      "dx": 0.05,
+      "dy": 0.05,
+      "dt": 0.001,
+      "steps": 20,
+      "boundary": "periodic",
+      "potential_kind": "barrier",
+      "potential_params": {"height": 1.0}
+    }
+  })");
+  expect(c2d.kind == qx::ProblemKind::ContinuousSpace2D, "continuous_space_2d kind should parse");
+  expect(c2d.continuous_2d.nx == 64, "continuous nx should parse");
+  expect(c2d.continuous_2d.ny == 32, "continuous ny should parse");
+  expect(std::abs(c2d.continuous_2d.dt - 0.001) < 1e-12, "continuous dt should parse");
+
+  const auto c2d_run = qx::run(c2d, o);
+  expect(c2d_run.ok, "continuous2d run should succeed");
+  expect(c2d_run.backend == "continuous2d", "continuous2d backend should be selected");
+  expect(c2d_run.observables.count("norm") == 1, "continuous2d should report norm");
+  expect(std::abs(c2d_run.observables.at("norm") - 1.0) < 5e-2, "continuous2d norm should remain close to 1");
+  expect(c2d_run.observables.count("sigma_x") == 1, "continuous2d should report sigma_x");
+
+  auto c2d_free_early = qx::problem_from_json(R"({
+    "kind": "continuous_space_2d",
+    "continuous_space_2d": {
+      "nx": 64,
+      "ny": 64,
+      "dx": 0.1,
+      "dy": 0.1,
+      "dt": 0.001,
+      "steps": 2,
+      "boundary": "periodic",
+      "potential_kind": "none",
+      "potential_params": {"psi_sigma": 0.2, "psi_kx": 0.0, "psi_ky": 0.0, "psi_x0": 0.0, "psi_y0": 0.0}
+    }
+  })");
+  auto c2d_free_late = c2d_free_early;
+  c2d_free_late.continuous_2d.steps = 120;
+
+  const auto free_early = qx::run(c2d_free_early, o);
+  const auto free_late = qx::run(c2d_free_late, o);
+  expect(free_early.ok && free_late.ok, "free-packet continuous2d runs should succeed");
+  const double sigma_x_early = free_early.observables.at("sigma_x");
+  const double sigma_x_late = free_late.observables.at("sigma_x");
+  expect(sigma_x_late > sigma_x_early + 1e-4, "free packet sigma_x should broaden over time");
+
   qx::QuantumProblem rabi;
   rabi.qubits = 1;
   rabi.evolution.total_time = std::numbers::pi / 2.0;

@@ -3,6 +3,10 @@
   "title": "QuantumProblem",
   "type": "object",
   "properties": {
+    "kind": {
+      "type": "string",
+      "enum": ["discrete", "continuous_space_2d", "continuous2d", "continuous_2d"]
+    },
     "qubits": { "type": "integer", "minimum": 1 },
     "equation": {
       "type": "string",
@@ -17,6 +21,28 @@
     "target_error": { "type": "number", "exclusiveMinimum": 0 },
     "expected_circuit_depth": { "type": "integer", "minimum": 0 },
     "noisy": { "type": "boolean" },
+    "continuous_space_2d": {
+      "type": "object",
+      "properties": {
+        "nx": { "type": "integer", "minimum": 1 },
+        "ny": { "type": "integer", "minimum": 1 },
+        "dx": { "type": "number", "exclusiveMinimum": 0 },
+        "dy": { "type": "number", "exclusiveMinimum": 0 },
+        "dt": { "type": "number", "exclusiveMinimum": 0 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "boundary": { "type": "string" },
+        "potential_kind": { "type": "string" },
+        "potential_params": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "potential_grid": {
+          "type": "array",
+          "items": { "type": "number" }
+        }
+      },
+      "additionalProperties": true
+    },
     "hamiltonian_terms": {
       "type": "array",
       "items": {

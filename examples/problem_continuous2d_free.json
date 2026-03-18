@@ -1,0 +1,20 @@
+{
+  "kind": "continuous_space_2d",
+  "continuous_space_2d": {
+    "nx": 128,
+    "ny": 128,
+    "dx": 0.1,
+    "dy": 0.1,
+    "dt": 0.001,
+    "steps": 100,
+    "boundary": "periodic",
+    "potential_kind": "none",
+    "potential_params": {
+      "psi_sigma": 0.25,
+      "psi_kx": 0.0,
+      "psi_ky": 0.0,
+      "psi_x0": 0.0,
+      "psi_y0": 0.0
+    }
+  }
+}

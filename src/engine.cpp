@@ -378,6 +378,7 @@ void register_builtin_backends() {
   auto& registry = BackendRegistry::instance();
   registry.register_backend("statevector", &make_statevector_backend, make_statevector_backend()->capabilities());
   registry.register_backend("mps", &make_mps_backend, make_mps_backend()->capabilities());
+  registry.register_backend("continuous2d", &make_continuous2d_backend, make_continuous2d_backend()->capabilities());
 }
 
 // Public API: explain backend choice.

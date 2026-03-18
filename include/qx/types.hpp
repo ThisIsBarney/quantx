@@ -8,6 +8,12 @@
 
 namespace qx {
 
+// High-level simulation problem category.
+enum class ProblemKind {
+  Discrete,
+  ContinuousSpace2D
+};
+
 // Equation family selector for present/future solver tracks.
 enum class EquationType {
   Schrodinger,
@@ -19,7 +25,8 @@ enum class EquationType {
 // Backend categories currently supported by the runtime.
 enum class BackendKind {
   Statevector,
-  MPS
+  MPS,
+  Continuous2D
 };
 
 // Runtime resource budget and hard limits.
@@ -65,11 +72,33 @@ struct OperatorGraph {
   std::vector<OperatorNode> nodes;
 };
 
+// Continuous 2D spatial simulation configuration.
+struct ContinuousSpace2DConfig {
+  // Uniform Cartesian grid resolution.
+  std::uint32_t nx{128};
+  std::uint32_t ny{128};
+  // Spatial step size.
+  double dx{0.1};
+  double dy{0.1};
+  // Time integration controls.
+  double dt{1e-3};
+  std::uint32_t steps{100};
+  // Boundary mode token (e.g. periodic/dirichlet/absorbing).
+  std::string boundary{"periodic"};
+  // Potential descriptor.
+  std::string potential_kind{"none"};
+  std::map<std::string, double> potential_params{};
+  // Optional flattened potential grid (row-major, size nx*ny).
+  std::vector<double> potential_grid{};
+};
+
 // Canonical simulation problem description used across API boundaries.
 struct QuantumProblem {
+  ProblemKind kind{ProblemKind::Discrete};
   std::uint32_t qubits{1};
   EquationType equation{EquationType::Schrodinger};
   EvolutionConfig evolution{};
+  ContinuousSpace2DConfig continuous_2d{};
   std::vector<HamiltonianTerm> hamiltonian_terms{};
   OperatorGraph operator_graph{};
   std::vector<std::string> observables{"norm"};

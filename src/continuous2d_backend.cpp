@@ -1,0 +1,415 @@
+#include "qx/backends.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <complex>
+#include <fstream>
+#include <stdexcept>
+#include <vector>
+
+#include <unsupported/Eigen/FFT>
+
+namespace qx {
+namespace {
+
+using Complex = std::complex<double>;
+
+class Continuous2DBackend final : public IBackend {
+ public:
+  std::string name() const override { return "continuous2d"; }
+
+  BackendCapabilities capabilities() const override {
+    BackendCapabilities c;
+    c.kind = BackendKind::Continuous2D;
+    c.supports_gpu = false;
+    c.supports_mpi = false;
+    c.supports_noisy = false;
+    c.max_qubits_recommended = 0;
+    c.equation_scope = "Schrodinger";
+    return c;
+  }
+
+  void initialize(const QuantumProblem& problem, const RunOptions&) override {
+    if (problem.kind != ProblemKind::ContinuousSpace2D) {
+      throw std::runtime_error("continuous2d backend requires ProblemKind::ContinuousSpace2D");
+    }
+
+    const auto& c = problem.continuous_2d;
+    if (c.nx == 0 || c.ny == 0) {
+      throw std::runtime_error("continuous2d grid resolution must be positive");
+    }
+    if (c.dx <= 0.0 || c.dy <= 0.0 || c.dt <= 0.0 || c.steps == 0) {
+      throw std::runtime_error("continuous2d dx/dy/dt/steps must be positive");
+    }
+    if (c.boundary != "periodic") {
+      throw std::runtime_error("continuous2d backend currently supports boundary=periodic only");
+    }
+
+    nx_ = c.nx;
+    ny_ = c.ny;
+    dx_ = c.dx;
+    dy_ = c.dy;
+    dt_ = c.dt;
+    steps_ = c.steps;
+    boundary_ = c.boundary;
+
+    const std::size_t n = static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_);
+    state_.assign(n, Complex{0.0, 0.0});
+    kbuf_.assign(n, Complex{0.0, 0.0});
+    potential_.assign(n, 0.0);
+    potential_phase_.assign(n, Complex{1.0, 0.0});
+    kinetic_half_phase_.assign(n, Complex{1.0, 0.0});
+
+    if (!c.potential_grid.empty()) {
+      if (c.potential_grid.size() != n) {
+        throw std::runtime_error("continuous2d potential_grid size must equal nx*ny");
+      }
+      potential_ = c.potential_grid;
+    } else {
+      build_analytic_potential(c.potential_kind, c.potential_params);
+    }
+
+    initialize_wavepacket(c.potential_params);
+    precompute_phases();
+    update_observables();
+  }
+
+  void evolve(const QuantumProblem&, const RunOptions&) override {
+    for (std::uint32_t s = 0; s < steps_; ++s) {
+      apply_half_kinetic();
+      apply_potential();
+      apply_half_kinetic();
+      normalize_state();
+    }
+    update_observables();
+  }
+
+  std::map<std::string, double> measure(const QuantumProblem&) override { return observables_; }
+
+  void checkpoint(const std::string& path) override {
+    std::ofstream os(path + "/continuous2d.chk", std::ios::binary);
+    if (!os.good()) {
+      return;
+    }
+    os.write(reinterpret_cast<const char*>(&nx_), sizeof(nx_));
+    os.write(reinterpret_cast<const char*>(&ny_), sizeof(ny_));
+    os.write(reinterpret_cast<const char*>(&dx_), sizeof(dx_));
+    os.write(reinterpret_cast<const char*>(&dy_), sizeof(dy_));
+    os.write(reinterpret_cast<const char*>(&dt_), sizeof(dt_));
+    os.write(reinterpret_cast<const char*>(&steps_), sizeof(steps_));
+    const std::size_t size = state_.size();
+    os.write(reinterpret_cast<const char*>(&size), sizeof(size));
+    if (size > 0) {
+      os.write(reinterpret_cast<const char*>(state_.data()),
+               static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
+    }
+  }
+
+  void restore(const std::string& path) override {
+    std::ifstream is(path + "/continuous2d.chk", std::ios::binary);
+    if (!is.good()) {
+      return;
+    }
+
+    std::uint32_t nx = 0;
+    std::uint32_t ny = 0;
+    double dx = 0.0;
+    double dy = 0.0;
+    double dt = 0.0;
+    std::uint32_t steps = 0;
+    std::size_t size = 0;
+
+    is.read(reinterpret_cast<char*>(&nx), sizeof(nx));
+    is.read(reinterpret_cast<char*>(&ny), sizeof(ny));
+    is.read(reinterpret_cast<char*>(&dx), sizeof(dx));
+    is.read(reinterpret_cast<char*>(&dy), sizeof(dy));
+    is.read(reinterpret_cast<char*>(&dt), sizeof(dt));
+    is.read(reinterpret_cast<char*>(&steps), sizeof(steps));
+    is.read(reinterpret_cast<char*>(&size), sizeof(size));
+
+    if (!is.good() || size == 0) {
+      return;
+    }
+
+    if (nx == nx_ && ny == ny_ && std::abs(dx - dx_) < 1e-15 && std::abs(dy - dy_) < 1e-15 && std::abs(dt - dt_) < 1e-15) {
+      state_.resize(size);
+      is.read(reinterpret_cast<char*>(state_.data()),
+              static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
+      if (is.good()) {
+        update_observables();
+      }
+    }
+  }
+
+  std::vector<std::complex<double>> current_state() const override { return state_; }
+
+ private:
+  std::size_t idx(std::uint32_t x, std::uint32_t y) const {
+    return static_cast<std::size_t>(y) * static_cast<std::size_t>(nx_) + static_cast<std::size_t>(x);
+  }
+
+  double x_coord(std::uint32_t x) const {
+    return (static_cast<double>(x) - 0.5 * static_cast<double>(nx_)) * dx_;
+  }
+
+  double y_coord(std::uint32_t y) const {
+    return (static_cast<double>(y) - 0.5 * static_cast<double>(ny_)) * dy_;
+  }
+
+  void build_analytic_potential(const std::string& kind, const std::map<std::string, double>& params) {
+    const auto get_param = [&params](const std::string& key, double def) {
+      const auto it = params.find(key);
+      return it == params.end() ? def : it->second;
+    };
+
+    if (kind.empty() || kind == "none") {
+      std::fill(potential_.begin(), potential_.end(), 0.0);
+      return;
+    }
+
+    const double x0 = get_param("x0", 0.0);
+    const double y0 = get_param("y0", 0.0);
+
+    if (kind == "harmonic") {
+      const double kx = get_param("kx", 1.0);
+      const double ky = get_param("ky", 1.0);
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        const double yy = y_coord(y) - y0;
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          const double xx = x_coord(x) - x0;
+          potential_[idx(x, y)] = 0.5 * (kx * xx * xx + ky * yy * yy);
+        }
+      }
+      return;
+    }
+
+    if (kind == "barrier") {
+      const double height = get_param("height", 1.0);
+      const double width_x = std::max(0.0, get_param("width_x", dx_ * 4.0));
+      const double width_y = std::max(0.0, get_param("width_y", dy_ * static_cast<double>(ny_)));
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        const double yy = std::abs(y_coord(y) - y0);
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          const double xx = std::abs(x_coord(x) - x0);
+          potential_[idx(x, y)] = (xx <= 0.5 * width_x && yy <= 0.5 * width_y) ? height : 0.0;
+        }
+      }
+      return;
+    }
+
+    if (kind == "well") {
+      const double depth = std::abs(get_param("depth", 1.0));
+      const double width_x = std::max(0.0, get_param("width_x", dx_ * 8.0));
+      const double width_y = std::max(0.0, get_param("width_y", dy_ * 8.0));
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        const double yy = std::abs(y_coord(y) - y0);
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          const double xx = std::abs(x_coord(x) - x0);
+          potential_[idx(x, y)] = (xx <= 0.5 * width_x && yy <= 0.5 * width_y) ? -depth : 0.0;
+        }
+      }
+      return;
+    }
+
+    std::fill(potential_.begin(), potential_.end(), 0.0);
+  }
+
+  void initialize_wavepacket(const std::map<std::string, double>& params) {
+    const auto get_param = [&params](const std::string& key, double def) {
+      const auto it = params.find(key);
+      return it == params.end() ? def : it->second;
+    };
+
+    const double psi_x0 = get_param("psi_x0", -0.2 * static_cast<double>(nx_) * dx_);
+    const double psi_y0 = get_param("psi_y0", 0.0);
+    const double psi_sigma = std::max(1e-6, get_param("psi_sigma", 0.1 * std::min(nx_ * dx_, ny_ * dy_)));
+    const double psi_kx = get_param("psi_kx", 3.0);
+    const double psi_ky = get_param("psi_ky", 0.0);
+
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const double yy = y_coord(y);
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const double xx = x_coord(x);
+        const double rx = xx - psi_x0;
+        const double ry = yy - psi_y0;
+        const double amp = std::exp(-(rx * rx + ry * ry) / (4.0 * psi_sigma * psi_sigma));
+        const double phase = psi_kx * xx + psi_ky * yy;
+        state_[idx(x, y)] = amp * std::exp(Complex{0.0, phase});
+      }
+    }
+
+    normalize_state();
+  }
+
+  void precompute_phases() {
+    const double two_pi = 6.28318530717958647692;
+    const double lx = static_cast<double>(nx_) * dx_;
+    const double ly = static_cast<double>(ny_) * dy_;
+
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const int ky_index = (y <= ny_ / 2) ? static_cast<int>(y) : static_cast<int>(y) - static_cast<int>(ny_);
+      const double ky = two_pi * static_cast<double>(ky_index) / ly;
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const int kx_index = (x <= nx_ / 2) ? static_cast<int>(x) : static_cast<int>(x) - static_cast<int>(nx_);
+        const double kx = two_pi * static_cast<double>(kx_index) / lx;
+        const double k2 = kx * kx + ky * ky;
+        const std::size_t i = idx(x, y);
+        kinetic_half_phase_[i] = std::exp(Complex{0.0, -0.25 * dt_ * k2});
+        potential_phase_[i] = std::exp(Complex{0.0, -dt_ * potential_[i]});
+      }
+    }
+  }
+
+  void normalize_state() {
+    double sum = 0.0;
+    for (const auto& a : state_) {
+      sum += std::norm(a);
+    }
+    const double cell = dx_ * dy_;
+    const double norm = std::sqrt(std::max(1e-30, sum * cell));
+    for (auto& a : state_) {
+      a /= norm;
+    }
+  }
+
+  void fft2_forward(const std::vector<Complex>& in, std::vector<Complex>& out) {
+    out = in;
+    std::vector<Complex> line;
+    std::vector<Complex> transformed;
+
+    line.resize(nx_);
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        line[x] = out[idx(x, y)];
+      }
+      fft_.fwd(transformed, line);
+      line.swap(transformed);
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        out[idx(x, y)] = line[x];
+      }
+    }
+
+    line.resize(ny_);
+    for (std::uint32_t x = 0; x < nx_; ++x) {
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        line[y] = out[idx(x, y)];
+      }
+      fft_.fwd(transformed, line);
+      line.swap(transformed);
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        out[idx(x, y)] = line[y];
+      }
+    }
+  }
+
+  void fft2_inverse(const std::vector<Complex>& in, std::vector<Complex>& out) {
+    out = in;
+    std::vector<Complex> line;
+    std::vector<Complex> transformed;
+
+    line.resize(nx_);
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        line[x] = out[idx(x, y)];
+      }
+      fft_.inv(transformed, line);
+      line.swap(transformed);
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        out[idx(x, y)] = line[x];
+      }
+    }
+
+    line.resize(ny_);
+    for (std::uint32_t x = 0; x < nx_; ++x) {
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        line[y] = out[idx(x, y)];
+      }
+      fft_.inv(transformed, line);
+      line.swap(transformed);
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        out[idx(x, y)] = line[y];
+      }
+    }
+  }
+
+  void apply_half_kinetic() {
+    fft2_forward(state_, kbuf_);
+    for (std::size_t i = 0; i < kbuf_.size(); ++i) {
+      kbuf_[i] *= kinetic_half_phase_[i];
+    }
+    fft2_inverse(kbuf_, state_);
+  }
+
+  void apply_potential() {
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      state_[i] *= potential_phase_[i];
+    }
+  }
+
+  void update_observables() {
+    const double cell = dx_ * dy_;
+    double norm = 0.0;
+    double x_mean = 0.0;
+    double y_mean = 0.0;
+    double x2_mean = 0.0;
+    double y2_mean = 0.0;
+
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const double yy = y_coord(y);
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const double xx = x_coord(x);
+        const double p = std::norm(state_[idx(x, y)]) * cell;
+        norm += p;
+        x_mean += xx * p;
+        y_mean += yy * p;
+        x2_mean += xx * xx * p;
+        y2_mean += yy * yy * p;
+      }
+    }
+
+    const double inv_norm = norm > 1e-30 ? 1.0 / norm : 0.0;
+    x_mean *= inv_norm;
+    y_mean *= inv_norm;
+    x2_mean *= inv_norm;
+    y2_mean *= inv_norm;
+
+    const double var_x = std::max(0.0, x2_mean - x_mean * x_mean);
+    const double var_y = std::max(0.0, y2_mean - y_mean * y_mean);
+
+    observables_["norm"] = norm;
+    observables_["x_mean"] = x_mean;
+    observables_["y_mean"] = y_mean;
+    observables_["x2_mean"] = x2_mean;
+    observables_["y2_mean"] = y2_mean;
+    observables_["sigma_x"] = std::sqrt(var_x);
+    observables_["sigma_y"] = std::sqrt(var_y);
+    observables_["nx"] = static_cast<double>(nx_);
+    observables_["ny"] = static_cast<double>(ny_);
+  }
+
+ private:
+  std::uint32_t nx_{0};
+  std::uint32_t ny_{0};
+  double dx_{0.0};
+  double dy_{0.0};
+  double dt_{0.0};
+  std::uint32_t steps_{0};
+  std::string boundary_{"periodic"};
+
+  std::vector<Complex> state_;
+  std::vector<Complex> kbuf_;
+  std::vector<double> potential_;
+  std::vector<Complex> potential_phase_;
+  std::vector<Complex> kinetic_half_phase_;
+  std::map<std::string, double> observables_;
+
+  Eigen::FFT<double> fft_;
+};
+
+}  // namespace
+
+std::unique_ptr<IBackend> make_continuous2d_backend() {
+  return std::make_unique<Continuous2DBackend>();
+}
+
+}  // namespace qx

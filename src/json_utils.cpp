@@ -13,6 +13,25 @@ namespace {
 
 using json = nlohmann::json;
 
+// Convert problem kind enum to stable JSON token.
+std::string problem_kind_to_string(ProblemKind k) {
+  switch (k) {
+    case ProblemKind::Discrete:
+      return "discrete";
+    case ProblemKind::ContinuousSpace2D:
+      return "continuous_space_2d";
+  }
+  return "discrete";
+}
+
+// Parse problem kind token to enum with discrete fallback.
+ProblemKind problem_kind_from_string(const std::string& s) {
+  if (s == "continuous_space_2d" || s == "continuous2d" || s == "continuous_2d") {
+    return ProblemKind::ContinuousSpace2D;
+  }
+  return ProblemKind::Discrete;
+}
+
 // Convert equation enum to stable JSON token.
 std::string equation_to_string(EquationType t) {
   switch (t) {
@@ -89,6 +108,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   const json j = parse_json_or_throw(json_text);
 
   QuantumProblem p;
+  p.kind = problem_kind_from_string(get_or<std::string>(j, "kind", problem_kind_to_string(p.kind)));
   p.qubits = get_or<std::uint32_t>(j, "qubits", p.qubits);
   p.equation = equation_from_string(get_or<std::string>(j, "equation", equation_to_string(p.equation)));
   p.evolution.total_time = get_or<double>(j, "total_time", p.evolution.total_time);
@@ -101,6 +121,23 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   p.noisy = get_or<bool>(j, "noisy", p.noisy);
   p.expected_circuit_depth = get_or<std::uint32_t>(j, "expected_circuit_depth", p.expected_circuit_depth);
   p.observables = get_or<std::vector<std::string>>(j, "observables", p.observables);
+
+  auto c2d_it = j.find("continuous_space_2d");
+  if (c2d_it != j.end() && c2d_it->is_object()) {
+    const auto& c2d = *c2d_it;
+    p.continuous_2d.nx = get_or<std::uint32_t>(c2d, "nx", p.continuous_2d.nx);
+    p.continuous_2d.ny = get_or<std::uint32_t>(c2d, "ny", p.continuous_2d.ny);
+    p.continuous_2d.dx = get_or<double>(c2d, "dx", p.continuous_2d.dx);
+    p.continuous_2d.dy = get_or<double>(c2d, "dy", p.continuous_2d.dy);
+    p.continuous_2d.dt = get_or<double>(c2d, "dt", p.continuous_2d.dt);
+    p.continuous_2d.steps = get_or<std::uint32_t>(c2d, "steps", p.continuous_2d.steps);
+    p.continuous_2d.boundary = get_or<std::string>(c2d, "boundary", p.continuous_2d.boundary);
+    p.continuous_2d.potential_kind = get_or<std::string>(c2d, "potential_kind", p.continuous_2d.potential_kind);
+    p.continuous_2d.potential_params =
+        get_or<std::map<std::string, double>>(c2d, "potential_params", p.continuous_2d.potential_params);
+    p.continuous_2d.potential_grid = get_or<std::vector<double>>(c2d, "potential_grid", p.continuous_2d.potential_grid);
+    p.kind = ProblemKind::ContinuousSpace2D;
+  }
 
   auto h_it = j.find("hamiltonian_terms");
   if (h_it != j.end() && h_it->is_array()) {

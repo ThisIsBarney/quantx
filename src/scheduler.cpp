@@ -9,6 +9,15 @@ BackendInfo explain_backend_choice_internal(const QuantumProblem& problem, const
   BackendInfo info;
   info.candidates = BackendRegistry::instance().names();
 
+  if (problem.kind == ProblemKind::ContinuousSpace2D) {
+    info.selected_backend = "continuous2d";
+    info.reasons.push_back("Problem kind is continuous_space_2d.");
+    if (options.use_gpu) {
+      info.reasons.push_back("GPU was requested; future Continuous2D backend may use GPU FFT acceleration.");
+    }
+    return info;
+  }
+
   if (problem.equation != EquationType::Schrodinger) {
     info.selected_backend = "statevector";
     info.reasons.push_back("Non-Schrodinger equations are reserved for future backends.");

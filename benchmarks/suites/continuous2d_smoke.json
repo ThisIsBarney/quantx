@@ -1,0 +1,18 @@
+{
+  "name": "continuous2d_smoke",
+  "repeats": 3,
+  "gates": {
+    "ok_rate_min": 1.0,
+    "norm_abs_error_mean_max": 0.05,
+    "core_elapsed_ms_mean_max": 3000.0
+  },
+  "options": {
+    "enable_checkpoint": false
+  },
+  "cases": [
+    {
+      "id": "free_128",
+      "problem_file": "examples/problem_continuous2d_free.json"
+    }
+  ]
+}
