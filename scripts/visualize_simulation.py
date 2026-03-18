@@ -167,45 +167,77 @@ def _make_engine(root: Path):
 
 
 def _spatial_wavepacket_frames(samples_t: int, samples_x: int) -> dict:
-  # Dimensionless free-particle Gaussian wavepacket (hbar=m=1).
-  x_min, x_max = -10.0, 10.0
+  # Finite-difference + Crank-Nicolson for 1D Schrodinger equation (hbar=m=1).
+  x_min, x_max = -12.0, 12.0
   t_min, t_max = 0.0, 4.0
-  sigma0 = 0.6
-  x0 = -5.0
-  k0 = 2.2
-  v = k0
-  xs = [x_min + (x_max - x_min) * i / max(1, samples_x - 1) for i in range(samples_x)]
-  ts = [t_min + (t_max - t_min) * i / max(1, samples_t - 1) for i in range(samples_t)]
+  n = max(80, samples_x)
+  nt = max(20, samples_t)
+  xs = [x_min + (x_max - x_min) * i / (n - 1) for i in range(n)]
+  dx = (x_max - x_min) / (n - 1)
+  dt = (t_max - t_min) / (nt - 1)
 
+  # Initial right-moving Gaussian wavepacket.
+  x0, sigma0, k0 = -6.0, 0.7, 2.8
+  psi = []
+  for x in xs:
+    amp = math.exp(-((x - x0) ** 2) / (4.0 * sigma0 * sigma0))
+    phase = complex(math.cos(k0 * x), math.sin(k0 * x))
+    psi.append(amp * phase)
+
+  # Mild Gaussian barrier to reveal reflection/transmission behavior.
+  v0, vb_w = 0.8, 0.7
+  potential = [v0 * math.exp(-(x * x) / (2.0 * vb_w * vb_w)) for x in xs]
+
+  # Tridiagonal coefficients for A psi_{n+1} = d (interior points only).
+  off_a = complex(0.0, -dt / (4.0 * dx * dx))
+  off_b = complex(0.0, dt / (4.0 * dx * dx))
+  diag_a = []
+  diag_b = []
+  for j in range(1, n - 1):
+    h_diag = (1.0 / (dx * dx)) + potential[j]
+    diag_a.append(complex(1.0, 0.5 * dt * h_diag))
+    diag_b.append(complex(1.0, -0.5 * dt * h_diag))
+
+  def solve_tridiagonal(a: complex, b_diag: list[complex], c: complex, d: list[complex]) -> list[complex]:
+    m = len(d)
+    cp = [0j] * m
+    dp = [0j] * m
+    cp[0] = c / b_diag[0]
+    dp[0] = d[0] / b_diag[0]
+    for i in range(1, m):
+      denom = b_diag[i] - a * cp[i - 1]
+      cp[i] = (c / denom) if i < m - 1 else 0j
+      dp[i] = (d[i] - a * dp[i - 1]) / denom
+    x = [0j] * m
+    x[-1] = dp[-1]
+    for i in range(m - 2, -1, -1):
+      x[i] = dp[i] - cp[i] * x[i + 1]
+    return x
+
+  def normalize(arr: list[complex]) -> None:
+    s = sum((z.real * z.real + z.imag * z.imag) for z in arr) * dx
+    if s > 0.0:
+      inv = 1.0 / math.sqrt(s)
+      for i in range(len(arr)):
+        arr[i] *= inv
+
+  normalize(psi)
   frames = []
-  for t in ts:
-    tau = t / (2.0 * sigma0 * sigma0)
-    denom = complex(1.0, tau)
-    norm = (1.0 / ((2.0 * math.pi * sigma0 * sigma0) ** 0.25)) * (1.0 / (abs(denom) ** 0.5))
-    density = []
-    phase = []
-    for x in xs:
-      dx = x - x0 - v * t
-      exponent = -(dx * dx) / (4.0 * sigma0 * sigma0 * denom) + 1j * (k0 * (x - x0 - 0.5 * v * t))
-      psi = norm * complex(math.e) ** exponent
-      p = (psi.real * psi.real) + (psi.imag * psi.imag)
-      density.append(p)
-      phase.append(math.atan2(psi.imag, psi.real))
+  n_particles = 56
 
-    # Normalize density and compute <x>.
-    dx_grid = (x_max - x_min) / max(1, samples_x - 1)
-    z = sum(density) * dx_grid
-    if z > 0.0:
-      density = [p / z for p in density]
-    exp_x = sum(x * p for x, p in zip(xs, density)) * dx_grid
+  for it in range(nt):
+    t = t_min + (t_max - t_min) * it / max(1, nt - 1)
+    density = [(z.real * z.real + z.imag * z.imag) for z in psi]
+    phase = [math.atan2(z.imag, z.real) for z in psi]
+    z_norm = sum(density) * dx
+    if z_norm > 0.0:
+      density = [p / z_norm for p in density]
 
-    # Deterministic "particle cloud" from CDF quantiles for intuitive motion view.
-    cdf = []
-    acc = 0.0
+    exp_x = sum(x * p for x, p in zip(xs, density)) * dx
+    cdf, acc = [], 0.0
     for p in density:
-      acc += p * dx_grid
+      acc += p * dx
       cdf.append(acc)
-    n_particles = 56
     cloud = []
     j = 0
     for i in range(n_particles):
@@ -213,16 +245,21 @@ def _spatial_wavepacket_frames(samples_t: int, samples_x: int) -> dict:
       while j < len(cdf) - 1 and cdf[j] < q:
         j += 1
       cloud.append(xs[j])
+    frames.append({"t": t, "density": density, "phase": phase, "exp_x": exp_x, "cloud": cloud})
 
-    frames.append(
-        {
-            "t": t,
-            "density": density,
-            "phase": phase,
-            "exp_x": exp_x,
-            "cloud": cloud,
-        }
-    )
+    if it == nt - 1:
+      break
+
+    # Build RHS d = B * psi_n (Dirichlet boundary psi[0]=psi[-1]=0).
+    rhs = []
+    for k in range(n - 2):
+      j = k + 1
+      val = diag_b[k] * psi[j] + off_b * psi[j - 1] + off_b * psi[j + 1]
+      rhs.append(val)
+    interior = solve_tridiagonal(off_a, diag_a, off_a, rhs)
+    psi = [0j] + interior + [0j]
+    normalize(psi)
+
   return {"xs": xs, "frames": frames, "x_min": x_min, "x_max": x_max}
 
 
@@ -241,7 +278,7 @@ def _spatial_wavepacket_page(data: dict) -> str:
 </head>
 <body>
   <h1>QuantX Animation - Spatial Wavepacket</h1>
-  <p>1D free Gaussian wavepacket: showing spatial probability density |psi(x,t)|^2, phase color, and sampled particle cloud.</p>
+  <p>1D Schrodinger solver (finite difference + Crank-Nicolson): showing spatial probability density |psi(x,t)|^2, phase color, and sampled particle cloud.</p>
   <svg id="svg" viewBox="0 0 1000 520" width="1000" height="520" xmlns="http://www.w3.org/2000/svg"></svg>
   <div class="controls">
     <button id="play">Play</button>
