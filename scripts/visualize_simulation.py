@@ -594,6 +594,250 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
 </html>"""
 
 
+def _spatial_wavepacket_3d_frames(samples_t: int, nx: int, ny: int, nz: int, potential_type: str, boundary: str) -> dict:
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("3D spatial visualization requires numpy") from ex
+
+  x_min, x_max = -6.0, 6.0
+  y_min, y_max = -6.0, 6.0
+  z_min, z_max = -6.0, 6.0
+  t_min, t_max = 0.0, 2.5
+  nx = max(16, nx)
+  ny = max(16, ny)
+  nz = max(16, nz)
+  nt = max(10, samples_t)
+
+  xs = np.linspace(x_min, x_max, nx)
+  ys = np.linspace(y_min, y_max, ny)
+  zs = np.linspace(z_min, z_max, nz)
+  dx = float(xs[1] - xs[0])
+  dy = float(ys[1] - ys[0])
+  dz = float(zs[1] - zs[0])
+  dt = (t_max - t_min) / (nt - 1)
+
+  X, Y, Z = np.meshgrid(xs, ys, zs, indexing="ij")
+
+  x0, y0, z0 = -2.0, -1.2, -0.8
+  sigma = 0.7
+  kx0, ky0, kz0 = 1.8, 1.0, 0.8
+  envelope = np.exp(-((X - x0) ** 2 + (Y - y0) ** 2 + (Z - z0) ** 2) / (4.0 * sigma * sigma))
+  phase = np.exp(1j * (kx0 * X + ky0 * Y + kz0 * Z))
+  psi = envelope * phase
+
+  if potential_type == "free":
+    V = np.zeros_like(X)
+  elif potential_type == "harmonic":
+    omega = 0.25
+    V = 0.5 * (omega * omega) * (X * X + Y * Y + Z * Z)
+  elif potential_type == "well":
+    wall = 5.5
+    V = np.where((np.abs(X) <= 4.8) & (np.abs(Y) <= 4.8) & (np.abs(Z) <= 4.8), 0.0, wall)
+  else:  # barrier
+    V = 0.95 * np.exp(-(X * X) / (2.0 * 0.55 * 0.55))
+
+  kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
+  ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
+  kz = 2.0 * np.pi * np.fft.fftfreq(nz, d=dz)
+  KX, KY, KZ = np.meshgrid(kx, ky, kz, indexing="ij")
+  kinetic_phase = np.exp(-1j * 0.5 * (KX * KX + KY * KY + KZ * KZ) * dt)
+  potential_half = np.exp(-1j * V * dt * 0.5)
+
+  absorb_mask = np.ones_like(V, dtype=float)
+  if boundary == "absorbing":
+    width = 4.0
+    strength = 4.0
+    ix = np.minimum(np.arange(nx), np.arange(nx)[::-1]).reshape(nx, 1, 1)
+    iy = np.minimum(np.arange(ny), np.arange(ny)[::-1]).reshape(1, ny, 1)
+    iz = np.minimum(np.arange(nz), np.arange(nz)[::-1]).reshape(1, 1, nz)
+    edge = np.minimum(np.minimum(ix, iy), iz).astype(float)
+    t = np.clip((width - edge) / width, 0.0, 1.0)
+    absorb_mask = np.exp(-strength * t * t * dt)
+
+  def normalize(a):
+    nrm = float(np.sum(np.abs(a) ** 2) * dx * dy * dz)
+    if nrm > 0:
+      a /= math.sqrt(nrm)
+    return a
+
+  def apply_dirichlet(a):
+    a[0, :, :] = 0
+    a[-1, :, :] = 0
+    a[:, 0, :] = 0
+    a[:, -1, :] = 0
+    a[:, :, 0] = 0
+    a[:, :, -1] = 0
+    return a
+
+  psi = normalize(psi)
+  if boundary == "dirichlet":
+    psi = apply_dirichlet(psi)
+    psi = normalize(psi)
+
+  frames = []
+  dens_max = 1e-12
+  z_mid = nz // 2
+  y_mid = ny // 2
+  x_mid = nx // 2
+
+  for it in range(nt):
+    t = t_min + (t_max - t_min) * it / max(1, nt - 1)
+    dens = np.abs(psi) ** 2
+    dens_max = max(dens_max, float(np.max(dens)))
+    norm = float(np.sum(dens) * dx * dy * dz)
+    exp_x = float(np.sum(X * dens) * dx * dy * dz)
+    exp_y = float(np.sum(Y * dens) * dx * dy * dz)
+    exp_z = float(np.sum(Z * dens) * dx * dy * dz)
+    frames.append(
+        {
+            "t": t,
+            "xy": dens[:, :, z_mid].tolist(),
+            "xz": dens[:, y_mid, :].tolist(),
+            "yz": dens[x_mid, :, :].tolist(),
+            "exp_x": exp_x,
+            "exp_y": exp_y,
+            "exp_z": exp_z,
+            "norm": norm,
+        }
+    )
+    if it == nt - 1:
+      break
+
+    psi = potential_half * psi
+    psi_k = np.fft.fftn(psi)
+    psi = np.fft.ifftn(kinetic_phase * psi_k)
+    psi = potential_half * psi
+    if boundary == "absorbing":
+      psi = psi * absorb_mask
+    if boundary == "dirichlet":
+      psi = apply_dirichlet(psi)
+    if boundary != "absorbing":
+      psi = normalize(psi)
+
+  return {
+      "x_min": x_min,
+      "x_max": x_max,
+      "y_min": y_min,
+      "y_max": y_max,
+      "z_min": z_min,
+      "z_max": z_max,
+      "potential_type": potential_type,
+      "boundary": boundary,
+      "frames": frames,
+      "dens_max": dens_max,
+  }
+
+
+def _spatial_wavepacket_3d_page(data: dict) -> str:
+  payload = json.dumps(data, ensure_ascii=False)
+  return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>QuantX Animation - 3D Spatial Wavepacket ({data.get("potential_type","barrier")}, {data.get("boundary","periodic")})</title>
+  <style>
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(3, minmax(260px, 1fr)); gap: 16px; }}
+    .panel {{ border: 1px solid #ccc; border-radius: 8px; padding: 10px; }}
+    canvas {{ width: 100%; max-width: 360px; aspect-ratio: 1/1; border: 1px solid #bbb; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 12px; }}
+    button {{ padding: 4px 10px; }}
+    .meta {{ margin-top: 8px; font-size: 13px; color: #333; }}
+  </style>
+</head>
+<body>
+  <h1>QuantX Animation - 3D Spatial Wavepacket</h1>
+  <p>Numerical 3D Schrodinger evolution (split-step Fourier). Panels show orthogonal slices of <code>|psi(x,y,z,t)|^2</code>: XY(z=0), XZ(y=0), YZ(x=0).</p>
+  <div class="grid">
+    <div class="panel"><h3>XY Slice</h3><canvas id="cv_xy" width="280" height="280"></canvas></div>
+    <div class="panel"><h3>XZ Slice</h3><canvas id="cv_xz" width="280" height="280"></canvas></div>
+    <div class="panel"><h3>YZ Slice</h3><canvas id="cv_yz" width="280" height="280"></canvas></div>
+  </div>
+  <div class="controls">
+    <button id="play">Play</button>
+    <button id="pause">Pause</button>
+    <input id="slider" type="range" min="1" step="1" style="width:520px"/>
+    <span id="label"></span>
+  </div>
+  <div id="meta" class="meta"></div>
+  <script>
+  const DATA = {payload};
+  const slider = document.getElementById("slider");
+  const label = document.getElementById("label");
+  const meta = document.getElementById("meta");
+  const play = document.getElementById("play");
+  const pause = document.getElementById("pause");
+  const ctxXY = document.getElementById("cv_xy").getContext("2d");
+  const ctxXZ = document.getElementById("cv_xz").getContext("2d");
+  const ctxYZ = document.getElementById("cv_yz").getContext("2d");
+  slider.max = String(DATA.frames.length);
+  slider.value = "1";
+
+  function colorMap(v) {{
+    const t = Math.max(0, Math.min(1, v));
+    const r = Math.floor(255 * Math.pow(t, 0.55));
+    const g = Math.floor(255 * t * t);
+    const b = Math.floor(255 * (1 - t));
+    return [r, g, b, 255];
+  }}
+
+  function drawSlice(ctx, arr2d) {{
+    const nx = arr2d.length;
+    const ny = arr2d[0].length;
+    const img = ctx.createImageData(nx, ny);
+    let p = 0;
+    for (let j = 0; j < ny; j++) {{
+      for (let i = 0; i < nx; i++) {{
+        const v = arr2d[i][j] / DATA.dens_max;
+        const c = colorMap(v);
+        img.data[p++] = c[0];
+        img.data[p++] = c[1];
+        img.data[p++] = c[2];
+        img.data[p++] = c[3];
+      }}
+    }}
+    const tmp = document.createElement("canvas");
+    tmp.width = nx;
+    tmp.height = ny;
+    tmp.getContext("2d").putImageData(img, 0, 0);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.drawImage(tmp, 0, 0, ctx.canvas.width, ctx.canvas.height);
+  }}
+
+  function render(frameIdx) {{
+    const f = DATA.frames[frameIdx - 1];
+    drawSlice(ctxXY, f.xy);
+    drawSlice(ctxXZ, f.xz);
+    drawSlice(ctxYZ, f.yz);
+    label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
+    meta.textContent = `boundary=${{DATA.boundary}}, potential=${{DATA.potential_type}}, norm=${{f.norm.toFixed(6)}}, <x,y,z>=(${{f.exp_x.toFixed(3)}}, ${{f.exp_y.toFixed(3)}}, ${{f.exp_z.toFixed(3)}})`;
+    slider.value = String(frameIdx);
+  }}
+
+  let timer = null;
+  function doPlay() {{
+    if (timer) return;
+    timer = setInterval(() => {{
+      let f = Number(slider.value);
+      f = f >= DATA.frames.length ? 1 : f + 1;
+      render(f);
+    }}, 90);
+  }}
+  function doPause() {{
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  }}
+  play.onclick = doPlay;
+  pause.onclick = doPause;
+  slider.oninput = () => render(Number(slider.value));
+  render(1);
+  </script>
+</body>
+</html>"""
+
+
 def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
   pts_sim = []
   pts_ref = []
@@ -639,9 +883,11 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
 
 def main() -> int:
   parser = argparse.ArgumentParser(description="Generate QuantX visualization HTML.")
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"], default="all")
   parser.add_argument("--spatial-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
+  parser.add_argument("--spatial3d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
+  parser.add_argument("--spatial3d-boundary", choices=["periodic", "absorbing", "dirichlet"], default="periodic")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -650,6 +896,10 @@ def main() -> int:
   parser.add_argument("--samples-spatial2d-t", type=int, default=90)
   parser.add_argument("--samples-spatial2d-x", type=int, default=72)
   parser.add_argument("--samples-spatial2d-y", type=int, default=72)
+  parser.add_argument("--samples-spatial3d-t", type=int, default=48)
+  parser.add_argument("--samples-spatial3d-x", type=int, default=32)
+  parser.add_argument("--samples-spatial3d-y", type=int, default=32)
+  parser.add_argument("--samples-spatial3d-z", type=int, default=32)
   args = parser.parse_args()
 
   root = Path(__file__).resolve().parents[1]
@@ -707,6 +957,19 @@ def main() -> int:
     )
     path = out_dir / f"quantum_spatial2d_wavepacket_{args.spatial2d_potential}.html"
     path.write_text(_spatial_wavepacket_2d_page(spatial2d), encoding="utf-8")
+    generated.append(path)
+
+  if args.scenario in {"spatial3d", "all"}:
+    spatial3d = _spatial_wavepacket_3d_frames(
+        args.samples_spatial3d_t,
+        args.samples_spatial3d_x,
+        args.samples_spatial3d_y,
+        args.samples_spatial3d_z,
+        args.spatial3d_potential,
+        args.spatial3d_boundary,
+    )
+    path = out_dir / f"quantum_spatial3d_wavepacket_{args.spatial3d_potential}_{args.spatial3d_boundary}.html"
+    path.write_text(_spatial_wavepacket_3d_page(spatial3d), encoding="utf-8")
     generated.append(path)
 
   for p in generated:

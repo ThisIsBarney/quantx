@@ -87,9 +87,17 @@ Generated files:
 - `out/visualizations/rabi_population.html`
 - `out/visualizations/mps_diagnostics.html`
 - `out/visualizations/quantum_spatial_wavepacket_barrier.html`
+- `out/visualizations/quantum_spatial3d_wavepacket_barrier_periodic.html`
 
 Each page includes animation controls (`Play`, `Pause`, timeline slider).
 `quantum_spatial_wavepacket_barrier.html` shows a 1D spatial wavepacket evolution (`|psi(x,t)|^2`) solved by finite difference + Crank-Nicolson, with phase color, potential profile, and sampled position cloud.
+`quantum_spatial3d_wavepacket_barrier_periodic.html` shows 3D evolution slices (XY/XZ/YZ) of `|psi(x,y,z,t)|^2` solved by split-step Fourier.
+
+Generate a focused 3D page with selectable boundary condition:
+
+```powershell
+python .\scripts\visualize_simulation.py --scenario spatial3d --spatial3d-potential barrier --spatial3d-boundary absorbing
+```
 
 Generate a spatial potential gallery:
 
@@ -107,8 +115,10 @@ Gallery outputs:
 - `out/visualizations/quantum_spatial2d_wavepacket_barrier.html`
 - `out/visualizations/quantum_spatial2d_wavepacket_harmonic.html`
 - `out/visualizations/quantum_spatial2d_wavepacket_well.html`
+- `out/visualizations/quantum_spatial3d_wavepacket_barrier_absorbing.html`
 
 2D pages use a numerical split-step Fourier solver and render `|psi(x,y,t)|^2` as animated heatmaps.
+3D pages render orthogonal slices (XY/XZ/YZ) of `|psi(x,y,z,t)|^2` and support `periodic`, `absorbing`, and `dirichlet` boundary options.
 
 ## 1.1) Benchmark usage
 
