@@ -74,6 +74,49 @@ def main() -> int:
   if "norm" not in r3.get("observables", {}):
     raise RuntimeError("run continuous2d missing norm observable")
 
+  continuous3d_problem = {
+      "kind": "continuous_space_3d",
+      "continuous_space_3d": {
+          "nx": 24,
+          "ny": 24,
+          "nz": 24,
+          "dx": 0.1,
+          "dy": 0.1,
+          "dz": 0.1,
+          "dt": 0.001,
+          "steps": 24,
+          "boundary": "periodic",
+          "potential_kind": "none",
+          "potential_params": {
+              "psi_sigma": 0.25,
+              "psi_kx": 0.0,
+              "psi_ky": 0.0,
+              "psi_kz": 0.0,
+              "psi_x0": 0.0,
+              "psi_y0": 0.0,
+              "psi_z0": 0.0,
+          },
+      },
+  }
+
+  v3d = eng.validate_problem(continuous3d_problem)
+  if not v3d.get("ok", False):
+    raise RuntimeError("validate_problem for continuous3d failed")
+
+  e3d = eng.explain(continuous3d_problem, {"enable_checkpoint": False})
+  if e3d.get("selected_backend") != "continuous3d":
+    raise RuntimeError("explain continuous3d did not select continuous3d backend")
+
+  r4 = eng.run(continuous3d_problem, {"enable_checkpoint": False})
+  if not r4.get("ok", False):
+    raise RuntimeError("run continuous3d failed")
+  if r4.get("backend") != "continuous3d":
+    raise RuntimeError("run continuous3d did not select continuous3d backend")
+  if "norm" not in r4.get("observables", {}):
+    raise RuntimeError("run continuous3d missing norm observable")
+  if "sigma_z" not in r4.get("observables", {}):
+    raise RuntimeError("run continuous3d missing sigma_z observable")
+
   print("python adapter smoke passed")
   return 0
 

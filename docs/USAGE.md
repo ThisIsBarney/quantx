@@ -240,6 +240,35 @@ pres = e.run({
 print(pres["backend"], pres["observables"]["norm"])
 ```
 
+Continuous-space 3D call (same unified `Engine.run(...)` API):
+
+```python
+from quantx_engine import Engine
+e = Engine(r"D:\\WUJ\\coding\\QuantX\\build-vs\\Debug\\quantx.dll")
+pres3d = e.run({
+  "kind": "continuous_space_3d",
+  "continuous_space_3d": {
+    "nx": 96,
+    "ny": 96,
+    "nz": 96,
+    "dx": 0.08,
+    "dy": 0.08,
+    "dz": 0.08,
+    "dt": 0.0005,
+    "steps": 240,
+    "boundary": "periodic",
+    "potential_kind": "harmonic",
+    "potential_params": {"kx": 0.4, "ky": 0.4, "kz": 0.4, "psi_sigma": 0.25}
+  }
+}, {"enable_checkpoint": False})
+print(pres3d["backend"], pres3d["observables"]["sigma_z"])
+```
+
+Standard template files:
+
+- `examples/problem_continuous2d_template.json`
+- `examples/problem_continuous3d_template.json`
+
 Framework-adapter call (Qiskit-like request):
 
 ```python
@@ -295,6 +324,26 @@ Use `quantx.dll` in `build-vs/Debug`.
     "steps": 100,
     "boundary": "periodic",
     "potential_kind": "none"
+  }
+}
+```
+
+`continuous_space_3d` also goes through the same `qx_run(problem_json, options_json)` entrypoint:
+
+```json
+{
+  "kind": "continuous_space_3d",
+  "continuous_space_3d": {
+    "nx": 96,
+    "ny": 96,
+    "nz": 96,
+    "dx": 0.08,
+    "dy": 0.08,
+    "dz": 0.08,
+    "dt": 0.0005,
+    "steps": 240,
+    "boundary": "periodic",
+    "potential_kind": "harmonic"
   }
 }
 ```
