@@ -888,6 +888,8 @@ def main() -> int:
   parser.add_argument("--spatial2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial3d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial3d-boundary", choices=["periodic", "absorbing", "dirichlet"], default="periodic")
+  parser.add_argument("--spatial3d-export-json", action="store_true")
+  parser.add_argument("--spatial3d-json-path", default="")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -971,6 +973,14 @@ def main() -> int:
     path = out_dir / f"quantum_spatial3d_wavepacket_{args.spatial3d_potential}_{args.spatial3d_boundary}.html"
     path.write_text(_spatial_wavepacket_3d_page(spatial3d), encoding="utf-8")
     generated.append(path)
+    if args.spatial3d_export_json:
+      if args.spatial3d_json_path:
+        json_path = root / args.spatial3d_json_path
+      else:
+        json_path = out_dir / f"quantum_spatial3d_wavepacket_{args.spatial3d_potential}_{args.spatial3d_boundary}.json"
+      json_path.parent.mkdir(parents=True, exist_ok=True)
+      json_path.write_text(json.dumps(spatial3d, ensure_ascii=False), encoding="utf-8")
+      generated.append(json_path)
 
   for p in generated:
     print(f"wrote visualization: {p}")

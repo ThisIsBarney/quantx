@@ -50,6 +50,7 @@ def main() -> int:
       "barrier",
       "--spatial3d-boundary",
       "absorbing",
+      "--spatial3d-export-json",
   ]
   subprocess.run(cmd, check=True)
 
@@ -59,11 +60,16 @@ def main() -> int:
       out_dir / "quantum_spatial_wavepacket_barrier.html",
       out_dir / "quantum_spatial2d_wavepacket_barrier.html",
       out_dir / "quantum_spatial3d_wavepacket_barrier_absorbing.html",
+      out_dir / "quantum_spatial3d_wavepacket_barrier_absorbing.json",
   ]
   for path in files:
     if not path.exists():
       raise RuntimeError(f"missing visualization file: {path}")
     content = path.read_text(encoding="utf-8")
+    if path.suffix.lower() == ".json":
+      if '"frames"' not in content:
+        raise RuntimeError(f"spatial3d json missing frames payload: {path}")
+      continue
     if ("createSvgEl" not in content) and ("Spatial Wavepacket" not in content):
       raise RuntimeError(f"visualization file missing svg renderer script: {path}")
     if "Play" not in content or ("range" not in content):

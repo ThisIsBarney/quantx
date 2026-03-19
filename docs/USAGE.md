@@ -99,6 +99,19 @@ Generate a focused 3D page with selectable boundary condition:
 python .\scripts\visualize_simulation.py --scenario spatial3d --spatial3d-potential barrier --spatial3d-boundary absorbing
 ```
 
+Export 3D frames as JSON and prepare standalone JS player assets:
+
+```powershell
+.\scripts\run_spatial3d_js_export.ps1
+```
+
+Outputs include:
+
+- `out/visualizations/quantum_spatial3d_wavepacket_barrier_periodic.json`
+- `out/visualizations/spatial3d_player.html`
+
+Open `spatial3d_player.html`, then load the exported JSON (path input or local file picker).
+
 Generate a spatial potential gallery:
 
 ```powershell

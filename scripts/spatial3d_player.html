@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>QuantX Spatial3D JS Player</title>
+  <style>
+    body { margin: 0; font-family: "Segoe UI", "Noto Sans", sans-serif; background: #f5f3ef; color: #1f2937; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .load { background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .load input[type="text"] { min-width: 260px; width: 38vw; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    .load button { border: 0; border-radius: 8px; padding: 7px 12px; background: #0f766e; color: #fff; cursor: pointer; font-weight: 600; }
+    .load button.alt { background: #334155; }
+    .meta { margin-top: 12px; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 13px; min-height: 18px; }
+    .grid { margin-top: 14px; display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }
+    .panel { background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; }
+    .panel h3 { margin: 2px 2px 8px; font-size: 14px; }
+    canvas { width: 100%; aspect-ratio: 1/1; border: 1px solid #cbd5e1; border-radius: 8px; image-rendering: pixelated; }
+    .controls { margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; }
+    .controls input[type="range"] { width: min(680px, 74vw); }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .load input[type="text"] { width: 100%; min-width: 180px; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1 style="margin:0">QuantX 3D Slice Player (JS)</h1>
+        <p style="margin:6px 0 0;font-size:13px">Load exported JSON and inspect XY/XZ/YZ slices frame by frame.</p>
+      </div>
+      <div class="load">
+        <input id="jsonPath" type="text" value="quantum_spatial3d_wavepacket_barrier_periodic.json"/>
+        <button id="loadPath">Load Path</button>
+        <input id="filePick" type="file" accept="application/json"/>
+        <button id="loadFile" class="alt">Load File</button>
+      </div>
+    </div>
+
+    <div id="meta" class="meta">No data loaded.</div>
+
+    <div class="grid">
+      <div class="panel"><h3>XY Slice</h3><canvas id="xy" width="300" height="300"></canvas></div>
+      <div class="panel"><h3>XZ Slice</h3><canvas id="xz" width="300" height="300"></canvas></div>
+      <div class="panel"><h3>YZ Slice</h3><canvas id="yz" width="300" height="300"></canvas></div>
+    </div>
+
+    <div class="controls">
+      <button id="play" style="background:#0f766e;color:#fff;border:0;border-radius:8px;padding:6px 11px">Play</button>
+      <button id="pause" style="background:#334155;color:#fff;border:0;border-radius:8px;padding:6px 11px">Pause</button>
+      <input id="slider" type="range" min="1" max="1" value="1"/>
+      <span id="label">frame 0/0</span>
+    </div>
+  </div>
+
+  <script>
+    const ctxXY = document.getElementById("xy").getContext("2d");
+    const ctxXZ = document.getElementById("xz").getContext("2d");
+    const ctxYZ = document.getElementById("yz").getContext("2d");
+    const slider = document.getElementById("slider");
+    const label = document.getElementById("label");
+    const meta = document.getElementById("meta");
+    const pathInput = document.getElementById("jsonPath");
+    let DATA = null;
+    let timer = null;
+
+    function colorMap(v) {
+      const t = Math.max(0, Math.min(1, v));
+      const r = Math.floor(255 * Math.pow(t, 0.58));
+      const g = Math.floor(255 * t * t);
+      const b = Math.floor(255 * (1 - t));
+      return [r, g, b, 255];
+    }
+
+    function drawSlice(ctx, arr2d, densMax) {
+      const nx = arr2d.length;
+      const ny = arr2d[0].length;
+      const img = ctx.createImageData(nx, ny);
+      let p = 0;
+      for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) {
+          const v = arr2d[i][j] / densMax;
+          const c = colorMap(v);
+          img.data[p++] = c[0];
+          img.data[p++] = c[1];
+          img.data[p++] = c[2];
+          img.data[p++] = c[3];
+        }
+      }
+      const tmp = document.createElement("canvas");
+      tmp.width = nx;
+      tmp.height = ny;
+      tmp.getContext("2d").putImageData(img, 0, 0);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.drawImage(tmp, 0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
+
+    function render(frameIdx) {
+      if (!DATA || !DATA.frames || DATA.frames.length === 0) return;
+      const f = DATA.frames[frameIdx - 1];
+      const densMax = DATA.dens_max || 1e-9;
+      drawSlice(ctxXY, f.xy, densMax);
+      drawSlice(ctxXZ, f.xz, densMax);
+      drawSlice(ctxYZ, f.yz, densMax);
+      label.textContent = `frame ${frameIdx}/${DATA.frames.length}`;
+      meta.textContent = `boundary=${DATA.boundary}, potential=${DATA.potential_type}, t=${f.t.toFixed(3)}, norm=${f.norm.toFixed(6)}, <x,y,z>=(${f.exp_x.toFixed(3)}, ${f.exp_y.toFixed(3)}, ${f.exp_z.toFixed(3)})`;
+      slider.value = String(frameIdx);
+    }
+
+    function loadData(obj) {
+      if (!obj || !obj.frames || !Array.isArray(obj.frames) || obj.frames.length === 0) {
+        throw new Error("invalid spatial3d json: missing non-empty frames");
+      }
+      DATA = obj;
+      slider.max = String(DATA.frames.length);
+      slider.value = "1";
+      render(1);
+    }
+
+    async function loadFromPath() {
+      const path = pathInput.value.trim();
+      if (!path) return;
+      const res = await fetch(path);
+      if (!res.ok) throw new Error(`failed to fetch ${path}: ${res.status}`);
+      const obj = await res.json();
+      loadData(obj);
+    }
+
+    async function loadFromFile() {
+      const file = document.getElementById("filePick").files[0];
+      if (!file) throw new Error("select a json file first");
+      const text = await file.text();
+      loadData(JSON.parse(text));
+    }
+
+    function doPlay() {
+      if (!DATA || timer) return;
+      timer = setInterval(() => {
+        let f = Number(slider.value);
+        f = f >= DATA.frames.length ? 1 : f + 1;
+        render(f);
+      }, 90);
+    }
+
+    function doPause() {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+    }
+
+    document.getElementById("play").onclick = doPlay;
+    document.getElementById("pause").onclick = doPause;
+    slider.oninput = () => render(Number(slider.value));
+
+    document.getElementById("loadPath").onclick = async () => {
+      try { await loadFromPath(); } catch (e) { meta.textContent = `Load error: ${e.message}`; }
+    };
+    document.getElementById("loadFile").onclick = async () => {
+      try { await loadFromFile(); } catch (e) { meta.textContent = `Load error: ${e.message}`; }
+    };
+  </script>
+</body>
+</html>
