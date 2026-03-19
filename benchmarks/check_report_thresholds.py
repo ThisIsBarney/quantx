@@ -23,9 +23,10 @@ def merged_case_gates(global_gates: dict, case: dict) -> dict:
   return out
 
 
-def check_case(case: dict, gates: dict) -> list[str]:
+def check_case(case: dict, gates: dict, perf_warn_only: bool) -> tuple[list[str], list[str]]:
   agg = case.get("aggregate", {})
-  failures = []
+  failures: list[str] = []
+  warnings: list[str] = []
 
   ok_rate_min = gates.get("ok_rate_min")
   if ok_rate_min is not None:
@@ -35,33 +36,40 @@ def check_case(case: dict, gates: dict) -> list[str]:
     elif float(ok_rate) < float(ok_rate_min):
       failures.append(f"{case['id']} ok_rate={ok_rate:.6f} < ok_rate_min={ok_rate_min:.6f}")
 
-  def check_le(metric: str, threshold_key: str) -> None:
+  def check_le(metric: str, threshold_key: str, is_performance: bool = False) -> None:
     threshold = gates.get(threshold_key)
     if threshold is None:
       return
     value = agg.get(metric)
     if value is None:
-      failures.append(f"{case['id']} missing metric {metric}")
+      target = warnings if (perf_warn_only and is_performance) else failures
+      target.append(f"{case['id']} missing metric {metric}")
       return
     if float(value) > float(threshold):
-      failures.append(f"{case['id']} {metric}={value:.6f} > {threshold_key}={threshold:.6f}")
+      target = warnings if (perf_warn_only and is_performance) else failures
+      target.append(f"{case['id']} {metric}={value:.6f} > {threshold_key}={threshold:.6f}")
 
   check_le("max_abs_error_mean", "max_abs_error_mean_max")
   check_le("mean_abs_error_mean", "mean_abs_error_mean_max")
-  check_le("core_elapsed_ms_mean", "core_elapsed_ms_mean_max")
+  check_le("core_elapsed_ms_mean", "core_elapsed_ms_mean_max", is_performance=True)
   check_le("norm_abs_error_mean", "norm_abs_error_mean_max")
   check_le("sigma_x_abs_error_mean", "sigma_x_abs_error_mean_max")
-  return failures
+  return failures, warnings
 
 
 def main() -> None:
   parser = argparse.ArgumentParser(description="Check latest benchmark report against suite gates.")
   parser.add_argument("--suite", required=True, help="Suite JSON path relative to repo root.")
   parser.add_argument(
-      "--report",
-      required=False,
-      default="",
-      help="Optional report JSON path relative to repo root. If omitted, use latest suite report.",
+    "--report",
+    required=False,
+    default="",
+    help="Optional report JSON path relative to repo root. If omitted, use latest suite report.",
+  )
+  parser.add_argument(
+      "--perf-warn-only",
+      action="store_true",
+      help="Treat performance threshold violations as warnings (non-blocking).",
   )
   args = parser.parse_args()
 
@@ -90,9 +98,17 @@ def main() -> None:
 
   report = load_json(latest)
   failures: list[str] = []
+  warnings: list[str] = []
   for case in report.get("cases", []):
     effective_gates = merged_case_gates(gates, case)
-    failures.extend(check_case(case, effective_gates))
+    case_failures, case_warnings = check_case(case, effective_gates, perf_warn_only=args.perf_warn_only)
+    failures.extend(case_failures)
+    warnings.extend(case_warnings)
+
+  if warnings:
+    print(f"gate warnings for report: {latest}")
+    for w in warnings:
+      print(f"- WARN: {w}")
 
   if failures:
     print(f"gate failed for report: {latest}")

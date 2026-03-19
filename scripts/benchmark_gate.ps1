@@ -1,5 +1,6 @@
 param(
-  [string]$Suite = "benchmarks/suites/circuit_accuracy_smoke.json"
+  [string]$Suite = "benchmarks/suites/circuit_accuracy_smoke.json",
+  [switch]$PerfWarnOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,5 +8,9 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-python .\benchmarks\check_report_thresholds.py --suite $Suite
+if ($PerfWarnOnly) {
+  python .\benchmarks\check_report_thresholds.py --suite $Suite --perf-warn-only
+} else {
+  python .\benchmarks\check_report_thresholds.py --suite $Suite
+}
 if ($LASTEXITCODE -ne 0) { throw "benchmark gate failed: exit code $LASTEXITCODE" }

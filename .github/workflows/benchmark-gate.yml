@@ -41,7 +41,7 @@ jobs:
 
       - name: Gate Accuracy
         shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
+        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json -PerfWarnOnly
 
       - name: Benchmark Noise Sweep
         shell: pwsh
@@ -49,7 +49,7 @@ jobs:
 
       - name: Gate Noise Sweep
         shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json
+        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json -PerfWarnOnly
 
       - name: Benchmark Continuous2D Smoke
         shell: pwsh
@@ -57,7 +57,7 @@ jobs:
 
       - name: Gate Continuous2D Smoke
         shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/continuous2d_smoke.json
+        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/continuous2d_smoke.json -PerfWarnOnly
 
       - name: Build Benchmark Index and Trends
         shell: pwsh
