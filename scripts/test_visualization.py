@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import json
 from pathlib import Path
 
 
@@ -69,6 +70,10 @@ def main() -> int:
     if path.suffix.lower() == ".json":
       if '"frames"' not in content:
         raise RuntimeError(f"spatial3d json missing frames payload: {path}")
+      data = json.loads(content)
+      frames = data.get("frames", [])
+      if not frames or not isinstance(frames[0].get("points"), list):
+        raise RuntimeError(f"spatial3d json missing volumetric point payload: {path}")
       continue
     if ("createSvgEl" not in content) and ("Spatial Wavepacket" not in content):
       raise RuntimeError(f"visualization file missing svg renderer script: {path}")

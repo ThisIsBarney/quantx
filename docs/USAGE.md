@@ -91,7 +91,7 @@ Generated files:
 
 Each page includes animation controls (`Play`, `Pause`, timeline slider).
 `quantum_spatial_wavepacket_barrier.html` shows a 1D spatial wavepacket evolution (`|psi(x,t)|^2`) solved by finite difference + Crank-Nicolson, with phase color, potential profile, and sampled position cloud.
-`quantum_spatial3d_wavepacket_barrier_periodic.html` shows 3D evolution slices (XY/XZ/YZ) of `|psi(x,y,z,t)|^2` solved by split-step Fourier.
+`quantum_spatial3d_wavepacket_barrier_periodic.html` shows 3D evolution solved by split-step Fourier and can be explored in a true WebGL world view via the standalone player.
 
 Generate a focused 3D page with selectable boundary condition:
 
@@ -112,14 +112,18 @@ Outputs include:
 
 Open `spatial3d_player.html`, then load the exported JSON (path input or local file picker).
 
-Player interaction features:
+Player interaction features (true 3D viewer):
 
-- Per-panel slice remap: each panel can switch among `XY` / `XZ` / `YZ`.
+- WebGL point-cloud world rendering with orbit camera controls (rotate/pan/zoom).
 - Frame navigation: `Prev` / `Next`, slider, keyboard `Left` / `Right` arrows.
 - Playback hotkey: `Space` toggles `Play` / `Pause`.
-- Intensity scales: `Linear`, `Sqrt`, `Log`.
-- Colormaps: `QuantX`, `Grayscale`, `Thermal`.
-- Render cache warmup for smoother playback on long sequences.
+- Point rendering controls: point size, density cutoff, playback speed, auto-rotate.
+- Real-time diagnostics: rendered point count, frame vmax, boundary/potential/norm and `<x,y,z>`.
+
+Notes:
+
+- The JSON export now includes per-frame volumetric points as `frame.points` entries in `[x, y, z, density]` format.
+- The standalone `spatial3d_player.html` uses Three.js from CDN (`unpkg`) and requires network access to load those assets.
 
 Generate a spatial potential gallery:
 
@@ -140,7 +144,7 @@ Gallery outputs:
 - `out/visualizations/quantum_spatial3d_wavepacket_barrier_absorbing.html`
 
 2D pages use a numerical split-step Fourier solver and render `|psi(x,y,t)|^2` as animated heatmaps.
-3D pages render orthogonal slices (XY/XZ/YZ) of `|psi(x,y,z,t)|^2` and support `periodic`, `absorbing`, and `dirichlet` boundary options.
+3D pages support `periodic`, `absorbing`, and `dirichlet` boundary options; the standalone player renders the exported volumetric point cloud in true 3D.
 
 ## 1.1) Benchmark usage
 
