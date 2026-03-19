@@ -112,6 +112,15 @@ Outputs include:
 
 Open `spatial3d_player.html`, then load the exported JSON (path input or local file picker).
 
+Player interaction features:
+
+- Per-panel slice remap: each panel can switch among `XY` / `XZ` / `YZ`.
+- Frame navigation: `Prev` / `Next`, slider, keyboard `Left` / `Right` arrows.
+- Playback hotkey: `Space` toggles `Play` / `Pause`.
+- Intensity scales: `Linear`, `Sqrt`, `Log`.
+- Colormaps: `QuantX`, `Grayscale`, `Thermal`.
+- Render cache warmup for smoother playback on long sequences.
+
 Generate a spatial potential gallery:
 
 ```powershell
