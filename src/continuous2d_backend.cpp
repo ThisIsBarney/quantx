@@ -1,13 +1,13 @@
 #include "qx/backends.hpp"
+#include "qx/fft_provider.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <complex>
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <vector>
-
-#include <unsupported/Eigen/FFT>
 
 namespace qx {
 namespace {
@@ -29,7 +29,7 @@ class Continuous2DBackend final : public IBackend {
     return c;
   }
 
-  void initialize(const QuantumProblem& problem, const RunOptions&) override {
+  void initialize(const QuantumProblem& problem, const RunOptions& options) override {
     if (problem.kind != ProblemKind::ContinuousSpace2D) {
       throw std::runtime_error("continuous2d backend requires ProblemKind::ContinuousSpace2D");
     }
@@ -52,6 +52,17 @@ class Continuous2DBackend final : public IBackend {
     dt_ = c.dt;
     steps_ = c.steps;
     boundary_ = c.boundary;
+
+    fft_provider_ = nullptr;
+    if (options.use_gpu) {
+      try {
+        fft_provider_ = create_fft_provider(FFTProviderKind::CuFFT);
+      } catch (const std::exception&) {
+        fft_provider_ = create_fft_provider(FFTProviderKind::Eigen);
+      }
+    } else {
+      fft_provider_ = create_fft_provider(FFTProviderKind::Auto);
+    }
 
     const std::size_t n = static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_);
     state_.assign(n, Complex{0.0, 0.0});
@@ -282,7 +293,7 @@ class Continuous2DBackend final : public IBackend {
       for (std::uint32_t x = 0; x < nx_; ++x) {
         line[x] = out[idx(x, y)];
       }
-      fft_.fwd(transformed, line);
+      fft_provider_->forward(transformed, line);
       line.swap(transformed);
       for (std::uint32_t x = 0; x < nx_; ++x) {
         out[idx(x, y)] = line[x];
@@ -294,7 +305,7 @@ class Continuous2DBackend final : public IBackend {
       for (std::uint32_t y = 0; y < ny_; ++y) {
         line[y] = out[idx(x, y)];
       }
-      fft_.fwd(transformed, line);
+      fft_provider_->forward(transformed, line);
       line.swap(transformed);
       for (std::uint32_t y = 0; y < ny_; ++y) {
         out[idx(x, y)] = line[y];
@@ -312,7 +323,7 @@ class Continuous2DBackend final : public IBackend {
       for (std::uint32_t x = 0; x < nx_; ++x) {
         line[x] = out[idx(x, y)];
       }
-      fft_.inv(transformed, line);
+      fft_provider_->inverse(transformed, line);
       line.swap(transformed);
       for (std::uint32_t x = 0; x < nx_; ++x) {
         out[idx(x, y)] = line[x];
@@ -324,7 +335,7 @@ class Continuous2DBackend final : public IBackend {
       for (std::uint32_t y = 0; y < ny_; ++y) {
         line[y] = out[idx(x, y)];
       }
-      fft_.inv(transformed, line);
+      fft_provider_->inverse(transformed, line);
       line.swap(transformed);
       for (std::uint32_t y = 0; y < ny_; ++y) {
         out[idx(x, y)] = line[y];
@@ -385,6 +396,8 @@ class Continuous2DBackend final : public IBackend {
     observables_["sigma_y"] = std::sqrt(var_y);
     observables_["nx"] = static_cast<double>(nx_);
     observables_["ny"] = static_cast<double>(ny_);
+    observables_["fft_provider_eigen"] = (fft_provider_ && fft_provider_->name() == "eigen") ? 1.0 : 0.0;
+    observables_["fft_provider_cufft"] = (fft_provider_ && fft_provider_->name() == "cufft") ? 1.0 : 0.0;
   }
 
  private:
@@ -402,8 +415,7 @@ class Continuous2DBackend final : public IBackend {
   std::vector<Complex> potential_phase_;
   std::vector<Complex> kinetic_half_phase_;
   std::map<std::string, double> observables_;
-
-  Eigen::FFT<double> fft_;
+  std::unique_ptr<IFFTProvider> fft_provider_;
 };
 
 }  // namespace

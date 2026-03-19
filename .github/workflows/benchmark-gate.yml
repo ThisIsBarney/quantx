@@ -51,6 +51,14 @@ jobs:
         shell: pwsh
         run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json
 
+      - name: Benchmark Continuous2D Smoke
+        shell: pwsh
+        run: .\scripts\run_problem_benchmark.ps1 -Suite benchmarks/suites/continuous2d_smoke.json
+
+      - name: Gate Continuous2D Smoke
+        shell: pwsh
+        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/continuous2d_smoke.json
+
       - name: Build Benchmark Index and Trends
         shell: pwsh
         run: .\scripts\benchmark_all.ps1 -NoiseSweep

@@ -27,6 +27,14 @@ def check_case(case: dict, gates: dict) -> list[str]:
   agg = case.get("aggregate", {})
   failures = []
 
+  ok_rate_min = gates.get("ok_rate_min")
+  if ok_rate_min is not None:
+    ok_rate = case.get("ok_rate")
+    if ok_rate is None:
+      failures.append(f"{case['id']} missing metric ok_rate")
+    elif float(ok_rate) < float(ok_rate_min):
+      failures.append(f"{case['id']} ok_rate={ok_rate:.6f} < ok_rate_min={ok_rate_min:.6f}")
+
   def check_le(metric: str, threshold_key: str) -> None:
     threshold = gates.get(threshold_key)
     if threshold is None:
@@ -41,6 +49,8 @@ def check_case(case: dict, gates: dict) -> list[str]:
   check_le("max_abs_error_mean", "max_abs_error_mean_max")
   check_le("mean_abs_error_mean", "mean_abs_error_mean_max")
   check_le("core_elapsed_ms_mean", "core_elapsed_ms_mean_max")
+  check_le("norm_abs_error_mean", "norm_abs_error_mean_max")
+  check_le("sigma_x_abs_error_mean", "sigma_x_abs_error_mean_max")
   return failures
 
 

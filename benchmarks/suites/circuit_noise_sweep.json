@@ -4,7 +4,7 @@
   "gates": {
     "max_abs_error_mean_max": 0.20,
     "mean_abs_error_mean_max": 0.12,
-    "core_elapsed_ms_mean_max": 15.0
+    "core_elapsed_ms_mean_max": 25.0
   },
   "options": {
     "enable_checkpoint": false

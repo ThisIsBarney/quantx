@@ -72,6 +72,7 @@ add_library(qx_core
   src/scheduler.cpp
   src/logging.cpp
   src/version.cpp
+  src/fft_provider.cpp
   src/statevector_backend.cpp
   src/mps_backend.cpp
   src/continuous2d_backend.cpp

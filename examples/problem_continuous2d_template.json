@@ -1,0 +1,26 @@
+{
+  "kind": "continuous_space_2d",
+  "continuous_space_2d": {
+    "nx": 256,
+    "ny": 256,
+    "dx": 0.05,
+    "dy": 0.05,
+    "dt": 0.0005,
+    "steps": 400,
+    "boundary": "periodic",
+    "potential_kind": "harmonic",
+    "potential_params": {
+      "kx": 0.5,
+      "ky": 0.5,
+      "x0": 0.0,
+      "y0": 0.0,
+      "psi_sigma": 0.25,
+      "psi_kx": 0.0,
+      "psi_ky": 0.0,
+      "psi_x0": -2.0,
+      "psi_y0": 0.0
+    },
+    "potential_grid": []
+  },
+  "observables": ["norm", "x_mean", "y_mean", "sigma_x", "sigma_y"]
+}
