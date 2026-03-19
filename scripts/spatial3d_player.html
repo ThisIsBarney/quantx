@@ -118,6 +118,7 @@
     const colorMode = document.getElementById("colorMode");
     let DATA = null;
     let timer = null;
+    let renderCache = new Map();
 
     const panelMapping = {
       xy: "xy",
@@ -155,10 +156,14 @@
       return x;
     }
 
-    function drawSlice(ctx, arr2d, densMax) {
+    function buildSliceCanvas(arr2d, densMax) {
       const nx = arr2d.length;
       const ny = arr2d[0].length;
-      const img = ctx.createImageData(nx, ny);
+      const tmp = document.createElement("canvas");
+      tmp.width = nx;
+      tmp.height = ny;
+      const tctx = tmp.getContext("2d");
+      const img = tctx.createImageData(nx, ny);
       let p = 0;
       for (let j = 0; j < ny; j++) {
         for (let i = 0; i < nx; i++) {
@@ -171,24 +176,53 @@
           img.data[p++] = c[3];
         }
       }
-      const tmp = document.createElement("canvas");
-      tmp.width = nx;
-      tmp.height = ny;
-      tmp.getContext("2d").putImageData(img, 0, 0);
+      tctx.putImageData(img, 0, 0);
+      return tmp;
+    }
+
+    function cacheKey(frameIdx, sliceKey) {
+      return `${frameIdx}:${sliceKey}:${scaleMode.value}:${colorMode.value}`;
+    }
+
+    function drawSlice(ctx, frameIdx, sliceKey, arr2d, densMax) {
+      const key = cacheKey(frameIdx, sliceKey);
+      let imgCanvas = renderCache.get(key);
+      if (!imgCanvas) {
+        imgCanvas = buildSliceCanvas(arr2d, densMax);
+        renderCache.set(key, imgCanvas);
+      }
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-      ctx.drawImage(tmp, 0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.drawImage(imgCanvas, 0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
+
+    function warmCache(frameIdx) {
+      if (!DATA || !DATA.frames || DATA.frames.length === 0) return;
+      const densMax = DATA.dens_max || 1e-9;
+      const n = DATA.frames.length;
+      const probes = [frameIdx, frameIdx + 1, frameIdx + 2];
+      for (const pf of probes) {
+        const wrapped = ((pf - 1 + n) % n) + 1;
+        const f = DATA.frames[wrapped - 1];
+        for (const key of ["xy", "xz", "yz"]) {
+          const ck = cacheKey(wrapped, key);
+          if (!renderCache.has(ck)) {
+            renderCache.set(ck, buildSliceCanvas(f[key], densMax));
+          }
+        }
+      }
     }
 
     function render(frameIdx) {
       if (!DATA || !DATA.frames || DATA.frames.length === 0) return;
       const f = DATA.frames[frameIdx - 1];
       const densMax = DATA.dens_max || 1e-9;
-      drawSlice(ctxXY, f[panelMapping.xy], densMax);
-      drawSlice(ctxXZ, f[panelMapping.xz], densMax);
-      drawSlice(ctxYZ, f[panelMapping.yz], densMax);
+      drawSlice(ctxXY, frameIdx, panelMapping.xy, f[panelMapping.xy], densMax);
+      drawSlice(ctxXZ, frameIdx, panelMapping.xz, f[panelMapping.xz], densMax);
+      drawSlice(ctxYZ, frameIdx, panelMapping.yz, f[panelMapping.yz], densMax);
       label.textContent = `frame ${frameIdx}/${DATA.frames.length}`;
       meta.textContent = `boundary=${DATA.boundary}, potential=${DATA.potential_type}, t=${f.t.toFixed(3)}, norm=${f.norm.toFixed(6)}, <x,y,z>=(${f.exp_x.toFixed(3)}, ${f.exp_y.toFixed(3)}, ${f.exp_z.toFixed(3)})`;
       slider.value = String(frameIdx);
+      warmCache(frameIdx);
     }
 
     function updatePanelTitles() {
@@ -217,6 +251,7 @@
         throw new Error("invalid spatial3d json: missing non-empty frames");
       }
       DATA = obj;
+      renderCache = new Map();
       slider.max = String(DATA.frames.length);
       slider.value = "1";
       render(1);
@@ -259,8 +294,14 @@
     mapXY.onchange = () => remapPanel("xy", mapXY.value);
     mapXZ.onchange = () => remapPanel("xz", mapXZ.value);
     mapYZ.onchange = () => remapPanel("yz", mapYZ.value);
-    scaleMode.onchange = () => render(Number(slider.value || "1"));
-    colorMode.onchange = () => render(Number(slider.value || "1"));
+    scaleMode.onchange = () => {
+      renderCache = new Map();
+      render(Number(slider.value || "1"));
+    };
+    colorMode.onchange = () => {
+      renderCache = new Map();
+      render(Number(slider.value || "1"));
+    };
 
     window.addEventListener("keydown", (ev) => {
       if (ev.key === "ArrowLeft") {
