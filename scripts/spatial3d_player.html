@@ -81,6 +81,20 @@
       <button id="play" style="background:#0f766e;color:#fff;border:0;border-radius:8px;padding:6px 11px">Play</button>
       <button id="pause" style="background:#334155;color:#fff;border:0;border-radius:8px;padding:6px 11px">Pause</button>
       <button id="next" style="background:#475569;color:#fff;border:0;border-radius:8px;padding:6px 11px">Next</button>
+      <label style="font-size:12px">Scale
+        <select id="scaleMode" style="margin-left:4px;border:1px solid #cbd5e1;border-radius:7px;padding:3px 6px">
+          <option value="linear">Linear</option>
+          <option value="sqrt">Sqrt</option>
+          <option value="log">Log</option>
+        </select>
+      </label>
+      <label style="font-size:12px">Colormap
+        <select id="colorMode" style="margin-left:4px;border:1px solid #cbd5e1;border-radius:7px;padding:3px 6px">
+          <option value="quantx">QuantX</option>
+          <option value="grayscale">Grayscale</option>
+          <option value="thermal">Thermal</option>
+        </select>
+      </label>
       <input id="slider" type="range" min="1" max="1" value="1"/>
       <span id="label">frame 0/0</span>
     </div>
@@ -100,6 +114,8 @@
     const titleXY = document.getElementById("title_xy");
     const titleXZ = document.getElementById("title_xz");
     const titleYZ = document.getElementById("title_yz");
+    const scaleMode = document.getElementById("scaleMode");
+    const colorMode = document.getElementById("colorMode");
     let DATA = null;
     let timer = null;
 
@@ -111,10 +127,32 @@
 
     function colorMap(v) {
       const t = Math.max(0, Math.min(1, v));
+      if (colorMode.value === "grayscale") {
+        const g = Math.floor(255 * t);
+        return [g, g, g, 255];
+      }
+      if (colorMode.value === "thermal") {
+        const r = Math.floor(255 * Math.min(1, 1.5 * t));
+        const g = Math.floor(255 * Math.max(0, Math.min(1, 1.7 * (t - 0.2))));
+        const b = Math.floor(255 * Math.max(0, Math.min(1, 2.2 * (t - 0.55))));
+        return [r, g, b, 255];
+      }
       const r = Math.floor(255 * Math.pow(t, 0.58));
       const g = Math.floor(255 * t * t);
       const b = Math.floor(255 * (1 - t));
       return [r, g, b, 255];
+    }
+
+    function transformIntensity(v) {
+      const x = Math.max(0, v);
+      if (scaleMode.value === "sqrt") {
+        return Math.sqrt(x);
+      }
+      if (scaleMode.value === "log") {
+        const alpha = 200.0;
+        return Math.log1p(alpha * x) / Math.log1p(alpha);
+      }
+      return x;
     }
 
     function drawSlice(ctx, arr2d, densMax) {
@@ -124,7 +162,8 @@
       let p = 0;
       for (let j = 0; j < ny; j++) {
         for (let i = 0; i < nx; i++) {
-          const v = arr2d[i][j] / densMax;
+          const raw = arr2d[i][j] / densMax;
+          const v = transformIntensity(raw);
           const c = colorMap(v);
           img.data[p++] = c[0];
           img.data[p++] = c[1];
@@ -220,6 +259,8 @@
     mapXY.onchange = () => remapPanel("xy", mapXY.value);
     mapXZ.onchange = () => remapPanel("xz", mapXZ.value);
     mapYZ.onchange = () => remapPanel("yz", mapYZ.value);
+    scaleMode.onchange = () => render(Number(slider.value || "1"));
+    colorMode.onchange = () => render(Number(slider.value || "1"));
 
     window.addEventListener("keydown", (ev) => {
       if (ev.key === "ArrowLeft") {
