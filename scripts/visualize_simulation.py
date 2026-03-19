@@ -234,6 +234,85 @@ def _attach_continuous_metadata(data: dict, solver_mode: str, source: str) -> di
   return payload
 
 
+def _reshape_flat_to_rows(flat: list[float], rows: int, cols: int) -> list[list[float]]:
+  """Reshape a flat row-major list into nested lists."""
+  if rows <= 0 or cols <= 0 or len(flat) != rows * cols:
+    return []
+  return [flat[r * cols:(r + 1) * cols] for r in range(rows)]
+
+
+def _normalize_engine_export_payload(payload: dict) -> dict:
+  """Convert native engine export payload to visualizer-friendly frame shapes."""
+  if not isinstance(payload, dict):
+    return payload
+  frames = payload.get("frames")
+  if not isinstance(frames, list) or not frames:
+    return payload
+
+  first = frames[0] if isinstance(frames[0], dict) else {}
+  nx = int(first.get("nx", 0) or 0)
+  ny = int(first.get("ny", 0) or 0)
+  nz = int(first.get("nz", 0) or 0)
+  if nx <= 0 or ny <= 0:
+    return payload
+
+  out = dict(payload)
+  norm_frames = []
+  dens_max = 1e-12
+  for fr in frames:
+    if not isinstance(fr, dict):
+      continue
+    item = dict(fr)
+    if nz == 0:
+      flat = fr.get("density_xy_flat")
+      if isinstance(flat, list):
+        density = _reshape_flat_to_rows([float(v) for v in flat], ny, nx)
+        if density:
+          item["density"] = density
+          dens_max = max(dens_max, max((max(row) for row in density), default=0.0))
+          item["exp_x"] = float(fr.get("x_mean", 0.0))
+          item["exp_y"] = float(fr.get("y_mean", 0.0))
+          item["t"] = float(fr.get("time", 0.0))
+    else:
+      xy = fr.get("density_xy_flat")
+      xz = fr.get("density_xz_flat")
+      yz = fr.get("density_yz_flat")
+      if isinstance(xy, list):
+        item["xy"] = _reshape_flat_to_rows([float(v) for v in xy], ny, nx)
+      if isinstance(xz, list):
+        item["xz"] = _reshape_flat_to_rows([float(v) for v in xz], nz, nx)
+      if isinstance(yz, list):
+        item["yz"] = _reshape_flat_to_rows([float(v) for v in yz], nz, ny)
+      pts = fr.get("points_xyzd_flat")
+      if isinstance(pts, list) and len(pts) >= 4:
+        points = []
+        for i in range(0, len(pts) - 3, 4):
+          points.append([float(pts[i]), float(pts[i + 1]), float(pts[i + 2]), float(pts[i + 3])])
+        item["points"] = points
+      item["t"] = float(fr.get("time", 0.0))
+      dens_vals = []
+      for key in ("xy", "xz", "yz"):
+        panel = item.get(key)
+        if isinstance(panel, list):
+          for row in panel:
+            if isinstance(row, list):
+              dens_vals.extend(float(v) for v in row)
+      if dens_vals:
+        dens_max = max(dens_max, max(dens_vals))
+    norm_frames.append(item)
+
+  out["frames"] = norm_frames
+  out.setdefault("x_min", float(first.get("x_min", -1.0)))
+  out.setdefault("x_max", float(first.get("x_max", 1.0)))
+  out.setdefault("y_min", float(first.get("y_min", -1.0)))
+  out.setdefault("y_max", float(first.get("y_max", 1.0)))
+  out.setdefault("z_min", float(first.get("z_min", -1.0)))
+  out.setdefault("z_max", float(first.get("z_max", 1.0)))
+  out.setdefault("potential_type", first.get("potential_kind", "none"))
+  out["dens_max"] = max(float(out.get("dens_max", 0.0)), dens_max)
+  return out
+
+
 def _continuous_problem_2d_request(samples_t: int, nx: int, ny: int, potential_type: str) -> dict:
   """Build the native 2D problem payload used when asking the engine for frames."""
   nx = max(32, nx)
@@ -243,14 +322,6 @@ def _continuous_problem_2d_request(samples_t: int, nx: int, ny: int, potential_t
       "kind": "continuous_space_2d",
       "equation": "Schrodinger",
       "observables": ["norm", "x_mean", "y_mean", "sigma_x", "sigma_y"],
-      "initial_state": {
-          "kind": "gaussian_packet",
-          "x0": -4.5,
-          "y0": -2.0,
-          "sigma": 0.7,
-          "kx": 2.2,
-          "ky": 1.1,
-      },
       "continuous_space_2d": {
           "nx": nx,
           "ny": ny,
@@ -269,6 +340,16 @@ def _continuous_problem_2d_request(samples_t: int, nx: int, ny: int, potential_t
               "x_half_width": 6.0,
               "y_half_width": 6.0,
           },
+          "initial_state": {
+              "kind": "gaussian",
+              "params": {
+                  "psi_x0": -4.5,
+                  "psi_y0": -2.0,
+                  "psi_sigma": 0.7,
+                  "psi_kx": 2.2,
+                  "psi_ky": 1.1,
+              },
+          },
       },
   }
 
@@ -283,16 +364,6 @@ def _continuous_problem_3d_request(samples_t: int, nx: int, ny: int, nz: int, po
       "kind": "continuous_space_3d",
       "equation": "Schrodinger",
       "observables": ["norm", "x_mean", "y_mean", "z_mean", "sigma_x", "sigma_y", "sigma_z"],
-      "initial_state": {
-          "kind": "gaussian_packet",
-          "x0": -2.0,
-          "y0": -1.2,
-          "z0": -0.8,
-          "sigma": 0.7,
-          "kx": 1.8,
-          "ky": 1.0,
-          "kz": 0.8,
-      },
       "continuous_space_3d": {
           "nx": nx,
           "ny": ny,
@@ -312,6 +383,18 @@ def _continuous_problem_3d_request(samples_t: int, nx: int, ny: int, nz: int, po
               "x_half_width": 4.8,
               "y_half_width": 4.8,
               "z_half_width": 4.8,
+          },
+          "initial_state": {
+              "kind": "gaussian",
+              "params": {
+                  "psi_x0": -2.0,
+                  "psi_y0": -1.2,
+                  "psi_z0": -0.8,
+                  "psi_sigma": 0.7,
+                  "psi_kx": 1.8,
+                  "psi_ky": 1.0,
+                  "psi_kz": 0.8,
+              },
           },
       },
   }
@@ -337,7 +420,7 @@ def _resolve_continuous_payload(
     if export is None:
       export = _extract_continuous_export_from_result(result)
     if export is not None:
-      return _attach_continuous_metadata(export, solver_mode, "engine-export")
+      return _attach_continuous_metadata(_normalize_engine_export_payload(export), solver_mode, "engine-export")
     if solver_mode == "engine":
       raise RuntimeError("continuous visualization requested solver-mode=engine but the native result did not include a frames export")
 

@@ -33,9 +33,10 @@
 - License: BSD-3-Clause
 - Purpose: numerical kernel for 2D split-step Fourier spatial wavepacket visualization.
 
-6. `CUDA Toolkit` / `cuFFT` (optional acceleration path, enabled with `QX_ENABLE_CUDA=ON`)
-- License: NVIDIA CUDA EULA (not OSS; optional local toolkit dependency, not redistributed by this repo).
-- Purpose: FFT acceleration provider path for continuous 2D/3D backends with runtime fallback to Eigen FFT.
+## Optional local toolchains (not redistributed)
+
+- `CUDA Toolkit` / `cuFFT` may be installed locally to enable optional acceleration (`QX_ENABLE_CUDA=ON`).
+- This toolkit is not bundled or redistributed by this repository and is outside the dependency-policy allow-list checks.
 
 ## Selection rationale (current iteration)
 

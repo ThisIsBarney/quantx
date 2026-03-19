@@ -94,6 +94,8 @@ Solver modes:
 - `engine`: require engine-exported continuous frames (fails fast if export is unavailable).
 - `python`: force Python reference solver for continuous scenarios.
 
+When engine export is used, QuantX emits `continuous_export.frames` in run results with native frame payloads (2D density grids, 3D slices and point-cloud payloads).
+
 Render from a pre-exported continuous frame JSON:
 
 ```powershell

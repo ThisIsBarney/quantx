@@ -120,7 +120,7 @@ json events_to_json(const std::vector<Event>& events) {
 
 // Serialize a continuous density frame metadata record.
 json continuous_density_frame_to_json(const ContinuousDensityFrame& frame) {
-  return json{
+  json out = json{
       {"step", frame.step},
       {"time", frame.time},
       {"nx", frame.nx},
@@ -134,7 +134,27 @@ json continuous_density_frame_to_json(const ContinuousDensityFrame& frame) {
       {"sigma_x", frame.sigma_x},
       {"sigma_y", frame.sigma_y},
       {"sigma_z", frame.sigma_z},
+      {"x_min", frame.x_min},
+      {"x_max", frame.x_max},
+      {"y_min", frame.y_min},
+      {"y_max", frame.y_max},
+      {"z_min", frame.z_min},
+      {"z_max", frame.z_max},
+      {"potential_kind", frame.potential_kind},
   };
+  if (!frame.density_xy_flat.empty()) {
+    out["density_xy_flat"] = frame.density_xy_flat;
+  }
+  if (!frame.density_xz_flat.empty()) {
+    out["density_xz_flat"] = frame.density_xz_flat;
+  }
+  if (!frame.density_yz_flat.empty()) {
+    out["density_yz_flat"] = frame.density_yz_flat;
+  }
+  if (!frame.points_xyzd_flat.empty()) {
+    out["points_xyzd_flat"] = frame.points_xyzd_flat;
+  }
+  return out;
 }
 
 // Serialize continuous density frame metadata to JSON array.
@@ -228,6 +248,7 @@ RunOptions options_from_json(const std::string& json_text) {
   o.use_gpu = get_or<bool>(j, "use_gpu", o.use_gpu);
   o.allow_mpi = get_or<bool>(j, "allow_mpi", o.allow_mpi);
   o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
+  o.export_continuous_frames = get_or<bool>(j, "export_continuous_frames", o.export_continuous_frames);
   o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
   o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
   o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
@@ -277,6 +298,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["engine_version"] = version_string();
   j["observables"] = result.observables;
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
+  j["continuous_export"] = {{"frames", continuous_density_frames_to_json(result.continuous_density_frames)}};
   j["events"] = events_to_json(result.events);
   return j.dump();
 }

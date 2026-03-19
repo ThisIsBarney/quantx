@@ -94,7 +94,9 @@ class Continuous2DBackend final : public IBackend {
     dt_ = c.dt;
     steps_ = c.steps;
     boundary_ = c.boundary;
+    potential_kind_ = c.potential_kind;
     completed_steps_ = 0;
+    export_frame_payloads_ = options.export_continuous_frames;
     frames_.clear();
     absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_), 1.0);
 
@@ -479,6 +481,19 @@ class Continuous2DBackend final : public IBackend {
     frame.sigma_x = get_obs("sigma_x");
     frame.sigma_y = get_obs("sigma_y");
     frame.sigma_z = get_obs("sigma_z");
+    frame.x_min = x_coord(0);
+    frame.x_max = x_coord(nx_ - 1U);
+    frame.y_min = y_coord(0);
+    frame.y_max = y_coord(ny_ - 1U);
+    frame.z_min = 0.0;
+    frame.z_max = 0.0;
+    frame.potential_kind = potential_kind_;
+    if (export_frame_payloads_) {
+      frame.density_xy_flat.resize(state_.size());
+      for (std::size_t i = 0; i < state_.size(); ++i) {
+        frame.density_xy_flat[i] = std::norm(state_[i]);
+      }
+    }
     frames_.push_back(frame);
   }
 
@@ -642,6 +657,8 @@ class Continuous2DBackend final : public IBackend {
   std::uint32_t steps_{0};
   std::uint32_t completed_steps_{0};
   std::string boundary_{"periodic"};
+  std::string potential_kind_{"none"};
+  bool export_frame_payloads_{false};
 
   std::vector<Complex> state_;
   std::vector<Complex> kbuf_;

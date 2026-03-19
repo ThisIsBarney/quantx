@@ -162,7 +162,9 @@ class Continuous3DBackend final : public IBackend {
     dt_ = c.dt;
     steps_ = c.steps;
     boundary_ = c.boundary;
+    potential_kind_ = c.potential_kind;
     completed_steps_ = 0;
+    export_frame_payloads_ = options.export_continuous_frames;
     frames_.clear();
     absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_),
                            1.0);
@@ -525,6 +527,82 @@ class Continuous3DBackend final : public IBackend {
     frame.sigma_x = get_obs("sigma_x");
     frame.sigma_y = get_obs("sigma_y");
     frame.sigma_z = get_obs("sigma_z");
+    frame.x_min = x_coord(0);
+    frame.x_max = x_coord(nx_ - 1U);
+    frame.y_min = y_coord(0);
+    frame.y_max = y_coord(ny_ - 1U);
+    frame.z_min = z_coord(0);
+    frame.z_max = z_coord(nz_ - 1U);
+    frame.potential_kind = potential_kind_;
+    if (export_frame_payloads_) {
+      const std::uint32_t z_mid = nz_ / 2U;
+      const std::uint32_t y_mid = ny_ / 2U;
+      const std::uint32_t x_mid = nx_ / 2U;
+      frame.density_xy_flat.reserve(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_));
+      frame.density_xz_flat.reserve(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(nz_));
+      frame.density_yz_flat.reserve(static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_));
+
+      double dens_max = 0.0;
+      for (const auto& a : state_) {
+        dens_max = std::max(dens_max, std::norm(a));
+      }
+
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          frame.density_xy_flat.push_back(std::norm(state_[idx(x, y, z_mid)]));
+        }
+      }
+      for (std::uint32_t z = 0; z < nz_; ++z) {
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          frame.density_xz_flat.push_back(std::norm(state_[idx(x, y_mid, z)]));
+        }
+      }
+      for (std::uint32_t z = 0; z < nz_; ++z) {
+        for (std::uint32_t y = 0; y < ny_; ++y) {
+          frame.density_yz_flat.push_back(std::norm(state_[idx(x_mid, y, z)]));
+        }
+      }
+
+      // Export sparse volumetric points for the standalone 3D player.
+      const double floor = dens_max * 0.08;
+      const std::size_t max_points = 2500;
+      struct PointRow {
+        double x;
+        double y;
+        double z;
+        double d;
+      };
+      std::vector<PointRow> points;
+      points.reserve(std::min<std::size_t>(max_points * 2U, state_.size()));
+      for (std::uint32_t z = 0; z < nz_; ++z) {
+        const double zz = z_coord(z);
+        for (std::uint32_t y = 0; y < ny_; ++y) {
+          const double yy = y_coord(y);
+          for (std::uint32_t x = 0; x < nx_; ++x) {
+            const double d = std::norm(state_[idx(x, y, z)]);
+            if (d < floor) {
+              continue;
+            }
+            points.push_back(PointRow{x_coord(x), yy, zz, d});
+          }
+        }
+      }
+      if (points.size() > max_points) {
+        std::nth_element(
+            points.begin(),
+            points.begin() + static_cast<std::ptrdiff_t>(max_points),
+            points.end(),
+            [](const PointRow& a, const PointRow& b) { return a.d > b.d; });
+        points.resize(max_points);
+      }
+      frame.points_xyzd_flat.reserve(points.size() * 4U);
+      for (const auto& p : points) {
+        frame.points_xyzd_flat.push_back(p.x);
+        frame.points_xyzd_flat.push_back(p.y);
+        frame.points_xyzd_flat.push_back(p.z);
+        frame.points_xyzd_flat.push_back(p.d);
+      }
+    }
     frames_.push_back(frame);
   }
 
@@ -745,6 +823,8 @@ class Continuous3DBackend final : public IBackend {
   std::uint32_t steps_{0};
   std::uint32_t completed_steps_{0};
   std::string boundary_{"periodic"};
+  std::string potential_kind_{"none"};
+  bool export_frame_payloads_{false};
 
   std::vector<Complex> state_;
   std::vector<Complex> kbuf_;

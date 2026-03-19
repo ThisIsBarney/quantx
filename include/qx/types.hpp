@@ -150,6 +150,25 @@ struct ContinuousDensityFrame {
   double sigma_x{0.0};
   double sigma_y{0.0};
   double sigma_z{0.0};
+  // Coordinate bounds for the exported frame payload.
+  double x_min{0.0};
+  double x_max{0.0};
+  double y_min{0.0};
+  double y_max{0.0};
+  double z_min{0.0};
+  double z_max{0.0};
+  // Potential tag used to generate this frame.
+  std::string potential_kind{"none"};
+  // Optional flattened slice payloads.
+  // 2D: density_xy_flat has nx*ny entries.
+  // 3D: density_xy_flat has nx*ny entries at z-mid.
+  //     density_xz_flat has nx*nz entries at y-mid.
+  //     density_yz_flat has ny*nz entries at x-mid.
+  std::vector<double> density_xy_flat{};
+  std::vector<double> density_xz_flat{};
+  std::vector<double> density_yz_flat{};
+  // Optional point-cloud payload encoded as flat [x,y,z,density] tuples.
+  std::vector<double> points_xyzd_flat{};
 };
 
 // Canonical simulation problem description used across API boundaries.
@@ -174,6 +193,8 @@ struct RunOptions {
   bool use_gpu{false};
   bool allow_mpi{false};
   bool enable_checkpoint{true};
+  // When enabled, continuous backends export frame payloads for visualization.
+  bool export_continuous_frames{false};
   std::string checkpoint_path{"./checkpoints"};
   ResourceConstraints resources{};
 };

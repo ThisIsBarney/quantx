@@ -146,6 +146,15 @@ int main() {
   const std::string c2d_json = qx::result_to_json(c2d_run);
   expect(c2d_json.find("\"continuous_density_frames\"") != std::string::npos,
          "continuous2d result json should include continuous density frames");
+  expect(c2d_json.find("\"continuous_export\"") != std::string::npos,
+         "continuous2d result json should include continuous export object");
+  auto o_export = o;
+  o_export.export_continuous_frames = true;
+  const auto c2d_export_run = qx::run(c2d, o_export);
+  expect(c2d_export_run.ok, "continuous2d export run should succeed");
+  expect(!c2d_export_run.continuous_density_frames.empty(), "continuous2d export run should include frames");
+  expect(!c2d_export_run.continuous_density_frames.front().density_xy_flat.empty(),
+         "continuous2d export run should include density payload");
 
   auto o_gpu = o;
   o_gpu.use_gpu = true;
@@ -301,6 +310,13 @@ int main() {
   expect(!c3d_run.continuous_density_frames.empty(), "continuous3d should export density frame metadata");
   expect(c3d_run.continuous_density_frames.back().step == c3d.continuous_3d.steps,
          "continuous3d last frame should match configured steps");
+  const auto c3d_export_run = qx::run(c3d, o_export);
+  expect(c3d_export_run.ok, "continuous3d export run should succeed");
+  expect(!c3d_export_run.continuous_density_frames.empty(), "continuous3d export run should include frames");
+  expect(!c3d_export_run.continuous_density_frames.front().density_xy_flat.empty(),
+         "continuous3d export run should include xy slice payload");
+  expect(!c3d_export_run.continuous_density_frames.front().points_xyzd_flat.empty(),
+         "continuous3d export run should include volumetric point payload");
 
   const auto c3d_gpu_run = qx::run(c3d, o_gpu);
   expect(c3d_gpu_run.ok, "continuous3d gpu run should succeed");
