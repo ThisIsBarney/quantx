@@ -123,7 +123,8 @@ Player interaction features (true 3D viewer):
 Notes:
 
 - The JSON export now includes per-frame volumetric points as `frame.points` entries in `[x, y, z, density]` format.
-- The standalone `spatial3d_player.html` uses Three.js from CDN (`unpkg`) and requires network access to load those assets.
+- The standalone bundle is offline-first: `spatial3d_player.html` loads `./vendor/three.min.js` and `./vendor/OrbitControls.js` locally.
+- If local vendor files are missing, the player will try CDN fallback from `unpkg`.
 
 Generate a spatial potential gallery:
 

@@ -15,4 +15,5 @@ python .\scripts\visualize_simulation.py `
 if ($LASTEXITCODE -ne 0) { throw "spatial3d export failed: exit code $LASTEXITCODE" }
 
 Copy-Item .\scripts\spatial3d_player.html (Join-Path $outDir "spatial3d_player.html") -Force
+Copy-Item .\scripts\vendor (Join-Path $outDir "vendor") -Recurse -Force
 Write-Host "wrote JS player bundle to: $outDir"
