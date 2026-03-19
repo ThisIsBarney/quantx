@@ -88,6 +88,12 @@ Generate visualization with explicit solver mode:
 .\scripts\run_visualization.ps1 -SolverMode auto
 ```
 
+Force engine-first visualization output:
+
+```powershell
+.\scripts\run_visualization.ps1 -SolverMode engine
+```
+
 Solver modes:
 
 - `auto` (default): use engine-exported continuous frames first, fallback to Python reference solver if export is unavailable.
@@ -95,6 +101,7 @@ Solver modes:
 - `python`: force Python reference solver for continuous scenarios.
 
 When engine export is used, QuantX emits `continuous_export.frames` in run results with native frame payloads (2D density grids, 3D slices and point-cloud payloads).
+If an engine export payload is partial or corrupt, the visualization layer prints a clear console diagnostic and either fails fast (`engine`) or falls back to the Python reference solver (`auto`).
 
 For subagent work, follow the checklist in `docs/ENGINEERING_STANDARDS.md` and keep each agent in its own `codex/*` worktree.
 
@@ -126,6 +133,8 @@ Export 3D frames as JSON and prepare standalone JS player assets:
 ```powershell
 .\scripts\run_spatial3d_js_export.ps1
 ```
+
+The 3D export helper defaults to `-SolverMode engine`, reuses an existing native DLL from the current repo or a parent worktree when available, and writes the exported frame JSON plus `spatial3d_player.html` into the requested output directory.
 
 Outputs include:
 

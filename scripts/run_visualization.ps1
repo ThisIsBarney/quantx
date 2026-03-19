@@ -11,7 +11,26 @@ Set-Location $root
 
 .\scripts\ensure_subagent_worktree.ps1
 
-.\scripts\build.ps1
+function Get-NativeDllPath {
+  param([string]$StartDir)
+  $current = Get-Item $StartDir
+  while ($null -ne $current) {
+    $candidate = Join-Path $current.FullName "build-vs\Debug\quantx.dll"
+    if (Test-Path $candidate) {
+      return $candidate
+    }
+    $parent = $current.Parent
+    if ($null -eq $parent) {
+      break
+    }
+    $current = $parent
+  }
+  return $null
+}
+
+if (-not (Get-NativeDllPath -StartDir $root)) {
+  .\scripts\build.ps1
+}
 
 # Keep the wrapper ergonomic while exposing the continuous solver mode.
 $arguments = @(

@@ -165,8 +165,14 @@ def _make_engine(root: Path):
   sys.path.insert(0, str(root / "python"))
   from quantx_engine import Engine
 
-  dll = root / "build-vs" / "Debug" / "quantx.dll"
-  if not dll.exists():
+  search_roots = [root, *root.parents]
+  dll = None
+  for candidate_root in search_roots:
+    candidate = candidate_root / "build-vs" / "Debug" / "quantx.dll"
+    if candidate.exists():
+      dll = candidate
+      break
+  if dll is None:
     return None
   try:
     return Engine(str(dll))
@@ -179,17 +185,17 @@ def _load_continuous_export_file(path: Path) -> dict:
   data = json.loads(path.read_text(encoding="utf-8"))
   if isinstance(data, dict):
     if isinstance(data.get("continuous_export"), dict):
-      return data["continuous_export"]
+      return _normalize_engine_export_payload(data["continuous_export"])
     export = data.get("export")
     if isinstance(export, dict):
       for key in ("continuous_export", "continuous", "frames"):
         value = export.get(key)
         if isinstance(value, dict):
-          return value
+          return _normalize_engine_export_payload(value)
         if isinstance(value, list):
-          return {"frames": value}
+          return _normalize_engine_export_payload({"frames": value})
     if isinstance(data.get("frames"), list):
-      return data
+      return _normalize_engine_export_payload(data)
   raise RuntimeError(f"continuous export json must contain a frames payload: {path}")
 
 
@@ -234,82 +240,101 @@ def _attach_continuous_metadata(data: dict, solver_mode: str, source: str) -> di
   return payload
 
 
-def _reshape_flat_to_rows(flat: list[float], rows: int, cols: int) -> list[list[float]]:
-  """Reshape a flat row-major list into nested lists."""
-  if rows <= 0 or cols <= 0 or len(flat) != rows * cols:
-    return []
+def _require_list(value: object, label: str) -> list:
+  """Return a list value or raise a diagnostic error."""
+  if not isinstance(value, list):
+    raise RuntimeError(f"engine-export payload field '{label}' must be a list")
+  return value
+
+
+def _reshape_flat_to_rows(flat: list[float], rows: int, cols: int, label: str) -> list[list[float]]:
+  """Reshape a flat row-major list into nested lists and validate its size."""
+  if rows <= 0 or cols <= 0:
+    raise RuntimeError(f"engine-export payload field '{label}' requires positive row and column sizes")
+  if len(flat) != rows * cols:
+    raise RuntimeError(
+        f"engine-export payload field '{label}' has {len(flat)} entries but expected {rows * cols} for {rows}x{cols}"
+    )
   return [flat[r * cols:(r + 1) * cols] for r in range(rows)]
+
+
+def _reshape_flat_points(flat: list[float], label: str) -> list[list[float]]:
+  """Reshape a flat [x,y,z,density] list into point rows and validate its size."""
+  if len(flat) % 4 != 0:
+    raise RuntimeError(
+        f"engine-export payload field '{label}' must contain a multiple of 4 values for [x,y,z,density] tuples"
+    )
+  return [flat[i:i + 4] for i in range(0, len(flat), 4)]
 
 
 def _normalize_engine_export_payload(payload: dict) -> dict:
   """Convert native engine export payload to visualizer-friendly frame shapes."""
   if not isinstance(payload, dict):
-    return payload
+    raise RuntimeError("engine-export payload must be a JSON object")
   frames = payload.get("frames")
   if not isinstance(frames, list) or not frames:
-    return payload
+    raise RuntimeError("engine-export payload must contain a non-empty 'frames' array")
 
-  first = frames[0] if isinstance(frames[0], dict) else {}
-  nx = int(first.get("nx", 0) or 0)
-  ny = int(first.get("ny", 0) or 0)
-  nz = int(first.get("nz", 0) or 0)
-  if nx <= 0 or ny <= 0:
-    return payload
+  normalized_frames = []
+  dens_max = float(payload.get("dens_max", 0.0) or 0.0)
+  base = frames[0] if isinstance(frames[0], dict) else {}
+  for frame_idx, raw_frame in enumerate(frames):
+    if not isinstance(raw_frame, dict):
+      raise RuntimeError(f"engine-export frame {frame_idx} must be a JSON object")
+
+    frame = dict(raw_frame)
+    nx = int(frame.get("nx", base.get("nx", 0)) or 0)
+    ny = int(frame.get("ny", base.get("ny", 0)) or 0)
+    nz = int(frame.get("nz", base.get("nz", 0)) or 0)
+
+    if nz <= 0:
+      if "density" in frame and isinstance(frame["density"], list):
+        density = _require_list(frame["density"], f"frames[{frame_idx}].density")
+      else:
+        density_flat = _require_list(frame.get("density_xy_flat"), f"frames[{frame_idx}].density_xy_flat")
+        if nx <= 0 or ny <= 0:
+          raise RuntimeError(f"engine-export frame {frame_idx} requires nx and ny for 2D density normalization")
+        density = _reshape_flat_to_rows([float(v) for v in density_flat], ny, nx, f"frames[{frame_idx}].density_xy_flat")
+      frame["density"] = density
+      frame["exp_x"] = float(frame.get("exp_x", frame.get("x_mean", 0.0)) or 0.0)
+      frame["exp_y"] = float(frame.get("exp_y", frame.get("y_mean", 0.0)) or 0.0)
+      frame["t"] = float(frame.get("t", frame.get("time", 0.0)) or 0.0)
+      dens_max = max(dens_max, max((max(row) for row in density), default=0.0))
+    else:
+      if nx <= 0 or ny <= 0 or nz <= 0:
+        raise RuntimeError(f"engine-export frame {frame_idx} requires nx, ny and nz for 3D density normalization")
+      xy_flat = _require_list(frame.get("density_xy_flat"), f"frames[{frame_idx}].density_xy_flat")
+      xz_flat = _require_list(frame.get("density_xz_flat"), f"frames[{frame_idx}].density_xz_flat")
+      yz_flat = _require_list(frame.get("density_yz_flat"), f"frames[{frame_idx}].density_yz_flat")
+      points_flat = _require_list(frame.get("points_xyzd_flat"), f"frames[{frame_idx}].points_xyzd_flat")
+      frame["xy"] = _reshape_flat_to_rows([float(v) for v in xy_flat], ny, nx, f"frames[{frame_idx}].density_xy_flat")
+      frame["xz"] = _reshape_flat_to_rows([float(v) for v in xz_flat], nz, nx, f"frames[{frame_idx}].density_xz_flat")
+      frame["yz"] = _reshape_flat_to_rows([float(v) for v in yz_flat], nz, ny, f"frames[{frame_idx}].density_yz_flat")
+      frame["points"] = _reshape_flat_points([float(v) for v in points_flat], f"frames[{frame_idx}].points_xyzd_flat")
+      frame["t"] = float(frame.get("t", frame.get("time", 0.0)) or 0.0)
+      frame["point_count"] = len(frame["points"])
+      frame["point_vmax"] = max((float(p[3]) for p in frame["points"]), default=0.0)
+      dens_max = max(
+          dens_max,
+          max((max(row) for row in frame["xy"]), default=0.0),
+          max((max(row) for row in frame["xz"]), default=0.0),
+          max((max(row) for row in frame["yz"]), default=0.0),
+      )
+
+    normalized_frames.append(frame)
 
   out = dict(payload)
-  norm_frames = []
-  dens_max = 1e-12
-  for fr in frames:
-    if not isinstance(fr, dict):
-      continue
-    item = dict(fr)
-    if nz == 0:
-      flat = fr.get("density_xy_flat")
-      if isinstance(flat, list):
-        density = _reshape_flat_to_rows([float(v) for v in flat], ny, nx)
-        if density:
-          item["density"] = density
-          dens_max = max(dens_max, max((max(row) for row in density), default=0.0))
-          item["exp_x"] = float(fr.get("x_mean", 0.0))
-          item["exp_y"] = float(fr.get("y_mean", 0.0))
-          item["t"] = float(fr.get("time", 0.0))
-    else:
-      xy = fr.get("density_xy_flat")
-      xz = fr.get("density_xz_flat")
-      yz = fr.get("density_yz_flat")
-      if isinstance(xy, list):
-        item["xy"] = _reshape_flat_to_rows([float(v) for v in xy], ny, nx)
-      if isinstance(xz, list):
-        item["xz"] = _reshape_flat_to_rows([float(v) for v in xz], nz, nx)
-      if isinstance(yz, list):
-        item["yz"] = _reshape_flat_to_rows([float(v) for v in yz], nz, ny)
-      pts = fr.get("points_xyzd_flat")
-      if isinstance(pts, list) and len(pts) >= 4:
-        points = []
-        for i in range(0, len(pts) - 3, 4):
-          points.append([float(pts[i]), float(pts[i + 1]), float(pts[i + 2]), float(pts[i + 3])])
-        item["points"] = points
-      item["t"] = float(fr.get("time", 0.0))
-      dens_vals = []
-      for key in ("xy", "xz", "yz"):
-        panel = item.get(key)
-        if isinstance(panel, list):
-          for row in panel:
-            if isinstance(row, list):
-              dens_vals.extend(float(v) for v in row)
-      if dens_vals:
-        dens_max = max(dens_max, max(dens_vals))
-    norm_frames.append(item)
-
-  out["frames"] = norm_frames
+  out["frames"] = normalized_frames
+  out["dens_max"] = max(dens_max, float(out.get("dens_max", 0.0) or 0.0))
+  first = normalized_frames[0]
   out.setdefault("x_min", float(first.get("x_min", -1.0)))
   out.setdefault("x_max", float(first.get("x_max", 1.0)))
   out.setdefault("y_min", float(first.get("y_min", -1.0)))
   out.setdefault("y_max", float(first.get("y_max", 1.0)))
   out.setdefault("z_min", float(first.get("z_min", -1.0)))
   out.setdefault("z_max", float(first.get("z_max", 1.0)))
-  out.setdefault("potential_type", first.get("potential_kind", "none"))
-  out["dens_max"] = max(float(out.get("dens_max", 0.0)), dens_max)
+  out.setdefault("boundary", first.get("boundary", out.get("boundary", "periodic")))
+  out.setdefault("potential_type", first.get("potential_kind", out.get("potential_type", "none")))
   return out
 
 
@@ -409,7 +434,14 @@ def _resolve_continuous_payload(
 ) -> dict:
   """Prefer engine-exported frames and fall back to the Python reference solver."""
   if export_json_path is not None:
-    return _attach_continuous_metadata(_load_continuous_export_file(export_json_path), solver_mode, "engine-export-file")
+    try:
+      export = _load_continuous_export_file(export_json_path)
+    except Exception as ex:
+      if solver_mode == "engine":
+        raise RuntimeError(f"continuous visualization received invalid engine export file: {ex}") from ex
+      print(f"warning: {ex}; falling back to live engine execution or Python reference solver", file=sys.stderr)
+    else:
+      return _attach_continuous_metadata(export, solver_mode, "engine-export-file")
 
   if solver_mode in {"auto", "engine"} and engine is not None:
     result = engine.run(problem, {"enable_checkpoint": False, "export_continuous_frames": True})
@@ -420,7 +452,14 @@ def _resolve_continuous_payload(
     if export is None:
       export = _extract_continuous_export_from_result(result)
     if export is not None:
-      return _attach_continuous_metadata(_normalize_engine_export_payload(export), solver_mode, "engine-export")
+      try:
+        normalized = _normalize_engine_export_payload(export)
+      except Exception as ex:
+        if solver_mode == "engine":
+          raise RuntimeError(f"continuous visualization received invalid engine export payload: {ex}") from ex
+        print(f"warning: {ex}; falling back to Python reference solver", file=sys.stderr)
+      else:
+        return _attach_continuous_metadata(normalized, solver_mode, "engine-export")
     if solver_mode == "engine":
       raise RuntimeError("continuous visualization requested solver-mode=engine but the native result did not include a frames export")
 
