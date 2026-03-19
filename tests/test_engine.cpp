@@ -167,6 +167,58 @@ int main() {
   expect(std::abs(c3d_run.observables.at("norm") - 1.0) < 6e-2, "continuous3d norm should remain close to 1");
   expect(c3d_run.observables.count("sigma_z") == 1, "continuous3d should report sigma_z");
 
+  auto c3d_free_early = qx::problem_from_json(R"({
+    "kind": "continuous_space_3d",
+    "continuous_space_3d": {
+      "nx": 24,
+      "ny": 24,
+      "nz": 24,
+      "dx": 0.1,
+      "dy": 0.1,
+      "dz": 0.1,
+      "dt": 0.001,
+      "steps": 2,
+      "boundary": "periodic",
+      "potential_kind": "none",
+      "potential_params": {
+        "psi_sigma": 0.25,
+        "psi_kx": 0.0,
+        "psi_ky": 0.0,
+        "psi_kz": 0.0,
+        "psi_x0": 0.0,
+        "psi_y0": 0.0,
+        "psi_z0": 0.0
+      }
+    }
+  })");
+  auto c3d_free_late = c3d_free_early;
+  c3d_free_late.continuous_3d.steps = 100;
+
+  const auto c3d_free_early_run = qx::run(c3d_free_early, o);
+  const auto c3d_free_late_run = qx::run(c3d_free_late, o);
+  expect(c3d_free_early_run.ok && c3d_free_late_run.ok, "free-packet continuous3d runs should succeed");
+
+  const double sigma0_3d = 0.25;
+  const double t_late_3d = static_cast<double>(c3d_free_late.continuous_3d.steps) * c3d_free_late.continuous_3d.dt;
+  const double sigma_analytic_3d = std::sqrt(sigma0_3d * sigma0_3d + (t_late_3d * t_late_3d) / (4.0 * sigma0_3d * sigma0_3d));
+
+  const double sigma_x_early_3d = c3d_free_early_run.observables.at("sigma_x");
+  const double sigma_y_early_3d = c3d_free_early_run.observables.at("sigma_y");
+  const double sigma_z_early_3d = c3d_free_early_run.observables.at("sigma_z");
+  const double sigma_x_late_3d = c3d_free_late_run.observables.at("sigma_x");
+  const double sigma_y_late_3d = c3d_free_late_run.observables.at("sigma_y");
+  const double sigma_z_late_3d = c3d_free_late_run.observables.at("sigma_z");
+
+  expect(sigma_x_late_3d > sigma_x_early_3d + 1e-4, "free packet sigma_x should broaden over time in continuous3d");
+  expect(sigma_y_late_3d > sigma_y_early_3d + 1e-4, "free packet sigma_y should broaden over time in continuous3d");
+  expect(sigma_z_late_3d > sigma_z_early_3d + 1e-4, "free packet sigma_z should broaden over time in continuous3d");
+  expect(std::abs(sigma_x_late_3d - sigma_analytic_3d) < 1.2e-1,
+         "free packet sigma_x should be close to analytic broadening in continuous3d");
+  expect(std::abs(sigma_y_late_3d - sigma_analytic_3d) < 1.2e-1,
+         "free packet sigma_y should be close to analytic broadening in continuous3d");
+  expect(std::abs(sigma_z_late_3d - sigma_analytic_3d) < 1.2e-1,
+         "free packet sigma_z should be close to analytic broadening in continuous3d");
+
   auto c3d_abs = c3d;
   c3d_abs.continuous_3d.boundary = "absorbing";
   c3d_abs.continuous_3d.steps = 60;
