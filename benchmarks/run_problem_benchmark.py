@@ -13,9 +13,11 @@ def expected_sigma(case: dict, problem: dict) -> float | None:
     return None
 
   c2d = problem.get("continuous_space_2d", {})
+  c3d = problem.get("continuous_space_3d", {})
+  cfg = c2d if c2d else c3d
   sigma0 = float(analytic.get("sigma0", 0.0))
-  steps = int(c2d.get("steps", 0))
-  dt = float(c2d.get("dt", 0.0))
+  steps = int(cfg.get("steps", 0))
+  dt = float(cfg.get("dt", 0.0))
   if sigma0 <= 0.0 or steps <= 0 or dt <= 0.0:
     return None
 
@@ -48,7 +50,9 @@ def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: i
   norm_abs_error = []
   sigma_x = []
   sigma_y = []
+  sigma_z = []
   sigma_x_abs_error = []
+  sigma_z_abs_error = []
 
   sigma_expected = expected_sigma(case, problem)
 
@@ -66,6 +70,11 @@ def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: i
         sigma_x_abs_error.append(abs(sx - sigma_expected))
     if "sigma_y" in obs:
       sigma_y.append(float(obs["sigma_y"]))
+    if "sigma_z" in obs:
+      sz = float(obs["sigma_z"])
+      sigma_z.append(sz)
+      if sigma_expected is not None:
+        sigma_z_abs_error.append(abs(sz - sigma_expected))
 
   aggregate = {
       "elapsed_ms_mean": statistics.fmean(elapsed) if elapsed else 0.0,
@@ -75,7 +84,9 @@ def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: i
       "norm_abs_error_mean": statistics.fmean(norm_abs_error) if norm_abs_error else None,
       "sigma_x_mean": statistics.fmean(sigma_x) if sigma_x else None,
       "sigma_y_mean": statistics.fmean(sigma_y) if sigma_y else None,
+      "sigma_z_mean": statistics.fmean(sigma_z) if sigma_z else None,
       "sigma_x_abs_error_mean": statistics.fmean(sigma_x_abs_error) if sigma_x_abs_error else None,
+      "sigma_z_abs_error_mean": statistics.fmean(sigma_z_abs_error) if sigma_z_abs_error else None,
       "sigma_x_expected": sigma_expected,
   }
 
@@ -113,9 +124,9 @@ def write_markdown_summary(report: dict, output_path: Path) -> None:
   lines.append("")
   lines.append(
       "| case | backend | ok_rate | elapsed_ms_mean | core_elapsed_ms_mean | norm_abs_error_mean | "
-      "sigma_x_mean | sigma_y_mean | sigma_x_expected | sigma_x_abs_error_mean |"
+      "sigma_x_mean | sigma_y_mean | sigma_z_mean | sigma_x_expected | sigma_x_abs_error_mean | sigma_z_abs_error_mean |"
   )
-  lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+  lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
 
   for case in report["cases"]:
     agg = case["aggregate"]
@@ -127,7 +138,8 @@ def write_markdown_summary(report: dict, output_path: Path) -> None:
         f"| {case['id']} | {case.get('backend','n/a')} | {case.get('ok_rate',0.0):.2f} | "
         f"{fmt(agg.get('elapsed_ms_mean'), 3)} | {fmt(agg.get('core_elapsed_ms_mean'), 3)} | "
         f"{fmt(agg.get('norm_abs_error_mean'), 6)} | {fmt(agg.get('sigma_x_mean'), 6)} | {fmt(agg.get('sigma_y_mean'), 6)} | "
-        f"{fmt(agg.get('sigma_x_expected'), 6)} | {fmt(agg.get('sigma_x_abs_error_mean'), 6)} |"
+        f"{fmt(agg.get('sigma_z_mean'), 6)} | {fmt(agg.get('sigma_x_expected'), 6)} | "
+        f"{fmt(agg.get('sigma_x_abs_error_mean'), 6)} | {fmt(agg.get('sigma_z_abs_error_mean'), 6)} |"
     )
 
   output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -162,6 +174,16 @@ def evaluate_gates(report_cases: list[dict], gates: dict) -> dict:
       elif float(value) > float(sigma_err_max):
         case_failures.append(
             f"sigma_x_abs_error_mean={value:.6f} > sigma_x_abs_error_mean_max={float(sigma_err_max):.6f}"
+        )
+
+    sigma_z_err_max = gates.get("sigma_z_abs_error_mean_max")
+    if sigma_z_err_max is not None:
+      value = agg.get("sigma_z_abs_error_mean")
+      if value is None:
+        case_failures.append("missing metric sigma_z_abs_error_mean")
+      elif float(value) > float(sigma_z_err_max):
+        case_failures.append(
+            f"sigma_z_abs_error_mean={value:.6f} > sigma_z_abs_error_mean_max={float(sigma_z_err_max):.6f}"
         )
 
     core_elapsed_max = gates.get("core_elapsed_ms_mean_max")

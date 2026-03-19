@@ -54,6 +54,7 @@ def check_case(case: dict, gates: dict, perf_warn_only: bool) -> tuple[list[str]
   check_le("core_elapsed_ms_mean", "core_elapsed_ms_mean_max", is_performance=True)
   check_le("norm_abs_error_mean", "norm_abs_error_mean_max")
   check_le("sigma_x_abs_error_mean", "sigma_x_abs_error_mean_max")
+  check_le("sigma_z_abs_error_mean", "sigma_z_abs_error_mean_max")
   return failures, warnings
 
 

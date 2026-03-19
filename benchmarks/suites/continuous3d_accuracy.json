@@ -1,0 +1,23 @@
+{
+  "name": "continuous3d_accuracy",
+  "repeats": 3,
+  "gates": {
+    "ok_rate_min": 1.0,
+    "norm_abs_error_mean_max": 0.06,
+    "sigma_x_abs_error_mean_max": 0.12,
+    "sigma_z_abs_error_mean_max": 0.12
+  },
+  "options": {
+    "enable_checkpoint": false
+  },
+  "cases": [
+    {
+      "id": "free3d_sigma_24",
+      "problem_file": "examples/problem_continuous3d_smoke.json",
+      "analytic": {
+        "model": "free_gaussian_sigma",
+        "sigma0": 0.35
+      }
+    }
+  ]
+}
