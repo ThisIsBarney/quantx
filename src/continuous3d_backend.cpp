@@ -29,6 +29,70 @@ class Continuous3DBackend final : public IBackend {
     return c;
   }
 
+  void precompute_boundary_mask(const std::map<std::string, double>& params) {
+    if (boundary_ != "absorbing") {
+      return;
+    }
+    const auto get_param = [&params](const std::string& key, double def) {
+      const auto it = params.find(key);
+      return it == params.end() ? def : it->second;
+    };
+
+    const double width_cells = std::max(1.0, get_param("absorb_width", 6.0));
+    const double strength = std::max(0.0, get_param("absorb_strength", 3.0));
+
+    for (std::uint32_t z = 0; z < nz_; ++z) {
+      const double dz_edge = std::min<double>(z, nz_ - 1U - z);
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        const double dy_edge = std::min<double>(y, ny_ - 1U - y);
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          const double dx_edge = std::min<double>(x, nx_ - 1U - x);
+          const double edge_dist = std::min({dx_edge, dy_edge, dz_edge});
+          if (edge_dist >= width_cells) {
+            absorbing_mask_[idx(x, y, z)] = 1.0;
+            continue;
+          }
+          const double t = (width_cells - edge_dist) / width_cells;
+          const double damp = std::exp(-strength * t * t * dt_);
+          absorbing_mask_[idx(x, y, z)] = std::clamp(damp, 0.0, 1.0);
+        }
+      }
+    }
+  }
+
+  void apply_absorbing_boundary() {
+    if (boundary_ != "absorbing") {
+      return;
+    }
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      state_[i] *= absorbing_mask_[i];
+    }
+  }
+
+  void enforce_dirichlet_boundary() {
+    if (boundary_ != "dirichlet") {
+      return;
+    }
+    for (std::uint32_t z = 0; z < nz_; ++z) {
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        state_[idx(0, y, z)] = Complex{0.0, 0.0};
+        state_[idx(nx_ - 1U, y, z)] = Complex{0.0, 0.0};
+      }
+    }
+    for (std::uint32_t z = 0; z < nz_; ++z) {
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        state_[idx(x, 0, z)] = Complex{0.0, 0.0};
+        state_[idx(x, ny_ - 1U, z)] = Complex{0.0, 0.0};
+      }
+    }
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        state_[idx(x, y, 0)] = Complex{0.0, 0.0};
+        state_[idx(x, y, nz_ - 1U)] = Complex{0.0, 0.0};
+      }
+    }
+  }
+
   void initialize(const QuantumProblem& problem, const RunOptions& options) override {
     if (problem.kind != ProblemKind::ContinuousSpace3D) {
       throw std::runtime_error("continuous3d backend requires ProblemKind::ContinuousSpace3D");
@@ -41,8 +105,8 @@ class Continuous3DBackend final : public IBackend {
     if (c.dx <= 0.0 || c.dy <= 0.0 || c.dz <= 0.0 || c.dt <= 0.0 || c.steps == 0) {
       throw std::runtime_error("continuous3d dx/dy/dz/dt/steps must be positive");
     }
-    if (c.boundary != "periodic") {
-      throw std::runtime_error("continuous3d backend currently supports boundary=periodic only");
+    if (c.boundary != "periodic" && c.boundary != "absorbing" && c.boundary != "dirichlet") {
+      throw std::runtime_error("continuous3d backend supports boundary in {periodic,absorbing,dirichlet}");
     }
 
     nx_ = c.nx;
@@ -71,6 +135,7 @@ class Continuous3DBackend final : public IBackend {
     potential_.assign(n, 0.0);
     potential_phase_.assign(n, Complex{1.0, 0.0});
     kinetic_half_phase_.assign(n, Complex{1.0, 0.0});
+    absorbing_mask_.assign(n, 1.0);
 
     if (!c.potential_grid.empty()) {
       if (c.potential_grid.size() != n) {
@@ -83,6 +148,8 @@ class Continuous3DBackend final : public IBackend {
 
     initialize_wavepacket(c.potential_params);
     precompute_phases();
+    precompute_boundary_mask(c.potential_params);
+    enforce_dirichlet_boundary();
     update_observables();
   }
 
@@ -91,7 +158,11 @@ class Continuous3DBackend final : public IBackend {
       apply_half_kinetic();
       apply_potential();
       apply_half_kinetic();
-      normalize_state();
+      apply_absorbing_boundary();
+      enforce_dirichlet_boundary();
+      if (boundary_ != "absorbing") {
+        normalize_state();
+      }
     }
     update_observables();
   }
@@ -487,6 +558,9 @@ class Continuous3DBackend final : public IBackend {
     observables_["nz"] = static_cast<double>(nz_);
     observables_["fft_provider_eigen"] = (fft_provider_ && fft_provider_->name() == "eigen") ? 1.0 : 0.0;
     observables_["fft_provider_cufft"] = (fft_provider_ && fft_provider_->name() == "cufft") ? 1.0 : 0.0;
+    observables_["boundary_periodic"] = boundary_ == "periodic" ? 1.0 : 0.0;
+    observables_["boundary_absorbing"] = boundary_ == "absorbing" ? 1.0 : 0.0;
+    observables_["boundary_dirichlet"] = boundary_ == "dirichlet" ? 1.0 : 0.0;
   }
 
  private:
@@ -503,6 +577,7 @@ class Continuous3DBackend final : public IBackend {
   std::vector<Complex> state_;
   std::vector<Complex> kbuf_;
   std::vector<double> potential_;
+  std::vector<double> absorbing_mask_;
   std::vector<Complex> potential_phase_;
   std::vector<Complex> kinetic_half_phase_;
   std::map<std::string, double> observables_;

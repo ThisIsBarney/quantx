@@ -167,6 +167,31 @@ int main() {
   expect(std::abs(c3d_run.observables.at("norm") - 1.0) < 6e-2, "continuous3d norm should remain close to 1");
   expect(c3d_run.observables.count("sigma_z") == 1, "continuous3d should report sigma_z");
 
+  auto c3d_abs = c3d;
+  c3d_abs.continuous_3d.boundary = "absorbing";
+  c3d_abs.continuous_3d.steps = 60;
+  c3d_abs.continuous_3d.potential_params["absorb_width"] = 4.0;
+  c3d_abs.continuous_3d.potential_params["absorb_strength"] = 4.0;
+  const auto c3d_abs_run = qx::run(c3d_abs, o);
+  expect(c3d_abs_run.ok, "continuous3d absorbing run should succeed");
+  expect(c3d_abs_run.observables.count("boundary_absorbing") == 1,
+         "continuous3d absorbing run should expose boundary flag");
+  expect(c3d_abs_run.observables.at("boundary_absorbing") > 0.5,
+         "continuous3d absorbing boundary flag should be enabled");
+  expect(c3d_abs_run.observables.at("norm") < c3d_run.observables.at("norm"),
+         "absorbing boundary should reduce norm versus periodic case");
+
+  auto c3d_dir = c3d;
+  c3d_dir.continuous_3d.boundary = "dirichlet";
+  const auto c3d_dir_run = qx::run(c3d_dir, o);
+  expect(c3d_dir_run.ok, "continuous3d dirichlet run should succeed");
+  expect(c3d_dir_run.observables.count("boundary_dirichlet") == 1,
+         "continuous3d dirichlet run should expose boundary flag");
+  expect(c3d_dir_run.observables.at("boundary_dirichlet") > 0.5,
+         "continuous3d dirichlet boundary flag should be enabled");
+  expect(c3d_dir_run.observables.at("norm") > 0.90,
+         "continuous3d dirichlet norm should stay reasonably close to 1 in smoke setup");
+
   qx::QuantumProblem rabi;
   rabi.qubits = 1;
   rabi.evolution.total_time = std::numbers::pi / 2.0;

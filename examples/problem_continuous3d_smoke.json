@@ -1,0 +1,25 @@
+{
+  "kind": "continuous_space_3d",
+  "continuous_space_3d": {
+    "nx": 24,
+    "ny": 24,
+    "nz": 24,
+    "dx": 0.2,
+    "dy": 0.2,
+    "dz": 0.2,
+    "dt": 0.001,
+    "steps": 20,
+    "boundary": "periodic",
+    "potential_kind": "none",
+    "potential_params": {
+      "psi_sigma": 0.35,
+      "psi_kx": 0.0,
+      "psi_ky": 0.0,
+      "psi_kz": 0.0,
+      "psi_x0": 0.0,
+      "psi_y0": 0.0,
+      "psi_z0": 0.0
+    }
+  },
+  "observables": ["norm", "sigma_x", "sigma_y", "sigma_z"]
+}
