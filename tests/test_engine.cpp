@@ -137,6 +137,36 @@ int main() {
   expect(std::abs(sigma_x_late - sigma_analytic) < 8e-2,
          "free packet sigma_x should be close to analytic broadening");
 
+  const auto c3d = qx::problem_from_json(R"({
+    "kind": "continuous_space_3d",
+    "continuous_space_3d": {
+      "nx": 24,
+      "ny": 20,
+      "nz": 16,
+      "dx": 0.2,
+      "dy": 0.2,
+      "dz": 0.2,
+      "dt": 0.001,
+      "steps": 12,
+      "boundary": "periodic",
+      "potential_kind": "none",
+      "potential_params": {"psi_sigma": 0.35, "psi_kx": 0.0, "psi_ky": 0.0, "psi_kz": 0.0}
+    }
+  })");
+  expect(c3d.kind == qx::ProblemKind::ContinuousSpace3D, "continuous_space_3d kind should parse");
+  expect(c3d.continuous_3d.nz == 16, "continuous3d nz should parse");
+  expect(std::abs(c3d.continuous_3d.dz - 0.2) < 1e-12, "continuous3d dz should parse");
+
+  const auto c3d_info = qx::explain_backend_choice(c3d, o);
+  expect(c3d_info.selected_backend == "continuous3d", "continuous3d problem should choose continuous3d backend");
+
+  const auto c3d_run = qx::run(c3d, o);
+  expect(c3d_run.ok, "continuous3d run should succeed");
+  expect(c3d_run.backend == "continuous3d", "continuous3d backend should run");
+  expect(c3d_run.observables.count("norm") == 1, "continuous3d should report norm");
+  expect(std::abs(c3d_run.observables.at("norm") - 1.0) < 6e-2, "continuous3d norm should remain close to 1");
+  expect(c3d_run.observables.count("sigma_z") == 1, "continuous3d should report sigma_z");
+
   qx::QuantumProblem rabi;
   rabi.qubits = 1;
   rabi.evolution.total_time = std::numbers::pi / 2.0;

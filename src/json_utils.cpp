@@ -20,6 +20,8 @@ std::string problem_kind_to_string(ProblemKind k) {
       return "discrete";
     case ProblemKind::ContinuousSpace2D:
       return "continuous_space_2d";
+    case ProblemKind::ContinuousSpace3D:
+      return "continuous_space_3d";
   }
   return "discrete";
 }
@@ -28,6 +30,9 @@ std::string problem_kind_to_string(ProblemKind k) {
 ProblemKind problem_kind_from_string(const std::string& s) {
   if (s == "continuous_space_2d" || s == "continuous2d" || s == "continuous_2d") {
     return ProblemKind::ContinuousSpace2D;
+  }
+  if (s == "continuous_space_3d" || s == "continuous3d" || s == "continuous_3d") {
+    return ProblemKind::ContinuousSpace3D;
   }
   return ProblemKind::Discrete;
 }
@@ -137,6 +142,25 @@ QuantumProblem problem_from_json(const std::string& json_text) {
         get_or<std::map<std::string, double>>(c2d, "potential_params", p.continuous_2d.potential_params);
     p.continuous_2d.potential_grid = get_or<std::vector<double>>(c2d, "potential_grid", p.continuous_2d.potential_grid);
     p.kind = ProblemKind::ContinuousSpace2D;
+  }
+
+  auto c3d_it = j.find("continuous_space_3d");
+  if (c3d_it != j.end() && c3d_it->is_object()) {
+    const auto& c3d = *c3d_it;
+    p.continuous_3d.nx = get_or<std::uint32_t>(c3d, "nx", p.continuous_3d.nx);
+    p.continuous_3d.ny = get_or<std::uint32_t>(c3d, "ny", p.continuous_3d.ny);
+    p.continuous_3d.nz = get_or<std::uint32_t>(c3d, "nz", p.continuous_3d.nz);
+    p.continuous_3d.dx = get_or<double>(c3d, "dx", p.continuous_3d.dx);
+    p.continuous_3d.dy = get_or<double>(c3d, "dy", p.continuous_3d.dy);
+    p.continuous_3d.dz = get_or<double>(c3d, "dz", p.continuous_3d.dz);
+    p.continuous_3d.dt = get_or<double>(c3d, "dt", p.continuous_3d.dt);
+    p.continuous_3d.steps = get_or<std::uint32_t>(c3d, "steps", p.continuous_3d.steps);
+    p.continuous_3d.boundary = get_or<std::string>(c3d, "boundary", p.continuous_3d.boundary);
+    p.continuous_3d.potential_kind = get_or<std::string>(c3d, "potential_kind", p.continuous_3d.potential_kind);
+    p.continuous_3d.potential_params =
+        get_or<std::map<std::string, double>>(c3d, "potential_params", p.continuous_3d.potential_params);
+    p.continuous_3d.potential_grid = get_or<std::vector<double>>(c3d, "potential_grid", p.continuous_3d.potential_grid);
+    p.kind = ProblemKind::ContinuousSpace3D;
   }
 
   auto h_it = j.find("hamiltonian_terms");

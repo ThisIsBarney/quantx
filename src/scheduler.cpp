@@ -18,6 +18,15 @@ BackendInfo explain_backend_choice_internal(const QuantumProblem& problem, const
     return info;
   }
 
+  if (problem.kind == ProblemKind::ContinuousSpace3D) {
+    info.selected_backend = "continuous3d";
+    info.reasons.push_back("Problem kind is continuous_space_3d.");
+    if (options.use_gpu) {
+      info.reasons.push_back("GPU was requested; future Continuous3D backend may use GPU FFT acceleration.");
+    }
+    return info;
+  }
+
   if (problem.equation != EquationType::Schrodinger) {
     info.selected_backend = "statevector";
     info.reasons.push_back("Non-Schrodinger equations are reserved for future backends.");

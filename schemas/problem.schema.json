@@ -5,7 +5,15 @@
   "properties": {
     "kind": {
       "type": "string",
-      "enum": ["discrete", "continuous_space_2d", "continuous2d", "continuous_2d"]
+      "enum": [
+        "discrete",
+        "continuous_space_2d",
+        "continuous2d",
+        "continuous_2d",
+        "continuous_space_3d",
+        "continuous3d",
+        "continuous_3d"
+      ]
     },
     "qubits": { "type": "integer", "minimum": 1 },
     "equation": {
@@ -28,6 +36,30 @@
         "ny": { "type": "integer", "minimum": 1 },
         "dx": { "type": "number", "exclusiveMinimum": 0 },
         "dy": { "type": "number", "exclusiveMinimum": 0 },
+        "dt": { "type": "number", "exclusiveMinimum": 0 },
+        "steps": { "type": "integer", "minimum": 1 },
+        "boundary": { "type": "string" },
+        "potential_kind": { "type": "string" },
+        "potential_params": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "potential_grid": {
+          "type": "array",
+          "items": { "type": "number" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "continuous_space_3d": {
+      "type": "object",
+      "properties": {
+        "nx": { "type": "integer", "minimum": 1 },
+        "ny": { "type": "integer", "minimum": 1 },
+        "nz": { "type": "integer", "minimum": 1 },
+        "dx": { "type": "number", "exclusiveMinimum": 0 },
+        "dy": { "type": "number", "exclusiveMinimum": 0 },
+        "dz": { "type": "number", "exclusiveMinimum": 0 },
         "dt": { "type": "number", "exclusiveMinimum": 0 },
         "steps": { "type": "integer", "minimum": 1 },
         "boundary": { "type": "string" },
