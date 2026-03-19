@@ -108,6 +108,15 @@ int main() {
   expect(std::abs(c2d_run.observables.at("norm") - 1.0) < 5e-2, "continuous2d norm should remain close to 1");
   expect(c2d_run.observables.count("sigma_x") == 1, "continuous2d should report sigma_x");
 
+  auto o_gpu = o;
+  o_gpu.use_gpu = true;
+  const auto c2d_gpu_run = qx::run(c2d, o_gpu);
+  expect(c2d_gpu_run.ok, "continuous2d gpu run should succeed");
+  expect(c2d_gpu_run.observables.count("fft_provider_cufft") == 1,
+         "continuous2d gpu run should expose fft_provider_cufft");
+  expect(c2d_gpu_run.observables.at("fft_provider_cufft") > 0.5,
+         "continuous2d gpu run should select cufft provider marker");
+
   auto c2d_free_early = qx::problem_from_json(R"({
     "kind": "continuous_space_2d",
     "continuous_space_2d": {
@@ -166,6 +175,13 @@ int main() {
   expect(c3d_run.observables.count("norm") == 1, "continuous3d should report norm");
   expect(std::abs(c3d_run.observables.at("norm") - 1.0) < 6e-2, "continuous3d norm should remain close to 1");
   expect(c3d_run.observables.count("sigma_z") == 1, "continuous3d should report sigma_z");
+
+  const auto c3d_gpu_run = qx::run(c3d, o_gpu);
+  expect(c3d_gpu_run.ok, "continuous3d gpu run should succeed");
+  expect(c3d_gpu_run.observables.count("fft_provider_cufft") == 1,
+         "continuous3d gpu run should expose fft_provider_cufft");
+  expect(c3d_gpu_run.observables.at("fft_provider_cufft") > 0.5,
+         "continuous3d gpu run should select cufft provider marker");
 
   auto c3d_free_early = qx::problem_from_json(R"({
     "kind": "continuous_space_3d",
