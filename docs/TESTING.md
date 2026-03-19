@@ -23,6 +23,13 @@
 - norm conservation:
   - `|psi|^2` stays near 1.0 in smoke scenarios
 
+## Workflow Checks
+
+- Task scripts warn when launched from `master` or `main`.
+- Start each new agent task from a dedicated `codex/*` worktree.
+- Failures must surface in the console; do not use debugger popups or modal error dialogs.
+- See `docs/ENGINEERING_STANDARDS.md` for the full workflow and quality checklist.
+
 ## Benchmark coverage
 
 - unified benchmark gate:

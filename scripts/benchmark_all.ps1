@@ -10,6 +10,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 if (-not $SkipBuild) {
   # Build once, then fan out over every suite so the benchmark entry flow stays consistent.
   .\scripts\build.ps1

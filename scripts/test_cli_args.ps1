@@ -4,6 +4,8 @@ $PSNativeCommandUseErrorActionPreference = $false
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 .\scripts\build.ps1
 
 # --help should succeed.

@@ -8,6 +8,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 if (-not $SkipBuild) {
   .\scripts\build.ps1
 }

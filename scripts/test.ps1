@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 .\scripts\build.ps1
 ctest --test-dir build-vs -C Debug --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "ctest failed: exit code $LASTEXITCODE" }

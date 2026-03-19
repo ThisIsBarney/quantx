@@ -21,3 +21,4 @@ benchmarks/reports/
 *.chk
 out/visualizations/
 out/visualizations_test/
+_worktrees/

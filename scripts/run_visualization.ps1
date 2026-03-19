@@ -9,6 +9,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 .\scripts\build.ps1
 
 # Keep the wrapper ergonomic while exposing the continuous solver mode.

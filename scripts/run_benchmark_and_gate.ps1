@@ -9,6 +9,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 # Reuse the shared benchmark runner and let callers suppress the extra build in batch mode.
 $benchmarkArgs = @{
   Suite = $Suite

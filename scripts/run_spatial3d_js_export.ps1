@@ -3,6 +3,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 $outDir = Join-Path $root "out/visualizations"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 

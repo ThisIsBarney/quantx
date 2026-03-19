@@ -96,6 +96,8 @@ Solver modes:
 
 When engine export is used, QuantX emits `continuous_export.frames` in run results with native frame payloads (2D density grids, 3D slices and point-cloud payloads).
 
+For subagent work, follow the checklist in `docs/ENGINEERING_STANDARDS.md` and keep each agent in its own `codex/*` worktree.
+
 Render from a pre-exported continuous frame JSON:
 
 ```powershell

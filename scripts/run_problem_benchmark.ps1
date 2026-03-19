@@ -7,5 +7,7 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+.\scripts\ensure_subagent_worktree.ps1
+
 # Keep the legacy continuous-space entrypoint, but reuse the unified dispatcher.
 .\scripts\run_benchmark.ps1 -Suite $Suite
