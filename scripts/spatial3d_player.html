@@ -94,10 +94,17 @@
     .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .controls input[type="range"] { width: min(100%, 640px); }
     .mono { font-family: Consolas, "Courier New", monospace; font-size: 12px; color: var(--muted); }
+    .ctl { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+    .ctl input[type="range"] { width: 130px; }
+    .ctl input[type="checkbox"] { transform: translateY(1px); }
     @media (max-width: 980px) {
       .content { grid-template-columns: 1fr; }
       .viewport { min-height: 56vh; }
       input[type="text"] { width: min(100%, 520px); }
+      button { padding: 9px 14px; }
+      .controls { gap: 10px; }
+      .ctl { width: 100%; justify-content: space-between; }
+      .ctl input[type="range"] { width: min(64vw, 230px); }
     }
   </style>
 </head>
@@ -132,6 +139,10 @@
           <button id="play">Play</button>
           <button id="pause" class="alt">Pause</button>
           <button id="next" class="alt">Next</button>
+          <label class="ctl">Point Size <input id="pointSize" type="range" min="3" max="30" step="1" value="11"/></label>
+          <label class="ctl">Density Cutoff <input id="cutoff" type="range" min="0" max="100" step="1" value="0"/></label>
+          <label class="ctl">Speed(ms) <input id="playMs" type="range" min="30" max="260" step="5" value="90"/></label>
+          <label class="ctl"><span>Auto Rotate</span><input id="autoRotate" type="checkbox"/></label>
           <input id="slider" type="range" min="1" max="1" value="1"/>
           <span id="label">frame 0/0</span>
           <div id="diag" class="mono">points=0</div>
@@ -149,8 +160,13 @@
     const label = document.getElementById("label");
     const diag = document.getElementById("diag");
     const pathInput = document.getElementById("jsonPath");
+    const pointSizeCtl = document.getElementById("pointSize");
+    const cutoffCtl = document.getElementById("cutoff");
+    const playMsCtl = document.getElementById("playMs");
+    const autoRotateCtl = document.getElementById("autoRotate");
     let DATA = null;
     let timer = null;
+    let pointCutoffRatio = 0.0;
 
     if (!window.THREE || !THREE.OrbitControls) {
       meta.textContent = "Three.js failed to load. Check network/CDN access for WebGL player assets.";
@@ -170,6 +186,8 @@
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
+    controls.autoRotate = false;
+    controls.autoRotateSpeed = 0.9;
 
     const ambient = new THREE.AmbientLight(0x99b7c7, 0.85);
     const keyLight = new THREE.DirectionalLight(0xd7edf8, 1.1);
@@ -215,7 +233,7 @@
         pointsGeometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(capacity * 3), 3));
         pointsGeometry.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(capacity * 3), 3));
         const material = new THREE.PointsMaterial({
-          size: 0.11,
+          size: Number(pointSizeCtl.value) / 100.0,
           vertexColors: true,
           transparent: true,
           opacity: 0.92,
@@ -237,24 +255,31 @@
       const pos = pointsGeometry.getAttribute("position").array;
       const col = pointsGeometry.getAttribute("color").array;
       const vmax = Math.max(1e-12, Number(f.point_vmax || DATA.dens_max || 1e-9));
+      const cutoff = pointCutoffRatio * vmax;
 
+      let drawn = 0;
       for (let i = 0; i < points.length; i++) {
         const p = points[i];
-        const o = i * 3;
+        const density = Math.max(0, Number(p[3]));
+        if (density < cutoff) {
+          continue;
+        }
+        const o = drawn * 3;
         pos[o] = Number(p[0]);
         pos[o + 1] = Number(p[1]);
         pos[o + 2] = Number(p[2]);
-        const [r, g, b] = colorOf(Math.sqrt(Math.max(0, Number(p[3])) / vmax));
+        const [r, g, b] = colorOf(Math.sqrt(density / vmax));
         col[o] = r;
         col[o + 1] = g;
         col[o + 2] = b;
+        drawn += 1;
       }
-      for (let i = points.length; i < cap; i++) {
+      for (let i = drawn; i < cap; i++) {
         const o = i * 3;
         pos[o] = 0; pos[o + 1] = 0; pos[o + 2] = 0;
         col[o] = 0; col[o + 1] = 0; col[o + 2] = 0;
       }
-      pointsGeometry.setDrawRange(0, points.length);
+      pointsGeometry.setDrawRange(0, drawn);
       pointsGeometry.attributes.position.needsUpdate = true;
       pointsGeometry.attributes.color.needsUpdate = true;
 
@@ -269,7 +294,7 @@
 
       slider.value = String(frameIdx);
       label.textContent = `frame ${frameIdx}/${DATA.frames.length}`;
-      diag.textContent = `points=${points.length} vmax=${vmax.toExponential(2)}`;
+      diag.textContent = `points=${drawn}/${points.length} vmax=${vmax.toExponential(2)} cutoff=${pointCutoffRatio.toFixed(2)}`;
       meta.textContent = `boundary=${DATA.boundary}, potential=${DATA.potential_type}, t=${Number(f.t || 0).toFixed(3)}, norm=${Number(f.norm || 0).toFixed(6)}, <x,y,z>=(${Number(f.exp_x || 0).toFixed(3)}, ${Number(f.exp_y || 0).toFixed(3)}, ${Number(f.exp_z || 0).toFixed(3)})`;
     }
 
@@ -320,7 +345,7 @@
 
     function doPlay() {
       if (!DATA || timer) return;
-      timer = setInterval(() => stepFrame(1), 90);
+      timer = setInterval(() => stepFrame(1), Number(playMsCtl.value));
     }
     function doPause() {
       if (!timer) return;
@@ -333,6 +358,25 @@
     document.getElementById("prev").onclick = () => stepFrame(-1);
     document.getElementById("next").onclick = () => stepFrame(1);
     slider.oninput = () => renderFrame(Number(slider.value));
+    pointSizeCtl.oninput = () => {
+      if (pointsMesh && pointsMesh.material) {
+        pointsMesh.material.size = Number(pointSizeCtl.value) / 100.0;
+        pointsMesh.material.needsUpdate = true;
+      }
+    };
+    cutoffCtl.oninput = () => {
+      pointCutoffRatio = Number(cutoffCtl.value) / 100.0;
+      renderFrame(Number(slider.value || "1"));
+    };
+    playMsCtl.oninput = () => {
+      if (timer) {
+        doPause();
+        doPlay();
+      }
+    };
+    autoRotateCtl.onchange = () => {
+      controls.autoRotate = !!autoRotateCtl.checked;
+    };
     document.getElementById("loadPath").onclick = async () => {
       try { await loadFromPath(); } catch (e) { meta.textContent = `Load error: ${e.message}`; }
     };
