@@ -50,6 +50,14 @@ Engineering policy:
 - produce release candidate artifacts
 - priority: P0/P1
 
+## v1.1-rc checklist
+
+- run `.\scripts\test.ps1`
+- run `.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate`
+- inspect `benchmarks/reports/INDEX.md` and the latest `*_TREND.md` files
+- generate visualization artifacts with `.\scripts\run_visualization.ps1`
+- re-check `docs/DEPENDENCIES.md` before adding new third-party packages
+
 ## Next milestones (post-v1, quantum-computing backend track)
 
 ## M6: Circuit IR and gate execution

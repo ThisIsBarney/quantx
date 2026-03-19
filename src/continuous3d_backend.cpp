@@ -7,12 +7,56 @@
 #include <fstream>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace qx {
 namespace {
 
 using Complex = std::complex<double>;
+
+// Checkpoint payload cached before initialize() applies it.
+struct PendingCheckpoint3D {
+  bool valid{false};
+  std::uint32_t nx{0};
+  std::uint32_t ny{0};
+  std::uint32_t nz{0};
+  double dx{0.0};
+  double dy{0.0};
+  double dz{0.0};
+  double dt{0.0};
+  std::uint32_t total_steps{0};
+  std::uint32_t completed_steps{0};
+  std::string boundary;
+  std::vector<Complex> state;
+};
+
+// Convert boundary token into a compact checkpoint code.
+std::uint32_t boundary_to_code(const std::string& boundary) {
+  if (boundary == "absorbing") {
+    return 1U;
+  }
+  if (boundary == "dirichlet") {
+    return 2U;
+  }
+  return 0U;
+}
+
+// Convert checkpoint code back into a boundary token.
+std::string boundary_from_code(std::uint32_t code) {
+  if (code == 1U) {
+    return "absorbing";
+  }
+  if (code == 2U) {
+    return "dirichlet";
+  }
+  return "periodic";
+}
+
+// Check whether a checkpoint header matches the 3D continuous magic prefix.
+bool is_checkpoint_magic(const char magic[4]) {
+  return magic[0] == 'Q' && magic[1] == 'X' && magic[2] == '3' && magic[3] == 'D';
+}
 
 class Continuous3DBackend final : public IBackend {
  public:
@@ -118,6 +162,10 @@ class Continuous3DBackend final : public IBackend {
     dt_ = c.dt;
     steps_ = c.steps;
     boundary_ = c.boundary;
+    completed_steps_ = 0;
+    frames_.clear();
+    absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_),
+                           1.0);
 
     if (options.use_gpu) {
       try {
@@ -146,15 +194,19 @@ class Continuous3DBackend final : public IBackend {
       build_analytic_potential(c.potential_kind, c.potential_params);
     }
 
-    initialize_wavepacket(c.potential_params);
+    initialize_wavepacket(c.initial_state, c.potential_params);
     precompute_phases();
     precompute_boundary_mask(c.potential_params);
-    enforce_dirichlet_boundary();
+    const bool restored = apply_pending_checkpoint();
+    if (!restored && boundary_ == "dirichlet") {
+      enforce_dirichlet_boundary();
+    }
     update_observables();
+    record_frame();
   }
 
   void evolve(const QuantumProblem&, const RunOptions&) override {
-    for (std::uint32_t s = 0; s < steps_; ++s) {
+    for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
       apply_half_kinetic();
       apply_potential();
       apply_half_kinetic();
@@ -163,8 +215,10 @@ class Continuous3DBackend final : public IBackend {
       if (boundary_ != "absorbing") {
         normalize_state();
       }
+      completed_steps_ = s + 1;
+      update_observables();
+      record_frame();
     }
-    update_observables();
   }
 
   std::map<std::string, double> measure(const QuantumProblem&) override { return observables_; }
@@ -174,6 +228,11 @@ class Continuous3DBackend final : public IBackend {
     if (!os.good()) {
       return;
     }
+    const char magic[4] = {'Q', 'X', '3', 'D'};
+    const std::uint32_t version = 2U;
+    const std::uint32_t boundary_code = boundary_to_code(boundary_);
+    os.write(magic, sizeof(magic));
+    os.write(reinterpret_cast<const char*>(&version), sizeof(version));
     os.write(reinterpret_cast<const char*>(&nx_), sizeof(nx_));
     os.write(reinterpret_cast<const char*>(&ny_), sizeof(ny_));
     os.write(reinterpret_cast<const char*>(&nz_), sizeof(nz_));
@@ -182,6 +241,8 @@ class Continuous3DBackend final : public IBackend {
     os.write(reinterpret_cast<const char*>(&dz_), sizeof(dz_));
     os.write(reinterpret_cast<const char*>(&dt_), sizeof(dt_));
     os.write(reinterpret_cast<const char*>(&steps_), sizeof(steps_));
+    os.write(reinterpret_cast<const char*>(&completed_steps_), sizeof(completed_steps_));
+    os.write(reinterpret_cast<const char*>(&boundary_code), sizeof(boundary_code));
     const std::size_t size = state_.size();
     os.write(reinterpret_cast<const char*>(&size), sizeof(size));
     if (size > 0) {
@@ -195,43 +256,87 @@ class Continuous3DBackend final : public IBackend {
     if (!is.good()) {
       return;
     }
-
-    std::uint32_t nx = 0;
-    std::uint32_t ny = 0;
-    std::uint32_t nz = 0;
-    double dx = 0.0;
-    double dy = 0.0;
-    double dz = 0.0;
-    double dt = 0.0;
-    std::uint32_t steps = 0;
-    std::size_t size = 0;
-
-    is.read(reinterpret_cast<char*>(&nx), sizeof(nx));
-    is.read(reinterpret_cast<char*>(&ny), sizeof(ny));
-    is.read(reinterpret_cast<char*>(&nz), sizeof(nz));
-    is.read(reinterpret_cast<char*>(&dx), sizeof(dx));
-    is.read(reinterpret_cast<char*>(&dy), sizeof(dy));
-    is.read(reinterpret_cast<char*>(&dz), sizeof(dz));
-    is.read(reinterpret_cast<char*>(&dt), sizeof(dt));
-    is.read(reinterpret_cast<char*>(&steps), sizeof(steps));
-    is.read(reinterpret_cast<char*>(&size), sizeof(size));
-
-    if (!is.good() || size == 0) {
+    PendingCheckpoint3D pending;
+    char magic[4] = {};
+    is.read(magic, sizeof(magic));
+    if (!is.good()) {
       return;
     }
 
-    if (nx == nx_ && ny == ny_ && nz == nz_ && std::abs(dx - dx_) < 1e-15 && std::abs(dy - dy_) < 1e-15 &&
-        std::abs(dz - dz_) < 1e-15 && std::abs(dt - dt_) < 1e-15) {
-      state_.resize(size);
-      is.read(reinterpret_cast<char*>(state_.data()),
-              static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
-      if (is.good()) {
-        update_observables();
+    if (is_checkpoint_magic(magic)) {
+      std::uint32_t version = 0U;
+      std::uint32_t boundary_code = 0U;
+      std::size_t size = 0;
+      is.read(reinterpret_cast<char*>(&version), sizeof(version));
+      is.read(reinterpret_cast<char*>(&pending.nx), sizeof(pending.nx));
+      is.read(reinterpret_cast<char*>(&pending.ny), sizeof(pending.ny));
+      is.read(reinterpret_cast<char*>(&pending.nz), sizeof(pending.nz));
+      is.read(reinterpret_cast<char*>(&pending.dx), sizeof(pending.dx));
+      is.read(reinterpret_cast<char*>(&pending.dy), sizeof(pending.dy));
+      is.read(reinterpret_cast<char*>(&pending.dz), sizeof(pending.dz));
+      is.read(reinterpret_cast<char*>(&pending.dt), sizeof(pending.dt));
+      is.read(reinterpret_cast<char*>(&pending.total_steps), sizeof(pending.total_steps));
+      is.read(reinterpret_cast<char*>(&pending.completed_steps), sizeof(pending.completed_steps));
+      is.read(reinterpret_cast<char*>(&boundary_code), sizeof(boundary_code));
+      is.read(reinterpret_cast<char*>(&size), sizeof(size));
+      pending.boundary = boundary_from_code(boundary_code);
+      pending.state.resize(size);
+      if (size > 0) {
+        is.read(reinterpret_cast<char*>(pending.state.data()),
+                static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
       }
+      pending.valid = is.good();
+    } else {
+      is.clear();
+      is.seekg(0, std::ios::beg);
+      std::uint32_t nx = 0;
+      std::uint32_t ny = 0;
+      std::uint32_t nz = 0;
+      double dx = 0.0;
+      double dy = 0.0;
+      double dz = 0.0;
+      double dt = 0.0;
+      std::uint32_t steps = 0;
+      std::size_t size = 0;
+      is.read(reinterpret_cast<char*>(&nx), sizeof(nx));
+      is.read(reinterpret_cast<char*>(&ny), sizeof(ny));
+      is.read(reinterpret_cast<char*>(&nz), sizeof(nz));
+      is.read(reinterpret_cast<char*>(&dx), sizeof(dx));
+      is.read(reinterpret_cast<char*>(&dy), sizeof(dy));
+      is.read(reinterpret_cast<char*>(&dz), sizeof(dz));
+      is.read(reinterpret_cast<char*>(&dt), sizeof(dt));
+      is.read(reinterpret_cast<char*>(&steps), sizeof(steps));
+      is.read(reinterpret_cast<char*>(&size), sizeof(size));
+      pending.nx = nx;
+      pending.ny = ny;
+      pending.nz = nz;
+      pending.dx = dx;
+      pending.dy = dy;
+      pending.dz = dz;
+      pending.dt = dt;
+      pending.total_steps = steps;
+      pending.completed_steps = steps;
+      pending.boundary = "periodic";
+      pending.state.resize(size);
+      if (size > 0) {
+        is.read(reinterpret_cast<char*>(pending.state.data()),
+                static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
+      }
+      pending.valid = is.good();
     }
+
+    if (!pending.valid || pending.state.empty()) {
+      return;
+    }
+
+    pending.state.shrink_to_fit();
+    pending_checkpoint_ = std::move(pending);
+    has_pending_checkpoint_ = true;
   }
 
   std::vector<std::complex<double>> current_state() const override { return state_; }
+
+  std::vector<ContinuousDensityFrame> continuous_density_frames() const override { return frames_; }
 
  private:
   std::size_t idx(std::uint32_t x, std::uint32_t y, std::uint32_t z) const {
@@ -323,11 +428,29 @@ class Continuous3DBackend final : public IBackend {
     std::fill(potential_.begin(), potential_.end(), 0.0);
   }
 
-  void initialize_wavepacket(const std::map<std::string, double>& params) {
+  void initialize_wavepacket(const ContinuousInitialStateConfig& initial_state,
+                             const std::map<std::string, double>& legacy_params) {
+    const auto& params = initial_state.params.empty() ? legacy_params : initial_state.params;
     const auto get_param = [&params](const std::string& key, double def) {
       const auto it = params.find(key);
       return it == params.end() ? def : it->second;
     };
+
+    const std::string kind = initial_state.kind.empty() ? "gaussian" : initial_state.kind;
+    if (kind == "grid") {
+      if (!initial_state.grid.empty()) {
+        if (initial_state.grid.size() != state_.size()) {
+          throw std::runtime_error("continuous3d initial_state.grid size must equal nx*ny*nz");
+        }
+        for (std::size_t i = 0; i < state_.size(); ++i) {
+          state_[i] = Complex{initial_state.grid[i], 0.0};
+        }
+      } else {
+        std::fill(state_.begin(), state_.end(), Complex{0.0, 0.0});
+      }
+      normalize_state();
+      return;
+    }
 
     const double psi_x0 = get_param("psi_x0", -0.2 * static_cast<double>(nx_) * dx_);
     const double psi_y0 = get_param("psi_y0", 0.0);
@@ -355,6 +478,54 @@ class Continuous3DBackend final : public IBackend {
     }
 
     normalize_state();
+  }
+
+  // Apply a cached checkpoint once the live grid has been initialized.
+  bool apply_pending_checkpoint() {
+    if (!has_pending_checkpoint_ || !pending_checkpoint_.valid) {
+      return false;
+    }
+    if (pending_checkpoint_.nx != nx_ || pending_checkpoint_.ny != ny_ || pending_checkpoint_.nz != nz_) {
+      return false;
+    }
+    if (std::abs(pending_checkpoint_.dx - dx_) > 1e-15 || std::abs(pending_checkpoint_.dy - dy_) > 1e-15 ||
+        std::abs(pending_checkpoint_.dz - dz_) > 1e-15 || std::abs(pending_checkpoint_.dt - dt_) > 1e-15) {
+      return false;
+    }
+    if (!pending_checkpoint_.boundary.empty() && pending_checkpoint_.boundary != boundary_) {
+      return false;
+    }
+    if (pending_checkpoint_.state.size() != state_.size()) {
+      return false;
+    }
+    state_ = pending_checkpoint_.state;
+    completed_steps_ = std::min(pending_checkpoint_.completed_steps, steps_);
+    has_pending_checkpoint_ = false;
+    pending_checkpoint_ = PendingCheckpoint3D{};
+    return true;
+  }
+
+  // Capture a compact metadata record for the current density frame.
+  void record_frame() {
+    ContinuousDensityFrame frame;
+    frame.step = completed_steps_;
+    frame.time = static_cast<double>(completed_steps_) * dt_;
+    frame.nx = nx_;
+    frame.ny = ny_;
+    frame.nz = nz_;
+    frame.boundary = boundary_;
+    const auto get_obs = [this](const std::string& key) {
+      const auto it = observables_.find(key);
+      return it == observables_.end() ? 0.0 : it->second;
+    };
+    frame.norm = get_obs("norm");
+    frame.x_mean = get_obs("x_mean");
+    frame.y_mean = get_obs("y_mean");
+    frame.z_mean = get_obs("z_mean");
+    frame.sigma_x = get_obs("sigma_x");
+    frame.sigma_y = get_obs("sigma_y");
+    frame.sigma_z = get_obs("sigma_z");
+    frames_.push_back(frame);
   }
 
   void precompute_phases() {
@@ -572,6 +743,7 @@ class Continuous3DBackend final : public IBackend {
   double dz_{0.0};
   double dt_{0.0};
   std::uint32_t steps_{0};
+  std::uint32_t completed_steps_{0};
   std::string boundary_{"periodic"};
 
   std::vector<Complex> state_;
@@ -581,6 +753,9 @@ class Continuous3DBackend final : public IBackend {
   std::vector<Complex> potential_phase_;
   std::vector<Complex> kinetic_half_phase_;
   std::map<std::string, double> observables_;
+  std::vector<ContinuousDensityFrame> frames_;
+  PendingCheckpoint3D pending_checkpoint_{};
+  bool has_pending_checkpoint_{false};
   std::unique_ptr<IFFTProvider> fft_provider_;
 };
 

@@ -23,6 +23,14 @@
 - norm conservation:
   - `|psi|^2` stays near 1.0 in smoke scenarios
 
+## Benchmark coverage
+
+- unified benchmark gate:
+  - `.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate`
+  - covers `circuit_accuracy_smoke`, `circuit_noise_sweep`, `continuous2d_smoke`, `continuous3d_smoke`, and `continuous3d_accuracy`
+- benchmark-only refresh:
+  - `.\scripts\benchmark_all.ps1 -NoiseSweep`
+
 ## How to run
 
 ```powershell

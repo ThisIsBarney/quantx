@@ -74,6 +74,16 @@ struct OperatorGraph {
   std::vector<OperatorNode> nodes;
 };
 
+// Initial condition descriptor for continuous-space solvers.
+struct ContinuousInitialStateConfig {
+  // Initial-state token, e.g. "gaussian" or "grid".
+  std::string kind{"gaussian"};
+  // Analytic parameters used by named initial states.
+  std::map<std::string, double> params{};
+  // Optional flattened amplitude grid used by grid-based initial states.
+  std::vector<double> grid{};
+};
+
 // Continuous 2D spatial simulation configuration.
 struct ContinuousSpace2DConfig {
   // Uniform Cartesian grid resolution.
@@ -92,6 +102,8 @@ struct ContinuousSpace2DConfig {
   std::map<std::string, double> potential_params{};
   // Optional flattened potential grid (row-major, size nx*ny).
   std::vector<double> potential_grid{};
+  // Initial condition descriptor for the wavefunction.
+  ContinuousInitialStateConfig initial_state{};
 };
 
 // Continuous 3D spatial simulation configuration.
@@ -114,6 +126,30 @@ struct ContinuousSpace3DConfig {
   std::map<std::string, double> potential_params{};
   // Optional flattened potential grid (row-major, size nx*ny*nz).
   std::vector<double> potential_grid{};
+  // Initial condition descriptor for the wavefunction.
+  ContinuousInitialStateConfig initial_state{};
+};
+
+// Metadata snapshot for a continuous-density animation frame.
+struct ContinuousDensityFrame {
+  // Frame index within the continuous evolution.
+  std::uint32_t step{0};
+  // Physical time associated with the frame.
+  double time{0.0};
+  // Grid dimensions used to render the frame.
+  std::uint32_t nx{0};
+  std::uint32_t ny{0};
+  std::uint32_t nz{0};
+  // Boundary token used by the simulation.
+  std::string boundary{"periodic"};
+  // Integrated norm and low-order moments for diagnostics.
+  double norm{0.0};
+  double x_mean{0.0};
+  double y_mean{0.0};
+  double z_mean{0.0};
+  double sigma_x{0.0};
+  double sigma_y{0.0};
+  double sigma_z{0.0};
 };
 
 // Canonical simulation problem description used across API boundaries.
@@ -191,6 +227,7 @@ struct SimulationResult {
   double elapsed_ms{0.0};
   std::vector<std::complex<double>> state{};
   std::map<std::string, double> observables{};
+  std::vector<ContinuousDensityFrame> continuous_density_frames{};
   std::vector<Event> events{};
   std::string message;
 };

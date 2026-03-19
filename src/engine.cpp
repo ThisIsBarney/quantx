@@ -424,6 +424,7 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   result.backend = backend->name();
   result.observables = backend->measure(problem);
   result.state = backend->current_state();
+  result.continuous_density_frames = backend->continuous_density_frames();
   result.events = runtime.events();
   result.message = "Simulation completed";
 

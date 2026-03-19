@@ -1,17 +1,25 @@
-# Benchmark Harness (Scaffold)
+# Benchmark Harness
 
-Planned benchmark suites:
+Current suites:
 
-1. Infinite well wave packet evolution (analytic cross-check)
-2. Two-level Rabi oscillation (analytic cross-check)
-3. Small Ising chain dynamics (cross-check against reference simulators)
+1. `circuit_accuracy_smoke`
+2. `circuit_noise_sweep`
+3. `continuous2d_smoke`
+4. `continuous3d_smoke`
+5. `continuous3d_accuracy`
 
-Expected output format:
+Recommended entrypoints:
 
-- `reports/<date>/accuracy.json`
-- `reports/<date>/performance.json`
-- `reports/<date>/environment.json`
+```powershell
+.\scripts\benchmark_all.ps1 -NoiseSweep
+.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate
+```
 
-All runs should pin random seeds and include hardware/software versions.
+The unified benchmark flow writes reports under `benchmarks/reports/`:
 
-Current report metadata includes `engine_version` for reproducibility and regression triage.
+- suite JSON report: `*.json`
+- suite markdown summary: `*.md`
+- cumulative index: `INDEX.md`
+- trend report: `*_TREND.md`
+
+All runs should pin random seeds and include hardware/software versions. Current report metadata includes `engine_version` for reproducibility and regression triage.

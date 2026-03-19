@@ -97,11 +97,51 @@ CircuitOp parse_circuit_op(const json& item) {
   return op;
 }
 
+// Parse the nested continuous initial-state payload if present.
+void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig& out) {
+  auto it = parent.find("initial_state");
+  if (it == parent.end() || !it->is_object()) {
+    return;
+  }
+  const auto& initial = *it;
+  out.kind = get_or<std::string>(initial, "kind", out.kind);
+  out.params = get_or<std::map<std::string, double>>(initial, "params", out.params);
+  out.grid = get_or<std::vector<double>>(initial, "grid", out.grid);
+}
+
 // Serialize events to JSON array.
 json events_to_json(const std::vector<Event>& events) {
   json out = json::array();
   for (const auto& ev : events) {
     out.push_back({{"name", ev.name}});
+  }
+  return out;
+}
+
+// Serialize a continuous density frame metadata record.
+json continuous_density_frame_to_json(const ContinuousDensityFrame& frame) {
+  return json{
+      {"step", frame.step},
+      {"time", frame.time},
+      {"nx", frame.nx},
+      {"ny", frame.ny},
+      {"nz", frame.nz},
+      {"boundary", frame.boundary},
+      {"norm", frame.norm},
+      {"x_mean", frame.x_mean},
+      {"y_mean", frame.y_mean},
+      {"z_mean", frame.z_mean},
+      {"sigma_x", frame.sigma_x},
+      {"sigma_y", frame.sigma_y},
+      {"sigma_z", frame.sigma_z},
+  };
+}
+
+// Serialize continuous density frame metadata to JSON array.
+json continuous_density_frames_to_json(const std::vector<ContinuousDensityFrame>& frames) {
+  json out = json::array();
+  for (const auto& frame : frames) {
+    out.push_back(continuous_density_frame_to_json(frame));
   }
   return out;
 }
@@ -141,6 +181,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
     p.continuous_2d.potential_params =
         get_or<std::map<std::string, double>>(c2d, "potential_params", p.continuous_2d.potential_params);
     p.continuous_2d.potential_grid = get_or<std::vector<double>>(c2d, "potential_grid", p.continuous_2d.potential_grid);
+    parse_initial_state_config(c2d, p.continuous_2d.initial_state);
     p.kind = ProblemKind::ContinuousSpace2D;
   }
 
@@ -160,6 +201,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
     p.continuous_3d.potential_params =
         get_or<std::map<std::string, double>>(c3d, "potential_params", p.continuous_3d.potential_params);
     p.continuous_3d.potential_grid = get_or<std::vector<double>>(c3d, "potential_grid", p.continuous_3d.potential_grid);
+    parse_initial_state_config(c3d, p.continuous_3d.initial_state);
     p.kind = ProblemKind::ContinuousSpace3D;
   }
 
@@ -234,6 +276,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["state_size"] = result.state.size();
   j["engine_version"] = version_string();
   j["observables"] = result.observables;
+  j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
   j["events"] = events_to_json(result.events);
   return j.dump();
 }

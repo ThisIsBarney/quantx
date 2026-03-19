@@ -1,8 +1,14 @@
 #include <cmath>
+#ifdef _MSC_VER
+#include <crtdbg.h>
+#endif
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <numbers>
 
+#include "qx/fft_provider.hpp"
+#include "qx/backends.hpp"
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
 #include "qx/version.hpp"
@@ -21,6 +27,19 @@ void expect(bool cond, const char* msg) {
 
 // End-to-end smoke test for simulation and circuit APIs.
 int main() {
+#ifdef _MSC_VER
+#ifdef _DEBUG
+  // Route CRT assertions/errors to stderr to avoid interactive debug popups in CI and scripted runs.
+  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+  _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+#endif
+#endif
+
+  try {
   qx::QuantumProblem p;
   p.qubits = 8;
   p.evolution.total_time = 1.0;
@@ -93,13 +112,26 @@ int main() {
       "steps": 20,
       "boundary": "periodic",
       "potential_kind": "barrier",
-      "potential_params": {"height": 1.0}
+      "potential_params": {"height": 1.0},
+      "initial_state": {
+        "kind": "gaussian",
+        "params": {
+          "psi_sigma": 0.2,
+          "psi_kx": 0.0,
+          "psi_ky": 0.0,
+          "psi_x0": 0.0,
+          "psi_y0": 0.0
+        }
+      }
     }
   })");
   expect(c2d.kind == qx::ProblemKind::ContinuousSpace2D, "continuous_space_2d kind should parse");
   expect(c2d.continuous_2d.nx == 64, "continuous nx should parse");
   expect(c2d.continuous_2d.ny == 32, "continuous ny should parse");
   expect(std::abs(c2d.continuous_2d.dt - 0.001) < 1e-12, "continuous dt should parse");
+  expect(c2d.continuous_2d.initial_state.kind == "gaussian", "continuous2d initial_state kind should parse");
+  expect(std::abs(c2d.continuous_2d.initial_state.params.at("psi_sigma") - 0.2) < 1e-12,
+         "continuous2d initial_state params should parse");
 
   const auto c2d_run = qx::run(c2d, o);
   expect(c2d_run.ok, "continuous2d run should succeed");
@@ -107,6 +139,13 @@ int main() {
   expect(c2d_run.observables.count("norm") == 1, "continuous2d should report norm");
   expect(std::abs(c2d_run.observables.at("norm") - 1.0) < 5e-2, "continuous2d norm should remain close to 1");
   expect(c2d_run.observables.count("sigma_x") == 1, "continuous2d should report sigma_x");
+  expect(!c2d_run.continuous_density_frames.empty(), "continuous2d should export density frame metadata");
+  expect(c2d_run.continuous_density_frames.front().step == 0, "continuous2d first frame should be step 0");
+  expect(c2d_run.continuous_density_frames.back().step == c2d.continuous_2d.steps,
+         "continuous2d last frame should match configured steps");
+  const std::string c2d_json = qx::result_to_json(c2d_run);
+  expect(c2d_json.find("\"continuous_density_frames\"") != std::string::npos,
+         "continuous2d result json should include continuous density frames");
 
   auto o_gpu = o;
   o_gpu.use_gpu = true;
@@ -114,8 +153,17 @@ int main() {
   expect(c2d_gpu_run.ok, "continuous2d gpu run should succeed");
   expect(c2d_gpu_run.observables.count("fft_provider_cufft") == 1,
          "continuous2d gpu run should expose fft_provider_cufft");
-  expect(c2d_gpu_run.observables.at("fft_provider_cufft") > 0.5,
-         "continuous2d gpu run should select cufft provider marker");
+  expect(c2d_gpu_run.observables.count("fft_provider_eigen") == 1,
+         "continuous2d gpu run should expose fft_provider_eigen");
+  const double c2d_fft_cufft = c2d_gpu_run.observables.at("fft_provider_cufft");
+  const double c2d_fft_eigen = c2d_gpu_run.observables.at("fft_provider_eigen");
+  expect(std::abs((c2d_fft_cufft + c2d_fft_eigen) - 1.0) < 1e-9,
+         "continuous2d gpu marker sum should stay normalized");
+  if (qx::cufft_backend_available()) {
+    expect(c2d_fft_cufft > 0.5, "continuous2d gpu run should select cufft provider marker when available");
+  } else {
+    expect(c2d_fft_eigen > 0.5, "continuous2d gpu run should fall back to eigen marker when cufft is unavailable");
+  }
 
   auto c2d_free_early = qx::problem_from_json(R"({
     "kind": "continuous_space_2d",
@@ -146,6 +194,68 @@ int main() {
   expect(std::abs(sigma_x_late - sigma_analytic) < 8e-2,
          "free packet sigma_x should be close to analytic broadening");
 
+  auto c2d_abs = c2d;
+  c2d_abs.continuous_2d.boundary = "absorbing";
+  c2d_abs.continuous_2d.steps = 60;
+  c2d_abs.continuous_2d.potential_params["absorb_width"] = 4.0;
+  c2d_abs.continuous_2d.potential_params["absorb_strength"] = 4.0;
+  const auto c2d_abs_run = qx::run(c2d_abs, o);
+  expect(c2d_abs_run.ok, "continuous2d absorbing run should succeed");
+  expect(c2d_abs_run.observables.count("boundary_absorbing") == 1,
+         "continuous2d absorbing run should expose boundary flag");
+  expect(c2d_abs_run.observables.at("boundary_absorbing") > 0.5,
+         "continuous2d absorbing boundary flag should be enabled");
+  expect(c2d_abs_run.observables.at("norm") < c2d_run.observables.at("norm"),
+         "absorbing boundary should reduce norm versus periodic case");
+
+  auto c2d_dir = c2d;
+  c2d_dir.continuous_2d.boundary = "dirichlet";
+  c2d_dir.continuous_2d.steps = 40;
+  const auto c2d_dir_run = qx::run(c2d_dir, o);
+  expect(c2d_dir_run.ok, "continuous2d dirichlet run should succeed");
+  expect(c2d_dir_run.observables.count("boundary_dirichlet") == 1,
+         "continuous2d dirichlet run should expose boundary flag");
+  expect(c2d_dir_run.observables.at("boundary_dirichlet") > 0.5,
+         "continuous2d dirichlet boundary flag should be enabled");
+  expect(c2d_dir_run.observables.at("norm") > 0.90, "continuous2d dirichlet norm should stay reasonably close to 1");
+  expect(std::abs(c2d_dir_run.state.front()) < 1e-10, "continuous2d dirichlet left edge should be zero");
+  expect(std::abs(c2d_dir_run.state.at(c2d_dir.continuous_2d.nx - 1U)) < 1e-10,
+         "continuous2d dirichlet right edge should be zero");
+  expect(std::abs(c2d_dir_run.state.at((c2d_dir.continuous_2d.ny - 1U) * c2d_dir.continuous_2d.nx)) < 1e-10,
+         "continuous2d dirichlet bottom edge should be zero");
+
+  {
+    auto checkpoint_problem = c2d;
+    checkpoint_problem.continuous_2d.steps = 14;
+    checkpoint_problem.continuous_2d.potential_kind = "none";
+    checkpoint_problem.continuous_2d.boundary = "periodic";
+    const auto checkpoint_backend = qx::make_continuous2d_backend();
+    const auto checkpoint_dir = std::filesystem::temp_directory_path() / "quantx_continuous2d_restore_test";
+    std::filesystem::remove_all(checkpoint_dir);
+    std::filesystem::create_directories(checkpoint_dir);
+
+    checkpoint_backend->initialize(checkpoint_problem, o);
+    checkpoint_backend->evolve(checkpoint_problem, o);
+    const auto checkpoint_obs = checkpoint_backend->measure(checkpoint_problem);
+    const auto checkpoint_state = checkpoint_backend->current_state();
+    checkpoint_backend->checkpoint(checkpoint_dir.string());
+
+    const auto restored_backend = qx::make_continuous2d_backend();
+    restored_backend->restore(checkpoint_dir.string());
+    restored_backend->initialize(checkpoint_problem, o);
+    restored_backend->evolve(checkpoint_problem, o);
+    const auto restored_obs = restored_backend->measure(checkpoint_problem);
+    const auto restored_state = restored_backend->current_state();
+    expect(restored_state.size() == checkpoint_state.size(), "restored continuous2d state size should match");
+    expect(std::abs(restored_obs.at("norm") - checkpoint_obs.at("norm")) < 1e-10,
+           "restored continuous2d norm should match checkpoint");
+    expect(std::abs(restored_state.front() - checkpoint_state.front()) < 1e-10,
+           "restored continuous2d state should match checkpoint");
+    expect(std::abs(restored_state.at(restored_state.size() / 2U) - checkpoint_state.at(checkpoint_state.size() / 2U)) <
+               1e-10,
+           "restored continuous2d state midpoint should match checkpoint");
+  }
+
   const auto c3d = qx::problem_from_json(R"({
     "kind": "continuous_space_3d",
     "continuous_space_3d": {
@@ -159,12 +269,25 @@ int main() {
       "steps": 12,
       "boundary": "periodic",
       "potential_kind": "none",
-      "potential_params": {"psi_sigma": 0.35, "psi_kx": 0.0, "psi_ky": 0.0, "psi_kz": 0.0}
+      "potential_params": {"psi_sigma": 0.35, "psi_kx": 0.0, "psi_ky": 0.0, "psi_kz": 0.0},
+      "initial_state": {
+        "kind": "gaussian",
+        "params": {
+          "psi_sigma": 0.35,
+          "psi_kx": 0.0,
+          "psi_ky": 0.0,
+          "psi_kz": 0.0,
+          "psi_x0": 0.0,
+          "psi_y0": 0.0,
+          "psi_z0": 0.0
+        }
+      }
     }
   })");
   expect(c3d.kind == qx::ProblemKind::ContinuousSpace3D, "continuous_space_3d kind should parse");
   expect(c3d.continuous_3d.nz == 16, "continuous3d nz should parse");
   expect(std::abs(c3d.continuous_3d.dz - 0.2) < 1e-12, "continuous3d dz should parse");
+  expect(c3d.continuous_3d.initial_state.kind == "gaussian", "continuous3d initial_state kind should parse");
 
   const auto c3d_info = qx::explain_backend_choice(c3d, o);
   expect(c3d_info.selected_backend == "continuous3d", "continuous3d problem should choose continuous3d backend");
@@ -175,13 +298,25 @@ int main() {
   expect(c3d_run.observables.count("norm") == 1, "continuous3d should report norm");
   expect(std::abs(c3d_run.observables.at("norm") - 1.0) < 6e-2, "continuous3d norm should remain close to 1");
   expect(c3d_run.observables.count("sigma_z") == 1, "continuous3d should report sigma_z");
+  expect(!c3d_run.continuous_density_frames.empty(), "continuous3d should export density frame metadata");
+  expect(c3d_run.continuous_density_frames.back().step == c3d.continuous_3d.steps,
+         "continuous3d last frame should match configured steps");
 
   const auto c3d_gpu_run = qx::run(c3d, o_gpu);
   expect(c3d_gpu_run.ok, "continuous3d gpu run should succeed");
   expect(c3d_gpu_run.observables.count("fft_provider_cufft") == 1,
          "continuous3d gpu run should expose fft_provider_cufft");
-  expect(c3d_gpu_run.observables.at("fft_provider_cufft") > 0.5,
-         "continuous3d gpu run should select cufft provider marker");
+  expect(c3d_gpu_run.observables.count("fft_provider_eigen") == 1,
+         "continuous3d gpu run should expose fft_provider_eigen");
+  const double c3d_fft_cufft = c3d_gpu_run.observables.at("fft_provider_cufft");
+  const double c3d_fft_eigen = c3d_gpu_run.observables.at("fft_provider_eigen");
+  expect(std::abs((c3d_fft_cufft + c3d_fft_eigen) - 1.0) < 1e-9,
+         "continuous3d gpu marker sum should stay normalized");
+  if (qx::cufft_backend_available()) {
+    expect(c3d_fft_cufft > 0.5, "continuous3d gpu run should select cufft provider marker when available");
+  } else {
+    expect(c3d_fft_eigen > 0.5, "continuous3d gpu run should fall back to eigen marker when cufft is unavailable");
+  }
 
   auto c3d_free_early = qx::problem_from_json(R"({
     "kind": "continuous_space_3d",
@@ -259,6 +394,36 @@ int main() {
          "continuous3d dirichlet boundary flag should be enabled");
   expect(c3d_dir_run.observables.at("norm") > 0.90,
          "continuous3d dirichlet norm should stay reasonably close to 1 in smoke setup");
+
+  {
+    auto checkpoint_problem = c3d;
+    checkpoint_problem.continuous_3d.steps = 10;
+    const auto checkpoint_backend = qx::make_continuous3d_backend();
+    const auto checkpoint_dir = std::filesystem::temp_directory_path() / "quantx_continuous3d_restore_test";
+    std::filesystem::remove_all(checkpoint_dir);
+    std::filesystem::create_directories(checkpoint_dir);
+
+    checkpoint_backend->initialize(checkpoint_problem, o);
+    checkpoint_backend->evolve(checkpoint_problem, o);
+    const auto checkpoint_obs = checkpoint_backend->measure(checkpoint_problem);
+    const auto checkpoint_state = checkpoint_backend->current_state();
+    checkpoint_backend->checkpoint(checkpoint_dir.string());
+
+    const auto restored_backend = qx::make_continuous3d_backend();
+    restored_backend->restore(checkpoint_dir.string());
+    restored_backend->initialize(checkpoint_problem, o);
+    restored_backend->evolve(checkpoint_problem, o);
+    const auto restored_obs = restored_backend->measure(checkpoint_problem);
+    const auto restored_state = restored_backend->current_state();
+    expect(restored_state.size() == checkpoint_state.size(), "restored continuous3d state size should match");
+    expect(std::abs(restored_obs.at("norm") - checkpoint_obs.at("norm")) < 1e-10,
+           "restored continuous3d norm should match checkpoint");
+    expect(std::abs(restored_state.front() - checkpoint_state.front()) < 1e-10,
+           "restored continuous3d state should match checkpoint");
+    expect(std::abs(restored_state.at(restored_state.size() / 2U) - checkpoint_state.at(checkpoint_state.size() / 2U)) <
+               1e-10,
+           "restored continuous3d state midpoint should match checkpoint");
+  }
 
   qx::QuantumProblem rabi;
   rabi.qubits = 1;
@@ -355,4 +520,11 @@ int main() {
 
   std::cout << "qx_smoke passed\n";
   return 0;
+  } catch (const std::exception& ex) {
+    std::cerr << "EXCEPTION: " << ex.what() << "\n";
+    return 2;
+  } catch (...) {
+    std::cerr << "EXCEPTION: unknown\n";
+    return 2;
+  }
 }

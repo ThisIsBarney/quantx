@@ -7,6 +7,5 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\build.ps1
-python .\benchmarks\run_problem_benchmark.py --suite $Suite
-if ($LASTEXITCODE -ne 0) { throw "problem benchmark runner failed: exit code $LASTEXITCODE" }
+# Keep the legacy continuous-space entrypoint, but reuse the unified dispatcher.
+.\scripts\run_benchmark.ps1 -Suite $Suite

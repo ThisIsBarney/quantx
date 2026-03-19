@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(QX_ENABLE_OPENMP "Enable OpenMP parallel backend" ON)
 option(QX_ENABLE_MPI "Enable MPI features" OFF)
 option(QX_ENABLE_PYBIND "Build pybind11 bindings" OFF)
+option(QX_ENABLE_CUDA "Enable CUDA/cuFFT support when the CUDA toolkit is available" OFF)
 
 find_package(nlohmann_json CONFIG QUIET)
 if(NOT nlohmann_json_FOUND)
@@ -66,6 +67,13 @@ if(QX_ENABLE_MPI)
   find_package(MPI REQUIRED)
 endif()
 
+if(QX_ENABLE_CUDA)
+  find_package(CUDAToolkit QUIET)
+  if(NOT CUDAToolkit_FOUND)
+    message(STATUS "CUDA toolkit not found; building Eigen fallback only.")
+  endif()
+endif()
+
 add_library(qx_core
   src/backend_registry.cpp
   src/runtime.cpp
@@ -103,6 +111,11 @@ if(QX_ENABLE_MPI)
   target_compile_definitions(qx_core PUBLIC QX_HAS_MPI=1)
 endif()
 
+if(QX_ENABLE_CUDA AND CUDAToolkit_FOUND)
+  target_compile_definitions(qx_core PRIVATE QX_HAS_CUDA=1 QX_HAS_CUFFT=1)
+  target_link_libraries(qx_core PUBLIC CUDA::cufft CUDA::cudart)
+endif()
+
 if(WIN32)
   target_compile_definitions(qx_core PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
@@ -116,6 +129,9 @@ set_target_properties(qx_capi PROPERTIES OUTPUT_NAME quantx)
 add_executable(qx_smoke tests/test_engine.cpp)
 target_link_libraries(qx_smoke PRIVATE qx_core)
 
+add_executable(qx_fft_smoke tests/test_fft_provider.cpp)
+target_link_libraries(qx_fft_smoke PRIVATE qx_core)
+
 add_executable(qx_cli src/qx_cli.cpp)
 target_link_libraries(qx_cli PRIVATE qx_core)
 if(TARGET CLI11::CLI11)
@@ -126,6 +142,7 @@ endif()
 
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
+add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 
 if(QX_ENABLE_PYBIND)
   find_package(pybind11 CONFIG REQUIRED)

@@ -47,6 +47,21 @@
         "potential_grid": {
           "type": "array",
           "items": { "type": "number" }
+        },
+        "initial_state": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string" },
+            "params": {
+              "type": "object",
+              "additionalProperties": { "type": "number" }
+            },
+            "grid": {
+              "type": "array",
+              "items": { "type": "number" }
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true
@@ -71,6 +86,21 @@
         "potential_grid": {
           "type": "array",
           "items": { "type": "number" }
+        },
+        "initial_state": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string" },
+            "params": {
+              "type": "object",
+              "additionalProperties": { "type": "number" }
+            },
+            "grid": {
+              "type": "array",
+              "items": { "type": "number" }
+            }
+          },
+          "additionalProperties": true
         }
       },
       "additionalProperties": true

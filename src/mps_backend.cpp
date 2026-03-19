@@ -100,6 +100,9 @@ class MpsBackend final : public IBackend {
   // Dense state is not exposed for compressed MPS backend.
   std::vector<std::complex<double>> current_state() const override { return {}; }
 
+  // MPS backend does not emit continuous density frames.
+  std::vector<ContinuousDensityFrame> continuous_density_frames() const override { return {}; }
+
  private:
   std::uint32_t qubits_{0};
   std::uint32_t bond_dim_{4};

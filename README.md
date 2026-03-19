@@ -23,7 +23,7 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 .\scripts\run_cli.ps1
 .\scripts\run_benchmark.ps1
 .\scripts\benchmark_all.ps1 -NoiseSweep
-.\scripts\benchmark_all.ps1 -NoiseSweep -EnforceGate
+.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate
 .\scripts\run_benchmark_and_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
 ```
 
@@ -55,4 +55,14 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 
 - Statevector supports Trotter and Arnoldi-Krylov evolution (configurable `krylov_dim`) with one-body and two-body Pauli-string terms.
 - MPI/CUDA/pybind11 flags are prepared at CMake level; full HPC kernels are next milestone.
+- Optional CUDA/cuFFT acceleration path can be enabled with `-DQX_ENABLE_CUDA=ON` when CUDA Toolkit is installed.
 - Quantum-computing backend roadmap is tracked in `docs/ROADMAP.md` and `docs/QUANTUM_COMPUTING_BACKEND.md`.
+- `scripts/benchmark_all.ps1` is the unified benchmark entrypoint for circuit accuracy/noise sweep plus continuous 2D/3D smoke and 3D accuracy suites.
+
+## v1.1-rc Checklist
+
+- Run `.\scripts\test.ps1` before release tagging.
+- Run `.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate` for the reproducible benchmark gate.
+- Inspect `benchmarks/reports/INDEX.md` and the latest `*_TREND.md` files for regressions.
+- Generate the visualization artifacts with `.\scripts\run_visualization.ps1`.
+- Re-check `docs/DEPENDENCIES.md` before adding any new third-party package.

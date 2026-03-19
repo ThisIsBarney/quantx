@@ -362,6 +362,9 @@ class StatevectorBackend final : public IBackend {
   // Expose current dense statevector.
   std::vector<std::complex<double>> current_state() const override { return state_; }
 
+  // Dense statevector backend does not emit continuous density frames.
+  std::vector<ContinuousDensityFrame> continuous_density_frames() const override { return {}; }
+
  private:
   std::vector<Complex> state_;
   std::vector<ParsedTerm> terms_;

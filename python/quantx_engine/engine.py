@@ -5,7 +5,10 @@ from ctypes import c_char_p, c_void_p
 
 
 class Engine:
+  """ctypes wrapper around the native QuantX library."""
+
   def __init__(self, lib_path=None):
+    """Load the native library and bind the exported C ABI entrypoints."""
     self._lib_path = lib_path or self._default_library_path()
     self._lib = ctypes.CDLL(self._lib_path)
     self._lib.qx_run.argtypes = [c_char_p, c_char_p]
@@ -24,14 +27,17 @@ class Engine:
     self._lib.qx_free_string.restype = None
 
   def run(self, problem: dict, options: dict | None = None) -> dict:
+    """Run a Hamiltonian simulation request and return the decoded JSON result."""
     options = options or {}
     return self._call(self._lib.qx_run, problem, options)
 
   def explain(self, problem: dict, options: dict | None = None) -> dict:
+    """Ask the scheduler which backend the native runtime would select."""
     options = options or {}
     return self._call(self._lib.qx_explain_backend_choice, problem, options)
 
   def run_circuit(self, circuit: dict, options: dict | None = None) -> dict:
+    """Run a circuit-model request through the native runtime."""
     options = options or {}
     return self._call(self._lib.qx_run_circuit, circuit, options)
 
@@ -69,6 +75,7 @@ class Engine:
     return self.run_circuit(self._from_cirq_like(request), options)
 
   def validate_problem(self, problem: dict) -> dict:
+    """Validate a problem JSON payload against the native schema checker."""
     p = json.dumps(problem).encode("utf-8")
     ptr = self._lib.qx_validate_problem(p)
     if not ptr:
@@ -80,6 +87,7 @@ class Engine:
       self._lib.qx_free_string(ptr)
 
   def validate_circuit(self, circuit: dict) -> dict:
+    """Validate a circuit JSON payload against the native schema checker."""
     c = json.dumps(circuit).encode("utf-8")
     ptr = self._lib.qx_validate_circuit(c)
     if not ptr:
@@ -91,9 +99,43 @@ class Engine:
       self._lib.qx_free_string(ptr)
 
   def version(self) -> str:
+    """Return the native engine version string."""
     return self._lib.qx_version().decode("utf-8")
 
+  @staticmethod
+  def extract_continuous_export(result: dict) -> dict | None:
+    """Normalize any continuous-space export payload embedded in a native result."""
+    if not isinstance(result, dict):
+      return None
+
+    candidates = []
+    for key in ("continuous_export", "continuous_frames", "continuous"):
+      value = result.get(key)
+      if isinstance(value, dict):
+        candidates.append(value)
+      elif isinstance(value, list):
+        candidates.append({"frames": value})
+
+    export_block = result.get("export")
+    if isinstance(export_block, dict):
+      for key in ("continuous_export", "continuous", "frames"):
+        value = export_block.get(key)
+        if isinstance(value, dict):
+          candidates.append(value)
+        elif isinstance(value, list):
+          candidates.append({"frames": value})
+
+    frames = result.get("frames")
+    if isinstance(frames, list):
+      candidates.append({"frames": frames})
+
+    for candidate in candidates:
+      if isinstance(candidate, dict) and isinstance(candidate.get("frames"), list) and candidate["frames"]:
+        return candidate
+    return None
+
   def _call(self, fn, problem: dict, options: dict) -> dict:
+    """Invoke a native JSON API and decode the returned payload."""
     p = json.dumps(problem).encode("utf-8")
     o = json.dumps(options).encode("utf-8")
     ptr = fn(p, o)
@@ -107,6 +149,7 @@ class Engine:
 
   @staticmethod
   def _normalize_gate_name(name: str) -> str:
+    """Map framework-specific gate spellings into the native gate vocabulary."""
     n = name.upper()
     mapping = {
         "CX": "CNOT",
@@ -115,6 +158,7 @@ class Engine:
     return mapping.get(n, n)
 
   def _from_qiskit_like(self, request: dict) -> dict:
+    """Convert a compact Qiskit-like request into the native circuit schema."""
     qubits = request.get("num_qubits", request.get("qubits"))
     if qubits is None:
       raise ValueError("qiskit-like request requires num_qubits or qubits")
@@ -144,6 +188,7 @@ class Engine:
     }
 
   def _from_cirq_like(self, request: dict) -> dict:
+    """Convert a compact Cirq-like request into the native circuit schema."""
     qubits = request.get("qubits")
     if qubits is None:
       raise ValueError("cirq-like request requires qubits")
@@ -179,6 +224,7 @@ class Engine:
 
   @staticmethod
   def _default_library_path():
+    """Pick the most likely native library path for the current platform."""
     cwd = os.getcwd()
     if os.name == "nt":
       candidates = [

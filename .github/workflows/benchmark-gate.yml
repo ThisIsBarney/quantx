@@ -35,49 +35,9 @@ jobs:
         shell: pwsh
         run: .\scripts\check_dependency_policy.ps1
 
-      - name: Benchmark Accuracy
+      - name: Benchmark And Gate All
         shell: pwsh
-        run: .\scripts\run_benchmark.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
-
-      - name: Gate Accuracy
-        shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json -PerfWarnOnly
-
-      - name: Benchmark Noise Sweep
-        shell: pwsh
-        run: .\scripts\run_benchmark.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json
-
-      - name: Gate Noise Sweep
-        shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/circuit_noise_sweep.json -PerfWarnOnly
-
-      - name: Benchmark Continuous2D Smoke
-        shell: pwsh
-        run: .\scripts\run_problem_benchmark.ps1 -Suite benchmarks/suites/continuous2d_smoke.json
-
-      - name: Gate Continuous2D Smoke
-        shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/continuous2d_smoke.json -PerfWarnOnly
-
-      - name: Benchmark Continuous3D Smoke
-        shell: pwsh
-        run: .\scripts\run_problem_benchmark.ps1 -Suite benchmarks/suites/continuous3d_smoke.json
-
-      - name: Gate Continuous3D Smoke
-        shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/continuous3d_smoke.json -PerfWarnOnly
-
-      - name: Benchmark Continuous3D Accuracy
-        shell: pwsh
-        run: .\scripts\run_problem_benchmark.ps1 -Suite benchmarks/suites/continuous3d_accuracy.json
-
-      - name: Gate Continuous3D Accuracy
-        shell: pwsh
-        run: .\scripts\benchmark_gate.ps1 -Suite benchmarks/suites/continuous3d_accuracy.json
-
-      - name: Build Benchmark Index and Trends
-        shell: pwsh
-        run: .\scripts\benchmark_all.ps1 -NoiseSweep
+        run: .\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild
 
       - name: Upload Benchmark Reports
         uses: actions/upload-artifact@v4

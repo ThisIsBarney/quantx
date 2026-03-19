@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 def _animated_page(title: str, charts: list[dict]) -> str:
+  """Render a lightweight SVG animation page for 1D time-series charts."""
   charts_json = json.dumps(charts, ensure_ascii=False)
   return f"""<!doctype html>
 <html lang="en">
@@ -160,13 +161,196 @@ def _animated_page(title: str, charts: list[dict]) -> str:
 
 
 def _make_engine(root: Path):
+  """Construct the native Python SDK wrapper when the DLL is available."""
   sys.path.insert(0, str(root / "python"))
   from quantx_engine import Engine
 
-  return Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
+  dll = root / "build-vs" / "Debug" / "quantx.dll"
+  if not dll.exists():
+    return None
+  try:
+    return Engine(str(dll))
+  except OSError:
+    return None
 
 
-def _spatial_wavepacket_frames(samples_t: int, samples_x: int, potential_type: str) -> dict:
+def _load_continuous_export_file(path: Path) -> dict:
+  """Load a continuous-space export payload from a JSON file."""
+  data = json.loads(path.read_text(encoding="utf-8"))
+  if isinstance(data, dict):
+    if isinstance(data.get("continuous_export"), dict):
+      return data["continuous_export"]
+    export = data.get("export")
+    if isinstance(export, dict):
+      for key in ("continuous_export", "continuous", "frames"):
+        value = export.get(key)
+        if isinstance(value, dict):
+          return value
+        if isinstance(value, list):
+          return {"frames": value}
+    if isinstance(data.get("frames"), list):
+      return data
+  raise RuntimeError(f"continuous export json must contain a frames payload: {path}")
+
+
+def _extract_continuous_export_from_result(result: dict) -> dict | None:
+  """Normalize any continuous export payload returned by the native runtime."""
+  if not isinstance(result, dict):
+    return None
+
+  candidates: list[dict] = []
+  for key in ("continuous_export", "continuous_frames", "continuous"):
+    value = result.get(key)
+    if isinstance(value, dict):
+      candidates.append(value)
+    elif isinstance(value, list):
+      candidates.append({"frames": value})
+
+  export = result.get("export")
+  if isinstance(export, dict):
+    for key in ("continuous_export", "continuous", "frames"):
+      value = export.get(key)
+      if isinstance(value, dict):
+        candidates.append(value)
+      elif isinstance(value, list):
+        candidates.append({"frames": value})
+
+  frames = result.get("frames")
+  if isinstance(frames, list):
+    candidates.append({"frames": frames})
+
+  for candidate in candidates:
+    if isinstance(candidate, dict) and isinstance(candidate.get("frames"), list) and candidate["frames"]:
+      return candidate
+  return None
+
+
+def _attach_continuous_metadata(data: dict, solver_mode: str, source: str) -> dict:
+  """Clone a payload and annotate the source used to produce it."""
+  payload = dict(data)
+  payload.setdefault("frames", [])
+  payload["solver_mode"] = solver_mode
+  payload["source"] = source
+  return payload
+
+
+def _continuous_problem_2d_request(samples_t: int, nx: int, ny: int, potential_type: str) -> dict:
+  """Build the native 2D problem payload used when asking the engine for frames."""
+  nx = max(32, nx)
+  ny = max(32, ny)
+  steps = max(1, samples_t - 1)
+  return {
+      "kind": "continuous_space_2d",
+      "equation": "Schrodinger",
+      "observables": ["norm", "x_mean", "y_mean", "sigma_x", "sigma_y"],
+      "initial_state": {
+          "kind": "gaussian_packet",
+          "x0": -4.5,
+          "y0": -2.0,
+          "sigma": 0.7,
+          "kx": 2.2,
+          "ky": 1.1,
+      },
+      "continuous_space_2d": {
+          "nx": nx,
+          "ny": ny,
+          "dx": 16.0 / max(1, nx - 1),
+          "dy": 16.0 / max(1, ny - 1),
+          "dt": 3.0 / steps,
+          "steps": steps,
+          "boundary": "periodic",
+          "potential_kind": potential_type,
+          "potential_params": {
+              "height": 0.9,
+              "omega": 0.28,
+              "wall": 5.0,
+              "sigma_x": 0.6,
+              "sigma_y": 0.6,
+              "x_half_width": 6.0,
+              "y_half_width": 6.0,
+          },
+      },
+  }
+
+
+def _continuous_problem_3d_request(samples_t: int, nx: int, ny: int, nz: int, potential_type: str, boundary: str) -> dict:
+  """Build the native 3D problem payload used when asking the engine for frames."""
+  nx = max(16, nx)
+  ny = max(16, ny)
+  nz = max(16, nz)
+  steps = max(1, samples_t - 1)
+  return {
+      "kind": "continuous_space_3d",
+      "equation": "Schrodinger",
+      "observables": ["norm", "x_mean", "y_mean", "z_mean", "sigma_x", "sigma_y", "sigma_z"],
+      "initial_state": {
+          "kind": "gaussian_packet",
+          "x0": -2.0,
+          "y0": -1.2,
+          "z0": -0.8,
+          "sigma": 0.7,
+          "kx": 1.8,
+          "ky": 1.0,
+          "kz": 0.8,
+      },
+      "continuous_space_3d": {
+          "nx": nx,
+          "ny": ny,
+          "nz": nz,
+          "dx": 12.0 / max(1, nx - 1),
+          "dy": 12.0 / max(1, ny - 1),
+          "dz": 12.0 / max(1, nz - 1),
+          "dt": 2.5 / steps,
+          "steps": steps,
+          "boundary": boundary,
+          "potential_kind": potential_type,
+          "potential_params": {
+              "height": 0.95,
+              "omega": 0.25,
+              "wall": 5.5,
+              "sigma_x": 0.55,
+              "x_half_width": 4.8,
+              "y_half_width": 4.8,
+              "z_half_width": 4.8,
+          },
+      },
+  }
+
+
+def _resolve_continuous_payload(
+    engine,
+    problem: dict,
+    solver_mode: str,
+    reference_builder,
+    export_json_path: Path | None,
+) -> dict:
+  """Prefer engine-exported frames and fall back to the Python reference solver."""
+  if export_json_path is not None:
+    return _attach_continuous_metadata(_load_continuous_export_file(export_json_path), solver_mode, "engine-export-file")
+
+  if solver_mode in {"auto", "engine"} and engine is not None:
+    result = engine.run(problem, {"enable_checkpoint": False, "export_continuous_frames": True})
+    export = None
+    extractor = getattr(engine, "extract_continuous_export", None)
+    if callable(extractor):
+      export = extractor(result)
+    if export is None:
+      export = _extract_continuous_export_from_result(result)
+    if export is not None:
+      return _attach_continuous_metadata(export, solver_mode, "engine-export")
+    if solver_mode == "engine":
+      raise RuntimeError("continuous visualization requested solver-mode=engine but the native result did not include a frames export")
+
+  if solver_mode == "engine":
+    raise RuntimeError("continuous visualization requested solver-mode=engine but the native engine is unavailable")
+
+  return _attach_continuous_metadata(reference_builder(), solver_mode, "python-reference")
+
+
+def _spatial_wavepacket_frames(
+    samples_t: int, samples_x: int, potential_type: str, source: str = "python-reference"
+) -> dict:
+  """Build a 1D reference solution for the spatial wavepacket animation."""
   # Finite-difference + Crank-Nicolson for 1D Schrodinger equation (hbar=m=1).
   x_min, x_max = -12.0, 12.0
   t_min, t_max = 0.0, 4.0
@@ -269,10 +453,19 @@ def _spatial_wavepacket_frames(samples_t: int, samples_x: int, potential_type: s
     psi = [0j] + interior + [0j]
     normalize(psi)
 
-  return {"xs": xs, "frames": frames, "x_min": x_min, "x_max": x_max, "potential": potential, "potential_type": potential_type}
+  return {
+      "xs": xs,
+      "frames": frames,
+      "x_min": x_min,
+      "x_max": x_max,
+      "potential": potential,
+      "potential_type": potential_type,
+      "source": source,
+  }
 
 
 def _spatial_wavepacket_page(data: dict) -> str:
+  """Render the 1D spatial wavepacket animation page."""
   payload = json.dumps(data, ensure_ascii=False)
   return f"""<!doctype html>
 <html lang="en">
@@ -287,7 +480,7 @@ def _spatial_wavepacket_page(data: dict) -> str:
 </head>
 <body>
   <h1>QuantX Animation - Spatial Wavepacket ({data.get("potential_type","barrier")})</h1>
-  <p>1D Schrodinger solver (finite difference + Crank-Nicolson): showing spatial probability density |psi(x,t)|^2, phase color, potential profile, and sampled particle cloud.</p>
+  <p>1D Schrodinger solver (finite difference + Crank-Nicolson): showing spatial probability density |psi(x,t)|^2, phase color, potential profile, sampled particle cloud, and <b>data source:</b> {data.get("source","python-reference")}.</p>
   <svg id="svg" viewBox="0 0 1000 520" width="1000" height="520" xmlns="http://www.w3.org/2000/svg"></svg>
   <div class="controls">
     <button id="play">Play</button>
@@ -402,7 +595,10 @@ def _spatial_wavepacket_page(data: dict) -> str:
 </html>"""
 
 
-def _spatial_wavepacket_2d_frames(samples_t: int, nx: int, ny: int, potential_type: str) -> dict:
+def _spatial_wavepacket_2d_frames(
+    samples_t: int, nx: int, ny: int, potential_type: str, source: str = "python-reference"
+) -> dict:
+  """Build a 2D reference solution for the spatial wavepacket animation."""
   try:
     import numpy as np
   except ImportError as ex:
@@ -490,10 +686,12 @@ def _spatial_wavepacket_2d_frames(samples_t: int, nx: int, ny: int, potential_ty
       "potential_type": potential_type,
       "frames": frames,
       "dens_max": dens_max,
+      "source": source,
   }
 
 
 def _spatial_wavepacket_2d_page(data: dict) -> str:
+  """Render the 2D spatial wavepacket heatmap animation page."""
   payload = json.dumps(data, ensure_ascii=False)
   return f"""<!doctype html>
 <html lang="en">
@@ -508,7 +706,7 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
 </head>
 <body>
   <h1>QuantX Animation - 2D Spatial Wavepacket ({data.get("potential_type","barrier")})</h1>
-  <p>Numerical 2D Schrodinger evolution (split-step Fourier): heatmap of |psi(x,y,t)|^2 with center-of-mass marker.</p>
+  <p>Numerical 2D Schrodinger evolution (split-step Fourier): heatmap of |psi(x,y,t)|^2 with center-of-mass marker and <b>data source:</b> {data.get("source","python-reference")}.</p>
   <canvas id="cv" width="640" height="640" style="border:1px solid #ccc"></canvas>
   <div class="controls">
     <button id="play">Play</button>
@@ -537,13 +735,14 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
 
   function render(frameIdx) {{
     const f = DATA.frames[frameIdx - 1];
+    const densMax = Math.max(1e-12, DATA.dens_max || 0, ...DATA.frames.flatMap(fr => fr.density.flat()));
     const ny = f.density.length;
     const nx = f.density[0].length;
     const img = ctx.createImageData(nx, ny);
     let p = 0;
     for (let j = 0; j < ny; j++) {{
       for (let i = 0; i < nx; i++) {{
-        const v = f.density[j][i] / DATA.dens_max;
+        const v = f.density[j][i] / densMax;
         const c = colorMap(v);
         img.data[p++] = c[0];
         img.data[p++] = c[1];
@@ -594,7 +793,16 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
 </html>"""
 
 
-def _spatial_wavepacket_3d_frames(samples_t: int, nx: int, ny: int, nz: int, potential_type: str, boundary: str) -> dict:
+def _spatial_wavepacket_3d_frames(
+    samples_t: int,
+    nx: int,
+    ny: int,
+    nz: int,
+    potential_type: str,
+    boundary: str,
+    source: str = "python-reference",
+) -> dict:
+  """Build a 3D reference solution for the spatial wavepacket animation."""
   try:
     import numpy as np
   except ImportError as ex:
@@ -766,10 +974,12 @@ def _spatial_wavepacket_3d_frames(samples_t: int, nx: int, ny: int, nz: int, pot
       "volume_point_fields": ["x", "y", "z", "density"],
       "volume_points_max_per_frame": points_max_per_frame,
       "volume_points_density_floor_ratio": points_density_floor_ratio,
+      "source": source,
   }
 
 
 def _spatial_wavepacket_3d_page(data: dict) -> str:
+  """Render the 3D slice-based spatial wavepacket animation page."""
   payload = json.dumps(data, ensure_ascii=False)
   return f"""<!doctype html>
 <html lang="en">
@@ -788,7 +998,7 @@ def _spatial_wavepacket_3d_page(data: dict) -> str:
 </head>
 <body>
   <h1>QuantX Animation - 3D Spatial Wavepacket</h1>
-  <p>Numerical 3D Schrodinger evolution (split-step Fourier). Panels show orthogonal slices of <code>|psi(x,y,z,t)|^2</code>: XY(z=0), XZ(y=0), YZ(x=0).</p>
+  <p>Numerical 3D Schrodinger evolution (split-step Fourier). Panels show orthogonal slices of <code>|psi(x,y,z,t)|^2</code>: XY(z=0), XZ(y=0), YZ(x=0). Data source: <b>{data.get("source","python-reference")}</b>.</p>
   <div class="grid">
     <div class="panel"><h3>XY Slice</h3><canvas id="cv_xy" width="280" height="280"></canvas></div>
     <div class="panel"><h3>XZ Slice</h3><canvas id="cv_xz" width="280" height="280"></canvas></div>
@@ -826,10 +1036,11 @@ def _spatial_wavepacket_3d_page(data: dict) -> str:
     const nx = arr2d.length;
     const ny = arr2d[0].length;
     const img = ctx.createImageData(nx, ny);
+    const densMax = Math.max(1e-12, DATA.dens_max || 0, ...DATA.frames.flatMap(fr => fr.xy.flat()));
     let p = 0;
     for (let j = 0; j < ny; j++) {{
       for (let i = 0; i < nx; i++) {{
-        const v = arr2d[i][j] / DATA.dens_max;
+        const v = arr2d[i][j] / densMax;
         const c = colorMap(v);
         img.data[p++] = c[0];
         img.data[p++] = c[1];
@@ -879,6 +1090,7 @@ def _spatial_wavepacket_3d_page(data: dict) -> str:
 
 
 def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+  """Collect the simulation and analytic traces for the Rabi demo."""
   pts_sim = []
   pts_ref = []
   for i in range(samples):
@@ -899,6 +1111,7 @@ def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tu
 
 
 def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
+  """Collect the bond-dimension and truncation traces for the MPS demo."""
   bond = []
   trunc = []
   for i in range(samples):
@@ -922,8 +1135,20 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
 
 
 def main() -> int:
+  """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(description="Generate QuantX visualization HTML.")
   parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"], default="all")
+  parser.add_argument(
+      "--solver-mode",
+      choices=["auto", "engine", "python"],
+      default="auto",
+      help="How continuous spatial pages should source their frame data.",
+  )
+  parser.add_argument(
+      "--continuous-export-json",
+      default="",
+      help="Optional engine-export JSON file to render directly instead of solving again.",
+  )
   parser.add_argument("--spatial-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial3d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
@@ -947,10 +1172,13 @@ def main() -> int:
   root = Path(__file__).resolve().parents[1]
   out_dir = root / args.out_dir
   out_dir.mkdir(parents=True, exist_ok=True)
-  engine = _make_engine(root)
+  engine = _make_engine(root) if args.scenario in {"rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"} or args.solver_mode != "python" else None
   generated = []
+  export_json_path = root / args.continuous_export_json if args.continuous_export_json else None
 
   if args.scenario in {"rabi", "all"}:
+    if engine is None:
+      raise RuntimeError("rabi visualization requires the native engine library")
     sim, ref = _rabi_data(engine, args.samples_rabi)
     charts = [
         {
@@ -968,6 +1196,8 @@ def main() -> int:
     generated.append(path)
 
   if args.scenario in {"mps", "all"}:
+    if engine is None:
+      raise RuntimeError("mps visualization requires the native engine library")
     bond, trunc = _mps_data(engine, args.samples_mps)
     charts = [
         {
@@ -988,27 +1218,52 @@ def main() -> int:
     generated.append(path)
 
   if args.scenario in {"spatial", "all"}:
-    spatial_data = _spatial_wavepacket_frames(args.samples_spatial_t, args.samples_spatial_x, args.spatial_potential)
+    spatial_data = _spatial_wavepacket_frames(
+        args.samples_spatial_t, args.samples_spatial_x, args.spatial_potential, source="python-reference"
+    )
     path = out_dir / f"quantum_spatial_wavepacket_{args.spatial_potential}.html"
     path.write_text(_spatial_wavepacket_page(spatial_data), encoding="utf-8")
     generated.append(path)
 
   if args.scenario in {"spatial2d", "all"}:
-    spatial2d = _spatial_wavepacket_2d_frames(
+    spatial2d_problem = _continuous_problem_2d_request(
         args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y, args.spatial2d_potential
+    )
+    spatial2d = _resolve_continuous_payload(
+        engine,
+        spatial2d_problem,
+        args.solver_mode,
+        lambda: _spatial_wavepacket_2d_frames(
+            args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y, args.spatial2d_potential
+        ),
+        export_json_path,
     )
     path = out_dir / f"quantum_spatial2d_wavepacket_{args.spatial2d_potential}.html"
     path.write_text(_spatial_wavepacket_2d_page(spatial2d), encoding="utf-8")
     generated.append(path)
 
   if args.scenario in {"spatial3d", "all"}:
-    spatial3d = _spatial_wavepacket_3d_frames(
+    spatial3d_problem = _continuous_problem_3d_request(
         args.samples_spatial3d_t,
         args.samples_spatial3d_x,
         args.samples_spatial3d_y,
         args.samples_spatial3d_z,
         args.spatial3d_potential,
         args.spatial3d_boundary,
+    )
+    spatial3d = _resolve_continuous_payload(
+        engine,
+        spatial3d_problem,
+        args.solver_mode,
+        lambda: _spatial_wavepacket_3d_frames(
+            args.samples_spatial3d_t,
+            args.samples_spatial3d_x,
+            args.samples_spatial3d_y,
+            args.samples_spatial3d_z,
+            args.spatial3d_potential,
+            args.spatial3d_boundary,
+        ),
+        export_json_path,
     )
     path = out_dir / f"quantum_spatial3d_wavepacket_{args.spatial3d_potential}_{args.spatial3d_boundary}.html"
     path.write_text(_spatial_wavepacket_3d_page(spatial3d), encoding="utf-8")

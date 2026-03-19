@@ -31,6 +31,8 @@ class IBackend {
   virtual void restore(const std::string& path) = 0;
   // Return dense state if available; empty for compressed backends.
   virtual std::vector<std::complex<double>> current_state() const = 0;
+  // Return continuous density frame metadata; empty for non-continuous backends.
+  virtual std::vector<ContinuousDensityFrame> continuous_density_frames() const = 0;
 };
 
 using BackendFactory = std::function<std::unique_ptr<IBackend>()>;

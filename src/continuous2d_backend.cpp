@@ -7,12 +7,54 @@
 #include <fstream>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace qx {
 namespace {
 
 using Complex = std::complex<double>;
+
+// Checkpoint payload cached before initialize() applies it.
+struct PendingCheckpoint2D {
+  bool valid{false};
+  std::uint32_t nx{0};
+  std::uint32_t ny{0};
+  double dx{0.0};
+  double dy{0.0};
+  double dt{0.0};
+  std::uint32_t total_steps{0};
+  std::uint32_t completed_steps{0};
+  std::string boundary;
+  std::vector<Complex> state;
+};
+
+// Convert boundary token into a compact checkpoint code.
+std::uint32_t boundary_to_code(const std::string& boundary) {
+  if (boundary == "absorbing") {
+    return 1U;
+  }
+  if (boundary == "dirichlet") {
+    return 2U;
+  }
+  return 0U;
+}
+
+// Convert checkpoint code back into a boundary token.
+std::string boundary_from_code(std::uint32_t code) {
+  if (code == 1U) {
+    return "absorbing";
+  }
+  if (code == 2U) {
+    return "dirichlet";
+  }
+  return "periodic";
+}
+
+// Check whether a checkpoint header matches the 2D continuous magic prefix.
+bool is_checkpoint_magic(const char magic[4]) {
+  return magic[0] == 'Q' && magic[1] == 'X' && magic[2] == '2' && magic[3] == 'D';
+}
 
 class Continuous2DBackend final : public IBackend {
  public:
@@ -41,8 +83,8 @@ class Continuous2DBackend final : public IBackend {
     if (c.dx <= 0.0 || c.dy <= 0.0 || c.dt <= 0.0 || c.steps == 0) {
       throw std::runtime_error("continuous2d dx/dy/dt/steps must be positive");
     }
-    if (c.boundary != "periodic") {
-      throw std::runtime_error("continuous2d backend currently supports boundary=periodic only");
+    if (c.boundary != "periodic" && c.boundary != "absorbing" && c.boundary != "dirichlet") {
+      throw std::runtime_error("continuous2d backend supports boundary in {periodic,absorbing,dirichlet}");
     }
 
     nx_ = c.nx;
@@ -52,6 +94,9 @@ class Continuous2DBackend final : public IBackend {
     dt_ = c.dt;
     steps_ = c.steps;
     boundary_ = c.boundary;
+    completed_steps_ = 0;
+    frames_.clear();
+    absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_), 1.0);
 
     fft_provider_ = nullptr;
     if (options.use_gpu) {
@@ -80,19 +125,36 @@ class Continuous2DBackend final : public IBackend {
       build_analytic_potential(c.potential_kind, c.potential_params);
     }
 
-    initialize_wavepacket(c.potential_params);
+    initialize_wavepacket(c.initial_state, c.potential_params);
     precompute_phases();
+    precompute_boundary_mask(c.potential_params);
+
+    const bool restored = apply_pending_checkpoint();
+    if (!restored && boundary_ == "dirichlet") {
+      enforce_dirichlet_boundary();
+    }
+
     update_observables();
+    record_frame();
   }
 
   void evolve(const QuantumProblem&, const RunOptions&) override {
-    for (std::uint32_t s = 0; s < steps_; ++s) {
+    for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
       apply_half_kinetic();
       apply_potential();
       apply_half_kinetic();
-      normalize_state();
+      if (boundary_ == "absorbing") {
+        apply_absorbing_boundary();
+      } else if (boundary_ == "dirichlet") {
+        enforce_dirichlet_boundary();
+      }
+      if (boundary_ != "absorbing") {
+        normalize_state();
+      }
+      completed_steps_ = s + 1;
+      update_observables();
+      record_frame();
     }
-    update_observables();
   }
 
   std::map<std::string, double> measure(const QuantumProblem&) override { return observables_; }
@@ -102,12 +164,19 @@ class Continuous2DBackend final : public IBackend {
     if (!os.good()) {
       return;
     }
+    const char magic[4] = {'Q', 'X', '2', 'D'};
+    const std::uint32_t version = 2U;
+    const std::uint32_t boundary_code = boundary_to_code(boundary_);
+    os.write(magic, sizeof(magic));
+    os.write(reinterpret_cast<const char*>(&version), sizeof(version));
     os.write(reinterpret_cast<const char*>(&nx_), sizeof(nx_));
     os.write(reinterpret_cast<const char*>(&ny_), sizeof(ny_));
     os.write(reinterpret_cast<const char*>(&dx_), sizeof(dx_));
     os.write(reinterpret_cast<const char*>(&dy_), sizeof(dy_));
     os.write(reinterpret_cast<const char*>(&dt_), sizeof(dt_));
     os.write(reinterpret_cast<const char*>(&steps_), sizeof(steps_));
+    os.write(reinterpret_cast<const char*>(&completed_steps_), sizeof(completed_steps_));
+    os.write(reinterpret_cast<const char*>(&boundary_code), sizeof(boundary_code));
     const std::size_t size = state_.size();
     os.write(reinterpret_cast<const char*>(&size), sizeof(size));
     if (size > 0) {
@@ -122,37 +191,78 @@ class Continuous2DBackend final : public IBackend {
       return;
     }
 
-    std::uint32_t nx = 0;
-    std::uint32_t ny = 0;
-    double dx = 0.0;
-    double dy = 0.0;
-    double dt = 0.0;
-    std::uint32_t steps = 0;
-    std::size_t size = 0;
+    PendingCheckpoint2D pending;
+    char magic[4] = {};
+    is.read(magic, sizeof(magic));
+    if (!is.good()) {
+      return;
+    }
+    if (is_checkpoint_magic(magic)) {
+      std::uint32_t version = 0U;
+      std::uint32_t boundary_code = 0U;
+      std::size_t size = 0;
+      is.read(reinterpret_cast<char*>(&version), sizeof(version));
+      is.read(reinterpret_cast<char*>(&pending.nx), sizeof(pending.nx));
+      is.read(reinterpret_cast<char*>(&pending.ny), sizeof(pending.ny));
+      is.read(reinterpret_cast<char*>(&pending.dx), sizeof(pending.dx));
+      is.read(reinterpret_cast<char*>(&pending.dy), sizeof(pending.dy));
+      is.read(reinterpret_cast<char*>(&pending.dt), sizeof(pending.dt));
+      is.read(reinterpret_cast<char*>(&pending.total_steps), sizeof(pending.total_steps));
+      is.read(reinterpret_cast<char*>(&pending.completed_steps), sizeof(pending.completed_steps));
+      is.read(reinterpret_cast<char*>(&boundary_code), sizeof(boundary_code));
+      is.read(reinterpret_cast<char*>(&size), sizeof(size));
+      pending.boundary = boundary_from_code(boundary_code);
+      pending.state.resize(size);
+      if (size > 0) {
+        is.read(reinterpret_cast<char*>(pending.state.data()),
+                static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
+      }
+      pending.valid = is.good();
+    } else {
+      is.clear();
+      is.seekg(0, std::ios::beg);
+      std::uint32_t nx = 0;
+      std::uint32_t ny = 0;
+      double dx = 0.0;
+      double dy = 0.0;
+      double dt = 0.0;
+      std::uint32_t steps = 0;
+      std::size_t size = 0;
+      is.read(reinterpret_cast<char*>(&nx), sizeof(nx));
+      is.read(reinterpret_cast<char*>(&ny), sizeof(ny));
+      is.read(reinterpret_cast<char*>(&dx), sizeof(dx));
+      is.read(reinterpret_cast<char*>(&dy), sizeof(dy));
+      is.read(reinterpret_cast<char*>(&dt), sizeof(dt));
+      is.read(reinterpret_cast<char*>(&steps), sizeof(steps));
+      is.read(reinterpret_cast<char*>(&size), sizeof(size));
+      pending.nx = nx;
+      pending.ny = ny;
+      pending.dx = dx;
+      pending.dy = dy;
+      pending.dt = dt;
+      pending.total_steps = steps;
+      pending.completed_steps = steps;
+      pending.boundary = "periodic";
+      pending.state.resize(size);
+      if (size > 0) {
+        is.read(reinterpret_cast<char*>(pending.state.data()),
+                static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
+      }
+      pending.valid = is.good();
+    }
 
-    is.read(reinterpret_cast<char*>(&nx), sizeof(nx));
-    is.read(reinterpret_cast<char*>(&ny), sizeof(ny));
-    is.read(reinterpret_cast<char*>(&dx), sizeof(dx));
-    is.read(reinterpret_cast<char*>(&dy), sizeof(dy));
-    is.read(reinterpret_cast<char*>(&dt), sizeof(dt));
-    is.read(reinterpret_cast<char*>(&steps), sizeof(steps));
-    is.read(reinterpret_cast<char*>(&size), sizeof(size));
-
-    if (!is.good() || size == 0) {
+    if (!pending.valid || pending.state.empty()) {
       return;
     }
 
-    if (nx == nx_ && ny == ny_ && std::abs(dx - dx_) < 1e-15 && std::abs(dy - dy_) < 1e-15 && std::abs(dt - dt_) < 1e-15) {
-      state_.resize(size);
-      is.read(reinterpret_cast<char*>(state_.data()),
-              static_cast<std::streamsize>(size * sizeof(std::complex<double>)));
-      if (is.good()) {
-        update_observables();
-      }
-    }
+    pending.state.shrink_to_fit();
+    pending_checkpoint_ = std::move(pending);
+    has_pending_checkpoint_ = true;
   }
 
   std::vector<std::complex<double>> current_state() const override { return state_; }
+
+  std::vector<ContinuousDensityFrame> continuous_density_frames() const override { return frames_; }
 
  private:
   std::size_t idx(std::uint32_t x, std::uint32_t y) const {
@@ -225,11 +335,29 @@ class Continuous2DBackend final : public IBackend {
     std::fill(potential_.begin(), potential_.end(), 0.0);
   }
 
-  void initialize_wavepacket(const std::map<std::string, double>& params) {
+  void initialize_wavepacket(const ContinuousInitialStateConfig& initial_state,
+                             const std::map<std::string, double>& legacy_params) {
+    const auto& params = initial_state.params.empty() ? legacy_params : initial_state.params;
     const auto get_param = [&params](const std::string& key, double def) {
       const auto it = params.find(key);
       return it == params.end() ? def : it->second;
     };
+
+    const std::string kind = initial_state.kind.empty() ? "gaussian" : initial_state.kind;
+    if (kind == "grid") {
+      if (!initial_state.grid.empty()) {
+        if (initial_state.grid.size() != state_.size()) {
+          throw std::runtime_error("continuous2d initial_state.grid size must equal nx*ny");
+        }
+        for (std::size_t i = 0; i < state_.size(); ++i) {
+          state_[i] = Complex{initial_state.grid[i], 0.0};
+        }
+      } else {
+        std::fill(state_.begin(), state_.end(), Complex{0.0, 0.0});
+      }
+      normalize_state();
+      return;
+    }
 
     const double psi_x0 = get_param("psi_x0", -0.2 * static_cast<double>(nx_) * dx_);
     const double psi_y0 = get_param("psi_y0", 0.0);
@@ -250,6 +378,108 @@ class Continuous2DBackend final : public IBackend {
     }
 
     normalize_state();
+  }
+
+  // Build the absorbing boundary attenuation mask from potential parameters.
+  void precompute_boundary_mask(const std::map<std::string, double>& params) {
+    if (boundary_ != "absorbing") {
+      return;
+    }
+    const auto get_param = [&params](const std::string& key, double def) {
+      const auto it = params.find(key);
+      return it == params.end() ? def : it->second;
+    };
+
+    const double width_cells = std::max(1.0, get_param("absorb_width", 6.0));
+    const double strength = std::max(0.0, get_param("absorb_strength", 3.0));
+
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const double dy_edge = std::min<double>(y, ny_ - 1U - y);
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const double dx_edge = std::min<double>(x, nx_ - 1U - x);
+        const double edge_dist = std::min(dx_edge, dy_edge);
+        if (edge_dist >= width_cells) {
+          absorbing_mask_[idx(x, y)] = 1.0;
+          continue;
+        }
+        const double t = (width_cells - edge_dist) / width_cells;
+        const double damp = std::exp(-strength * t * t * dt_);
+        absorbing_mask_[idx(x, y)] = std::clamp(damp, 0.0, 1.0);
+      }
+    }
+  }
+
+  // Apply the absorbing boundary attenuation to the current wavefunction.
+  void apply_absorbing_boundary() {
+    if (boundary_ != "absorbing") {
+      return;
+    }
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      state_[i] *= absorbing_mask_[i];
+    }
+  }
+
+  // Zero the outer grid cells for Dirichlet boundary conditions.
+  void enforce_dirichlet_boundary() {
+    if (boundary_ != "dirichlet") {
+      return;
+    }
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      state_[idx(0, y)] = Complex{0.0, 0.0};
+      state_[idx(nx_ - 1U, y)] = Complex{0.0, 0.0};
+    }
+    for (std::uint32_t x = 0; x < nx_; ++x) {
+      state_[idx(x, 0)] = Complex{0.0, 0.0};
+      state_[idx(x, ny_ - 1U)] = Complex{0.0, 0.0};
+    }
+  }
+
+  // Apply a cached checkpoint once the live grid has been initialized.
+  bool apply_pending_checkpoint() {
+    if (!has_pending_checkpoint_ || !pending_checkpoint_.valid) {
+      return false;
+    }
+    if (pending_checkpoint_.nx != nx_ || pending_checkpoint_.ny != ny_) {
+      return false;
+    }
+    if (std::abs(pending_checkpoint_.dx - dx_) > 1e-15 || std::abs(pending_checkpoint_.dy - dy_) > 1e-15 ||
+        std::abs(pending_checkpoint_.dt - dt_) > 1e-15) {
+      return false;
+    }
+    if (!pending_checkpoint_.boundary.empty() && pending_checkpoint_.boundary != boundary_) {
+      return false;
+    }
+    if (pending_checkpoint_.state.size() != state_.size()) {
+      return false;
+    }
+    state_ = pending_checkpoint_.state;
+    completed_steps_ = std::min(pending_checkpoint_.completed_steps, steps_);
+    has_pending_checkpoint_ = false;
+    pending_checkpoint_ = PendingCheckpoint2D{};
+    return true;
+  }
+
+  // Capture a compact density-frame metadata record for export.
+  void record_frame() {
+    ContinuousDensityFrame frame;
+    frame.step = completed_steps_;
+    frame.time = static_cast<double>(completed_steps_) * dt_;
+    frame.nx = nx_;
+    frame.ny = ny_;
+    frame.nz = 0;
+    frame.boundary = boundary_;
+    const auto get_obs = [this](const std::string& key) {
+      const auto it = observables_.find(key);
+      return it == observables_.end() ? 0.0 : it->second;
+    };
+    frame.norm = get_obs("norm");
+    frame.x_mean = get_obs("x_mean");
+    frame.y_mean = get_obs("y_mean");
+    frame.z_mean = get_obs("z_mean");
+    frame.sigma_x = get_obs("sigma_x");
+    frame.sigma_y = get_obs("sigma_y");
+    frame.sigma_z = get_obs("sigma_z");
+    frames_.push_back(frame);
   }
 
   void precompute_phases() {
@@ -398,6 +628,9 @@ class Continuous2DBackend final : public IBackend {
     observables_["ny"] = static_cast<double>(ny_);
     observables_["fft_provider_eigen"] = (fft_provider_ && fft_provider_->name() == "eigen") ? 1.0 : 0.0;
     observables_["fft_provider_cufft"] = (fft_provider_ && fft_provider_->name() == "cufft") ? 1.0 : 0.0;
+    observables_["boundary_periodic"] = boundary_ == "periodic" ? 1.0 : 0.0;
+    observables_["boundary_absorbing"] = boundary_ == "absorbing" ? 1.0 : 0.0;
+    observables_["boundary_dirichlet"] = boundary_ == "dirichlet" ? 1.0 : 0.0;
   }
 
  private:
@@ -407,14 +640,19 @@ class Continuous2DBackend final : public IBackend {
   double dy_{0.0};
   double dt_{0.0};
   std::uint32_t steps_{0};
+  std::uint32_t completed_steps_{0};
   std::string boundary_{"periodic"};
 
   std::vector<Complex> state_;
   std::vector<Complex> kbuf_;
   std::vector<double> potential_;
+  std::vector<double> absorbing_mask_;
   std::vector<Complex> potential_phase_;
   std::vector<Complex> kinetic_half_phase_;
   std::map<std::string, double> observables_;
+  std::vector<ContinuousDensityFrame> frames_;
+  PendingCheckpoint2D pending_checkpoint_{};
+  bool has_pending_checkpoint_{false};
   std::unique_ptr<IFFTProvider> fft_provider_;
 };
 

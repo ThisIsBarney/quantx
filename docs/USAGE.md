@@ -82,6 +82,24 @@ Generate visualization pages (HTML + SVG):
 .\scripts\run_visualization.ps1
 ```
 
+Generate visualization with explicit solver mode:
+
+```powershell
+.\scripts\run_visualization.ps1 -SolverMode auto
+```
+
+Solver modes:
+
+- `auto` (default): use engine-exported continuous frames first, fallback to Python reference solver if export is unavailable.
+- `engine`: require engine-exported continuous frames (fails fast if export is unavailable).
+- `python`: force Python reference solver for continuous scenarios.
+
+Render from a pre-exported continuous frame JSON:
+
+```powershell
+python .\scripts\visualize_simulation.py --scenario spatial3d --continuous-export-json out/visualizations/quantum_spatial3d_wavepacket_barrier_periodic.json
+```
+
 Generated files:
 
 - `out/visualizations/rabi_population.html`
@@ -149,35 +167,37 @@ Gallery outputs:
 
 ## 1.1) Benchmark usage
 
-Run accuracy smoke benchmark:
+Run the unified benchmark flow with gates:
 
 ```powershell
-.\scripts\run_benchmark.ps1
+.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate
 ```
 
-Run continuous-space 2D smoke benchmark (uses `Engine.run(...)` with problem JSON):
-
-```powershell
-.\scripts\run_problem_benchmark.ps1
-```
-
-Run both accuracy + noise sweep and regenerate index:
+Run the unified benchmark flow without gates:
 
 ```powershell
 .\scripts\benchmark_all.ps1 -NoiseSweep
 ```
 
-Run with threshold gating (fails if any suite breaches configured gates):
+Run a single suite directly when you are iterating on one target:
 
 ```powershell
-.\scripts\benchmark_all.ps1 -NoiseSweep -EnforceGate
+.\scripts\run_benchmark.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
 ```
 
-Run a single suite with gate in one command:
+Legacy continuous-space alias for the unified dispatcher:
 
 ```powershell
-.\scripts\run_benchmark_and_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
+.\scripts\run_problem_benchmark.ps1 -Suite benchmarks/suites/continuous2d_smoke.json
 ```
+
+The unified benchmark entrypoint covers:
+
+- `circuit_accuracy_smoke`
+- `circuit_noise_sweep`
+- `continuous2d_smoke`
+- `continuous3d_smoke`
+- `continuous3d_accuracy`
 
 Reports are written to `benchmarks/reports/`:
 
@@ -186,10 +206,14 @@ Reports are written to `benchmarks/reports/`:
 - cumulative index: `INDEX.md`
 - suite trend report: `*_TREND.md`
 
-CI integration:
+CI integration uses the same script:
+
+```powershell
+.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild
+```
 
 - workflow file: `.github/workflows/benchmark-gate.yml`
-- runs build + tests + both benchmark suites + gate checks on Windows
+- runs build + tests + unified benchmark gate on Windows
 - uploads `benchmarks/reports/` as CI artifact
 
 ## 2) Python SDK
