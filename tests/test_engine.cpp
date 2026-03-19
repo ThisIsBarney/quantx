@@ -131,6 +131,11 @@ int main() {
   const double sigma_x_early = free_early.observables.at("sigma_x");
   const double sigma_x_late = free_late.observables.at("sigma_x");
   expect(sigma_x_late > sigma_x_early + 1e-4, "free packet sigma_x should broaden over time");
+  const double sigma0 = 0.2;
+  const double t_late = static_cast<double>(c2d_free_late.continuous_2d.steps) * c2d_free_late.continuous_2d.dt;
+  const double sigma_analytic = std::sqrt(sigma0 * sigma0 + (t_late * t_late) / (4.0 * sigma0 * sigma0));
+  expect(std::abs(sigma_x_late - sigma_analytic) < 8e-2,
+         "free packet sigma_x should be close to analytic broadening");
 
   qx::QuantumProblem rabi;
   rabi.qubits = 1;

@@ -195,6 +195,28 @@ cres = e.run_circuit({
 print(cres)
 ```
 
+Continuous-space 2D call (same unified `Engine.run(...)` API):
+
+```python
+from quantx_engine import Engine
+e = Engine(r"D:\\WUJ\\coding\\QuantX\\build-vs\\Debug\\quantx.dll")
+pres = e.run({
+  "kind": "continuous_space_2d",
+  "continuous_space_2d": {
+    "nx": 128,
+    "ny": 128,
+    "dx": 0.1,
+    "dy": 0.1,
+    "dt": 0.001,
+    "steps": 100,
+    "boundary": "periodic",
+    "potential_kind": "none",
+    "potential_params": {"psi_sigma": 0.25, "psi_kx": 0.0, "psi_ky": 0.0}
+  }
+}, {"enable_checkpoint": False})
+print(pres["backend"], pres["observables"]["norm"])
+```
+
 Framework-adapter call (Qiskit-like request):
 
 ```python
@@ -235,6 +257,24 @@ Exports:
 - `qx_free_string(ptr)`
 
 Use `quantx.dll` in `build-vs/Debug`.
+
+`continuous_space_2d` also goes through `qx_run(problem_json, options_json)` (no extra ABI entrypoint):
+
+```json
+{
+  "kind": "continuous_space_2d",
+  "continuous_space_2d": {
+    "nx": 128,
+    "ny": 128,
+    "dx": 0.1,
+    "dy": 0.1,
+    "dt": 0.001,
+    "steps": 100,
+    "boundary": "periodic",
+    "potential_kind": "none"
+  }
+}
+```
 
 ## 4) Problem JSON fields (core)
 
