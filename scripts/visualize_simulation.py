@@ -680,10 +680,44 @@ def _spatial_wavepacket_3d_frames(samples_t: int, nx: int, ny: int, nz: int, pot
   z_mid = nz // 2
   y_mid = ny // 2
   x_mid = nx // 2
+  points_max_per_frame = 1400
+  points_density_floor_ratio = 0.08
+
+  def sample_points(dens: np.ndarray) -> tuple[list[list[float]], float]:
+    vmax = float(np.max(dens))
+    if vmax <= 0.0:
+      return [], 0.0
+
+    floor = vmax * points_density_floor_ratio
+    coords = np.argwhere(dens >= floor)
+    if coords.shape[0] == 0:
+      coords = np.argwhere(dens > 0.0)
+    if coords.shape[0] == 0:
+      return [], vmax
+
+    values = dens[coords[:, 0], coords[:, 1], coords[:, 2]]
+    if coords.shape[0] > points_max_per_frame:
+      keep_idx = np.argpartition(values, -points_max_per_frame)[-points_max_per_frame:]
+      coords = coords[keep_idx]
+      values = values[keep_idx]
+
+    points = []
+    for n in range(coords.shape[0]):
+      ix, iy, iz = coords[n]
+      points.append(
+          [
+              round(float(xs[ix]), 4),
+              round(float(ys[iy]), 4),
+              round(float(zs[iz]), 4),
+              round(float(values[n]), 8),
+          ]
+      )
+    return points, vmax
 
   for it in range(nt):
     t = t_min + (t_max - t_min) * it / max(1, nt - 1)
     dens = np.abs(psi) ** 2
+    points, point_vmax = sample_points(dens)
     dens_max = max(dens_max, float(np.max(dens)))
     norm = float(np.sum(dens) * dx * dy * dz)
     exp_x = float(np.sum(X * dens) * dx * dy * dz)
@@ -699,6 +733,9 @@ def _spatial_wavepacket_3d_frames(samples_t: int, nx: int, ny: int, nz: int, pot
             "exp_y": exp_y,
             "exp_z": exp_z,
             "norm": norm,
+            "points": points,
+            "point_vmax": point_vmax,
+            "point_count": len(points),
         }
     )
     if it == nt - 1:
@@ -726,6 +763,9 @@ def _spatial_wavepacket_3d_frames(samples_t: int, nx: int, ny: int, nz: int, pot
       "boundary": boundary,
       "frames": frames,
       "dens_max": dens_max,
+      "volume_point_fields": ["x", "y", "z", "density"],
+      "volume_points_max_per_frame": points_max_per_frame,
+      "volume_points_density_floor_ratio": points_density_floor_ratio,
   }
 
 
