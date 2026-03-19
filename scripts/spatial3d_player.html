@@ -15,7 +15,8 @@
     .meta { margin-top: 12px; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font-size: 13px; min-height: 18px; }
     .grid { margin-top: 14px; display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }
     .panel { background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; }
-    .panel h3 { margin: 2px 2px 8px; font-size: 14px; }
+    .panel h3 { margin: 2px 2px 8px; font-size: 14px; display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .panel select { border: 1px solid #cbd5e1; border-radius: 7px; padding: 3px 6px; font-size: 12px; background: #fff; }
     canvas { width: 100%; aspect-ratio: 1/1; border: 1px solid #cbd5e1; border-radius: 8px; image-rendering: pixelated; }
     .controls { margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px; }
     .controls input[type="range"] { width: min(680px, 74vw); }
@@ -40,14 +41,46 @@
     <div id="meta" class="meta">No data loaded.</div>
 
     <div class="grid">
-      <div class="panel"><h3>XY Slice</h3><canvas id="xy" width="300" height="300"></canvas></div>
-      <div class="panel"><h3>XZ Slice</h3><canvas id="xz" width="300" height="300"></canvas></div>
-      <div class="panel"><h3>YZ Slice</h3><canvas id="yz" width="300" height="300"></canvas></div>
+      <div class="panel">
+        <h3>
+          <span id="title_xy">XY Slice</span>
+          <select id="map_xy">
+            <option value="xy">XY</option>
+            <option value="xz">XZ</option>
+            <option value="yz">YZ</option>
+          </select>
+        </h3>
+        <canvas id="xy" width="300" height="300"></canvas>
+      </div>
+      <div class="panel">
+        <h3>
+          <span id="title_xz">XZ Slice</span>
+          <select id="map_xz">
+            <option value="xy">XY</option>
+            <option value="xz" selected>XZ</option>
+            <option value="yz">YZ</option>
+          </select>
+        </h3>
+        <canvas id="xz" width="300" height="300"></canvas>
+      </div>
+      <div class="panel">
+        <h3>
+          <span id="title_yz">YZ Slice</span>
+          <select id="map_yz">
+            <option value="xy">XY</option>
+            <option value="xz">XZ</option>
+            <option value="yz" selected>YZ</option>
+          </select>
+        </h3>
+        <canvas id="yz" width="300" height="300"></canvas>
+      </div>
     </div>
 
     <div class="controls">
+      <button id="prev" style="background:#475569;color:#fff;border:0;border-radius:8px;padding:6px 11px">Prev</button>
       <button id="play" style="background:#0f766e;color:#fff;border:0;border-radius:8px;padding:6px 11px">Play</button>
       <button id="pause" style="background:#334155;color:#fff;border:0;border-radius:8px;padding:6px 11px">Pause</button>
+      <button id="next" style="background:#475569;color:#fff;border:0;border-radius:8px;padding:6px 11px">Next</button>
       <input id="slider" type="range" min="1" max="1" value="1"/>
       <span id="label">frame 0/0</span>
     </div>
@@ -61,8 +94,20 @@
     const label = document.getElementById("label");
     const meta = document.getElementById("meta");
     const pathInput = document.getElementById("jsonPath");
+    const mapXY = document.getElementById("map_xy");
+    const mapXZ = document.getElementById("map_xz");
+    const mapYZ = document.getElementById("map_yz");
+    const titleXY = document.getElementById("title_xy");
+    const titleXZ = document.getElementById("title_xz");
+    const titleYZ = document.getElementById("title_yz");
     let DATA = null;
     let timer = null;
+
+    const panelMapping = {
+      xy: "xy",
+      xz: "xz",
+      yz: "yz",
+    };
 
     function colorMap(v) {
       const t = Math.max(0, Math.min(1, v));
@@ -99,12 +144,33 @@
       if (!DATA || !DATA.frames || DATA.frames.length === 0) return;
       const f = DATA.frames[frameIdx - 1];
       const densMax = DATA.dens_max || 1e-9;
-      drawSlice(ctxXY, f.xy, densMax);
-      drawSlice(ctxXZ, f.xz, densMax);
-      drawSlice(ctxYZ, f.yz, densMax);
+      drawSlice(ctxXY, f[panelMapping.xy], densMax);
+      drawSlice(ctxXZ, f[panelMapping.xz], densMax);
+      drawSlice(ctxYZ, f[panelMapping.yz], densMax);
       label.textContent = `frame ${frameIdx}/${DATA.frames.length}`;
       meta.textContent = `boundary=${DATA.boundary}, potential=${DATA.potential_type}, t=${f.t.toFixed(3)}, norm=${f.norm.toFixed(6)}, <x,y,z>=(${f.exp_x.toFixed(3)}, ${f.exp_y.toFixed(3)}, ${f.exp_z.toFixed(3)})`;
       slider.value = String(frameIdx);
+    }
+
+    function updatePanelTitles() {
+      titleXY.textContent = `${panelMapping.xy.toUpperCase()} Slice`;
+      titleXZ.textContent = `${panelMapping.xz.toUpperCase()} Slice`;
+      titleYZ.textContent = `${panelMapping.yz.toUpperCase()} Slice`;
+    }
+
+    function remapPanel(panelId, targetSlice) {
+      panelMapping[panelId] = targetSlice;
+      updatePanelTitles();
+      render(Number(slider.value || "1"));
+    }
+
+    function stepFrame(delta) {
+      if (!DATA || !DATA.frames || DATA.frames.length === 0) return;
+      const n = DATA.frames.length;
+      let f = Number(slider.value || "1") + delta;
+      if (f < 1) f = n;
+      if (f > n) f = 1;
+      render(f);
     }
 
     function loadData(obj) {
@@ -136,9 +202,7 @@
     function doPlay() {
       if (!DATA || timer) return;
       timer = setInterval(() => {
-        let f = Number(slider.value);
-        f = f >= DATA.frames.length ? 1 : f + 1;
-        render(f);
+        stepFrame(1);
       }, 90);
     }
 
@@ -150,7 +214,23 @@
 
     document.getElementById("play").onclick = doPlay;
     document.getElementById("pause").onclick = doPause;
+    document.getElementById("prev").onclick = () => stepFrame(-1);
+    document.getElementById("next").onclick = () => stepFrame(1);
     slider.oninput = () => render(Number(slider.value));
+    mapXY.onchange = () => remapPanel("xy", mapXY.value);
+    mapXZ.onchange = () => remapPanel("xz", mapXZ.value);
+    mapYZ.onchange = () => remapPanel("yz", mapYZ.value);
+
+    window.addEventListener("keydown", (ev) => {
+      if (ev.key === "ArrowLeft") {
+        stepFrame(-1);
+      } else if (ev.key === "ArrowRight") {
+        stepFrame(1);
+      } else if (ev.key === " ") {
+        ev.preventDefault();
+        if (timer) doPause(); else doPlay();
+      }
+    });
 
     document.getElementById("loadPath").onclick = async () => {
       try { await loadFromPath(); } catch (e) { meta.textContent = `Load error: ${e.message}`; }
