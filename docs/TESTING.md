@@ -22,6 +22,11 @@
     - per-observable stderr/variance and aggregate error summary are emitted
 - norm conservation:
   - `|psi|^2` stays near 1.0 in smoke scenarios
+- smoke diagnostics:
+  - `qx_smoke` and `qx_fft_smoke` route CRT failures to stderr, so Windows debug runs stay console-only
+- continuous export payload checks:
+  - 2D export payloads are validated to match `nx * ny`
+  - 3D export payloads are validated for `xy`, `xz`, `yz` slice shapes and `[x,y,z,density]` point quads
 
 ## Workflow Checks
 
@@ -61,6 +66,15 @@ Dependency license policy check:
 ```powershell
 .\scripts\check_dependency_policy.ps1
 ```
+
+Smoke binaries:
+
+```powershell
+.\build-vs\Debug\qx_smoke.exe
+.\build-vs\Debug\qx_fft_smoke.exe
+```
+
+These binaries should fail in the terminal with `FAIL:` or `EXCEPTION:` output instead of opening debugger popups.
 
 Visualization smoke test:
 

@@ -1,7 +1,4 @@
 #include <cmath>
-#ifdef _MSC_VER
-#include <crtdbg.h>
-#endif
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -18,6 +15,7 @@
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
 #include "qx/version.hpp"
+#include "test_support.hpp"
 
 namespace {
 
@@ -130,20 +128,9 @@ std::filesystem::path resolve_repo_root(const std::filesystem::path& start_dir) 
 
 // End-to-end smoke test for simulation and circuit APIs.
 int main() {
-#ifdef _MSC_VER
-#ifdef _DEBUG
-  // Route CRT assertions/errors to stderr to avoid interactive debug popups in CI and scripted runs.
-  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
-  _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
-  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
-  _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
-  _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
-  _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
-#endif
-#endif
-
+  qx::test::configure_console_diagnostics();
   try {
-  qx::QuantumProblem p;
+    qx::QuantumProblem p;
   p.qubits = 8;
   p.evolution.total_time = 1.0;
   p.evolution.dt = 0.05;
@@ -258,6 +245,9 @@ int main() {
   expect(!c2d_export_run.continuous_density_frames.empty(), "continuous2d export run should include frames");
   expect(!c2d_export_run.continuous_density_frames.front().density_xy_flat.empty(),
          "continuous2d export run should include density payload");
+  expect(c2d_export_run.continuous_density_frames.front().density_xy_flat.size() ==
+             static_cast<std::size_t>(c2d.continuous_2d.nx) * static_cast<std::size_t>(c2d.continuous_2d.ny),
+         "continuous2d export density payload should match nx*ny");
 
   const auto workdir = std::filesystem::current_path();
   const auto repo_root = resolve_repo_root(workdir);
@@ -453,8 +443,19 @@ int main() {
   expect(!c3d_export_run.continuous_density_frames.empty(), "continuous3d export run should include frames");
   expect(!c3d_export_run.continuous_density_frames.front().density_xy_flat.empty(),
          "continuous3d export run should include xy slice payload");
+  expect(c3d_export_run.continuous_density_frames.front().density_xy_flat.size() ==
+             static_cast<std::size_t>(c3d.continuous_3d.nx) * static_cast<std::size_t>(c3d.continuous_3d.ny),
+         "continuous3d xy slice payload should match nx*ny");
+  expect(c3d_export_run.continuous_density_frames.front().density_xz_flat.size() ==
+             static_cast<std::size_t>(c3d.continuous_3d.nx) * static_cast<std::size_t>(c3d.continuous_3d.nz),
+         "continuous3d xz slice payload should match nx*nz");
+  expect(c3d_export_run.continuous_density_frames.front().density_yz_flat.size() ==
+             static_cast<std::size_t>(c3d.continuous_3d.ny) * static_cast<std::size_t>(c3d.continuous_3d.nz),
+         "continuous3d yz slice payload should match ny*nz");
   expect(!c3d_export_run.continuous_density_frames.front().points_xyzd_flat.empty(),
          "continuous3d export run should include volumetric point payload");
+  expect(c3d_export_run.continuous_density_frames.front().points_xyzd_flat.size() % 4U == 0U,
+         "continuous3d point payload should be encoded as x,y,z,density quads");
 
   const auto c3d_gpu_run = qx::run(c3d, o_gpu);
   expect(c3d_gpu_run.ok, "continuous3d gpu run should succeed");
@@ -675,10 +676,8 @@ int main() {
   std::cout << "qx_smoke passed\n";
   return 0;
   } catch (const std::exception& ex) {
-    std::cerr << "EXCEPTION: " << ex.what() << "\n";
-    return 2;
+    return qx::test::report_exception(ex);
   } catch (...) {
-    std::cerr << "EXCEPTION: unknown\n";
-    return 2;
+    return qx::test::report_unknown_exception();
   }
 }

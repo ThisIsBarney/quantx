@@ -8,6 +8,7 @@ Set-Location $root
 .\scripts\build.ps1
 ctest --test-dir build-vs -C Debug --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "ctest failed: exit code $LASTEXITCODE" }
+# Smoke binaries must report failures on the console, not via modal debugger popups.
 .\build-vs\Debug\qx_smoke.exe
 if ($LASTEXITCODE -ne 0) { throw "qx_smoke failed: exit code $LASTEXITCODE" }
 .\scripts\test_cli_args.ps1
