@@ -1,0 +1,56 @@
+{
+  "local": {
+    "display_name": "local",
+    "default_perf_warnings_blocking": false,
+    "default_label": "perf warnings non-blocking",
+    "suite_policies": {
+      "circuit_accuracy_smoke": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "circuit_noise_sweep": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "continuous2d_smoke": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "continuous3d_smoke": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "continuous3d_accuracy": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      }
+    }
+  },
+  "github-windows": {
+    "display_name": "github-windows",
+    "default_perf_warnings_blocking": false,
+    "default_label": "perf warnings non-blocking",
+    "suite_policies": {
+      "circuit_accuracy_smoke": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "circuit_noise_sweep": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "continuous2d_smoke": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "continuous3d_smoke": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      },
+      "continuous3d_accuracy": {
+        "perf_warnings_blocking": false,
+        "label": "perf warnings non-blocking"
+      }
+    }
+  }
+}

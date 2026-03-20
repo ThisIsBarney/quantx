@@ -3,18 +3,27 @@ import json
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+  sys.path.insert(0, str(ROOT))
+
+from benchmarks.report_utils import detect_platform_profile, suite_policy
+
 
 def load_json(path: Path) -> dict:
+  """Load a JSON file from disk."""
   with path.open("r", encoding="utf-8") as f:
     return json.load(f)
 
 
 def find_latest_report(report_dir: Path, suite_name: str) -> Path | None:
+  """Return the newest report JSON for a suite, or ``None`` if missing."""
   candidates = sorted(report_dir.glob(f"{suite_name}_*.json"))
   return candidates[-1] if candidates else None
 
 
 def merged_case_gates(global_gates: dict, case: dict) -> dict:
+  """Merge suite-level gates with case-level overrides."""
   case_gates = case.get("gates", {})
   if not isinstance(case_gates, dict):
     case_gates = {}
@@ -23,7 +32,8 @@ def merged_case_gates(global_gates: dict, case: dict) -> dict:
   return out
 
 
-def check_case(case: dict, gates: dict, perf_warn_only: bool) -> tuple[list[str], list[str]]:
+def check_case(case: dict, gates: dict, perf_warnings_blocking: bool) -> tuple[list[str], list[str]]:
+  """Check one benchmark case and split failures from warnings."""
   agg = case.get("aggregate", {})
   failures: list[str] = []
   warnings: list[str] = []
@@ -42,11 +52,11 @@ def check_case(case: dict, gates: dict, perf_warn_only: bool) -> tuple[list[str]
       return
     value = agg.get(metric)
     if value is None:
-      target = warnings if (perf_warn_only and is_performance) else failures
+      target = failures if (not is_performance or perf_warnings_blocking) else warnings
       target.append(f"{case['id']} missing metric {metric}")
       return
     if float(value) > float(threshold):
-      target = warnings if (perf_warn_only and is_performance) else failures
+      target = failures if (not is_performance or perf_warnings_blocking) else warnings
       target.append(f"{case['id']} {metric}={value:.6f} > {threshold_key}={threshold:.6f}")
 
   check_le("max_abs_error_mean", "max_abs_error_mean_max")
@@ -59,6 +69,7 @@ def check_case(case: dict, gates: dict, perf_warn_only: bool) -> tuple[list[str]
 
 
 def main() -> None:
+  """Check the latest benchmark report for the requested suite."""
   parser = argparse.ArgumentParser(description="Check latest benchmark report against suite gates.")
   parser.add_argument("--suite", required=True, help="Suite JSON path relative to repo root.")
   parser.add_argument(
@@ -72,12 +83,19 @@ def main() -> None:
       action="store_true",
       help="Treat performance threshold violations as warnings (non-blocking).",
   )
+  parser.add_argument(
+      "--platform-profile",
+      default="",
+      help="Optional platform profile name (local, github-windows, ...). Defaults to environment detection.",
+  )
   args = parser.parse_args()
 
   root = Path(__file__).resolve().parents[1]
   suite = load_json(root / args.suite)
   suite_name = suite.get("name", "")
   gates = suite.get("gates", {})
+  profile_name = args.platform_profile or detect_platform_profile()
+  policy = suite_policy(suite_name, profile_name, suite, root)
   if not suite_name:
     print("suite.name is required for gating", file=sys.stderr)
     sys.exit(2)
@@ -100,9 +118,10 @@ def main() -> None:
   report = load_json(latest)
   failures: list[str] = []
   warnings: list[str] = []
+  perf_warnings_blocking = bool(policy["perf_warnings_blocking"]) and not args.perf_warn_only
   for case in report.get("cases", []):
     effective_gates = merged_case_gates(gates, case)
-    case_failures, case_warnings = check_case(case, effective_gates, perf_warn_only=args.perf_warn_only)
+    case_failures, case_warnings = check_case(case, effective_gates, perf_warnings_blocking=perf_warnings_blocking)
     failures.extend(case_failures)
     warnings.extend(case_warnings)
 

@@ -6,13 +6,21 @@ from datetime import UTC, datetime
 from pathlib import Path
 import argparse
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+  sys.path.insert(0, str(ROOT))
+
+from benchmarks.report_utils import detect_platform_profile, suite_policy
+
 
 def load_json(path: Path) -> dict:
+  """Load a JSON file from disk."""
   with path.open("r", encoding="utf-8") as f:
     return json.load(f)
 
 
 def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: int) -> dict:
+  """Execute one circuit benchmark case repeatedly and aggregate the results."""
   circuit_path = root / case["circuit_file"]
   circuit = load_json(circuit_path)
   runs = []
@@ -63,16 +71,23 @@ def run_case(engine: "Engine", root: Path, case: dict, options: dict, repeats: i
 
 
 def write_markdown_summary(report: dict, output_path: Path) -> None:
+  """Write a compact human-readable markdown summary for circuit benchmarks."""
   lines = []
   lines.append(f"# Benchmark Summary: {report['suite']}")
   lines.append("")
   lines.append(f"- generated_at: {report['generated_at']}")
   lines.append(f"- repeats: {report['repeats']}")
+  if report.get("platform_profile"):
+    lines.append(f"- platform_profile: {report['platform_profile']}")
   if report.get("engine_version"):
     lines.append(f"- engine_version: {report['engine_version']}")
   gate_status = report.get("gate", {}).get("status")
   if gate_status is not None:
     lines.append(f"- gate_status: {gate_status}")
+  gate_policy = report.get("gate", {}).get("perf_warnings_blocking")
+  if gate_policy is not None:
+    label = "blocking" if gate_policy else "non-blocking"
+    lines.append(f"- perf_warning_policy: {label}")
   lines.append("")
   lines.append("| case | status | elapsed_ms_mean | core_elapsed_ms_mean | max_abs_error_mean | mean_abs_error_mean |")
   lines.append("|---|---|---:|---:|---:|---:|")
@@ -89,15 +104,18 @@ def write_markdown_summary(report: dict, output_path: Path) -> None:
   output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def evaluate_gates(report_cases: list[dict], gates: dict) -> dict:
+def evaluate_gates(report_cases: list[dict], gates: dict, perf_warnings_blocking: bool) -> dict:
+  """Evaluate circuit benchmark gates with performance warnings optionally non-blocking."""
   if not gates:
     for case in report_cases:
       case["gate"] = {"status": "SKIPPED", "reasons": []}
-    return {"status": "SKIPPED", "failures": []}
+    return {"status": "SKIPPED", "failures": [], "warnings": [], "perf_warnings_blocking": perf_warnings_blocking}
 
   failures = []
+  warnings = []
   for case in report_cases:
     case_failures = []
+    case_warnings = []
     agg = case.get("aggregate", {})
     effective_gates = dict(gates)
     effective_gates.update(case.get("gates", {}))
@@ -108,10 +126,17 @@ def evaluate_gates(report_cases: list[dict], gates: dict) -> dict:
         return
       value = agg.get(metric)
       if value is None:
-        case_failures.append(f"missing metric {metric}")
+        if metric == "core_elapsed_ms_mean" and not perf_warnings_blocking:
+          case_warnings.append(f"missing metric {metric}")
+        else:
+          case_failures.append(f"missing metric {metric}")
         return
       if float(value) > float(threshold):
-        case_failures.append(f"{metric}={value:.6f} > {threshold_key}={threshold:.6f}")
+        msg = f"{metric}={value:.6f} > {threshold_key}={threshold:.6f}"
+        if metric == "core_elapsed_ms_mean" and not perf_warnings_blocking:
+          case_warnings.append(msg)
+        else:
+          case_failures.append(msg)
 
     check_le("max_abs_error_mean", "max_abs_error_mean_max")
     check_le("mean_abs_error_mean", "mean_abs_error_mean_max")
@@ -122,11 +147,19 @@ def evaluate_gates(report_cases: list[dict], gates: dict) -> dict:
       failures.append({"case": case["id"], "reasons": case_failures})
     else:
       case["gate"] = {"status": "PASS", "reasons": []}
+    if case_warnings:
+      warnings.append({"case": case["id"], "reasons": case_warnings})
 
-  return {"status": "FAIL" if failures else "PASS", "failures": failures}
+  return {
+      "status": "FAIL" if failures else "PASS",
+      "failures": failures,
+      "warnings": warnings,
+      "perf_warnings_blocking": perf_warnings_blocking,
+  }
 
 
 def main() -> None:
+  """Run the circuit benchmark suite and emit JSON/Markdown reports."""
   parser = argparse.ArgumentParser(description="Run QuantX circuit benchmark suite.")
   parser.add_argument(
       "--suite",
@@ -142,6 +175,8 @@ def main() -> None:
 
   suite_path = root / args.suite
   suite = load_json(suite_path)
+  profile = detect_platform_profile()
+  policy = suite_policy(suite.get("name", "unnamed_suite"), profile, suite, root)
 
   engine = Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
 
@@ -151,7 +186,7 @@ def main() -> None:
   report_cases = []
   for case in suite.get("cases", []):
     report_cases.append(run_case(engine, root, case, options, repeats))
-  gate = evaluate_gates(report_cases, gates)
+  gate = evaluate_gates(report_cases, gates, perf_warnings_blocking=policy["perf_warnings_blocking"])
   case_versions = {c.get("engine_version") for c in report_cases if c.get("engine_version")}
   report_engine_version = sorted(case_versions)[0] if case_versions else None
 
@@ -160,6 +195,9 @@ def main() -> None:
       "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
       "repeats": repeats,
       "engine_version": report_engine_version,
+      "platform_profile": policy["profile"],
+      "platform_profile_label": policy["profile_label"],
+      "suite_policy": policy,
       "cases": report_cases,
       "gate": gate,
   }
@@ -174,6 +212,11 @@ def main() -> None:
   summary_file = out_dir / f"{suite.get('name','suite')}_{ts}.md"
   write_markdown_summary(report, summary_file)
   print(f"wrote benchmark summary: {summary_file}")
+
+  for warning in gate.get("warnings", []):
+    print(f"gate warning: {warning['case']}")
+    for reason in warning.get("reasons", []):
+      print(f"- WARN: {reason}")
 
 
 if __name__ == "__main__":

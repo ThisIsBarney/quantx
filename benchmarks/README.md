@@ -23,3 +23,5 @@ The unified benchmark flow writes reports under `benchmarks/reports/`:
 - trend report: `*_TREND.md`
 
 All runs should pin random seeds and include hardware/software versions. Current report metadata includes `engine_version` for reproducibility and regression triage.
+The reporting layer also records `platform_profile` (`local` or `github-windows`) and labels suites whose performance warnings are non-blocking.
+Continuous-space reports add explainable performance metadata such as grid shape, export volume, FFT provider, and average step cost.

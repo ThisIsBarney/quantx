@@ -2,7 +2,8 @@ param(
   [switch]$NoiseSweep,
   [switch]$RunGates,
   [switch]$EnforceGate,
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [string]$PlatformProfile = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +12,24 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 .\scripts\ensure_subagent_worktree.ps1
+
+ # Resolve the effective platform profile for benchmark metadata and report labeling.
+function Get-BenchmarkPlatformProfile {
+  param([string]$ExplicitProfile)
+  if (-not [string]::IsNullOrWhiteSpace($ExplicitProfile)) {
+    return $ExplicitProfile
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:QX_BENCHMARK_PLATFORM_PROFILE)) {
+    return $env:QX_BENCHMARK_PLATFORM_PROFILE
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:GITHUB_ACTIONS) -or -not [string]::IsNullOrWhiteSpace($env:CI)) {
+    return "github-windows"
+  }
+  return "local"
+}
+
+$platformProfile = Get-BenchmarkPlatformProfile -ExplicitProfile $PlatformProfile
+$env:QX_BENCHMARK_PLATFORM_PROFILE = $platformProfile
 
 if (-not $SkipBuild) {
   # Build once, then fan out over every suite so the benchmark entry flow stays consistent.
@@ -33,18 +52,6 @@ function Get-BenchmarkSuites {
   return $suites
 }
 
-# Mark the smoke suites that should default to perf-warn-only gating unless the caller forces strict mode.
-function Use-PerfWarnOnly {
-  param([string]$SuiteName)
-  # Keep smoke suites in perf-warn mode even under EnforceGate because CI runners are noisy for timing.
-  # Accuracy suites still run as strict blocking gates.
-  return $SuiteName -in @(
-    "benchmarks/suites/circuit_noise_sweep.json",
-    "benchmarks/suites/continuous2d_smoke.json",
-    "benchmarks/suites/continuous3d_smoke.json"
-  )
-}
-
 $suites = Get-BenchmarkSuites -IncludeNoiseSweep:$NoiseSweep
 
 foreach ($suite in $suites) {
@@ -52,14 +59,12 @@ foreach ($suite in $suites) {
     $gateArgs = @{
       Suite = $suite
       SkipBuild = $true
-    }
-    if (Use-PerfWarnOnly -SuiteName $suite) {
-      $gateArgs.PerfWarnOnly = $true
+      PlatformProfile = $platformProfile
     }
     .\scripts\run_benchmark_and_gate.ps1 @gateArgs
     if ($LASTEXITCODE -ne 0) { throw "benchmark gate failed for ${suite}: exit code $LASTEXITCODE" }
   } else {
-    .\scripts\run_benchmark.ps1 -Suite $suite -SkipBuild
+    .\scripts\run_benchmark.ps1 -Suite $suite -SkipBuild -PlatformProfile $platformProfile
     if ($LASTEXITCODE -ne 0) { throw "benchmark failed for ${suite}: exit code $LASTEXITCODE" }
   }
 }

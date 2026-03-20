@@ -37,6 +37,8 @@ jobs:
 
       - name: Benchmark And Gate All
         shell: pwsh
+        env:
+          QX_BENCHMARK_PLATFORM_PROFILE: github-windows
         run: .\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild
 
       - name: Upload Benchmark Reports

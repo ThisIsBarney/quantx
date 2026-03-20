@@ -42,6 +42,19 @@
   - covers `circuit_accuracy_smoke`, `circuit_noise_sweep`, `continuous2d_smoke`, `continuous3d_smoke`, and `continuous3d_accuracy`
 - benchmark-only refresh:
   - `.\scripts\benchmark_all.ps1 -NoiseSweep`
+- platform profiles:
+  - local runs default to the `local` profile
+  - GitHub Actions Windows runs default to `github-windows`
+  - performance thresholds are emitted as warnings, while accuracy/stability checks remain blocking
+- benchmark reporting smoke:
+  - `python .\scripts\test_benchmark_reporting.py`
+  - verifies platform profile detection, continuous performance metadata, gate classification, and backward-compatible frame extraction
+
+The benchmark reports and trend files now include:
+
+- `platform_profile` and `perf_warning_policy`
+- continuous-space metadata such as `grid`, `export_volume`, `fft_provider`, and `avg_step_ms_mean`
+- a trend label that explicitly marks suites whose performance warnings are non-blocking
 
 ## How to run
 
