@@ -10,6 +10,8 @@
 #include <windows.h>
 #endif
 
+#include <nlohmann/json.hpp>
+
 #include "qx/fft_provider.hpp"
 #include "qx/backends.hpp"
 #include "qx/engine.hpp"
@@ -191,6 +193,18 @@ int main() {
   expect(std::abs(parsed.hamiltonian_terms.at(0).coefficient - 1e-3) < 1e-12,
          "json scientific notation should parse for Hamiltonian coefficient");
 
+  const auto parsed_options = qx::options_from_json(R"({
+    "export_continuous_frames": true,
+    "export_frame_stride": 5,
+    "export_points_max": 42,
+    "export_density_floor_ratio": 0.25
+  })");
+  expect(parsed_options.export_continuous_frames, "options json should parse export_continuous_frames");
+  expect(parsed_options.export_frame_stride == 5U, "options json should parse export_frame_stride");
+  expect(parsed_options.export_points_max == 42U, "options json should parse export_points_max");
+  expect(std::abs(parsed_options.export_density_floor_ratio - 0.25) < 1e-12,
+         "options json should parse export_density_floor_ratio");
+
   const auto c2d = qx::problem_from_json(R"({
     "kind": "continuous_space_2d",
     "continuous_space_2d": {
@@ -249,6 +263,43 @@ int main() {
              static_cast<std::size_t>(c2d.continuous_2d.nx) * static_cast<std::size_t>(c2d.continuous_2d.ny),
          "continuous2d export density payload should match nx*ny");
 
+  auto o_export_stride = o_export;
+  o_export_stride.export_frame_stride = 4;
+  const auto c2d_stride_run = qx::run(c2d, o_export_stride);
+  expect(c2d_stride_run.ok, "continuous2d stride export run should succeed");
+  expect(!c2d_stride_run.continuous_density_frames.empty(), "continuous2d stride run should include frames");
+  expect(c2d_stride_run.continuous_density_frames.front().step == 0, "continuous2d stride first frame should be step 0");
+  expect(c2d_stride_run.continuous_density_frames.back().step == c2d.continuous_2d.steps,
+         "continuous2d stride last frame should match configured steps");
+  expect(!c2d_stride_run.continuous_density_frames.front().density_xy_flat.empty(),
+         "continuous2d stride run should keep payload on the first frame");
+  expect(c2d_stride_run.continuous_density_frames.at(1).density_xy_flat.empty(),
+         "continuous2d stride run should skip payload on non-stride frames");
+  const std::string c2d_stride_json = qx::result_to_json(c2d_stride_run);
+  const auto c2d_stride_doc = nlohmann::json::parse(c2d_stride_json);
+  expect(c2d_stride_doc.at("continuous_export").at("schema_version").get<std::uint32_t>() == 1U,
+         "continuous2d export wrapper should expose schema_version");
+  expect(c2d_stride_doc.at("continuous_export").at("export_config").at("export_frame_stride").get<std::uint32_t>() == 4U,
+         "continuous2d export wrapper should report export_frame_stride");
+  const auto c2d_stride_frames = c2d_stride_doc.at("continuous_export").at("frames");
+  expect(c2d_stride_frames.is_array(), "continuous2d export wrapper frames should be an array");
+  expect(c2d_stride_frames.size() < c2d_stride_run.continuous_density_frames.size(),
+         "continuous2d export wrapper should be stride-sampled");
+  std::uint32_t previous_step = 0U;
+  for (std::size_t i = 0; i < c2d_stride_frames.size(); ++i) {
+    const auto& frame = c2d_stride_frames.at(i);
+    const std::uint32_t step = frame.at("step").get<std::uint32_t>();
+    if (i > 0U) {
+      expect(step > previous_step, "continuous2d export wrapper steps should be strictly increasing");
+    }
+    previous_step = step;
+    const auto density = frame.at("density_xy_flat");
+    expect(density.is_array(), "continuous2d export wrapper payload should include density_xy_flat");
+    expect(density.size() == static_cast<std::size_t>(c2d.continuous_2d.nx) *
+                                static_cast<std::size_t>(c2d.continuous_2d.ny),
+           "continuous2d export wrapper density payload should match nx*ny");
+  }
+
   const auto workdir = std::filesystem::current_path();
   const auto repo_root = resolve_repo_root(workdir);
   const auto cli_path = resolve_qx_cli_executable(repo_root);
@@ -277,12 +328,27 @@ int main() {
     std::ostringstream cmd;
     cmd << quote_path(cli_path) << " --problem " << quote_path(cli_problem) << " --options "
         << quote_path(cli_options) << " --out " << quote_path(cli_export_out)
-        << " --export-continuous-frames";
+        << " --export-continuous-frames --export-frame-stride 4 --export-points-max 32 --export-density-floor-ratio 0.2";
     expect(run_command(cmd.str()) == 0, "CLI with export flag should succeed");
   }
   const std::string cli_export_json = read_text_file(cli_export_out);
-  expect(cli_export_json.find("\"density_xy_flat\"") != std::string::npos,
-         "CLI export flag should include dense frame payload");
+  const auto cli_export_doc = nlohmann::json::parse(cli_export_json);
+  expect(cli_export_doc.at("continuous_export").at("schema_version").get<std::uint32_t>() == 1U,
+         "CLI export wrapper should expose schema_version");
+  expect(cli_export_doc.at("continuous_export").at("export_config").at("export_frame_stride").get<std::uint32_t>() == 4U,
+         "CLI export wrapper should preserve export_frame_stride");
+  expect(cli_export_doc.at("continuous_export").at("export_config").at("export_points_max").get<std::size_t>() == 32U,
+         "CLI export wrapper should preserve export_points_max");
+  expect(std::abs(cli_export_doc.at("continuous_export").at("export_config").at("export_density_floor_ratio").get<double>() - 0.2) < 1e-12,
+         "CLI export wrapper should preserve export_density_floor_ratio");
+  const auto cli_export_frames = cli_export_doc.at("continuous_export").at("frames");
+  expect(cli_export_frames.is_array(), "CLI export wrapper frames should be an array");
+  expect(cli_export_frames.size() < cli_export_doc.at("continuous_density_frames").size(),
+         "CLI export wrapper should sample frames when stride > 1");
+  for (const auto& frame : cli_export_frames) {
+    expect(frame.at("density_xy_flat").is_array(), "CLI export wrapper should retain 2D density payloads");
+    expect(!frame.at("density_xy_flat").empty(), "CLI export wrapper payload should be non-empty");
+  }
 
   auto o_gpu = o;
   o_gpu.use_gpu = true;
@@ -456,6 +522,42 @@ int main() {
          "continuous3d export run should include volumetric point payload");
   expect(c3d_export_run.continuous_density_frames.front().points_xyzd_flat.size() % 4U == 0U,
          "continuous3d point payload should be encoded as x,y,z,density quads");
+
+  auto o_export_stride_3d = o_export;
+  o_export_stride_3d.export_frame_stride = 5;
+  const auto c3d_stride_run = qx::run(c3d, o_export_stride_3d);
+  expect(c3d_stride_run.ok, "continuous3d stride export run should succeed");
+  expect(!c3d_stride_run.continuous_density_frames.empty(), "continuous3d stride export run should include frames");
+  expect(c3d_stride_run.continuous_density_frames.front().step == 0,
+         "continuous3d stride first frame should be step 0");
+  expect(c3d_stride_run.continuous_density_frames.back().step == c3d.continuous_3d.steps,
+         "continuous3d stride last frame should match configured steps");
+  expect(!c3d_stride_run.continuous_density_frames.front().points_xyzd_flat.empty(),
+         "continuous3d stride run should keep payload on the first frame");
+  expect(c3d_stride_run.continuous_density_frames.at(1).points_xyzd_flat.empty(),
+         "continuous3d stride run should skip volumetric payload on non-stride frames");
+  const auto c3d_stride_doc = nlohmann::json::parse(qx::result_to_json(c3d_stride_run));
+  expect(c3d_stride_doc.at("continuous_export").at("export_config").at("export_frame_stride").get<std::uint32_t>() == 5U,
+         "continuous3d export wrapper should preserve export_frame_stride");
+  expect(c3d_stride_doc.at("continuous_export").at("frames").size() < c3d_stride_run.continuous_density_frames.size(),
+         "continuous3d export wrapper should be stride-sampled");
+
+  auto o_export_sparse = o_export;
+  o_export_sparse.export_points_max = 16;
+  o_export_sparse.export_density_floor_ratio = 0.9;
+  const auto c3d_sparse_run = qx::run(c3d, o_export_sparse);
+  expect(c3d_sparse_run.ok, "continuous3d sparse export run should succeed");
+  expect(!c3d_sparse_run.continuous_density_frames.empty(), "continuous3d sparse export run should include frames");
+  expect(c3d_sparse_run.continuous_density_frames.front().points_xyzd_flat.size() <= 16U * 4U,
+         "continuous3d sparse export should respect export_points_max");
+  expect(c3d_sparse_run.continuous_density_frames.front().points_xyzd_flat.size() <
+             c3d_export_run.continuous_density_frames.front().points_xyzd_flat.size(),
+         "continuous3d sparse export should reduce point-cloud size");
+  const auto c3d_sparse_doc = nlohmann::json::parse(qx::result_to_json(c3d_sparse_run));
+  expect(c3d_sparse_doc.at("continuous_export").at("export_config").at("export_points_max").get<std::size_t>() == 16U,
+         "continuous3d export wrapper should preserve export_points_max");
+  expect(std::abs(c3d_sparse_doc.at("continuous_export").at("export_config").at("export_density_floor_ratio").get<double>() - 0.9) < 1e-12,
+         "continuous3d export wrapper should preserve export_density_floor_ratio");
 
   const auto c3d_gpu_run = qx::run(c3d, o_gpu);
   expect(c3d_gpu_run.ok, "continuous3d gpu run should succeed");

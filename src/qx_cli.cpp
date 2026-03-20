@@ -1,4 +1,6 @@
 #include <fstream>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -49,6 +51,9 @@ int main(int argc, char** argv) {
     bool show_version = false;
     bool validate_only = false;
     bool export_continuous_frames = false;
+    std::uint32_t export_frame_stride = 1U;
+    std::size_t export_points_max = 2500U;
+    double export_density_floor_ratio = 0.08;
 
     CLI::App app{"QuantX CLI"};
     app.add_option("--problem", problem_path, "problem json path");
@@ -62,11 +67,24 @@ int main(int argc, char** argv) {
     app.add_flag("--validate-only", validate_only, "validate input json and exit without execution");
     app.add_flag("--export-continuous-frames", export_continuous_frames,
                  "include native continuous-frame payloads in continuous results");
+    app.add_option("--export-frame-stride", export_frame_stride,
+                   "sample continuous export frames every N steps (minimum 1)");
+    app.add_option("--export-points-max", export_points_max,
+                   "maximum sparse points emitted by 3D continuous export payloads");
+    app.add_option("--export-density-floor-ratio", export_density_floor_ratio,
+                   "minimum density ratio used when sampling sparse 3D export points");
 
     try {
       app.parse(argc, argv);
     } catch (const CLI::ParseError& e) {
       return app.exit(e);
+    }
+
+    if (export_frame_stride == 0U) {
+      throw std::runtime_error("--export-frame-stride must be at least 1");
+    }
+    if (export_density_floor_ratio < 0.0 || export_density_floor_ratio > 1.0) {
+      throw std::runtime_error("--export-density-floor-ratio must be between 0 and 1");
     }
 
     qx::log::set_log_level(log_level);
@@ -88,6 +106,9 @@ int main(int argc, char** argv) {
     if (export_continuous_frames) {
       options.export_continuous_frames = true;
     }
+    options.export_frame_stride = export_frame_stride;
+    options.export_points_max = export_points_max;
+    options.export_density_floor_ratio = export_density_floor_ratio;
     qx::log::debug("options loaded");
 
     std::string output_json;

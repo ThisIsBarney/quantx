@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "qx/json_utils.hpp"
 #include "qx/version.hpp"
 
@@ -166,6 +167,33 @@ json continuous_density_frames_to_json(const std::vector<ContinuousDensityFrame>
   return out;
 }
 
+// Select a stride-sampled view of the continuous frame list for the public export wrapper.
+std::vector<ContinuousDensityFrame> sample_continuous_export_frames(
+    const std::vector<ContinuousDensityFrame>& frames,
+    std::uint32_t stride) {
+  if (stride <= 1U || frames.empty()) {
+    return frames;
+  }
+
+  std::vector<ContinuousDensityFrame> sampled;
+  sampled.reserve(frames.size() / stride + 2U);
+  for (std::size_t i = 0; i < frames.size(); ++i) {
+    const bool keep = (i == 0U) || (i + 1U == frames.size()) || (frames[i].step % stride == 0U);
+    if (keep) {
+      sampled.push_back(frames[i]);
+    }
+  }
+  return sampled;
+}
+
+// Serialize the stable continuous-export contract metadata.
+json continuous_export_config_to_json(const ContinuousExportConfig& config) {
+  return json{{"schema_version", config.schema_version},
+              {"export_frame_stride", config.export_frame_stride},
+              {"export_points_max", config.export_points_max},
+              {"export_density_floor_ratio", config.export_density_floor_ratio}};
+}
+
 }  // namespace
 
 // Parse simulation problem JSON into IR.
@@ -249,6 +277,12 @@ RunOptions options_from_json(const std::string& json_text) {
   o.allow_mpi = get_or<bool>(j, "allow_mpi", o.allow_mpi);
   o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
   o.export_continuous_frames = get_or<bool>(j, "export_continuous_frames", o.export_continuous_frames);
+  o.export_frame_stride =
+      std::max<std::uint32_t>(1U, get_or<std::uint32_t>(j, "export_frame_stride", o.export_frame_stride));
+  o.export_points_max = static_cast<std::size_t>(
+      get_or<std::uint64_t>(j, "export_points_max", static_cast<std::uint64_t>(o.export_points_max)));
+  o.export_density_floor_ratio =
+      std::clamp(get_or<double>(j, "export_density_floor_ratio", o.export_density_floor_ratio), 0.0, 1.0);
   o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
   o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
   o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
@@ -298,7 +332,14 @@ std::string result_to_json(const SimulationResult& result) {
   j["engine_version"] = version_string();
   j["observables"] = result.observables;
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
-  j["continuous_export"] = {{"frames", continuous_density_frames_to_json(result.continuous_density_frames)}};
+  j["continuous_export"] = {
+      {"schema_version", result.continuous_export.schema_version},
+      {"export_config", continuous_export_config_to_json(result.continuous_export)},
+      {"frames",
+       continuous_density_frames_to_json(
+           sample_continuous_export_frames(result.continuous_density_frames,
+                                           result.continuous_export.export_frame_stride))},
+  };
   j["events"] = events_to_json(result.events);
   return j.dump();
 }

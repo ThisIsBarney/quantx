@@ -97,6 +97,7 @@ class Continuous2DBackend final : public IBackend {
     potential_kind_ = c.potential_kind;
     completed_steps_ = 0;
     export_frame_payloads_ = options.export_continuous_frames;
+    export_frame_stride_ = std::max<std::uint32_t>(1U, options.export_frame_stride);
     frames_.clear();
     absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_), 1.0);
 
@@ -488,13 +489,20 @@ class Continuous2DBackend final : public IBackend {
     frame.z_min = 0.0;
     frame.z_max = 0.0;
     frame.potential_kind = potential_kind_;
-    if (export_frame_payloads_) {
+    // Export the dense payload only on stride-aligned frames so the wrapper can sample
+    // a stable subset without changing the full metadata timeline.
+    if (export_frame_payloads_ && should_export_payload_frame()) {
       frame.density_xy_flat.resize(state_.size());
       for (std::size_t i = 0; i < state_.size(); ++i) {
         frame.density_xy_flat[i] = std::norm(state_[i]);
       }
     }
     frames_.push_back(frame);
+  }
+
+  // Decide whether the current frame should carry a dense payload in the public export.
+  bool should_export_payload_frame() const {
+    return frames_.empty() || completed_steps_ == steps_ || (completed_steps_ % export_frame_stride_ == 0U);
   }
 
   void precompute_phases() {
@@ -659,6 +667,7 @@ class Continuous2DBackend final : public IBackend {
   std::string boundary_{"periodic"};
   std::string potential_kind_{"none"};
   bool export_frame_payloads_{false};
+  std::uint32_t export_frame_stride_{1};
 
   std::vector<Complex> state_;
   std::vector<Complex> kbuf_;

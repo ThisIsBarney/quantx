@@ -54,6 +54,24 @@ Export native continuous-frame payloads from the CLI:
 
 `--export-continuous-frames` only affects continuous-space problems. It keeps JSON/API behavior append-only by adding optional payload fields without changing existing result keys.
 
+Additional continuous-export knobs:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --problem .\examples\problem_continuous2d_free.json --options .\examples\options_default.json --export-continuous-frames --export-frame-stride 4 --export-points-max 32 --export-density-floor-ratio 0.2
+```
+
+- `--export-frame-stride` samples the public `continuous_export.frames` wrapper every N steps while preserving the full internal `continuous_density_frames` timeline.
+- `--export-points-max` caps the sparse 3D point-cloud payload size.
+- `--export-density-floor-ratio` filters sparse 3D points below a relative density threshold before the max-point cap is applied.
+
+The public export wrapper now includes:
+
+- `continuous_export.schema_version`
+- `continuous_export.export_config`
+- `continuous_export.frames`
+
+`export_config` echoes the effective values used for the run so downstream tooling can reason about the export contract without guessing defaults.
+
 Explain backend selection:
 
 ```powershell
@@ -108,7 +126,7 @@ Solver modes:
 - `engine`: require engine-exported continuous frames (fails fast if export is unavailable).
 - `python`: force Python reference solver for continuous scenarios.
 
-When engine export is used, QuantX emits `continuous_export.frames` in run results with native frame payloads (2D density grids, 3D slices and point-cloud payloads).
+When engine export is used, QuantX emits `continuous_export.frames` in run results with native frame payloads (2D density grids, 3D slices and point-cloud payloads). The wrapper is stride-sampled, while the internal `continuous_density_frames` list still preserves the full solver timeline for compatibility.
 If an engine export payload is partial or corrupt, the visualization layer prints a clear console diagnostic and either fails fast (`engine`) or falls back to the Python reference solver (`auto`).
 
 For subagent work, follow the checklist in `docs/ENGINEERING_STANDARDS.md` and keep each agent in its own `codex/*` worktree.
