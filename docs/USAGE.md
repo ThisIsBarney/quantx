@@ -46,6 +46,14 @@ Run continuous-space 2D problem:
 .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_continuous2d_free.json --options .\examples\options_default.json
 ```
 
+Export native continuous-frame payloads from the CLI:
+
+```powershell
+.\build-vs\Debug\qx_cli.exe --problem .\examples\problem_continuous2d_free.json --options .\examples\options_default.json --export-continuous-frames
+```
+
+`--export-continuous-frames` only affects continuous-space problems. It keeps JSON/API behavior append-only by adding optional payload fields without changing existing result keys.
+
 Explain backend selection:
 
 ```powershell

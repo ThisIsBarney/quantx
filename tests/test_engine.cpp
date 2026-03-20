@@ -4,8 +4,14 @@
 #endif
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <numbers>
+#include <sstream>
+#include <vector>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 #include "qx/fft_provider.hpp"
 #include "qx/backends.hpp"
@@ -21,6 +27,103 @@ void expect(bool cond, const char* msg) {
     std::cerr << "FAIL: " << msg << "\n";
     std::exit(1);
   }
+}
+
+// Write a UTF-8 text file for CLI smoke tests.
+void write_text_file(const std::filesystem::path& path, const std::string& text) {
+  std::ofstream os(path, std::ios::binary);
+  if (!os.good()) {
+    throw std::runtime_error("failed to write file: " + path.string());
+  }
+  os << text;
+}
+
+// Read a UTF-8 text file for CLI smoke tests.
+std::string read_text_file(const std::filesystem::path& path) {
+  std::ifstream is(path, std::ios::binary);
+  if (!is.good()) {
+    throw std::runtime_error("failed to open file: " + path.string());
+  }
+  std::ostringstream os;
+  os << is.rdbuf();
+  return os.str();
+}
+
+// Wrap a filesystem path in quotes for a shell command.
+std::string quote_path(const std::filesystem::path& path) {
+  return "\"" + path.string() + "\"";
+}
+
+// Execute a command through the platform shell and return the raw exit code.
+int run_command(const std::string& command) {
+#ifdef _WIN32
+  // Use CreateProcess instead of std::system so the smoke test stays shell-free and does not depend on cmd.exe parsing.
+  std::vector<char> mutable_command(command.begin(), command.end());
+  mutable_command.push_back('\0');
+
+  STARTUPINFOA si{};
+  si.cb = sizeof(si);
+  PROCESS_INFORMATION pi{};
+  if (!CreateProcessA(nullptr, mutable_command.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+    const DWORD err = GetLastError();
+    std::cerr << "command launch failed (" << err << "): " << command << "\n";
+    return 1;
+  }
+
+  WaitForSingleObject(pi.hProcess, INFINITE);
+  DWORD exit_code = 1;
+  if (!GetExitCodeProcess(pi.hProcess, &exit_code)) {
+    exit_code = 1;
+  }
+  CloseHandle(pi.hProcess);
+  CloseHandle(pi.hThread);
+  if (exit_code != 0) {
+    std::cerr << "command failed (" << exit_code << "): " << command << "\n";
+  }
+  return static_cast<int>(exit_code);
+#else
+  const int rc = std::system(command.c_str());
+  if (rc != 0) {
+    std::cerr << "command failed (" << rc << "): " << command << "\n";
+  }
+  return rc;
+#endif
+}
+
+// Locate qx_cli.exe across the supported local build layouts.
+std::filesystem::path resolve_qx_cli_executable(const std::filesystem::path& repo_root) {
+  const std::filesystem::path candidates[] = {
+      repo_root / "build-nmake-local" / "qx_cli.exe",
+      repo_root / "build-vs" / "Debug" / "qx_cli.exe",
+      repo_root / "build-vs" / "qx_cli.exe",
+      repo_root / "Debug" / "qx_cli.exe",
+  };
+  for (const auto& candidate : candidates) {
+    if (std::filesystem::exists(candidate)) {
+      return candidate;
+    }
+  }
+  std::ostringstream msg;
+  msg << "unable to locate qx_cli.exe; checked:";
+  for (const auto& candidate : candidates) {
+    msg << ' ' << candidate.string();
+  }
+  throw std::runtime_error(msg.str());
+}
+
+// Resolve the repository root by walking upward until the canonical top-level files appear.
+std::filesystem::path resolve_repo_root(const std::filesystem::path& start_dir) {
+  std::filesystem::path current = start_dir;
+  for (int depth = 0; depth < 4; ++depth) {
+    if (std::filesystem::exists(current / "examples") && std::filesystem::exists(current / "CMakeLists.txt")) {
+      return current;
+    }
+    if (!current.has_parent_path()) {
+      break;
+    }
+    current = current.parent_path();
+  }
+  throw std::runtime_error("unable to locate repository root from " + start_dir.string());
 }
 
 }  // namespace
@@ -155,6 +258,41 @@ int main() {
   expect(!c2d_export_run.continuous_density_frames.empty(), "continuous2d export run should include frames");
   expect(!c2d_export_run.continuous_density_frames.front().density_xy_flat.empty(),
          "continuous2d export run should include density payload");
+
+  const auto workdir = std::filesystem::current_path();
+  const auto repo_root = resolve_repo_root(workdir);
+  const auto cli_path = resolve_qx_cli_executable(repo_root);
+  const auto cli_problem = repo_root / "examples" / "problem_continuous2d_free.json";
+  const auto cli_options = std::filesystem::temp_directory_path() / "quantx_cli_export_options.json";
+  const auto cli_plain_out = std::filesystem::temp_directory_path() / "quantx_cli_plain.json";
+  const auto cli_export_out = std::filesystem::temp_directory_path() / "quantx_cli_export.json";
+  std::filesystem::remove(cli_options);
+  std::filesystem::remove(cli_plain_out);
+  std::filesystem::remove(cli_export_out);
+  write_text_file(cli_options, R"({"enable_checkpoint": false})");
+
+  {
+    std::ostringstream cmd;
+    cmd << quote_path(cli_path) << " --problem " << quote_path(cli_problem) << " --options "
+        << quote_path(cli_options) << " --out " << quote_path(cli_plain_out);
+    expect(run_command(cmd.str()) == 0, "CLI without export flag should succeed");
+  }
+  const std::string cli_plain_json = read_text_file(cli_plain_out);
+  expect(cli_plain_json.find("\"continuous_export\"") != std::string::npos,
+         "CLI without export flag should still emit continuous_export wrapper");
+  expect(cli_plain_json.find("\"density_xy_flat\"") == std::string::npos,
+         "CLI without export flag should not include dense frame payload");
+
+  {
+    std::ostringstream cmd;
+    cmd << quote_path(cli_path) << " --problem " << quote_path(cli_problem) << " --options "
+        << quote_path(cli_options) << " --out " << quote_path(cli_export_out)
+        << " --export-continuous-frames";
+    expect(run_command(cmd.str()) == 0, "CLI with export flag should succeed");
+  }
+  const std::string cli_export_json = read_text_file(cli_export_out);
+  expect(cli_export_json.find("\"density_xy_flat\"") != std::string::npos,
+         "CLI export flag should include dense frame payload");
 
   auto o_gpu = o;
   o_gpu.use_gpu = true;

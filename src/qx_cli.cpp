@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
     bool explain = false;
     bool show_version = false;
     bool validate_only = false;
+    bool export_continuous_frames = false;
 
     CLI::App app{"QuantX CLI"};
     app.add_option("--problem", problem_path, "problem json path");
@@ -59,6 +60,8 @@ int main(int argc, char** argv) {
     app.add_flag("--explain", explain, "explain backend selection (problem mode only)");
     app.add_flag("--version", show_version, "print engine version and exit");
     app.add_flag("--validate-only", validate_only, "validate input json and exit without execution");
+    app.add_flag("--export-continuous-frames", export_continuous_frames,
+                 "include native continuous-frame payloads in continuous results");
 
     try {
       app.parse(argc, argv);
@@ -81,7 +84,10 @@ int main(int argc, char** argv) {
     }
 
     const std::string options_json = options_path.empty() ? "{}" : read_text_file(options_path);
-    const qx::RunOptions options = qx::options_from_json(options_json);
+    qx::RunOptions options = qx::options_from_json(options_json);
+    if (export_continuous_frames) {
+      options.export_continuous_frames = true;
+    }
     qx::log::debug("options loaded");
 
     std::string output_json;
