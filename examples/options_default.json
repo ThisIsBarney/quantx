@@ -3,6 +3,9 @@
   "allow_mpi": false,
   "enable_checkpoint": false,
   "export_continuous_frames": false,
+  "export_frame_stride": 1,
+  "export_points_max": 2500,
+  "export_density_floor_ratio": 0.08,
   "max_threads": 8,
   "mpi_ranks": 1
 }

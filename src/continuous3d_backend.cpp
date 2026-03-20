@@ -165,6 +165,9 @@ class Continuous3DBackend final : public IBackend {
     potential_kind_ = c.potential_kind;
     completed_steps_ = 0;
     export_frame_payloads_ = options.export_continuous_frames;
+    export_frame_stride_ = std::max<std::uint32_t>(1U, options.export_frame_stride);
+    export_points_max_ = options.export_points_max;
+    export_density_floor_ratio_ = std::clamp(options.export_density_floor_ratio, 0.0, 1.0);
     frames_.clear();
     absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_),
                            1.0);
@@ -534,7 +537,8 @@ class Continuous3DBackend final : public IBackend {
     frame.z_min = z_coord(0);
     frame.z_max = z_coord(nz_ - 1U);
     frame.potential_kind = potential_kind_;
-    if (export_frame_payloads_) {
+    // Export dense payloads only on stride-aligned frames to keep the wrapper compact.
+    if (export_frame_payloads_ && should_export_payload_frame()) {
       const std::uint32_t z_mid = nz_ / 2U;
       const std::uint32_t y_mid = ny_ / 2U;
       const std::uint32_t x_mid = nx_ / 2U;
@@ -564,8 +568,8 @@ class Continuous3DBackend final : public IBackend {
       }
 
       // Export sparse volumetric points for the standalone 3D player.
-      const double floor = dens_max * 0.08;
-      const std::size_t max_points = 2500;
+      const double floor = dens_max * export_density_floor_ratio_;
+      const std::size_t max_points = export_points_max_;
       struct PointRow {
         double x;
         double y;
@@ -604,6 +608,11 @@ class Continuous3DBackend final : public IBackend {
       }
     }
     frames_.push_back(frame);
+  }
+
+  // Decide whether the current frame should carry a dense payload in the public export.
+  bool should_export_payload_frame() const {
+    return frames_.empty() || completed_steps_ == steps_ || (completed_steps_ % export_frame_stride_ == 0U);
   }
 
   void precompute_phases() {
@@ -825,6 +834,9 @@ class Continuous3DBackend final : public IBackend {
   std::string boundary_{"periodic"};
   std::string potential_kind_{"none"};
   bool export_frame_payloads_{false};
+  std::uint32_t export_frame_stride_{1};
+  std::size_t export_points_max_{2500};
+  double export_density_floor_ratio_{0.08};
 
   std::vector<Complex> state_;
   std::vector<Complex> kbuf_;

@@ -399,6 +399,13 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   log::info("run started: qubits=" + std::to_string(problem.qubits));
 
   SimulationResult result;
+  // Mirror the caller's export knobs into the result so the JSON surface can advertise
+  // exactly which continuous-export contract was used for this run.
+  result.continuous_export.schema_version = 1U;
+  result.continuous_export.export_frame_stride = std::max<std::uint32_t>(1U, options.export_frame_stride);
+  result.continuous_export.export_points_max = options.export_points_max;
+  result.continuous_export.export_density_floor_ratio =
+      std::clamp(options.export_density_floor_ratio, 0.0, 1.0);
   RuntimeContext runtime(options);
   runtime.emit_event("runtime_initialized",
                      {{"threads", static_cast<double>(runtime.effective_threads())},

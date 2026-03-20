@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <complex>
 #include <cstdint>
 #include <map>
@@ -171,6 +172,18 @@ struct ContinuousDensityFrame {
   std::vector<double> points_xyzd_flat{};
 };
 
+// Stable contract metadata for the continuous-export wrapper.
+struct ContinuousExportConfig {
+  // Frozen schema version for append-only compatibility.
+  std::uint32_t schema_version{1};
+  // Frame sampling stride used when building the export wrapper.
+  std::uint32_t export_frame_stride{1};
+  // Upper bound on sparse point-cloud tuples emitted by 3D payloads.
+  std::size_t export_points_max{2500};
+  // Density threshold ratio used to filter sparse 3D points.
+  double export_density_floor_ratio{0.08};
+};
+
 // Canonical simulation problem description used across API boundaries.
 struct QuantumProblem {
   ProblemKind kind{ProblemKind::Discrete};
@@ -195,6 +208,10 @@ struct RunOptions {
   bool enable_checkpoint{true};
   // When enabled, continuous backends export frame payloads for visualization.
   bool export_continuous_frames{false};
+  // Append-only controls for the stable continuous-export wrapper.
+  std::uint32_t export_frame_stride{1};
+  std::size_t export_points_max{2500};
+  double export_density_floor_ratio{0.08};
   std::string checkpoint_path{"./checkpoints"};
   ResourceConstraints resources{};
 };
@@ -249,6 +266,7 @@ struct SimulationResult {
   std::vector<std::complex<double>> state{};
   std::map<std::string, double> observables{};
   std::vector<ContinuousDensityFrame> continuous_density_frames{};
+  ContinuousExportConfig continuous_export{};
   std::vector<Event> events{};
   std::string message;
 };
