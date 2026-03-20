@@ -1,38 +1,52 @@
 import argparse
 import json
+import sys
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+  sys.path.insert(0, str(ROOT))
 
 
 def load_json(path: Path) -> dict:
+  """Load a JSON report from disk."""
   with path.open("r", encoding="utf-8") as f:
     return json.load(f)
 
 
 def latest_two(report_dir: Path, suite_name: str) -> list[Path]:
+  """Return the two newest reports for one suite."""
   files = sorted(report_dir.glob(f"{suite_name}_*.json"))
   return files[-2:] if len(files) >= 2 else files
 
 
 def case_map(report: dict) -> dict:
+  """Convert a report into a per-case lookup table."""
   out = {}
   for case in report.get("cases", []):
-    out[case["id"]] = case.get("aggregate", {})
+    out[case["id"]] = {
+        "aggregate": case.get("aggregate", {}),
+        "performance": case.get("performance", {}),
+    }
   return out
 
 
 def fmt(v: float | None, digits: int = 6) -> str:
+  """Format an optional float for trend tables."""
   if v is None:
     return "n/a"
   return f"{v:.{digits}f}"
 
 
 def delta(curr: float | None, prev: float | None) -> float | None:
+  """Compute a signed delta, preserving missing values."""
   if curr is None or prev is None:
     return None
   return curr - prev
 
 
 def sign_label(v: float | None, lower_is_better: bool = True) -> str:
+  """Convert a delta into a human-readable trend label."""
   if v is None:
     return "N/A"
   if abs(v) < 1e-12:
@@ -43,6 +57,7 @@ def sign_label(v: float | None, lower_is_better: bool = True) -> str:
 
 
 def main() -> None:
+  """Generate a Markdown trend report from the newest two suite reports."""
   parser = argparse.ArgumentParser(description="Compare latest two reports for a suite.")
   parser.add_argument("--suite", required=True, help="Suite name (not path), e.g. circuit_accuracy_smoke")
   args = parser.parse_args()
@@ -66,18 +81,34 @@ def main() -> None:
   lines.append("")
   lines.append(f"- previous: {prev_path.name}")
   lines.append(f"- current: {curr_path.name}")
+  if curr.get("platform_profile"):
+    lines.append(f"- platform_profile: {curr.get('platform_profile')}")
+  gate_policy = curr.get("gate", {}).get("perf_warnings_blocking")
+  if gate_policy is not None:
+    label = "blocking" if gate_policy else "non-blocking"
+    lines.append(f"- perf_warning_policy: {label}")
+    if not gate_policy:
+      lines.append("- suite_label: perf warnings non-blocking")
   lines.append("")
-  lines.append("| case | metric | prev | curr | delta | status |")
-  lines.append("|---|---|---:|---:|---:|---|")
+  lines.append("| case | grid | export_volume | fft_provider | avg_step_ms_mean | metric | prev | curr | delta | status |")
+  lines.append("|---|---|---|---:|---|---|---:|---:|---:|---|")
 
   metrics = ["core_elapsed_ms_mean", "mean_abs_error_mean", "max_abs_error_mean"]
   for cid in ids:
+    perf = curr_cases[cid].get("performance", {})
+    grid = perf.get("grid", "n/a")
+    export_volume = perf.get("export_volume", "n/a")
+    fft_provider = perf.get("fft_provider", "n/a")
+    avg_step_ms = perf.get("avg_step_ms_mean", None)
     for m in metrics:
-      pv = prev_cases[cid].get(m)
-      cv = curr_cases[cid].get(m)
+      pv = prev_cases[cid].get("aggregate", {}).get(m)
+      cv = curr_cases[cid].get("aggregate", {}).get(m)
       dv = delta(cv, pv)
       status = sign_label(dv, lower_is_better=True)
-      lines.append(f"| {cid} | {m} | {fmt(pv)} | {fmt(cv)} | {fmt(dv)} | {status} |")
+      lines.append(
+          f"| {cid} | {grid} | {export_volume} | {fft_provider} | {fmt(avg_step_ms, 3)} | "
+          f"{m} | {fmt(pv)} | {fmt(cv)} | {fmt(dv)} | {status} |"
+      )
 
   out = report_dir / f"{args.suite}_TREND.md"
   out.write_text("\n".join(lines) + "\n", encoding="utf-8")

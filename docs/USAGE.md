@@ -110,6 +110,7 @@ Solver modes:
 
 When engine export is used, QuantX emits `continuous_export.frames` in run results with native frame payloads (2D density grids, 3D slices and point-cloud payloads).
 If an engine export payload is partial or corrupt, the visualization layer prints a clear console diagnostic and either fails fast (`engine`) or falls back to the Python reference solver (`auto`).
+The benchmark/reporting layer treats these exports as append-only and now records platform/profile metadata alongside the extracted frame payloads.
 
 For subagent work, follow the checklist in `docs/ENGINEERING_STANDARDS.md` and keep each agent in its own `codex/*` worktree.
 
@@ -226,6 +227,17 @@ Reports are written to `benchmarks/reports/`:
 - suite markdown summary: `*.md`
 - cumulative index: `INDEX.md`
 - suite trend report: `*_TREND.md`
+
+The benchmark reports include:
+
+- `platform_profile` and `perf_warning_policy`
+- continuous-space performance metadata:
+  - `grid`
+  - `export_volume`
+  - `fft_provider`
+  - `avg_step_ms_mean`
+
+CI runs default to the `github-windows` platform profile, while local runs default to `local`. Performance threshold violations remain visible as warnings, but only accuracy/stability thresholds block the gate.
 
 CI integration uses the same script:
 

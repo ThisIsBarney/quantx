@@ -15,5 +15,7 @@ if ($LASTEXITCODE -ne 0) { throw "qx_smoke failed: exit code $LASTEXITCODE" }
 .\scripts\check_dependency_policy.ps1
 python .\scripts\test_python_adapters.py
 if ($LASTEXITCODE -ne 0) { throw "python adapter smoke failed: exit code $LASTEXITCODE" }
+python .\scripts\test_benchmark_reporting.py
+if ($LASTEXITCODE -ne 0) { throw "benchmark reporting smoke failed: exit code $LASTEXITCODE" }
 python .\scripts\test_visualization.py
 if ($LASTEXITCODE -ne 0) { throw "visualization smoke failed: exit code $LASTEXITCODE" }
