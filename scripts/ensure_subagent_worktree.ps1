@@ -7,6 +7,12 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
+# CI jobs run on shared default branches; skip warning noise unless explicit enforcement is requested.
+$isCI = $env:CI -eq "true" -or $env:GITHUB_ACTIONS -eq "true"
+if ($isCI -and -not $Enforce) {
+  return
+}
+
 # Warn when task scripts are run from a protected default branch instead of an isolated codex/* worktree.
 try {
   $safeRoot = ($root -replace '\\', '/')

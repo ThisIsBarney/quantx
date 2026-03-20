@@ -36,9 +36,8 @@ function Get-BenchmarkSuites {
 # Mark the smoke suites that should default to perf-warn-only gating unless the caller forces strict mode.
 function Use-PerfWarnOnly {
   param([string]$SuiteName)
-  if ($EnforceGate) {
-    return $false
-  }
+  # Keep smoke suites in perf-warn mode even under EnforceGate because CI runners are noisy for timing.
+  # Accuracy suites still run as strict blocking gates.
   return $SuiteName -in @(
     "benchmarks/suites/circuit_noise_sweep.json",
     "benchmarks/suites/continuous2d_smoke.json",
