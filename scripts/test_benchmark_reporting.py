@@ -52,6 +52,18 @@ def test_continuous_metadata() -> None:
           "fft_provider_eigen": 1.0,
           "norm": 1.0,
       },
+      "continuous_export": {
+          "schema_version": 1,
+          "export_config": {
+              "frame_stride": 4,
+              "density_floor_ratio": 0.05,
+              "points_max": 128,
+          },
+          "frames": [
+              {"step": 0, "density_xy_flat": [0.1] * 20},
+              {"step": 4, "density_xy_flat": [0.2] * 20},
+          ],
+      },
       "continuous_density_frames": [
           {"density_xy_flat": [0.1] * 20},
           {"density_xy_flat": [0.2] * 20},
@@ -68,6 +80,30 @@ def test_continuous_metadata() -> None:
   assert_true(perf["export_volume"] == 40, "expected dense export volume to be counted")
   assert_true(perf["fft_provider"] == "eigen", "expected FFT provider marker to be inferred")
   assert_true(abs(float(perf["avg_step_ms_mean"]) - 1.0) < 1e-12, "avg step cost should derive from elapsed / steps")
+
+  diag = ru.continuous_export_diagnostics(result, steps=10)
+  assert_true(diag["schema_version"] == 1, "schema_version should be surfaced when present")
+  assert_true("frame_stride=4" in diag["export_config_summary"], "export_config summary should include frame stride")
+  assert_true("density_floor_ratio=0.05" in diag["export_config_summary"], "export_config summary should include floor ratio")
+  assert_true("explicit sampling" in diag["frame_sampling"], "sampling note should prefer explicit configuration")
+  assert_true(diag["diagnostic_tag"] == "ok", "complete continuous export should not emit warnings")
+
+
+def test_continuous_export_missing_metadata() -> None:
+  """Verify missing continuous-export metadata becomes a warning-only diagnosis."""
+  diag = ru.continuous_export_diagnostics(
+      {
+          "backend": "continuous2d",
+          "continuous_export": {
+              "frames": [{"step": 0, "density_xy_flat": [0.1, 0.2]}],
+          },
+      },
+      steps=8,
+  )
+  assert_true(diag["schema_version"] == "n/a", "missing schema version should be surfaced as n/a")
+  assert_true("missing schema_version" in diag["diagnostic_tag"], "missing schema version should be warned")
+  assert_true("missing export_config" in diag["diagnostic_tag"], "missing export config should be warned")
+  assert_true("observed 1 frame(s)" in diag["frame_sampling"], "sampling note should fall back to an observed cadence")
 
 
 def test_gate_classification() -> None:
@@ -112,11 +148,56 @@ def test_summary_and_trend_labels() -> None:
                   "max_abs_error_mean": 0.02,
               },
               "performance": {
+                  "kind": "continuous_space_2d",
                   "grid": "4x5",
                   "export_volume": 40,
                   "fft_provider": "eigen",
                   "avg_step_ms_mean": 1.0,
+                  "steps": 10,
               },
+              "runs": [
+                  {
+                      "result": {
+                          "continuous_export": {
+                              "schema_version": 2,
+                              "export_config": {
+                                  "frame_stride": 2,
+                                  "density_floor_ratio": 0.02,
+                              },
+                              "frames": [
+                                  {"step": 0, "density_xy_flat": [0.1] * 20},
+                                  {"step": 2, "density_xy_flat": [0.2] * 20},
+                              ],
+                          }
+                      }
+                  }
+              ],
+          },
+          {
+              "aggregate": {
+                  "core_elapsed_ms_mean": 11.0,
+                  "mean_abs_error_mean": 0.02,
+                  "max_abs_error_mean": 0.03,
+              },
+              "performance": {
+                  "kind": "continuous_space_2d",
+                  "grid": "4x5",
+                  "export_volume": 40,
+                  "fft_provider": "eigen",
+                  "avg_step_ms_mean": 1.1,
+                  "steps": 10,
+              },
+              "runs": [
+                  {
+                      "result": {
+                          "continuous_export": {
+                              "frames": [
+                                  {"step": 0, "density_xy_flat": [0.1] * 20},
+                              ],
+                          }
+                      }
+                  }
+              ],
           }
       ],
   }
@@ -124,8 +205,12 @@ def test_summary_and_trend_labels() -> None:
   assert_true(summary["platform_profile"] == "github-windows", "summary should keep profile")
   assert_true(summary["perf_warning_policy"] == "non-blocking", "summary should label perf policy")
   assert_true(summary["grid"] == "4x5", "summary should expose the grid label")
-  assert_true(summary["export_volume"] == 40, "summary should expose export volume")
+  assert_true(summary["export_volume"] == 80, "summary should expose aggregated export volume")
   assert_true(summary["fft_provider"] == "eigen", "summary should expose FFT provider")
+  assert_true(summary["continuous_export_schema"] == "mixed: 2, n/a", "summary should expose continuous export schema versions")
+  assert_true("frame_stride=2" in summary["continuous_export_config"], "summary should expose export config summary")
+  assert_true("explicit sampling" in summary["continuous_export_sampling"], "summary should explain the sampling rate")
+  assert_true("warn:" in summary["continuous_export_diag"], "summary should retain warning tags for incomplete export metadata")
 
   prev = {
       "cases": [
