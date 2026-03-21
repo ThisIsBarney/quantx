@@ -55,6 +55,9 @@ The benchmark reports and trend files now include:
 - `platform_profile` and `perf_warning_policy`
 - continuous-space metadata such as `grid`, `export_volume`, `fft_provider`, and `avg_step_ms_mean`
 - a trend label that explicitly marks suites whose performance warnings are non-blocking
+- pre-commit verification matrix:
+  - `.\scripts\run_verification_matrix.ps1`
+  - runs smoke, adapter, visualization, and the selected benchmark gate in one console-only pass
 
 ## How to run
 

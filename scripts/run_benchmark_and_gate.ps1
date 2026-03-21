@@ -2,7 +2,8 @@ param(
   [string]$Suite = "benchmarks/suites/circuit_accuracy_smoke.json",
   [switch]$SkipBuild,
   [switch]$PerfWarnOnly,
-  [string]$PlatformProfile = ""
+  [string]$PlatformProfile = "",
+  [switch]$EnforceWorktreeGuard
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +11,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
 if (-not [string]::IsNullOrWhiteSpace($PlatformProfile)) {
   $env:QX_BENCHMARK_PLATFORM_PROFILE = $PlatformProfile
@@ -22,6 +27,9 @@ $benchmarkArgs = @{
 }
 if ($SkipBuild) {
   $benchmarkArgs.SkipBuild = $true
+}
+if ($EnforceWorktreeGuard) {
+  $benchmarkArgs.EnforceWorktreeGuard = $true
 }
 if (-not [string]::IsNullOrWhiteSpace($PlatformProfile)) {
   $benchmarkArgs.PlatformProfile = $PlatformProfile

@@ -2,7 +2,8 @@ param(
   [ValidateSet("auto", "engine", "python")]
   [string]$SolverMode = "engine",
   [string]$ContinuousExportJson = "",
-  [string]$OutDir = "out/visualizations"
+  [string]$OutDir = "out/visualizations",
+  [switch]$EnforceWorktreeGuard
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,7 +11,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
 function Resolve-VisualizationOutDir {
   param(
@@ -44,7 +49,7 @@ function Get-NativeDllPath {
 }
 
 if (-not (Get-NativeDllPath -StartDir $root)) {
-  .\scripts\build.ps1
+  .\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
 }
 
 $arguments = @(

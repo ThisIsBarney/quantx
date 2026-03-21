@@ -3,7 +3,8 @@ param(
   [switch]$RunGates,
   [switch]$EnforceGate,
   [switch]$SkipBuild,
-  [string]$PlatformProfile = ""
+  [string]$PlatformProfile = "",
+  [switch]$EnforceWorktreeGuard
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,7 +12,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
  # Resolve the effective platform profile for benchmark metadata and report labeling.
 function Get-BenchmarkPlatformProfile {
@@ -33,7 +38,7 @@ $env:QX_BENCHMARK_PLATFORM_PROFILE = $platformProfile
 
 if (-not $SkipBuild) {
   # Build once, then fan out over every suite so the benchmark entry flow stays consistent.
-  .\scripts\build.ps1
+  .\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
   if ($LASTEXITCODE -ne 0) { throw "build failed: exit code $LASTEXITCODE" }
 }
 
@@ -61,10 +66,21 @@ foreach ($suite in $suites) {
       SkipBuild = $true
       PlatformProfile = $platformProfile
     }
+    if ($EnforceWorktreeGuard) {
+      $gateArgs.EnforceWorktreeGuard = $true
+    }
     .\scripts\run_benchmark_and_gate.ps1 @gateArgs
     if ($LASTEXITCODE -ne 0) { throw "benchmark gate failed for ${suite}: exit code $LASTEXITCODE" }
   } else {
-    .\scripts\run_benchmark.ps1 -Suite $suite -SkipBuild -PlatformProfile $platformProfile
+    $runArgs = @{
+      Suite = $suite
+      SkipBuild = $true
+      PlatformProfile = $platformProfile
+    }
+    if ($EnforceWorktreeGuard) {
+      $runArgs.EnforceWorktreeGuard = $true
+    }
+    .\scripts\run_benchmark.ps1 @runArgs
     if ($LASTEXITCODE -ne 0) { throw "benchmark failed for ${suite}: exit code $LASTEXITCODE" }
   }
 }
