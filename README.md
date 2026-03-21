@@ -63,6 +63,8 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 - `scripts/benchmark_all.ps1` is the unified benchmark entrypoint for circuit accuracy/noise sweep plus continuous 2D/3D smoke and 3D accuracy suites.
 - `scripts/run_verification_matrix.ps1` is the one-shot pre-commit flow: smoke, adapters, visualization, and the selected benchmark gate.
 - `scripts/run_visualization.ps1 -SolverMode engine` is the strict continuous-export path; `-SolverMode auto` is the fallback-friendly path.
+- circuit capability introspection is available through `qx_circuit_capabilities()` / `Engine.circuit_capabilities()`, and unsupported circuit inputs return `error_code` plus `error_message` so callers can branch cleanly.
+- a minimal circuit sanity run is `.\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell.json --options .\examples\options_default.json`; unsupported-gate repros should assert on `QX_UNSUPPORTED_GATE` instead of scraping free-form text.
 - Subagent workflow, branch isolation, and code-quality guardrails are documented in `docs/ENGINEERING_STANDARDS.md`.
 - Smoke tests are expected to report failures on stderr/stdout instead of opening modal debug dialogs on Windows.
 
