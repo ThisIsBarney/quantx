@@ -1,7 +1,10 @@
 param(
+  [ValidateSet("rabi", "mps", "spatial", "spatial2d", "spatial3d", "all")]
+  [string]$Scenario = "all",
   [ValidateSet("auto", "engine", "python")]
   [string]$SolverMode = "auto",
   [string]$ContinuousExportJson = "",
+  [switch]$StrictExportSchema,
   [switch]$EnforceWorktreeGuard
 )
 
@@ -41,7 +44,7 @@ if (-not (Get-NativeDllPath -StartDir $root)) {
 $arguments = @(
   ".\scripts\visualize_simulation.py"
   "--scenario"
-  "all"
+  $Scenario
   "--spatial-potential"
   "barrier"
   "--out-dir"
@@ -51,6 +54,9 @@ $arguments = @(
 )
 if ($ContinuousExportJson) {
   $arguments += @("--continuous-export-json", $ContinuousExportJson)
+}
+if ($StrictExportSchema) {
+  $arguments += "--strict-export-schema"
 }
 python @arguments
 if ($LASTEXITCODE -ne 0) { throw "visualization generation failed: exit code $LASTEXITCODE" }

@@ -180,22 +180,83 @@ def _make_engine(root: Path):
     return None
 
 
-def _load_continuous_export_file(path: Path) -> dict:
+def _continuous_export_schema_version(payload: dict) -> int | None:
+  """Return the declared continuous-export schema version, if any."""
+  raw = payload.get("schema_version")
+  if raw is None:
+    return None
+  try:
+    return int(raw)
+  except (TypeError, ValueError):
+    return None
+
+
+def _prepare_continuous_export_payload(
+    payload: dict,
+    source: str,
+    strict_export_schema: bool,
+    fallback_hint: str,
+) -> dict | None:
+  """Validate the export schema version and normalize supported payloads.
+
+  Version 1 is accepted as-is, versions above 1 emit a warning but continue in
+  best-effort mode, and missing or version<1 payloads either raise immediately
+  in strict mode or return ``None`` so the caller can fall back.
+  """
+  version = _continuous_export_schema_version(payload)
+  if version is None or version < 1:
+    message = f"{source}: continuous_export.schema_version is missing or below 1; expected version 1"
+    if strict_export_schema:
+      raise RuntimeError(message)
+    print(f"warning: {message}; {fallback_hint}", file=sys.stderr)
+    return None
+  if version > 1:
+    message = (
+        f"{source}: continuous_export.schema_version={version} is newer than supported version 1; "
+        "best-effort rendering will continue"
+    )
+    if strict_export_schema:
+      raise RuntimeError(message)
+    print(f"warning: {message}", file=sys.stderr)
+  return _normalize_engine_export_payload(payload)
+
+
+def _load_continuous_export_file(path: Path, strict_export_schema: bool) -> dict | None:
   """Load a continuous-space export payload from a JSON file."""
   data = json.loads(path.read_text(encoding="utf-8"))
   if isinstance(data, dict):
     if isinstance(data.get("continuous_export"), dict):
-      return _normalize_engine_export_payload(data["continuous_export"])
+      return _prepare_continuous_export_payload(
+          data["continuous_export"],
+          source=f"engine-export file {path}",
+          strict_export_schema=strict_export_schema,
+          fallback_hint="falling back to live engine execution or Python reference solver",
+      )
     export = data.get("export")
     if isinstance(export, dict):
       for key in ("continuous_export", "continuous", "frames"):
         value = export.get(key)
         if isinstance(value, dict):
-          return _normalize_engine_export_payload(value)
+          return _prepare_continuous_export_payload(
+              value,
+              source=f"engine-export file {path}",
+              strict_export_schema=strict_export_schema,
+              fallback_hint="falling back to live engine execution or Python reference solver",
+          )
         if isinstance(value, list):
-          return _normalize_engine_export_payload({"frames": value})
+          return _prepare_continuous_export_payload(
+              {"frames": value},
+              source=f"engine-export file {path}",
+              strict_export_schema=strict_export_schema,
+              fallback_hint="falling back to live engine execution or Python reference solver",
+          )
     if isinstance(data.get("frames"), list):
-      return _normalize_engine_export_payload(data)
+      return _prepare_continuous_export_payload(
+          data,
+          source=f"engine-export file {path}",
+          strict_export_schema=strict_export_schema,
+          fallback_hint="falling back to live engine execution or Python reference solver",
+      )
   raise RuntimeError(f"continuous export json must contain a frames payload: {path}")
 
 
@@ -431,17 +492,22 @@ def _resolve_continuous_payload(
     solver_mode: str,
     reference_builder,
     export_json_path: Path | None,
+    strict_export_schema: bool,
 ) -> dict:
   """Prefer engine-exported frames and fall back to the Python reference solver."""
   if export_json_path is not None:
     try:
-      export = _load_continuous_export_file(export_json_path)
+      export = _load_continuous_export_file(export_json_path, strict_export_schema)
     except Exception as ex:
-      if solver_mode == "engine":
+      if strict_export_schema:
         raise RuntimeError(f"continuous visualization received invalid engine export file: {ex}") from ex
       print(f"warning: {ex}; falling back to live engine execution or Python reference solver", file=sys.stderr)
     else:
-      return _attach_continuous_metadata(export, solver_mode, "engine-export-file")
+      if export is None:
+        if strict_export_schema:
+          raise RuntimeError("continuous visualization requested strict export-schema validation but the export schema is incompatible")
+      else:
+        return _attach_continuous_metadata(export, solver_mode, "engine-export-file")
 
   if solver_mode in {"auto", "engine"} and engine is not None:
     result = engine.run(problem, {"enable_checkpoint": False, "export_continuous_frames": True})
@@ -453,13 +519,19 @@ def _resolve_continuous_payload(
       export = _extract_continuous_export_from_result(result)
     if export is not None:
       try:
-        normalized = _normalize_engine_export_payload(export)
+        normalized = _prepare_continuous_export_payload(
+            export,
+            source="native engine result",
+            strict_export_schema=strict_export_schema,
+            fallback_hint="falling back to Python reference solver",
+        )
       except Exception as ex:
-        if solver_mode == "engine":
+        if strict_export_schema:
           raise RuntimeError(f"continuous visualization received invalid engine export payload: {ex}") from ex
         print(f"warning: {ex}; falling back to Python reference solver", file=sys.stderr)
       else:
-        return _attach_continuous_metadata(normalized, solver_mode, "engine-export")
+        if normalized is not None:
+          return _attach_continuous_metadata(normalized, solver_mode, "engine-export")
     if solver_mode == "engine":
       raise RuntimeError("continuous visualization requested solver-mode=engine but the native result did not include a frames export")
 
@@ -1271,6 +1343,11 @@ def main() -> int:
       default="",
       help="Optional engine-export JSON file to render directly instead of solving again.",
   )
+  parser.add_argument(
+      "--strict-export-schema",
+      action="store_true",
+      help="Fail immediately when the continuous export schema_version is missing, below 1, or newer than supported.",
+  )
   parser.add_argument("--spatial-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--spatial3d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
@@ -1359,6 +1436,7 @@ def main() -> int:
             args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y, args.spatial2d_potential
         ),
         export_json_path,
+        args.strict_export_schema,
     )
     path = out_dir / f"quantum_spatial2d_wavepacket_{args.spatial2d_potential}.html"
     path.write_text(_spatial_wavepacket_2d_page(spatial2d), encoding="utf-8")
@@ -1386,6 +1464,7 @@ def main() -> int:
             args.spatial3d_boundary,
         ),
         export_json_path,
+        args.strict_export_schema,
     )
     path = out_dir / f"quantum_spatial3d_wavepacket_{args.spatial3d_potential}_{args.spatial3d_boundary}.html"
     path.write_text(_spatial_wavepacket_3d_page(spatial3d), encoding="utf-8")

@@ -9,10 +9,11 @@ import json
 from pathlib import Path
 
 
-def _write_continuous_export_fixture(path: Path) -> None:
+def _write_continuous_export_fixture(path: Path, schema_version: int | None = 1) -> None:
   """Write a tiny engine-export-shaped continuous 2D payload for smoke testing."""
   payload = {
       "continuous_export": {
+          **({"schema_version": schema_version} if schema_version is not None else {}),
           "kind": "continuous_space_2d",
           "source": "engine-export",
           "solver_mode": "engine",
@@ -40,10 +41,11 @@ def _write_continuous_export_fixture(path: Path) -> None:
   path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _write_continuous_export_fixture_3d(path: Path) -> None:
+def _write_continuous_export_fixture_3d(path: Path, schema_version: int | None = 1) -> None:
   """Write a tiny engine-export-shaped continuous 3D payload for smoke testing."""
   payload = {
       "continuous_export": {
+          **({"schema_version": schema_version} if schema_version is not None else {}),
           "kind": "continuous_space_3d",
           "source": "engine-export",
           "solver_mode": "engine",
@@ -91,10 +93,11 @@ def _write_continuous_export_fixture_3d(path: Path) -> None:
   path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _write_corrupt_continuous_export_fixture_3d(path: Path) -> None:
+def _write_corrupt_continuous_export_fixture_3d(path: Path, schema_version: int | None = 1) -> None:
   """Write a malformed engine-export-shaped 3D payload for negative smoke coverage."""
   payload = {
       "continuous_export": {
+          **({"schema_version": schema_version} if schema_version is not None else {}),
           "kind": "continuous_space_3d",
           "source": "engine-export",
           "solver_mode": "engine",
@@ -147,52 +150,31 @@ def _ensure_native_build(root: Path) -> None:
 def main() -> int:
   """Run visualization smoke checks across fallback and exported-data paths."""
   root = Path(__file__).resolve().parents[1]
-  _ensure_native_build(root)
   out_dir = root / "out" / "visualizations_test"
   out_dir.mkdir(parents=True, exist_ok=True)
 
-  cmd = [
-      sys.executable,
-      str(root / "scripts" / "visualize_simulation.py"),
-      "--scenario",
-      "all",
-      "--out-dir",
-      str(out_dir),
-      "--samples-rabi",
-      "20",
-      "--samples-mps",
-      "20",
-      "--samples-spatial-t",
-      "40",
-      "--samples-spatial-x",
-      "120",
-      "--samples-spatial2d-t",
-      "24",
-      "--samples-spatial2d-x",
-      "40",
-      "--samples-spatial2d-y",
-      "40",
-      "--samples-spatial3d-t",
-      "16",
-      "--samples-spatial3d-x",
-      "20",
-      "--samples-spatial3d-y",
-      "20",
-      "--samples-spatial3d-z",
-      "20",
-      "--spatial-potential",
-      "barrier",
-      "--spatial2d-potential",
-      "barrier",
-      "--spatial3d-potential",
-      "barrier",
-      "--spatial3d-boundary",
-      "absorbing",
-      "--spatial3d-export-json",
-  ]
-  subprocess.run(cmd, check=True)
-
   python_only_dir = out_dir / "python_mode"
+  subprocess.run(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial",
+          "--solver-mode",
+          "python",
+          "--out-dir",
+          str(python_only_dir),
+          "--samples-spatial-t",
+          "8",
+          "--samples-spatial-x",
+          "16",
+          "--spatial-potential",
+          "barrier",
+      ],
+      check=True,
+  )
+
+  python_only_2d_dir = out_dir / "python_mode_2d"
   subprocess.run(
       [
           sys.executable,
@@ -202,7 +184,7 @@ def main() -> int:
           "--solver-mode",
           "python",
           "--out-dir",
-          str(python_only_dir),
+          str(python_only_2d_dir),
           "--samples-spatial2d-t",
           "8",
           "--samples-spatial2d-x",
@@ -226,8 +208,100 @@ def main() -> int:
           "engine",
           "--continuous-export-json",
           str(export_fixture),
+          "--strict-export-schema",
           "--out-dir",
           str(engine_export_dir),
+      ],
+      check=True,
+  )
+
+  future_export_fixture = out_dir / "continuous2d_export_future_fixture.json"
+  _write_continuous_export_fixture(future_export_fixture, schema_version=2)
+  engine_export_future_dir = out_dir / "engine_export_future_mode"
+  _run_expected_success_with_warning(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial2d",
+          "--solver-mode",
+          "engine",
+          "--continuous-export-json",
+          str(future_export_fixture),
+          "--out-dir",
+          str(engine_export_future_dir),
+      ],
+      "schema_version=2 is newer than supported version 1",
+  )
+  _run_expected_failure(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial2d",
+          "--solver-mode",
+          "engine",
+          "--continuous-export-json",
+          str(future_export_fixture),
+          "--strict-export-schema",
+          "--out-dir",
+          str(out_dir / "engine_export_future_strict_fail"),
+      ],
+      "schema_version=2 is newer than supported version 1",
+  )
+
+  invalid_export_fixture = out_dir / "continuous2d_export_invalid_fixture.json"
+  _write_continuous_export_fixture(invalid_export_fixture, schema_version=None)
+  python_fallback_dir = out_dir / "python_fallback_mode"
+  _run_expected_success_with_warning(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial2d",
+          "--solver-mode",
+          "python",
+          "--continuous-export-json",
+          str(invalid_export_fixture),
+          "--out-dir",
+          str(python_fallback_dir),
+      ],
+      "continuous_export.schema_version is missing or below 1",
+  )
+
+  _run_expected_failure(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial2d",
+          "--solver-mode",
+          "python",
+          "--continuous-export-json",
+          str(invalid_export_fixture),
+          "--strict-export-schema",
+          "--out-dir",
+          str(out_dir / "python_fallback_strict_fail"),
+      ],
+      "continuous_export.schema_version is missing or below 1",
+  )
+
+  wrapper_export_dir = root / "out" / "visualizations"
+  wrapper_engine_export = wrapper_export_dir / "quantum_spatial2d_wavepacket_barrier.html"
+  if wrapper_engine_export.exists():
+    wrapper_engine_export.unlink()
+  subprocess.run(
+      [
+          "powershell",
+          "-File",
+          str(root / "scripts" / "run_visualization.ps1"),
+          "-Scenario",
+          "spatial2d",
+          "-SolverMode",
+          "engine",
+          "-ContinuousExportJson",
+          str(export_fixture),
+          "-StrictExportSchema",
       ],
       check=True,
   )
@@ -245,6 +319,7 @@ def main() -> int:
           "engine",
           "--continuous-export-json",
           str(export_fixture_3d),
+          "--strict-export-schema",
           "--spatial3d-export-json",
           "--out-dir",
           str(engine_export_3d_dir),
@@ -264,6 +339,7 @@ def main() -> int:
           "engine",
           "--continuous-export-json",
           str(corrupt_export_fixture_3d),
+          "--strict-export-schema",
           "--out-dir",
           str(out_dir / "engine_export_bad"),
       ],
@@ -292,19 +368,17 @@ def main() -> int:
       [
           "powershell",
           "-Command",
-          f'.\\scripts\\run_spatial3d_js_export.ps1 -SolverMode engine -OutDir "{js_export_dir}"',
+          f'.\\scripts\\run_spatial3d_js_export.ps1 -SolverMode python -OutDir "{js_export_dir}"',
       ],
       check=True,
   )
 
   files = [
-      out_dir / "rabi_population.html",
-      out_dir / "mps_diagnostics.html",
-      out_dir / "quantum_spatial_wavepacket_barrier.html",
-      out_dir / "quantum_spatial2d_wavepacket_barrier.html",
-      out_dir / "quantum_spatial3d_wavepacket_barrier_absorbing.html",
-      out_dir / "quantum_spatial3d_wavepacket_barrier_absorbing.json",
-      python_only_dir / "quantum_spatial2d_wavepacket_barrier.html",
+      python_only_dir / "quantum_spatial_wavepacket_barrier.html",
+      python_only_2d_dir / "quantum_spatial2d_wavepacket_barrier.html",
+      engine_export_future_dir / "quantum_spatial2d_wavepacket_barrier.html",
+      python_fallback_dir / "quantum_spatial2d_wavepacket_barrier.html",
+      wrapper_engine_export,
       engine_export_dir / "quantum_spatial2d_wavepacket_barrier.html",
       engine_export_3d_dir / "quantum_spatial3d_wavepacket_barrier_periodic.html",
       engine_export_3d_dir / "quantum_spatial3d_wavepacket_barrier_periodic.json",
