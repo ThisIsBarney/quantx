@@ -49,6 +49,8 @@ The circuit backend exposes a stable, append-only capability object with:
 - `max_shots`
 - adapter support hints
 
+Read the capability object first, then route requests based on the returned limits and supported vocabulary.
+
 The current native gate-model executor accepts:
 
 - single-qubit gates: `X`, `Y`, `Z`, `H`, `S`, `T`, `RX`, `RY`, `RZ`
@@ -61,6 +63,32 @@ Supported noise model selectors:
 - `amplitude_damping`
 
 The advertised limits are practical execution limits for the current statevector path and are intended for planning, validation, and adapter routing.
+
+### Capability query examples
+
+C++:
+
+```cpp
+const auto caps = qx::circuit_backend_capabilities();
+std::cout << qx::circuit_capabilities_to_json(caps) << std::endl;
+```
+
+C ABI:
+
+```c
+const char* caps_json = qx_circuit_capabilities();
+/* caps_json contains backend, supported_gates, supported_noise_models, max_qubits, max_shots */
+qx_free_string(caps_json);
+```
+
+Python:
+
+```python
+caps = engine.circuit_capabilities()
+print(caps["backend"])
+print(caps["supported_gates"])
+print(caps["supported_noise_models"])
+```
 
 ## 4) Result model
 
@@ -78,12 +106,52 @@ Unsupported circuit inputs return machine-readable error payloads with:
 - `error_message`
 - `error` as a human-readable compatibility alias
 
+Client code should branch on `error_code` and display `error_message` to users. The `error` alias is preserved for compatibility, but the contract is `code + message`.
+
 Examples:
 
 - `QX_UNSUPPORTED_GATE`
 - `QX_UNSUPPORTED_NOISE`
 - `QX_INVALID_CIRCUIT`
 - `QX_INVALID_QUBIT_INDEX`
+
+### Error contract examples
+
+C++:
+
+```cpp
+try {
+  (void)qx::run_circuit(bad_circuit, options);
+} catch (const qx::CircuitError& ex) {
+  std::cout << ex.code() << ": " << ex.what() << std::endl;
+}
+```
+
+C ABI:
+
+```c
+const char* json = qx_run_circuit(circuit_json, options_json);
+/* parse ok=false, error_code, error_message */
+qx_free_string(json);
+```
+
+Python:
+
+```python
+result = engine.run_circuit({"qubits": 1, "operations": [{"name": "foo", "targets": [0]}]}, {"enable_checkpoint": False})
+print(result["ok"])
+print(result["error_code"])
+print(result["error_message"])
+```
+
+Minimal command line reproduction:
+
+```powershell
+@'
+{"qubits":1,"operations":[{"name":"foo","targets":[0]}]}
+'@ | Set-Content $env:TEMP\qx_bad_circuit.json -Encoding utf8
+.\build-vs\Debug\qx_cli.exe --circuit $env:TEMP\qx_bad_circuit.json --options .\examples\options_default.json
+```
 
 ## Integration principles
 

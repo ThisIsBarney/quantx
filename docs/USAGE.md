@@ -334,6 +334,24 @@ cres = e.run_circuit({
 print(cres)
 ```
 
+Circuit capability and error contract:
+
+```python
+caps = e.circuit_capabilities()
+print(caps["backend"], caps["supported_gates"], caps["supported_noise_models"])
+
+bad = e.run_circuit({
+    "qubits": 1,
+    "operations": [
+      {"name": "foo", "targets": [0]}
+    ]
+}, {"enable_checkpoint": False})
+
+if not bad["ok"]:
+  print(bad["error_code"])
+  print(bad["error_message"])
+```
+
 Continuous-space 2D call (same unified `Engine.run(...)` API):
 
 ```python
@@ -406,6 +424,17 @@ caps = e.circuit_capabilities()
 print(caps["supported_gates"], caps["supported_noise_models"], caps["max_qubits"])
 ```
 
+The circuit API uses a machine-readable `error_code` plus a human-readable `error_message`. Downstream code should branch on `error_code` and display `error_message`; the legacy `error` field is kept only as a compatibility alias.
+
+Minimal command-line repro for an unsupported gate:
+
+```powershell
+@'
+{"qubits":1,"operations":[{"name":"foo","targets":[0]}]}
+'@ | Set-Content $env:TEMP\qx_bad_circuit.json -Encoding utf8
+.\build-vs\Debug\qx_cli.exe --circuit $env:TEMP\qx_bad_circuit.json --options .\examples\options_default.json
+```
+
 Output includes:
 
 - `expectation_exact`: exact expectation from final statevector
@@ -416,6 +445,7 @@ Output includes:
 - `error_summary`: aggregate error stats (`mean_abs_error`, `max_abs_error`, count)
 - `engine_version`: producing engine version string (for reproducibility/audit)
 - on failure, `ok: false` plus `error_code` and `error_message`
+- on failure, `ok: false` plus `error_code` and `error_message` (the `error` alias remains for compatibility)
 
 Observable support:
 
