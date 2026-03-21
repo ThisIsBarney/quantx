@@ -130,6 +130,25 @@ When engine export is used, QuantX emits `continuous_export.frames` in run resul
 If an engine export payload is partial or corrupt, the visualization layer prints a clear console diagnostic and either fails fast (`engine`) or falls back to the Python reference solver (`auto`).
 The benchmark/reporting layer treats these exports as append-only and now records platform/profile metadata alongside the extracted frame payloads.
 
+## Continuous Export Schema
+
+`continuous_export` is treated as an append-only contract.
+
+- `schema_version` identifies the wrapper schema that downstream tooling should validate first.
+- `export_config` echoes the effective export knobs used for the run, so consumers do not need to guess defaults.
+- `frames` contains the actual sampled payloads and may gain new optional fields over time.
+- Unknown fields should be ignored by non-strict readers, not treated as breaking changes.
+
+Strict consumers should validate `continuous_export.schema_version`, require the documented fields they depend on, and fail fast if the wrapper is incomplete.
+Non-strict consumers should prefer `--SolverMode auto` or equivalent fallback behavior so they can keep running when engine export is unavailable.
+
+Example commands:
+
+```powershell
+.\scripts\run_visualization.ps1 -SolverMode engine
+.\scripts\run_visualization.ps1 -SolverMode auto
+```
+
 For subagent work, follow the checklist in `docs/ENGINEERING_STANDARDS.md` and keep each agent in its own `codex/*` worktree.
 
 Render from a pre-exported continuous frame JSON:

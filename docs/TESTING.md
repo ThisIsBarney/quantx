@@ -24,9 +24,11 @@
   - `|psi|^2` stays near 1.0 in smoke scenarios
 - smoke diagnostics:
   - `qx_smoke` and `qx_fft_smoke` route CRT failures to stderr, so Windows debug runs stay console-only
+  - `scripts/test.ps1` only runs the Python adapter and visualization smoke when it finds a compatible x64 native DLL; otherwise it prints a clear console skip message and continues with the lightweight schema smoke
 - continuous export payload checks:
   - 2D export payloads are validated to match `nx * ny`
   - 3D export payloads are validated for `xy`, `xz`, `yz` slice shapes and `[x,y,z,density]` point quads
+  - the schema smoke in `scripts/test.ps1` validates the append-only wrapper fields `schema_version`, `export_config`, and `frames`
 
 ## Workflow Checks
 
@@ -49,6 +51,13 @@
 - benchmark reporting smoke:
   - `python .\scripts\test_benchmark_reporting.py`
   - verifies platform profile detection, continuous performance metadata, gate classification, and backward-compatible frame extraction
+
+## Schema Compatibility
+
+- `continuous_export` should be treated as append-only by readers.
+- strict consumers must validate `schema_version` and the documented wrapper fields before using the payload.
+- non-strict consumers should use fallback behavior instead of assuming the engine export is always available.
+- `scripts/test.ps1` includes a lightweight schema smoke so regressions are caught before the heavier visualization smoke test.
 
 The benchmark reports and trend files now include:
 
