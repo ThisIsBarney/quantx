@@ -231,7 +231,6 @@ json circuit_capabilities_to_json_object(const CircuitCapabilities& capabilities
       {"supports_cirq_like", capabilities.supports_cirq_like},
   };
 }
-
 }  // namespace
 
 // Parse simulation problem JSON into IR.
