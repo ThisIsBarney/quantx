@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
 from benchmarks import check_report_thresholds as crt
 from benchmarks import compare_latest_reports as clr
 from benchmarks import report_utils as ru
+from benchmarks import run_circuit_benchmark as rcb
 from benchmarks import run_problem_benchmark as rpb
 from benchmarks import summarize_reports as sr
 
@@ -104,6 +105,70 @@ def test_continuous_export_missing_metadata() -> None:
   assert_true("missing schema_version" in diag["diagnostic_tag"], "missing schema version should be warned")
   assert_true("missing export_config" in diag["diagnostic_tag"], "missing export config should be warned")
   assert_true("observed 1 frame(s)" in diag["frame_sampling"], "sampling note should fall back to an observed cadence")
+
+
+def test_circuit_capability_summary() -> None:
+  """Verify circuit capability metadata is summarized for reports."""
+  capabilities = {
+      "backend": "statevector",
+      "supported_gates": ["H", "CNOT", "CX", "SWAP"],
+      "supported_noise_models": ["none", "depolarizing"],
+      "max_qubits": 25,
+      "max_shots": 1000,
+      "supports_qiskit_like": True,
+      "supports_cirq_like": False,
+  }
+  diag = ru.circuit_capability_diagnostics(capabilities)
+  assert_true(diag["status"] == "ok", "complete capability payload should not warn")
+  assert_true("backend=statevector" in diag["capability_summary"], "capability summary should include backend")
+  assert_true("gates=[H, CNOT, CX, SWAP]" in diag["capability_summary"], "capability summary should include gates")
+  assert_true("noise=[none, depolarizing]" in diag["capability_summary"], "capability summary should include noise models")
+  assert_true("adapters={qiskit_like=true, cirq_like=false}" in diag["capability_summary"], "capability summary should include adapter hints")
+  assert_true(diag["supported_gate_count"] == 4, "capability summary should count supported gates")
+  assert_true(diag["supported_noise_model_count"] == 2, "capability summary should count supported noise models")
+
+  report = {
+      "suite": "circuit_accuracy_smoke",
+      "generated_at": "2026-03-20T00:00:00+00:00",
+      "repeats": 3,
+      "circuit_capability_summary": diag["capability_summary"],
+      "circuit_capability_diag": diag,
+      "cases": [
+          {
+              "id": "bell_clean",
+              "aggregate": {
+                  "elapsed_ms_mean": 1.0,
+                  "core_elapsed_ms_mean": 0.9,
+                  "max_abs_error_mean": 0.01,
+                  "mean_abs_error_mean": 0.005,
+              },
+              "gate": {"status": "PASS"},
+          }
+      ],
+      "gate": {"status": "PASS", "perf_warnings_blocking": False},
+  }
+  out_dir = ROOT / "out" / "benchmark_reporting_smoke"
+  out_dir.mkdir(parents=True, exist_ok=True)
+  path = out_dir / "circuit_summary.md"
+  try:
+    rcb.write_markdown_summary(report, path)
+    content = path.read_text(encoding="utf-8")
+    assert_true("circuit_capability_summary" in content, "markdown summary should include capability summary")
+    assert_true("circuit_capability_diag" in content, "markdown summary should include capability diagnostics")
+  finally:
+    if path.exists():
+      path.unlink()
+
+
+def test_circuit_capability_missing_fields_warning_only() -> None:
+  """Verify missing circuit capability fields become warnings, not failures."""
+  diag = ru.circuit_capability_diagnostics({"backend": "statevector"})
+  assert_true(diag["status"] == "warn", "missing capability fields should only warn")
+  assert_true("missing supported_gates" in diag["diagnostic_tag"], "missing gates should be warned")
+  assert_true("missing supported_noise_models" in diag["diagnostic_tag"], "missing noise models should be warned")
+  assert_true("missing max_qubits" in diag["diagnostic_tag"], "missing max_qubits should be warned")
+  assert_true("missing max_shots" in diag["diagnostic_tag"], "missing max_shots should be warned")
+  assert_true("backend=statevector" in diag["capability_summary"], "summary should preserve the available backend")
 
 
 def test_gate_classification() -> None:
@@ -249,6 +314,8 @@ def main() -> None:
   test_gate_classification()
   test_summary_and_trend_labels()
   test_backwards_compatible_frame_extraction()
+  test_circuit_capability_summary()
+  test_circuit_capability_missing_fields_warning_only()
   print("benchmark reporting smoke passed")
 
 

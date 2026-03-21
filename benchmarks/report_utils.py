@@ -124,6 +124,111 @@ def get_continuous_config(problem: dict[str, Any]) -> dict[str, Any] | None:
   return None
 
 
+def _as_string_list(value: Any) -> list[str]:
+  """Normalize a capability field into a compact list of strings."""
+  if not isinstance(value, list):
+    return []
+  out: list[str] = []
+  for item in value:
+    if isinstance(item, str):
+      text = item.strip()
+      if text:
+        out.append(text)
+    elif item is not None:
+      out.append(str(item))
+  return out
+
+
+def summarize_circuit_capabilities(capabilities: dict[str, Any] | None) -> str:
+  """Summarize circuit capability metadata for reports and trend tables."""
+  if not isinstance(capabilities, dict) or not capabilities:
+    return "n/a"
+
+  parts: list[str] = []
+  backend = capabilities.get("backend")
+  if isinstance(backend, str) and backend.strip():
+    parts.append(f"backend={backend.strip()}")
+
+  gates = _as_string_list(capabilities.get("supported_gates"))
+  if gates:
+    preview = ", ".join(gates[:6])
+    if len(gates) > 6:
+      preview += ", ..."
+    parts.append(f"gates=[{preview}]")
+
+  noise = _as_string_list(capabilities.get("supported_noise_models"))
+  if noise:
+    preview = ", ".join(noise[:6])
+    if len(noise) > 6:
+      preview += ", ..."
+    parts.append(f"noise=[{preview}]")
+
+  max_qubits = capabilities.get("max_qubits")
+  if isinstance(max_qubits, (int, float)) and not isinstance(max_qubits, bool):
+    parts.append(f"max_qubits={int(max_qubits)}")
+
+  max_shots = capabilities.get("max_shots")
+  if isinstance(max_shots, (int, float)) and not isinstance(max_shots, bool):
+    parts.append(f"max_shots={int(max_shots)}")
+
+  adapter_flags = []
+  for key, label in (("supports_qiskit_like", "qiskit_like"), ("supports_cirq_like", "cirq_like")):
+    value = capabilities.get(key)
+    if isinstance(value, bool):
+      adapter_flags.append(f"{label}={'true' if value else 'false'}")
+  if adapter_flags:
+    parts.append("adapters={" + ", ".join(adapter_flags) + "}")
+
+  if not parts:
+    keys = ", ".join(sorted(capabilities.keys()))
+    return f"custom[{keys}]"
+  return "; ".join(parts)
+
+
+def circuit_capability_diagnostics(capabilities: dict[str, Any] | None) -> dict[str, Any]:
+  """Summarize circuit capabilities and downgrade missing fields to warnings.
+
+  The diagnostics are advisory only. Missing fields should not fail benchmark
+  reporting because the capability object is append-only and may evolve.
+  """
+  warnings: list[str] = []
+  if not isinstance(capabilities, dict) or not capabilities:
+    warnings.append("missing circuit capability payload")
+    capabilities = {}
+
+  backend = capabilities.get("backend")
+  if not (isinstance(backend, str) and backend.strip()):
+    warnings.append("missing backend")
+
+  gates = _as_string_list(capabilities.get("supported_gates"))
+  if not gates:
+    warnings.append("missing supported_gates")
+
+  noise = _as_string_list(capabilities.get("supported_noise_models"))
+  if not noise:
+    warnings.append("missing supported_noise_models")
+
+  if not isinstance(capabilities.get("max_qubits"), (int, float)) or isinstance(capabilities.get("max_qubits"), bool):
+    warnings.append("missing max_qubits")
+
+  if not isinstance(capabilities.get("max_shots"), (int, float)) or isinstance(capabilities.get("max_shots"), bool):
+    warnings.append("missing max_shots")
+
+  status = "ok" if not warnings else "warn"
+  diagnostic_tag = "ok" if not warnings else f"warn: {'; '.join(warnings)}"
+  return {
+      "status": status,
+      "diagnostic_tag": diagnostic_tag,
+      "diagnostic_warnings": warnings,
+      "capability_summary": summarize_circuit_capabilities(capabilities),
+      "backend": backend if isinstance(backend, str) and backend.strip() else "n/a",
+      "supported_gate_count": len(gates),
+      "supported_noise_model_count": len(noise),
+      "max_qubits": capabilities.get("max_qubits") if isinstance(capabilities.get("max_qubits"), (int, float)) else "n/a",
+      "max_shots": capabilities.get("max_shots") if isinstance(capabilities.get("max_shots"), (int, float)) else "n/a",
+  }
+
+
 def extract_continuous_frames(result: dict[str, Any]) -> list[dict[str, Any]]:
   """Return any native continuous export frames embedded in a benchmark result."""
   export_block = extract_continuous_export_block(result)

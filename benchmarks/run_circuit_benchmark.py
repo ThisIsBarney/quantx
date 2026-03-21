@@ -10,7 +10,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
   sys.path.insert(0, str(ROOT))
 
-from benchmarks.report_utils import detect_platform_profile, suite_policy
+from benchmarks.report_utils import (
+    circuit_capability_diagnostics,
+    detect_platform_profile,
+    suite_policy,
+)
 
 
 def load_json(path: Path) -> dict:
@@ -81,6 +85,12 @@ def write_markdown_summary(report: dict, output_path: Path) -> None:
     lines.append(f"- platform_profile: {report['platform_profile']}")
   if report.get("engine_version"):
     lines.append(f"- engine_version: {report['engine_version']}")
+  capability_diag = report.get("circuit_capability_diag", {})
+  capability_summary = report.get("circuit_capability_summary")
+  if capability_summary:
+    lines.append(f"- circuit_capability_summary: {capability_summary}")
+  if capability_diag.get("diagnostic_tag"):
+    lines.append(f"- circuit_capability_diag: {capability_diag['diagnostic_tag']}")
   gate_status = report.get("gate", {}).get("status")
   if gate_status is not None:
     lines.append(f"- gate_status: {gate_status}")
@@ -179,6 +189,14 @@ def main() -> None:
   policy = suite_policy(suite.get("name", "unnamed_suite"), profile, suite, root)
 
   engine = Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
+  try:
+    circuit_capabilities = engine.circuit_capabilities()
+  except Exception as exc:
+    circuit_capabilities = {}
+    print(f"circuit capability query warning: {exc}")
+  circuit_capability_diag = circuit_capability_diagnostics(circuit_capabilities)
+  if circuit_capability_diag.get("status") != "ok":
+    print(f"circuit capability warning: {circuit_capability_diag['diagnostic_tag']}")
 
   repeats = int(suite.get("repeats", 1))
   options = dict(suite.get("options", {}))
@@ -195,6 +213,9 @@ def main() -> None:
       "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
       "repeats": repeats,
       "engine_version": report_engine_version,
+      "circuit_capabilities": circuit_capabilities,
+      "circuit_capability_summary": circuit_capability_diag["capability_summary"],
+      "circuit_capability_diag": circuit_capability_diag,
       "platform_profile": policy["profile"],
       "platform_profile_label": policy["profile_label"],
       "suite_policy": policy,
