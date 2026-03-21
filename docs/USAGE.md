@@ -372,6 +372,13 @@ qiskit_req = {
 print(e.run_qiskit_like(qiskit_req, {"enable_checkpoint": False}))
 ```
 
+Capability query:
+
+```python
+caps = e.circuit_capabilities()
+print(caps["supported_gates"], caps["supported_noise_models"], caps["max_qubits"])
+```
+
 Output includes:
 
 - `expectation_exact`: exact expectation from final statevector
@@ -381,6 +388,7 @@ Output includes:
 - `shot_stderr`: per-observable standard error (`sqrt(variance/shots)`)
 - `error_summary`: aggregate error stats (`mean_abs_error`, `max_abs_error`, count)
 - `engine_version`: producing engine version string (for reproducibility/audit)
+- on failure, `ok: false` plus `error_code` and `error_message`
 
 Observable support:
 

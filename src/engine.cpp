@@ -10,6 +10,7 @@
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+#include <utility>
 #include <unordered_set>
 
 #include "qx/backend.hpp"
@@ -22,6 +23,19 @@ namespace qx {
 namespace {
 
 using Complex = std::complex<double>;
+
+// Return the fixed gate vocabulary accepted by the circuit executor.
+const std::vector<std::string>& supported_circuit_gates() {
+  static const std::vector<std::string> gates = {
+      "X", "Y", "Z", "H", "S", "T", "RX", "RY", "RZ", "CNOT", "CX", "CZ", "SWAP"};
+  return gates;
+}
+
+// Return the fixed noise vocabulary accepted by the circuit executor.
+const std::vector<std::string>& supported_circuit_noise_models() {
+  static const std::vector<std::string> noise_models = {"none", "depolarizing", "amplitude_damping"};
+  return noise_models;
+}
 
 // Ensure built-in backends are registered exactly once.
 void ensure_builtin_backends() {
@@ -36,8 +50,19 @@ void ensure_builtin_backends() {
 // Validate one qubit index against circuit width.
 void require_qubit(std::uint32_t q, std::uint32_t n, const std::string& opname) {
   if (q >= n) {
-    throw std::runtime_error("gate " + opname + " references out-of-range qubit");
+    throw CircuitError("QX_INVALID_QUBIT_INDEX", "gate " + opname + " references out-of-range qubit");
   }
+}
+
+// Validate the optional noise model selector on a circuit request.
+void require_supported_noise_model(const QuantumCircuit& circuit) {
+  if (circuit.noise_model.empty() || circuit.noise_model == "none") {
+    return;
+  }
+  if (circuit.noise_model == "depolarizing" || circuit.noise_model == "amplitude_damping") {
+    return;
+  }
+  throw CircuitError("QX_UNSUPPORTED_NOISE", "unsupported noise model: " + circuit.noise_model);
 }
 
 // Apply an arbitrary 2x2 single-qubit unitary to the full statevector.
@@ -373,6 +398,13 @@ ShotStats shot_stats_rotated_state(
 
 }  // namespace
 
+// Build a structured circuit execution error.
+CircuitError::CircuitError(std::string code, std::string message)
+    : std::runtime_error(std::move(message)), code_(std::move(code)) {}
+
+// Return the machine-readable circuit error code.
+const std::string& CircuitError::code() const noexcept { return code_; }
+
 // Register built-in backends into global registry.
 void register_builtin_backends() {
   auto& registry = BackendRegistry::instance();
@@ -389,6 +421,19 @@ BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptio
   const BackendInfo info = explain_backend_choice_internal(problem, options);
   log::debug("backend explain selected: " + info.selected_backend);
   return info;
+}
+
+// Public API: report the circuit executor capability contract.
+CircuitCapabilities circuit_backend_capabilities() {
+  CircuitCapabilities c;
+  c.backend = "statevector";
+  c.supported_gates = supported_circuit_gates();
+  c.supported_noise_models = supported_circuit_noise_models();
+  c.max_qubits = 25;
+  c.max_shots = 1000000;
+  c.supports_qiskit_like = true;
+  c.supports_cirq_like = true;
+  return c;
 }
 
 // Public API: run Hamiltonian simulation.
@@ -458,11 +503,12 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   const auto t0 = std::chrono::high_resolution_clock::now();
   log::info("circuit run started: qubits=" + std::to_string(circuit.qubits));
   if (circuit.qubits == 0) {
-    throw std::runtime_error("circuit must have at least 1 qubit");
+    throw CircuitError("QX_INVALID_CIRCUIT", "circuit must have at least 1 qubit");
   }
   if (circuit.qubits >= 26) {
-    throw std::runtime_error("circuit execution currently supports qubits < 26");
+    throw CircuitError("QX_CIRCUIT_TOO_LARGE", "circuit execution currently supports qubits < 26");
   }
+  require_supported_noise_model(circuit);
 
   std::mt19937_64 rng(circuit.seed);
 
@@ -477,7 +523,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
     if (g == "X" || g == "Y" || g == "Z" || g == "H" || g == "S" || g == "T" || g == "RX" || g == "RY" ||
         g == "RZ") {
       if (op.targets.size() != 1) {
-        throw std::runtime_error("single-qubit gate " + g + " requires 1 target");
+        throw CircuitError("QX_INVALID_CIRCUIT", "single-qubit gate " + g + " requires 1 target");
       }
       const std::uint32_t t = op.targets[0];
       require_qubit(t, circuit.qubits, g);
@@ -516,7 +562,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
 
     if (g == "CNOT" || g == "CX") {
       if (op.controls.empty() || op.targets.size() != 1) {
-        throw std::runtime_error("CNOT requires 1 control and 1 target");
+        throw CircuitError("QX_INVALID_CIRCUIT", "CNOT requires 1 control and 1 target");
       }
       const std::uint32_t c = op.controls[0];
       const std::uint32_t t = op.targets[0];
@@ -529,7 +575,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
 
     if (g == "CZ") {
       if (op.controls.empty() || op.targets.size() != 1) {
-        throw std::runtime_error("CZ requires 1 control and 1 target");
+        throw CircuitError("QX_INVALID_CIRCUIT", "CZ requires 1 control and 1 target");
       }
       const std::uint32_t c = op.controls[0];
       const std::uint32_t t = op.targets[0];
@@ -542,7 +588,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
 
     if (g == "SWAP") {
       if (op.targets.size() != 2) {
-        throw std::runtime_error("SWAP requires 2 targets");
+        throw CircuitError("QX_INVALID_CIRCUIT", "SWAP requires 2 targets");
       }
       const std::uint32_t q0 = op.targets[0];
       const std::uint32_t q1 = op.targets[1];
@@ -553,7 +599,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
       continue;
     }
 
-    throw std::runtime_error("unsupported gate: " + g);
+    throw CircuitError("QX_UNSUPPORTED_GATE", "unsupported gate: " + g);
   }
 
   CircuitResult out;

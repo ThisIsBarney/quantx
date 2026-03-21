@@ -231,6 +231,11 @@ struct QuantumCircuit {
   std::vector<std::string> observables{};
   // 0 means exact expectation only; >0 enables sampling statistics.
   std::uint32_t shots{0};
+  // Optional explicit noise-model selector for adapter payloads.
+  // "none" keeps legacy explicit probability fields in force.
+  std::string noise_model{"none"};
+  // Optional user-supplied parameters for the selected noise model.
+  std::map<std::string, double> noise_params{};
   double depolarizing_prob{0.0};
   double amplitude_damping_gamma{0.0};
   std::uint64_t seed{42};
@@ -286,6 +291,23 @@ struct BackendCapabilities {
   bool supports_noisy{false};
   std::uint32_t max_qubits_recommended{0};
   std::string equation_scope{"Schrodinger"};
+};
+
+// Static capability descriptor for the gate-model execution path.
+struct CircuitCapabilities {
+  // Native backend used by the circuit path today.
+  std::string backend{"statevector"};
+  // Gate vocabulary accepted by the current circuit executor.
+  std::vector<std::string> supported_gates{};
+  // Noise kinds accepted by the current circuit executor.
+  std::vector<std::string> supported_noise_models{};
+  // Practical hard limit enforced by the statevector implementation.
+  std::uint32_t max_qubits{0};
+  // Practical sampling limit exposed to callers for planning.
+  std::uint32_t max_shots{0};
+  // Framework-adapter hints.
+  bool supports_qiskit_like{true};
+  bool supports_cirq_like{true};
 };
 
 }  // namespace qx

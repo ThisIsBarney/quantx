@@ -17,6 +17,8 @@ class Engine:
     self._lib.qx_explain_backend_choice.restype = c_void_p
     self._lib.qx_run_circuit.argtypes = [c_char_p, c_char_p]
     self._lib.qx_run_circuit.restype = c_void_p
+    self._lib.qx_circuit_capabilities.argtypes = []
+    self._lib.qx_circuit_capabilities.restype = c_void_p
     self._lib.qx_validate_problem.argtypes = [c_char_p]
     self._lib.qx_validate_problem.restype = c_void_p
     self._lib.qx_validate_circuit.argtypes = [c_char_p]
@@ -40,6 +42,17 @@ class Engine:
     """Run a circuit-model request through the native runtime."""
     options = options or {}
     return self._call(self._lib.qx_run_circuit, circuit, options)
+
+  def circuit_capabilities(self) -> dict:
+    """Return the gate-model capability contract exposed by the native runtime."""
+    ptr = self._lib.qx_circuit_capabilities()
+    if not ptr:
+      raise RuntimeError("native call returned null pointer")
+    try:
+      raw = ctypes.cast(ptr, c_char_p).value.decode("utf-8")
+      return json.loads(raw)
+    finally:
+      self._lib.qx_free_string(ptr)
 
   def run_qiskit_like(self, request: dict, options: dict | None = None) -> dict:
     """Execute a minimal Qiskit-like circuit payload.
@@ -185,6 +198,11 @@ class Engine:
         "shots": int(request.get("shots", 0)),
         "observables": list(request.get("observables", [])),
         "operations": ops,
+        "seed": int(request.get("seed", 42)),
+        **({"noise": request["noise"]} if isinstance(request.get("noise"), dict) else {}),
+        **({"depolarizing_prob": float(request["depolarizing_prob"])} if "depolarizing_prob" in request else {}),
+        **({"amplitude_damping_gamma": float(request["amplitude_damping_gamma"])}
+           if "amplitude_damping_gamma" in request else {}),
     }
 
   def _from_cirq_like(self, request: dict) -> dict:
@@ -220,6 +238,11 @@ class Engine:
         "shots": int(shots),
         "observables": list(request.get("observables", [])),
         "operations": ops,
+        "seed": int(request.get("seed", 42)),
+        **({"noise": request["noise"]} if isinstance(request.get("noise"), dict) else {}),
+        **({"depolarizing_prob": float(request["depolarizing_prob"])} if "depolarizing_prob" in request else {}),
+        **({"amplitude_damping_gamma": float(request["amplitude_damping_gamma"])}
+           if "amplitude_damping_gamma" in request else {}),
     }
 
   @staticmethod

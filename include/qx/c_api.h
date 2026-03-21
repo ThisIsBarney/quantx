@@ -20,6 +20,8 @@ QX_API const char* qx_run(const char* problem_json, const char* options_json);
 QX_API const char* qx_explain_backend_choice(const char* problem_json, const char* options_json);
 // Run circuit simulation from JSON inputs and return heap-allocated JSON output.
 QX_API const char* qx_run_circuit(const char* circuit_json, const char* options_json);
+// Query gate-model capability metadata and return heap-allocated JSON output.
+QX_API const char* qx_circuit_capabilities(void);
 // Validate problem JSON payload and return JSON status.
 QX_API const char* qx_validate_problem(const char* problem_json);
 // Validate circuit JSON payload and return JSON status.

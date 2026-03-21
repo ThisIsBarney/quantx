@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
@@ -731,6 +732,42 @@ int main() {
   expect(std::abs(cb.expectation_exact.at("X0Y1")) < 2e-2, "bell <X0Y1> should be near 0");
   const std::string circuit_json = qx::circuit_result_to_json(cb);
   expect(circuit_json.find("\"engine_version\"") != std::string::npos, "circuit result json should include engine_version");
+
+  const auto caps = qx::circuit_backend_capabilities();
+  expect(caps.backend == "statevector", "circuit capability backend should be statevector");
+  expect(caps.max_qubits == 25, "circuit capability max_qubits should match the hard limit");
+  expect(caps.max_shots >= 1000, "circuit capability max_shots should cover smoke sampling");
+  expect(std::find(caps.supported_gates.begin(), caps.supported_gates.end(), "CNOT") != caps.supported_gates.end(),
+         "circuit capability should list CNOT");
+  expect(std::find(caps.supported_gates.begin(), caps.supported_gates.end(), "CX") != caps.supported_gates.end(),
+         "circuit capability should list CX");
+  expect(std::find(caps.supported_noise_models.begin(), caps.supported_noise_models.end(), "depolarizing") !=
+             caps.supported_noise_models.end(),
+         "circuit capability should list depolarizing noise");
+  const std::string caps_json = qx::circuit_capabilities_to_json(caps);
+  expect(caps_json.find("\"supported_gates\"") != std::string::npos,
+         "circuit capability json should include supported_gates");
+
+  try {
+    qx::QuantumCircuit bad_gate;
+    bad_gate.qubits = 1;
+    bad_gate.operations = {qx::CircuitOp{"FOO", {0}, {}, {}}};
+    (void)qx::run_circuit(bad_gate, o);
+    expect(false, "unsupported gate should throw CircuitError");
+  } catch (const qx::CircuitError& ex) {
+    expect(ex.code() == "QX_UNSUPPORTED_GATE", "unsupported gate should use QX_UNSUPPORTED_GATE");
+    expect(std::string(ex.what()).find("unsupported gate") != std::string::npos,
+           "unsupported gate message should be human readable");
+  }
+
+  try {
+    (void)qx::circuit_from_json(R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"phase_flip"}})");
+    expect(false, "unsupported noise should throw CircuitError during parse");
+  } catch (const qx::CircuitError& ex) {
+    expect(ex.code() == "QX_UNSUPPORTED_NOISE", "unsupported noise should use QX_UNSUPPORTED_NOISE");
+    expect(std::string(ex.what()).find("unsupported noise model") != std::string::npos,
+           "unsupported noise message should be human readable");
+  }
 
   qx::QuantumCircuit rx;
   rx.qubits = 1;
