@@ -31,6 +31,43 @@ def first_case_result(case: dict) -> dict:
   return {}
 
 
+def trend_legend_lines() -> list[str]:
+  """Return the canonical legend text used by trend reports."""
+  return [
+      "legend: accuracy regression = a precision metric worsened compared with the previous report.",
+      "legend: perf warning = a performance metric worsened; the suite gate may still block it depending on policy.",
+      "legend: metadata warning = the comparison is incomplete because a report field is missing or undecodable.",
+  ]
+
+
+def _trend_missing_context(perf: dict) -> bool:
+  """Return True when trend context is incomplete enough to warrant a metadata warning."""
+  for key in ("grid", "export_volume", "fft_provider", "avg_step_ms_mean"):
+    value = perf.get(key)
+    if value is None:
+      return True
+    if isinstance(value, str) and value.strip().lower() == "n/a":
+      return True
+  return False
+
+
+def trend_issue_classification(metric: str, prev: float | None, curr: float | None, perf: dict) -> str:
+  """Classify one trend row into an explainable issue bucket."""
+  if prev is None or curr is None:
+    return "metadata warning"
+  if _trend_missing_context(perf):
+    return "metadata warning"
+
+  delta = curr - prev
+  if abs(delta) < 1e-12:
+    return "ok"
+  if metric in {"mean_abs_error_mean", "max_abs_error_mean"} and delta > 0:
+    return "accuracy regression"
+  if metric == "core_elapsed_ms_mean" and delta > 0:
+    return "perf warning"
+  return "ok"
+
+
 def summarize(report: dict) -> dict:
   """Collapse one report into a table-friendly summary row."""
   case_count = 0
