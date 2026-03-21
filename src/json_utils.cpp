@@ -77,7 +77,7 @@ json parse_json_or_throw(const std::string& text) {
 template <typename T>
 T get_or(const json& j, const char* key, const T& def) {
   auto it = j.find(key);
-  if (it == nullptr || it->is_null()) {
+  if (it == j.end() || it->is_null()) {
     return def;
   }
   return it->get<T>();
@@ -104,7 +104,7 @@ CircuitOp parse_circuit_op(const json& item) {
 // Parse the nested continuous initial-state payload if present.
 void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig& out) {
   auto it = parent.find("initial_state");
-  if (it == nullptr || !it->is_object()) {
+  if (it == parent.end() || !it->is_object()) {
     return;
   }
   const auto& initial = *it;
@@ -161,7 +161,7 @@ ContinuousExportConfig parse_continuous_export_config_impl(const json& root) {
 // Read a numeric field as an unsigned 32-bit value and clamp it to a minimum.
 std::uint32_t read_clamped_u32(const json& j, const char* key, std::uint32_t def, std::uint32_t min_value) {
   auto it = j.find(key);
-  if (it == nullptr || it->is_null()) {
+  if (it == j.end() || it->is_null()) {
     return def;
   }
   double value = 0.0;
@@ -185,7 +185,7 @@ std::uint32_t read_clamped_u32(const json& j, const char* key, std::uint32_t def
 // Read a numeric field as size_t and clamp it to a minimum.
 std::size_t read_clamped_size(const json& j, const char* key, std::size_t def, std::size_t min_value) {
   auto it = j.find(key);
-  if (it == nullptr || it->is_null()) {
+  if (it == j.end() || it->is_null()) {
     return def;
   }
   long double value = 0.0L;
@@ -210,7 +210,7 @@ std::size_t read_clamped_size(const json& j, const char* key, std::size_t def, s
 // Read a density-floor ratio and clamp it to the inclusive range [0, 1].
 double read_clamped_ratio(const json& j, const char* key, double def) {
   auto it = j.find(key);
-  if (it == nullptr || it->is_null()) {
+  if (it == j.end() || it->is_null()) {
     return def;
   }
   double value = 0.0;
@@ -237,7 +237,7 @@ double read_clamped_ratio(const json& j, const char* key, double def);
 // Parse the optional circuit noise payload and keep legacy fields synchronized.
 void parse_noise_config(const json& parent, QuantumCircuit& out) {
   auto it = parent.find("noise");
-  if (it == nullptr || !it->is_object()) {
+  if (it == parent.end() || !it->is_object()) {
     return;
   }
   const auto& noise = *it;
@@ -381,7 +381,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   p.observables = get_or<std::vector<std::string>>(j, "observables", p.observables);
 
   auto c2d_it = j.find("continuous_space_2d");
-  if (c2d_it != nullptr && c2d_it->is_object()) {
+  if (c2d_it != j.end() && c2d_it->is_object()) {
     const auto& c2d = *c2d_it;
     p.continuous_2d.nx = get_or<std::uint32_t>(c2d, "nx", p.continuous_2d.nx);
     p.continuous_2d.ny = get_or<std::uint32_t>(c2d, "ny", p.continuous_2d.ny);
@@ -399,7 +399,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   }
 
   auto c3d_it = j.find("continuous_space_3d");
-  if (c3d_it != nullptr && c3d_it->is_object()) {
+  if (c3d_it != j.end() && c3d_it->is_object()) {
     const auto& c3d = *c3d_it;
     p.continuous_3d.nx = get_or<std::uint32_t>(c3d, "nx", p.continuous_3d.nx);
     p.continuous_3d.ny = get_or<std::uint32_t>(c3d, "ny", p.continuous_3d.ny);
@@ -419,7 +419,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   }
 
   auto h_it = j.find("hamiltonian_terms");
-  if (h_it != nullptr && h_it->is_array()) {
+  if (h_it != j.end() && h_it->is_array()) {
     p.hamiltonian_terms.clear();
     for (std::size_t i = 0; i < h_it->size(); ++i) {
       const auto& item = h_it->at(i);
@@ -483,7 +483,7 @@ QuantumCircuit circuit_from_json(const std::string& json_text) {
   c.seed = get_or<std::uint64_t>(j, "seed", c.seed);
 
   auto ops_it = j.find("operations");
-  if (ops_it != nullptr && ops_it->is_array()) {
+  if (ops_it != j.end() && ops_it->is_array()) {
     c.operations.clear();
     for (std::size_t i = 0; i < ops_it->size(); ++i) {
       const auto& item = ops_it->at(i);
