@@ -126,39 +126,186 @@ def get_continuous_config(problem: dict[str, Any]) -> dict[str, Any] | None:
 
 def extract_continuous_frames(result: dict[str, Any]) -> list[dict[str, Any]]:
   """Return any native continuous export frames embedded in a benchmark result."""
-  if not isinstance(result, dict):
+  export_block = extract_continuous_export_block(result)
+  if export_block is None:
     return []
+  frames = export_block.get("frames")
+  if isinstance(frames, list):
+    return [frame for frame in frames if isinstance(frame, dict)]
+  return []
 
-  candidates: list[Any] = []
-  for key in ("continuous_density_frames", "continuous_export", "continuous_frames", "continuous"):
+
+def extract_continuous_export_block(result: dict[str, Any]) -> dict[str, Any] | None:
+  """Return the first structured continuous-export block found in a result.
+
+  The helper is intentionally tolerant of older payload shapes. It accepts the
+  native ``continuous_export`` object, legacy list-only encodings, and nested
+  ``export`` wrappers so that the reporting layer can keep working as the
+  schema evolves append-only.
+  """
+  if not isinstance(result, dict):
+    return None
+
+  candidates: list[dict[str, Any]] = []
+  for key in ("continuous_export", "continuous_frames", "continuous", "continuous_density_frames"):
     value = result.get(key)
-    if isinstance(value, list):
+    if isinstance(value, dict):
       candidates.append(value)
-    elif isinstance(value, dict):
-      frames = value.get("frames")
-      if isinstance(frames, list):
-        candidates.append(frames)
+    elif isinstance(value, list):
+      candidates.append({"frames": value})
 
   export_block = result.get("export")
   if isinstance(export_block, dict):
     for key in ("continuous_export", "continuous", "frames"):
       value = export_block.get(key)
-      if isinstance(value, list):
+      if isinstance(value, dict):
         candidates.append(value)
-      elif isinstance(value, dict):
-        frames = value.get("frames")
-        if isinstance(frames, list):
-          candidates.append(frames)
+      elif isinstance(value, list):
+        candidates.append({"frames": value})
 
   if isinstance(result.get("frames"), list):
-    candidates.append(result["frames"])
+    candidates.append({"frames": result["frames"]})
 
   for candidate in candidates:
-    if isinstance(candidate, list) and candidate:
-      first = candidate[0]
-      if isinstance(first, dict):
-        return [frame for frame in candidate if isinstance(frame, dict)]
-  return []
+    if any(key in candidate for key in ("frames", "schema_version", "export_config")):
+      return candidate
+  return None
+
+
+def _compact_value(value: Any) -> str:
+  """Convert a structured export field into a short human-readable token."""
+  if value is None:
+    return "n/a"
+  if isinstance(value, bool):
+    return "true" if value else "false"
+  if isinstance(value, (int, float)):
+    return str(value)
+  if isinstance(value, str):
+    text = value.strip()
+    return text if text else "n/a"
+  if isinstance(value, dict):
+    parts = []
+    for key in sorted(value.keys()):
+      parts.append(f"{key}={_compact_value(value[key])}")
+    return "{" + ", ".join(parts) + "}"
+  if isinstance(value, list):
+    return "[" + ", ".join(_compact_value(item) for item in value[:6]) + ("..." if len(value) > 6 else "") + "]"
+  return str(value)
+
+
+def _first_numeric(export_config: dict[str, Any] | None, keys: tuple[str, ...]) -> float | None:
+  """Return the first numeric value found under any of the provided keys."""
+  if not isinstance(export_config, dict):
+    return None
+  for key in keys:
+    if key not in export_config:
+      continue
+    value = export_config.get(key)
+    if isinstance(value, bool):
+      continue
+    if isinstance(value, (int, float)):
+      return float(value)
+  return None
+
+
+def summarize_continuous_export_config(export_config: dict[str, Any] | None) -> str:
+  """Summarize a continuous-export configuration for compact reports."""
+  if not isinstance(export_config, dict) or not export_config:
+    return "n/a"
+
+  parts: list[str] = []
+
+  frame_stride = _first_numeric(export_config, ("frame_stride", "export_frame_stride", "stride", "sample_stride"))
+  if frame_stride is not None:
+    parts.append(f"frame_stride={int(frame_stride) if frame_stride.is_integer() else frame_stride:g}")
+
+  points_max = _first_numeric(export_config, ("points_max", "export_points_max", "max_points"))
+  if points_max is not None:
+    parts.append(f"points_max={int(points_max) if points_max.is_integer() else points_max:g}")
+
+  density_floor = _first_numeric(
+      export_config,
+      ("density_floor_ratio", "export_density_floor_ratio", "floor_ratio", "density_floor"),
+  )
+  if density_floor is not None:
+    parts.append(f"density_floor_ratio={density_floor:g}")
+
+  if not parts:
+    keys = ", ".join(sorted(export_config.keys()))
+    return f"custom[{keys}]"
+
+  return "; ".join(parts)
+
+
+def explain_continuous_frame_sampling(
+    export_config: dict[str, Any] | None,
+    frames: list[dict[str, Any]],
+    steps: int | None = None,
+) -> str:
+  """Explain how continuous frames were sampled without over-claiming accuracy.
+
+  The output intentionally distinguishes between an explicit sampling rate and a
+  best-effort observed cadence so that benchmark summaries do not imply that a
+  successful gate automatically means there was no trend change.
+  """
+  if isinstance(export_config, dict):
+    stride = _first_numeric(export_config, ("frame_stride", "export_frame_stride", "stride", "sample_stride"))
+    if stride is not None and stride > 0.0:
+      stride_text = int(stride) if stride.is_integer() else stride
+      if float(stride_text) == 1.0:
+        return "explicit sampling: 1 frame per step"
+      return f"explicit sampling: 1 frame every {stride_text} step(s)"
+
+  frame_count = len(frames)
+  if frame_count <= 0:
+    return "no exported frames"
+  if steps is not None and steps > 0:
+    return f"observed {frame_count} frame(s) across {steps} step(s); sampling stride not declared"
+  return f"observed {frame_count} frame(s); sampling stride not declared"
+
+
+def continuous_export_diagnostics(result: dict[str, Any], steps: int | None = None) -> dict[str, Any]:
+  """Summarize continuous-export metadata and flag missing fields as warnings.
+
+  The return value is intentionally advisory. It is suitable for human-readable
+  report columns, but it never changes gate outcomes or hard-fails benchmark
+  evaluation.
+  """
+  export_block = extract_continuous_export_block(result)
+  frames = extract_continuous_frames(result)
+  export_config = None
+  schema_version = None
+  if isinstance(export_block, dict):
+    schema_version = export_block.get("schema_version")
+    export_config = export_block.get("export_config") if isinstance(export_block.get("export_config"), dict) else None
+
+  warnings: list[str] = []
+  if export_block is None:
+    warnings.append("missing continuous_export payload")
+  if schema_version is None:
+    warnings.append("missing schema_version")
+  if export_config is None:
+    warnings.append("missing export_config")
+  if export_block is not None and not frames:
+    warnings.append("missing frames")
+
+  status = "ok" if not warnings else "warn"
+  if warnings:
+    diagnostic_tag = f"warn: {'; '.join(warnings)}"
+  else:
+    diagnostic_tag = "ok"
+
+  return {
+      "has_continuous_export": export_block is not None,
+      "schema_version": schema_version if schema_version is not None else "n/a",
+      "export_config_summary": summarize_continuous_export_config(export_config),
+      "frame_sampling": explain_continuous_frame_sampling(export_config, frames, steps),
+      "export_frame_count": len(frames),
+      "export_volume": continuous_export_volume(frames),
+      "diagnostic_status": status,
+      "diagnostic_tag": diagnostic_tag,
+      "diagnostic_warnings": warnings,
+  }
 
 
 def infer_fft_provider(result: dict[str, Any]) -> str:
