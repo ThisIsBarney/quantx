@@ -16,6 +16,22 @@ def main() -> int:
   dll = root / "build-vs" / "Debug" / "quantx.dll"
   eng = Engine(str(dll))
 
+  caps = eng.circuit_capabilities()
+  if caps.get("backend") != "statevector":
+    raise RuntimeError("circuit_capabilities backend mismatch")
+  supported_gates = set(caps.get("supported_gates", []))
+  for gate in {"H", "CNOT", "CX", "SWAP"}:
+    if gate not in supported_gates:
+      raise RuntimeError(f"missing supported gate: {gate}")
+  supported_noise = set(caps.get("supported_noise_models", []))
+  for noise in {"none", "depolarizing", "amplitude_damping"}:
+    if noise not in supported_noise:
+      raise RuntimeError(f"missing supported noise model: {noise}")
+  if int(caps.get("max_qubits", 0)) < 25:
+    raise RuntimeError("circuit_capabilities max_qubits too small")
+  if int(caps.get("max_shots", 0)) < 1000:
+    raise RuntimeError("circuit_capabilities max_shots too small")
+
   qiskit_req = {
       "num_qubits": 2,
       "shots": 1000,
@@ -24,6 +40,7 @@ def main() -> int:
           {"name": "h", "qubits": [0]},
           {"name": "cx", "qubits": [0, 1]},
       ],
+      "seed": 1234,
   }
   r1 = eng.run_qiskit_like(qiskit_req, {"enable_checkpoint": False})
   if not r1.get("ok", False):
@@ -37,10 +54,42 @@ def main() -> int:
           [{"gate": "H", "targets": [0]}],
           [{"gate": "CNOT", "controls": [0], "targets": [1]}],
       ],
+      "seed": 1234,
   }
   r2 = eng.run_cirq_like(cirq_req, {"enable_checkpoint": False})
   if not r2.get("ok", False):
     raise RuntimeError("run_cirq_like failed")
+  if r1.get("backend") != r2.get("backend"):
+    raise RuntimeError("adapter backends diverged")
+  if r1.get("expectation_exact") != r2.get("expectation_exact"):
+    raise RuntimeError("adapter exact expectations diverged")
+  if r1.get("counts") != r2.get("counts"):
+    raise RuntimeError("adapter sampled counts diverged")
+  if r1.get("error_summary") != r2.get("error_summary"):
+    raise RuntimeError("adapter error summaries diverged")
+
+  bad_gate = eng.run_circuit({
+      "qubits": 1,
+      "operations": [{"name": "foo", "targets": [0]}],
+  }, {"enable_checkpoint": False})
+  if bad_gate.get("ok", True):
+    raise RuntimeError("unsupported gate should fail")
+  if bad_gate.get("error_code") != "QX_UNSUPPORTED_GATE":
+    raise RuntimeError("unsupported gate should return QX_UNSUPPORTED_GATE")
+  if "unsupported gate" not in bad_gate.get("error_message", ""):
+    raise RuntimeError("unsupported gate should include human message")
+
+  bad_noise = eng.validate_circuit({
+      "qubits": 1,
+      "operations": [{"name": "x", "targets": [0]}],
+      "noise": {"kind": "phase_flip"},
+  })
+  if bad_noise.get("ok", True):
+    raise RuntimeError("unsupported noise should fail validation")
+  if bad_noise.get("error_code") != "QX_UNSUPPORTED_NOISE":
+    raise RuntimeError("unsupported noise should return QX_UNSUPPORTED_NOISE")
+  if "unsupported noise model" not in bad_noise.get("error_message", ""):
+    raise RuntimeError("unsupported noise should include human message")
 
   continuous_problem = {
       "kind": "continuous_space_2d",

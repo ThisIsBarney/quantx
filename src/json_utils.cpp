@@ -1,4 +1,5 @@
 #include "qx/json_utils.hpp"
+#include "qx/engine.hpp"
 #include "qx/version.hpp"
 
 #include <stdexcept>
@@ -109,6 +110,30 @@ void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig
   out.grid = get_or<std::vector<double>>(initial, "grid", out.grid);
 }
 
+// Parse the optional circuit noise payload and keep legacy fields synchronized.
+void parse_noise_config(const json& parent, QuantumCircuit& out) {
+  auto it = parent.find("noise");
+  if (it == parent.end() || !it->is_object()) {
+    return;
+  }
+  const auto& noise = *it;
+  out.noise_model = get_or<std::string>(noise, "kind", out.noise_model);
+  out.noise_params = get_or<std::map<std::string, double>>(noise, "params", out.noise_params);
+  if (out.noise_model == "depolarizing") {
+    out.depolarizing_prob = get_or<double>(noise, "prob", out.depolarizing_prob);
+    if (out.noise_params.count("prob") != 0U) {
+      out.depolarizing_prob = out.noise_params["prob"];
+    }
+  } else if (out.noise_model == "amplitude_damping") {
+    out.amplitude_damping_gamma = get_or<double>(noise, "gamma", out.amplitude_damping_gamma);
+    if (out.noise_params.count("gamma") != 0U) {
+      out.amplitude_damping_gamma = out.noise_params["gamma"];
+    }
+  } else if (out.noise_model != "none" && !out.noise_model.empty()) {
+    throw CircuitError("QX_UNSUPPORTED_NOISE", "unsupported noise model: " + out.noise_model);
+  }
+}
+
 // Serialize events to JSON array.
 json events_to_json(const std::vector<Event>& events) {
   json out = json::array();
@@ -164,6 +189,19 @@ json continuous_density_frames_to_json(const std::vector<ContinuousDensityFrame>
     out.push_back(continuous_density_frame_to_json(frame));
   }
   return out;
+}
+
+// Serialize circuit capability metadata to a JSON object.
+json circuit_capabilities_to_json_object(const CircuitCapabilities& capabilities) {
+  return json{
+      {"backend", capabilities.backend},
+      {"supported_gates", capabilities.supported_gates},
+      {"supported_noise_models", capabilities.supported_noise_models},
+      {"max_qubits", capabilities.max_qubits},
+      {"max_shots", capabilities.max_shots},
+      {"supports_qiskit_like", capabilities.supports_qiskit_like},
+      {"supports_cirq_like", capabilities.supports_cirq_like},
+  };
 }
 
 }  // namespace
@@ -281,6 +319,7 @@ QuantumCircuit circuit_from_json(const std::string& json_text) {
       }
     }
   }
+  parse_noise_config(j, c);
   if (c.operations.empty()) {
     throw std::runtime_error("circuit must contain at least one operation");
   }
@@ -319,6 +358,13 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   j["shot_variance"] = result.shot_variance;
   j["shot_stderr"] = result.shot_stderr;
   j["error_summary"] = result.error_summary;
+  return j.dump();
+}
+
+// Serialize circuit capability metadata as compact JSON.
+std::string circuit_capabilities_to_json(const CircuitCapabilities& capabilities) {
+  json j = circuit_capabilities_to_json_object(capabilities);
+  j["engine_version"] = version_string();
   return j.dump();
 }
 
