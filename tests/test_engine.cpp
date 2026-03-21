@@ -206,6 +206,46 @@ int main() {
   expect(std::abs(parsed_options.export_density_floor_ratio - 0.25) < 1e-12,
          "options json should parse export_density_floor_ratio");
 
+  const auto parsed_options_boundary = qx::options_from_json(R"({
+    "export_continuous_frames": true,
+    "export_frame_stride": 0,
+    "export_points_max": 0,
+    "export_density_floor_ratio": 3.5
+  })");
+  expect(parsed_options_boundary.export_frame_stride == 1U, "export_frame_stride should clamp to a minimum of 1");
+  expect(parsed_options_boundary.export_points_max == 1U, "export_points_max should clamp to a minimum of 1");
+  expect(std::abs(parsed_options_boundary.export_density_floor_ratio - 1.0) < 1e-12,
+         "export_density_floor_ratio should clamp to 1.0");
+
+  const auto default_export_contract = qx::continuous_export_config_from_json(R"({})");
+  expect(default_export_contract.schema_version == 1U, "default export contract schema_version should be 1");
+  expect(default_export_contract.export_frame_stride == 1U, "default export contract frame stride should be 1");
+  expect(default_export_contract.export_points_max == 2500U, "default export contract points cap should be 2500");
+  expect(std::abs(default_export_contract.export_density_floor_ratio - 0.08) < 1e-12,
+         "default export contract density floor ratio should be 0.08");
+
+  const auto future_export_contract = qx::continuous_export_config_from_json(R"({
+    "continuous_export": {
+      "schema_version": 0,
+      "export_frame_stride": 0,
+      "export_points_max": 0,
+      "export_density_floor_ratio": -0.5,
+      "future_field": 99,
+      "export_config": {
+        "schema_version": 0,
+        "export_frame_stride": 0,
+        "export_points_max": 0,
+        "export_density_floor_ratio": 4.0,
+        "future_nested_field": "keep"
+      }
+    }
+  })");
+  expect(future_export_contract.schema_version == 1U, "future export contract schema_version should clamp to 1");
+  expect(future_export_contract.export_frame_stride == 1U, "future export contract frame stride should clamp to 1");
+  expect(future_export_contract.export_points_max == 1U, "future export contract points cap should clamp to 1");
+  expect(std::abs(future_export_contract.export_density_floor_ratio - 1.0) < 1e-12,
+         "future export contract density floor ratio should clamp to 1.0");
+
   const auto c2d = qx::problem_from_json(R"({
     "kind": "continuous_space_2d",
     "continuous_space_2d": {
@@ -253,6 +293,22 @@ int main() {
          "continuous2d result json should include continuous density frames");
   expect(c2d_json.find("\"continuous_export\"") != std::string::npos,
          "continuous2d result json should include continuous export object");
+
+  qx::SimulationResult contract_result;
+  contract_result.continuous_export.schema_version = 0;
+  contract_result.continuous_export.export_frame_stride = 0;
+  contract_result.continuous_export.export_points_max = 0;
+  contract_result.continuous_export.export_density_floor_ratio = 9.0;
+  const auto contract_doc = nlohmann::json::parse(qx::result_to_json(contract_result));
+  expect(contract_doc.at("continuous_export").at("schema_version").get<std::uint32_t>() == 1U,
+         "serialized continuous export schema_version should clamp to 1");
+  expect(contract_doc.at("continuous_export").at("export_config").at("export_frame_stride").get<std::uint32_t>() == 1U,
+         "serialized continuous export frame stride should clamp to 1");
+  expect(contract_doc.at("continuous_export").at("export_config").at("export_points_max").get<std::size_t>() == 1U,
+         "serialized continuous export points cap should clamp to 1");
+  expect(std::abs(contract_doc.at("continuous_export").at("export_config").at("export_density_floor_ratio").get<double>() - 1.0) < 1e-12,
+         "serialized continuous export density floor ratio should clamp to 1.0");
+
   auto o_export = o;
   o_export.export_continuous_frames = true;
   const auto c2d_export_run = qx::run(c2d, o_export);
@@ -263,6 +319,46 @@ int main() {
   expect(c2d_export_run.continuous_density_frames.front().density_xy_flat.size() ==
              static_cast<std::size_t>(c2d.continuous_2d.nx) * static_cast<std::size_t>(c2d.continuous_2d.ny),
          "continuous2d export density payload should match nx*ny");
+
+  auto o_export_dirty = o_export;
+  o_export_dirty.export_frame_stride = 0;
+  o_export_dirty.export_points_max = 0;
+  o_export_dirty.export_density_floor_ratio = 2.5;
+  const auto c2d_dirty_run = qx::run(c2d, o_export_dirty);
+  expect(c2d_dirty_run.ok, "continuous2d dirty export run should succeed");
+  expect(c2d_dirty_run.continuous_export.export_frame_stride == 1U,
+         "continuous2d dirty export should normalize frame stride to 1");
+  expect(c2d_dirty_run.continuous_export.export_points_max == 1U,
+         "continuous2d dirty export should normalize points max to 1");
+  expect(std::abs(c2d_dirty_run.continuous_export.export_density_floor_ratio - 1.0) < 1e-12,
+         "continuous2d dirty export should normalize density floor ratio to 1.0");
+  bool saw_contract_event = false;
+  for (const auto& ev : c2d_dirty_run.events) {
+    if (ev.name == "continuous_export_contract") {
+      saw_contract_event = true;
+      expect(ev.metrics.count("normalized") == 1, "continuous_export_contract event should expose normalized flag");
+      expect(ev.metrics.at("normalized") > 0.5, "continuous_export_contract event should mark normalization");
+      expect(std::abs(ev.metrics.at("export_frame_stride") - 1.0) < 1e-12,
+             "continuous_export_contract event should report effective frame stride");
+      expect(std::abs(ev.metrics.at("export_points_max") - 1.0) < 1e-12,
+             "continuous_export_contract event should report effective points cap");
+      expect(std::abs(ev.metrics.at("export_density_floor_ratio") - 1.0) < 1e-12,
+             "continuous_export_contract event should report effective density floor ratio");
+    }
+  }
+  expect(saw_contract_event, "continuous2d dirty export should emit a normalization event");
+  const auto c2d_dirty_doc = nlohmann::json::parse(qx::result_to_json(c2d_dirty_run));
+  const auto c2d_dirty_events = c2d_dirty_doc.at("events");
+  bool saw_contract_event_json = false;
+  for (std::size_t i = 0; i < c2d_dirty_events.size(); ++i) {
+    const auto& ev = c2d_dirty_events.at(i);
+    if (ev.at("name").get<std::string>() == "continuous_export_contract") {
+      saw_contract_event_json = true;
+      expect(ev.at("metrics").at("normalized").get<double>() > 0.5,
+             "continuous_export_contract JSON event should expose normalization");
+    }
+  }
+  expect(saw_contract_event_json, "continuous_export_contract JSON event should be serialized");
 
   auto o_export_stride = o_export;
   o_export_stride.export_frame_stride = 4;
@@ -346,7 +442,8 @@ int main() {
   expect(cli_export_frames.is_array(), "CLI export wrapper frames should be an array");
   expect(cli_export_frames.size() < cli_export_doc.at("continuous_density_frames").size(),
          "CLI export wrapper should sample frames when stride > 1");
-  for (const auto& frame : cli_export_frames) {
+  for (std::size_t i = 0; i < cli_export_frames.size(); ++i) {
+    const auto& frame = cli_export_frames.at(i);
     expect(frame.at("density_xy_flat").is_array(), "CLI export wrapper should retain 2D density payloads");
     expect(!frame.at("density_xy_flat").empty(), "CLI export wrapper payload should be non-empty");
   }

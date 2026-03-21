@@ -4,6 +4,7 @@
 #include <cctype>
 #include <chrono>
 #include <complex>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <random>
@@ -16,6 +17,7 @@
 #include "qx/backend.hpp"
 #include "qx/backends.hpp"
 #include "qx/logging.hpp"
+#include "qx/json_utils.hpp"
 #include "qx/runtime.hpp"
 #include "qx/scheduler.hpp"
 
@@ -23,6 +25,37 @@ namespace qx {
 namespace {
 
 using Complex = std::complex<double>;
+
+// Build a continuous-export contract snapshot from runtime options.
+ContinuousExportConfig make_continuous_export_config(const RunOptions& options) {
+  ContinuousExportConfig config;
+  config.export_frame_stride = options.export_frame_stride;
+  config.export_points_max = options.export_points_max;
+  config.export_density_floor_ratio = options.export_density_floor_ratio;
+  return config;
+}
+
+// Emit a structured event when the continuous-export contract is normalized.
+void emit_continuous_export_contract_event(RuntimeContext& runtime,
+                                           const ContinuousExportConfig& raw_config,
+                                           const ContinuousExportConfig& normalized_config) {
+  runtime.emit_event(
+      "continuous_export_contract",
+      {{"schema_version_input", static_cast<double>(raw_config.schema_version)},
+       {"schema_version", static_cast<double>(normalized_config.schema_version)},
+       {"export_frame_stride_input", static_cast<double>(raw_config.export_frame_stride)},
+       {"export_frame_stride", static_cast<double>(normalized_config.export_frame_stride)},
+       {"export_points_max_input", static_cast<double>(raw_config.export_points_max)},
+       {"export_points_max", static_cast<double>(normalized_config.export_points_max)},
+       {"export_density_floor_ratio_input", raw_config.export_density_floor_ratio},
+       {"export_density_floor_ratio", normalized_config.export_density_floor_ratio},
+       {"normalized", (raw_config.schema_version != normalized_config.schema_version ||
+                       raw_config.export_frame_stride != normalized_config.export_frame_stride ||
+                       raw_config.export_points_max != normalized_config.export_points_max ||
+                       std::abs(raw_config.export_density_floor_ratio - normalized_config.export_density_floor_ratio) > 1e-15)
+                          ? 1.0
+                          : 0.0}});
+}
 
 // Return the fixed gate vocabulary accepted by the circuit executor.
 const std::vector<std::string>& supported_circuit_gates() {
@@ -444,32 +477,33 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   log::info("run started: qubits=" + std::to_string(problem.qubits));
 
   SimulationResult result;
-  // Mirror the caller's export knobs into the result so the JSON surface can advertise
-  // exactly which continuous-export contract was used for this run.
-  result.continuous_export.schema_version = 1U;
-  result.continuous_export.export_frame_stride = std::max<std::uint32_t>(1U, options.export_frame_stride);
-  result.continuous_export.export_points_max = options.export_points_max;
-  result.continuous_export.export_density_floor_ratio =
-      std::clamp(options.export_density_floor_ratio, 0.0, 1.0);
-  RuntimeContext runtime(options);
+  const ContinuousExportConfig raw_export = make_continuous_export_config(options);
+  const ContinuousExportConfig normalized_export = sanitize_continuous_export_config(raw_export);
+  RunOptions effective_options = options;
+  effective_options.export_frame_stride = normalized_export.export_frame_stride;
+  effective_options.export_points_max = normalized_export.export_points_max;
+  effective_options.export_density_floor_ratio = normalized_export.export_density_floor_ratio;
+  result.continuous_export = normalized_export;
+  RuntimeContext runtime(effective_options);
   runtime.emit_event("runtime_initialized",
                      {{"threads", static_cast<double>(runtime.effective_threads())},
                       {"mpi_ranks", static_cast<double>(runtime.effective_mpi_ranks())}});
+  emit_continuous_export_contract_event(runtime, raw_export, normalized_export);
 
-  const std::string backend_name = choose_backend(problem, options);
+  const std::string backend_name = choose_backend(problem, effective_options);
   log::info("scheduler selected backend: " + backend_name);
   auto backend = BackendRegistry::instance().create(backend_name);
 
-  if (options.enable_checkpoint) {
-    std::filesystem::create_directories(options.checkpoint_path);
-    backend->restore(options.checkpoint_path);
+  if (effective_options.enable_checkpoint) {
+    std::filesystem::create_directories(effective_options.checkpoint_path);
+    backend->restore(effective_options.checkpoint_path);
     runtime.emit_event("checkpoint_restore_attempt", {{"success", 1.0}});
-    log::debug("checkpoint restore attempted at: " + options.checkpoint_path);
+    log::debug("checkpoint restore attempted at: " + effective_options.checkpoint_path);
   }
 
-  backend->initialize(problem, options);
+  backend->initialize(problem, effective_options);
   runtime.emit_event("backend_initialized", {{"qubits", static_cast<double>(problem.qubits)}});
-  backend->evolve(problem, options);
+  backend->evolve(problem, effective_options);
   runtime.emit_event("evolution_complete", {{"total_time", problem.evolution.total_time}});
 
   result.ok = true;
@@ -480,10 +514,10 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   result.events = runtime.events();
   result.message = "Simulation completed";
 
-  if (options.enable_checkpoint) {
-    backend->checkpoint(options.checkpoint_path);
+  if (effective_options.enable_checkpoint) {
+    backend->checkpoint(effective_options.checkpoint_path);
     result.events.push_back(Event{"checkpoint_saved", {{"enabled", 1.0}}});
-    log::debug("checkpoint saved at: " + options.checkpoint_path);
+    log::debug("checkpoint saved at: " + effective_options.checkpoint_path);
   }
 
   const auto t1 = std::chrono::high_resolution_clock::now();
