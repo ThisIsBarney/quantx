@@ -55,6 +55,48 @@ std::string quote_path(const std::filesystem::path& path) {
   return "\"" + path.string() + "\"";
 }
 
+// Bind the C API entry points from the runtime DLL at test time.
+struct CApiBindings {
+  using RunCircuitFn = const char* (*)(const char*, const char*);
+  using FreeStringFn = void (*)(const char*);
+
+  HMODULE module{nullptr};
+  RunCircuitFn run_circuit{nullptr};
+  FreeStringFn free_string{nullptr};
+};
+
+// Load the DLL exports needed by the C API smoke checks.
+const CApiBindings& c_api_bindings() {
+  static const CApiBindings bindings = [] {
+    const char* candidates[] = {"Debug\\quantx.dll", "quantx.dll"};
+    HMODULE module = nullptr;
+    for (const char* candidate : candidates) {
+      module = LoadLibraryA(candidate);
+      if (module != nullptr) {
+        break;
+      }
+    }
+    if (module == nullptr) {
+      throw std::runtime_error("failed to load quantx.dll for C API smoke checks");
+    }
+    auto run_circuit = reinterpret_cast<CApiBindings::RunCircuitFn>(GetProcAddress(module, "qx_run_circuit"));
+    auto free_string = reinterpret_cast<CApiBindings::FreeStringFn>(GetProcAddress(module, "qx_free_string"));
+    if (run_circuit == nullptr || free_string == nullptr) {
+      throw std::runtime_error("failed to resolve qx_run_circuit/qx_free_string from quantx.dll");
+    }
+    return CApiBindings{module, run_circuit, free_string};
+  }();
+  return bindings;
+}
+
+// Convert a heap-allocated C string JSON payload into a parsed JSON value.
+nlohmann::json parse_owned_json(CApiBindings::RunCircuitFn fn, const char* circuit_json, const char* options_json) {
+  const char* raw = fn(circuit_json, options_json);
+  std::string text = raw ? raw : "";
+  c_api_bindings().free_string(raw);
+  return nlohmann::json::parse(text);
+}
+
 // Execute a command through the platform shell and return the raw exit code.
 int run_command(const std::string& command) {
 #ifdef _WIN32
@@ -767,6 +809,49 @@ int main() {
     expect(ex.code() == "QX_UNSUPPORTED_NOISE", "unsupported noise should use QX_UNSUPPORTED_NOISE");
     expect(std::string(ex.what()).find("unsupported noise model") != std::string::npos,
            "unsupported noise message should be human readable");
+  }
+
+  {
+    const auto& c_api = c_api_bindings();
+    const auto bad_gate_doc =
+        parse_owned_json(c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"FOO","targets":[0]}]})",
+                         R"({"enable_checkpoint":false})");
+    expect(!bad_gate_doc.at("ok").get<bool>(), "C API unsupported gate should return ok=false");
+    expect(bad_gate_doc.at("error_kind").get<std::string>() == "circuit",
+           "C API unsupported gate should mark circuit error kind");
+    expect(bad_gate_doc.at("error_code").get<std::string>() == "QX_UNSUPPORTED_GATE",
+           "C API unsupported gate should expose QX_UNSUPPORTED_GATE");
+    expect(bad_gate_doc.at("error").get<std::string>() == bad_gate_doc.at("error_message").get<std::string>(),
+           "C API unsupported gate should keep error and error_message aligned");
+  }
+
+  {
+    const auto& c_api = c_api_bindings();
+    const auto bad_noise_doc = parse_owned_json(
+        c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"phase_flip"}})",
+        R"({"enable_checkpoint":false})");
+    expect(!bad_noise_doc.at("ok").get<bool>(), "C API unsupported noise should return ok=false");
+    expect(bad_noise_doc.at("error_kind").get<std::string>() == "circuit",
+           "C API unsupported noise should mark circuit error kind");
+    expect(bad_noise_doc.at("error_code").get<std::string>() == "QX_UNSUPPORTED_NOISE",
+           "C API unsupported noise should expose QX_UNSUPPORTED_NOISE");
+    expect(bad_noise_doc.at("error_message").get<std::string>().find("unsupported noise model") != std::string::npos,
+           "C API unsupported noise message should be human readable");
+  }
+
+  {
+    const auto& c_api = c_api_bindings();
+    const auto bad_param_doc =
+        parse_owned_json(c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"CNOT","targets":[0]}]})",
+                         R"({"enable_checkpoint":false})");
+    expect(!bad_param_doc.at("ok").get<bool>(), "C API invalid parameter should return ok=false");
+    expect(bad_param_doc.at("error_kind").get<std::string>() == "circuit",
+           "C API invalid parameter should mark circuit error kind");
+    expect(bad_param_doc.at("error_code").get<std::string>() == "QX_INVALID_CIRCUIT",
+           "C API invalid parameter should expose QX_INVALID_CIRCUIT");
+    expect(bad_param_doc.at("error_message").get<std::string>().find("requires 1 control and 1 target") !=
+               std::string::npos,
+           "C API invalid parameter message should be human readable");
   }
 
   qx::QuantumCircuit rx;
