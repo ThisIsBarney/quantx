@@ -24,6 +24,8 @@
   - `|psi|^2` stays near 1.0 in smoke scenarios
 - smoke diagnostics:
   - `qx_smoke` and `qx_fft_smoke` route CRT failures to stderr, so Windows debug runs stay console-only
+  - `scripts/test.ps1 -NoPopup` enables a console-only native error mode before any child process starts
+  - `scripts/run_cli.ps1 -NoPopup` uses the same console-only native error mode before build and CLI execution
   - `scripts/test.ps1` only runs the Python adapter and visualization smoke when it finds a compatible x64 native DLL; otherwise it prints a clear console skip message and continues with the lightweight schema smoke
 - continuous export payload checks:
   - 2D export payloads are validated to match `nx * ny`
@@ -33,6 +35,10 @@
 ## Workflow Checks
 
 - Task scripts warn when launched from `master` or `main`.
+- `scripts/ensure_subagent_worktree.ps1` supports three guard modes:
+  - `warn` prints a warning and continues
+  - `enforce` throws on protected branches
+  - `silent` suppresses guard output, which is the default in CI
 - Start each new agent task from a dedicated `codex/*` worktree.
 - Failures must surface in the console; do not use debugger popups or modal error dialogs.
 - See `docs/ENGINEERING_STANDARDS.md` for the full workflow and quality checklist.
@@ -53,6 +59,31 @@ When a release or integration effort is split into three rounds, keep the flow d
 - Local smoke runs may skip heavier Python adapter or visualization checks when the available native DLL does not match the active Python architecture; the script prints the reason and continues with the lightweight checks.
 - CI uses the same console-only reporting, but the benchmark gate is labeled with the CI profile and keeps smoke-suite performance warnings non-blocking.
 - Local runs are expected to be more exploratory; CI is expected to be reproducible and quiet, especially around worktree guard messages.
+
+## Script Summary Format
+
+`scripts/test.ps1` writes one machine-parseable record per step and one final summary line:
+
+- `QX_TEST_STEP|{...}`
+- `QX_TEST_SUMMARY|{...}`
+
+Each step record includes:
+
+- `name`
+- `status` (`pass`, `skip`, or `fail`)
+- `reason`
+- `duration_ms`
+- `details`
+
+The summary record includes:
+
+- `pass`
+- `skip`
+- `fail`
+- `total`
+- `no_popup`
+- `worktree_guard`
+- `failed_step`
 
 ## Benchmark coverage
 
@@ -84,17 +115,21 @@ The benchmark reports and trend files now include:
 - pre-commit verification matrix:
   - `.\scripts\run_verification_matrix.ps1`
   - runs smoke, adapter, visualization, and the selected benchmark gate in one console-only pass
+  - `.\scripts\test_worktree_guard.ps1`
+    - validates the worktree guard's silent, enforce, and protected-branch warn paths
 
 ## How to run
 
 ```powershell
 .\scripts\test.ps1
+.\scripts\test.ps1 -NoPopup
 ```
 
 CLI sanity:
 
 ```powershell
 .\scripts\run_cli.ps1
+.\scripts\run_cli.ps1 -NoPopup
 ```
 
 CLI argument contract sanity:
