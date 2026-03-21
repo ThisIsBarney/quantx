@@ -14,13 +14,48 @@ if ($EnforceWorktreeGuard) {
 }
 
 function Get-VsDevCmdPath {
-  $candidates = @(
-    "C:\Program Files\Microsoft Visual Studio\18\Community\Common7\Tools\VsDevCmd.bat"
-    "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat"
-    "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
-    "C:\Program Files (x86)\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat"
-    "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat"
+  # Collect candidate locations in priority order and deduplicate while preserving order.
+  $candidates = New-Object System.Collections.Generic.List[string]
+  $seen = New-Object System.Collections.Generic.HashSet[string]
+
+  function Add-Candidate([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+      return
+    }
+    $normalized = [System.IO.Path]::GetFullPath($Path)
+    if ($seen.Add($normalized)) {
+      $candidates.Add($normalized)
+    }
+  }
+
+  # Prefer already-exported VS installation hints when present.
+  if (-not [string]::IsNullOrWhiteSpace($env:VSINSTALLDIR)) {
+    Add-Candidate (Join-Path $env:VSINSTALLDIR "Common7\Tools\VsDevCmd.bat")
+  }
+
+  # Known install layouts across local/CI images.
+  $roots = @(
+    "C:\Program Files\Microsoft Visual Studio"
+    "C:\Program Files (x86)\Microsoft Visual Studio"
   )
+  $versions = @("18", "2022")
+  $editions = @("Enterprise", "Professional", "Community", "BuildTools")
+  foreach ($root in $roots) {
+    foreach ($version in $versions) {
+      foreach ($edition in $editions) {
+        Add-Candidate (Join-Path $root "$version\$edition\Common7\Tools\VsDevCmd.bat")
+      }
+    }
+  }
+
+  # Fall back to vswhere when available (works on GitHub-hosted Windows runners).
+  $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+  if (Test-Path $vswhere) {
+    $installPaths = & $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -format value 2>$null
+    foreach ($installPath in $installPaths) {
+      Add-Candidate (Join-Path $installPath "Common7\Tools\VsDevCmd.bat")
+    }
+  }
 
   foreach ($candidate in $candidates) {
     if (Test-Path $candidate) {
@@ -28,7 +63,8 @@ function Get-VsDevCmdPath {
     }
   }
 
-  throw "Visual Studio developer command prompt not found."
+  $checked = ($candidates | ForEach-Object { "  - $_" }) -join [Environment]::NewLine
+  throw "Visual Studio developer command prompt not found. checked:`n$checked"
 }
 
 function Get-VsCompilerPath {
