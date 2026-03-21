@@ -1,7 +1,8 @@
 param(
   [ValidateSet("auto", "engine", "python")]
   [string]$SolverMode = "auto",
-  [string]$ContinuousExportJson = ""
+  [string]$ContinuousExportJson = "",
+  [switch]$EnforceWorktreeGuard
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,7 +10,11 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
 function Get-NativeDllPath {
   param([string]$StartDir)
@@ -29,7 +34,7 @@ function Get-NativeDllPath {
 }
 
 if (-not (Get-NativeDllPath -StartDir $root)) {
-  .\scripts\build.ps1
+  .\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
 }
 
 # Keep the wrapper ergonomic while exposing the continuous solver mode.

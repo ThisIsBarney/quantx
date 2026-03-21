@@ -2,7 +2,8 @@ param(
   [switch]$NoiseSweep,
   [switch]$RunGates,
   [switch]$EnforceGate,
-  [switch]$SkipBuild
+  [switch]$SkipBuild,
+  [switch]$EnforceWorktreeGuard
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,11 +11,15 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
 if (-not $SkipBuild) {
   # Build once, then fan out over every suite so the benchmark entry flow stays consistent.
-  .\scripts\build.ps1
+  .\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
   if ($LASTEXITCODE -ne 0) { throw "build failed: exit code $LASTEXITCODE" }
 }
 
@@ -56,10 +61,17 @@ foreach ($suite in $suites) {
     if (Use-PerfWarnOnly -SuiteName $suite) {
       $gateArgs.PerfWarnOnly = $true
     }
+    if ($EnforceWorktreeGuard) {
+      $gateArgs.EnforceWorktreeGuard = $true
+    }
     .\scripts\run_benchmark_and_gate.ps1 @gateArgs
     if ($LASTEXITCODE -ne 0) { throw "benchmark gate failed for ${suite}: exit code $LASTEXITCODE" }
   } else {
-    .\scripts\run_benchmark.ps1 -Suite $suite -SkipBuild
+    if ($EnforceWorktreeGuard) {
+      .\scripts\run_benchmark.ps1 -Suite $suite -SkipBuild -EnforceWorktreeGuard
+    } else {
+      .\scripts\run_benchmark.ps1 -Suite $suite -SkipBuild
+    }
     if ($LASTEXITCODE -ne 0) { throw "benchmark failed for ${suite}: exit code $LASTEXITCODE" }
   }
 }

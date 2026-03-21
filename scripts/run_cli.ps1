@@ -1,11 +1,19 @@
+param(
+  [switch]$EnforceWorktreeGuard
+)
+
 $ErrorActionPreference = "Stop"
 
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
-.\scripts\build.ps1
+.\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
 
 & .\build-vs\Debug\qx_cli.exe --problem .\examples\problem_rabi.json --options .\examples\options_default.json
 if ($LASTEXITCODE -ne 0) { throw "qx_cli rabi failed: exit code $LASTEXITCODE" }

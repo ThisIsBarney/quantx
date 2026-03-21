@@ -237,6 +237,14 @@ CI integration uses the same script:
 - runs build + tests + unified benchmark gate on Windows
 - uploads `benchmarks/reports/` as CI artifact
 
+Pre-commit verification matrix:
+
+```powershell
+.\scripts\run_verification_matrix.ps1
+```
+
+This one-shot script runs the smoke suite, Python adapter checks, visualization smoke, and the selected benchmark gate in a single console-only flow.
+
 ## 2) Python SDK
 
 ```powershell

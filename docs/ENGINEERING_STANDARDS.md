@@ -6,6 +6,7 @@
 - Use a dedicated `codex/*` branch per subagent and keep the branch isolated from other agents.
 - Do not develop directly on `master` or `main`.
 - Before running task scripts, run `.\scripts\ensure_subagent_worktree.ps1` or let the entry script invoke it.
+- Use warn mode for ad hoc local checks and `-EnforceWorktreeGuard` on entry scripts, or `-Enforce` on the helper, for pre-commit or matrix runs that must fail fast outside `codex/*`.
 - Commit only after the relevant tests pass.
 - If a task needs multiple iterations, keep going until the output is complete and testable.
 
@@ -31,3 +32,11 @@
 - Preserve backward compatibility for existing JSON and CLI inputs unless a breaking change is explicitly approved.
 - Keep docs, scripts, and examples in sync with behavior changes.
 - For user-facing workflow changes, update `README.md`, `docs/USAGE.md`, or `docs/TESTING.md` in the same change set.
+
+## Post-Merge Cleanup Checklist
+
+- Delete merged `codex/*` branches once the commits are on the mainline.
+- Remove the matching worktree directory after verifying the branch is merged.
+- Clear any temporary stash entries created during the task.
+- Confirm `git status` is clean in the main repo and in the removed worktree path.
+- Keep the branch/worktree layout simple: one active task, one dedicated worktree.

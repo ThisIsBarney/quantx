@@ -120,17 +120,28 @@ if(WIN32)
   target_compile_definitions(qx_core PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
+function(qx_set_config_output_dirs target_name)
+  set_target_properties(${target_name} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>"
+  )
+endfunction()
+
 add_library(qx_capi SHARED src/c_api.cpp)
 target_link_libraries(qx_capi PRIVATE qx_core)
 target_include_directories(qx_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(qx_capi PRIVATE QX_CAPI_EXPORTS=1)
 set_target_properties(qx_capi PROPERTIES OUTPUT_NAME quantx)
+qx_set_config_output_dirs(qx_capi)
 
 add_executable(qx_smoke tests/test_engine.cpp)
 target_link_libraries(qx_smoke PRIVATE qx_core)
+qx_set_config_output_dirs(qx_smoke)
 
 add_executable(qx_fft_smoke tests/test_fft_provider.cpp)
 target_link_libraries(qx_fft_smoke PRIVATE qx_core)
+qx_set_config_output_dirs(qx_fft_smoke)
 
 add_executable(qx_cli src/qx_cli.cpp)
 target_link_libraries(qx_cli PRIVATE qx_core)
@@ -139,6 +150,7 @@ if(TARGET CLI11::CLI11)
 else()
   target_link_libraries(qx_cli PRIVATE CLI11)
 endif()
+qx_set_config_output_dirs(qx_cli)
 
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)

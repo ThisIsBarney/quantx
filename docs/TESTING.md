@@ -42,6 +42,9 @@
   - covers `circuit_accuracy_smoke`, `circuit_noise_sweep`, `continuous2d_smoke`, `continuous3d_smoke`, and `continuous3d_accuracy`
 - benchmark-only refresh:
   - `.\scripts\benchmark_all.ps1 -NoiseSweep`
+- pre-commit verification matrix:
+  - `.\scripts\run_verification_matrix.ps1`
+  - runs smoke, adapter, visualization, and the selected benchmark gate in one console-only pass
 
 ## How to run
 

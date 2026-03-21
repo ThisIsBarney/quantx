@@ -1,12 +1,20 @@
+param(
+  [switch]$EnforceWorktreeGuard
+)
+
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-.\scripts\ensure_subagent_worktree.ps1
+if ($EnforceWorktreeGuard) {
+  .\scripts\ensure_subagent_worktree.ps1 -Enforce
+} else {
+  .\scripts\ensure_subagent_worktree.ps1
+}
 
-.\scripts\build.ps1
+.\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
 
 # --help should succeed.
 & .\build-vs\Debug\qx_cli.exe --help | Out-Null
