@@ -4,6 +4,26 @@ import os
 from ctypes import c_char_p, c_void_p
 
 
+class CircuitError(RuntimeError):
+  """Structured circuit execution error carrying a machine-readable code."""
+
+  def __init__(self, code: str, message: str, payload: dict | None = None):
+    """Create a circuit error with the native code, human message, and payload."""
+    super().__init__(message)
+    self._code = str(code)
+    self._payload = dict(payload or {})
+
+  @property
+  def code(self) -> str:
+    """Return the machine-readable error code."""
+    return self._code
+
+  @property
+  def payload(self) -> dict:
+    """Return the raw result payload that triggered this exception."""
+    return dict(self._payload)
+
+
 class Engine:
   """ctypes wrapper around the native QuantX library."""
 
@@ -54,6 +74,18 @@ class Engine:
     finally:
       self._lib.qx_free_string(ptr)
 
+  def circuit_capability_summary(self) -> str:
+    """Return a compact human-readable summary of the native circuit capabilities."""
+    return self.summarize_circuit_capabilities(self.circuit_capabilities())
+
+  def supports_circuit_gate(self, gate: str) -> bool:
+    """Check whether the native circuit backend advertises a specific gate."""
+    return self.circuit_supports_gate(self.circuit_capabilities(), gate)
+
+  def supports_noise_model(self, noise_model: str) -> bool:
+    """Check whether the native circuit backend advertises a specific noise model."""
+    return self.circuit_supports_noise_model(self.circuit_capabilities(), noise_model)
+
   def run_qiskit_like(self, request: dict, options: dict | None = None) -> dict:
     """Execute a minimal Qiskit-like circuit payload.
 
@@ -87,6 +119,12 @@ class Engine:
     """
     return self.run_circuit(self._from_cirq_like(request), options)
 
+  def run_circuit_checked(self, circuit: dict, options: dict | None = None) -> dict:
+    """Run a circuit request and raise CircuitError on an unsupported result."""
+    result = self.run_circuit(circuit, options)
+    self.raise_for_circuit_error(result)
+    return result
+
   def validate_problem(self, problem: dict) -> dict:
     """Validate a problem JSON payload against the native schema checker."""
     p = json.dumps(problem).encode("utf-8")
@@ -110,6 +148,113 @@ class Engine:
       return json.loads(raw)
     finally:
       self._lib.qx_free_string(ptr)
+
+  @staticmethod
+  def circuit_error_code(result: dict) -> str | None:
+    """Extract the machine-readable circuit error code from a result payload."""
+    if not isinstance(result, dict):
+      return None
+    if result.get("ok", True):
+      return None
+    code = result.get("error_code")
+    if isinstance(code, str) and code.strip():
+      return code.strip()
+    code = result.get("code")
+    if isinstance(code, str) and code.strip():
+      return code.strip()
+    return None
+
+  @staticmethod
+  def circuit_error_message(result: dict) -> str | None:
+    """Extract the human-readable circuit error message from a result payload."""
+    if not isinstance(result, dict):
+      return None
+    if result.get("ok", True):
+      return None
+    message = result.get("error_message")
+    if isinstance(message, str) and message.strip():
+      return message.strip()
+    message = result.get("error")
+    if isinstance(message, str) and message.strip():
+      return message.strip()
+    return None
+
+  @staticmethod
+  def raise_for_circuit_error(result: dict) -> dict:
+    """Raise CircuitError when a circuit result reports ok=false.
+
+    The method returns the original payload unchanged when it is successful so
+    callers can chain it in checked execution helpers.
+    """
+    if not isinstance(result, dict):
+      raise CircuitError("QX_INVALID_RESPONSE", "circuit result must be a JSON object", {"result": result})
+    if result.get("ok", True):
+      return result
+    code = Engine.circuit_error_code(result) or "QX_UNKNOWN_ERROR"
+    message = Engine.circuit_error_message(result) or "circuit execution failed"
+    raise CircuitError(code, message, result)
+
+  @staticmethod
+  def circuit_capability_summary(capabilities: dict | None) -> str:
+    """Return a compact summary string for a circuit capability payload."""
+    if not isinstance(capabilities, dict) or not capabilities:
+      return "n/a"
+
+    parts = []
+    backend = capabilities.get("backend")
+    if isinstance(backend, str) and backend.strip():
+      parts.append(f"backend={backend.strip()}")
+
+    gates = Engine._normalize_string_list(capabilities.get("supported_gates"))
+    if gates:
+      preview = ", ".join(gates[:6])
+      if len(gates) > 6:
+        preview += ", ..."
+      parts.append(f"gates=[{preview}]")
+
+    noise = Engine._normalize_string_list(capabilities.get("supported_noise_models"))
+    if noise:
+      preview = ", ".join(noise[:6])
+      if len(noise) > 6:
+        preview += ", ..."
+      parts.append(f"noise=[{preview}]")
+
+    max_qubits = capabilities.get("max_qubits")
+    if isinstance(max_qubits, (int, float)) and not isinstance(max_qubits, bool):
+      parts.append(f"max_qubits={int(max_qubits)}")
+
+    max_shots = capabilities.get("max_shots")
+    if isinstance(max_shots, (int, float)) and not isinstance(max_shots, bool):
+      parts.append(f"max_shots={int(max_shots)}")
+
+    adapter_flags = []
+    for key, label in (("supports_qiskit_like", "qiskit_like"), ("supports_cirq_like", "cirq_like")):
+      value = capabilities.get(key)
+      if isinstance(value, bool):
+        adapter_flags.append(f"{label}={'true' if value else 'false'}")
+    if adapter_flags:
+      parts.append("adapters={" + ", ".join(adapter_flags) + "}")
+
+    if not parts:
+      return "custom[" + ", ".join(sorted(capabilities.keys())) + "]"
+    return "; ".join(parts)
+
+  @staticmethod
+  def circuit_supports_gate(capabilities: dict | None, gate: str) -> bool:
+    """Check whether a capability payload lists a gate in its supported vocabulary."""
+    normalized_gate = Engine._normalize_gate_name(gate)
+    gates = {Engine._normalize_gate_name(item) for item in Engine._normalize_string_list(
+        capabilities.get("supported_gates") if isinstance(capabilities, dict) else None
+    )}
+    return normalized_gate in gates
+
+  @staticmethod
+  def circuit_supports_noise_model(capabilities: dict | None, noise_model: str) -> bool:
+    """Check whether a capability payload lists a supported noise model."""
+    noise_models = {item.strip().lower() for item in Engine._normalize_string_list(
+        capabilities.get("supported_noise_models") if isinstance(capabilities, dict) else None
+    )}
+    return noise_model.strip().lower() in noise_models
 
   def version(self) -> str:
     """Return the native engine version string."""
@@ -169,6 +314,21 @@ class Engine:
         "C-X": "CNOT",
     }
     return mapping.get(n, n)
+
+  @staticmethod
+  def _normalize_string_list(values) -> list[str]:
+    """Normalize a JSON list into a compact list of non-empty strings."""
+    if not isinstance(values, list):
+      return []
+    out = []
+    for value in values:
+      if isinstance(value, str):
+        text = value.strip()
+        if text:
+          out.append(text)
+      elif value is not None:
+        out.append(str(value))
+    return out
 
   def _from_qiskit_like(self, request: dict) -> dict:
     """Convert a compact Qiskit-like request into the native circuit schema."""

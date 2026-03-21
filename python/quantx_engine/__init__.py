@@ -1,3 +1,5 @@
-from .engine import Engine
+"""Public Python SDK exports for QuantX."""
 
-__all__ = ["Engine"]
+from .engine import CircuitError, Engine
+
+__all__ = ["CircuitError", "Engine"]

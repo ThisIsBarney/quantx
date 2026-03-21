@@ -3,18 +3,96 @@
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 
+def _normalize_caps(capabilities: dict | None) -> dict:
+  """Build a stable capability payload for pure-Python tests."""
+  return capabilities or {
+      "backend": "statevector",
+      "supported_gates": ["H", "CNOT", "CX", "SWAP"],
+      "supported_noise_models": ["none", "depolarizing", "amplitude_damping"],
+      "max_qubits": 25,
+      "max_shots": 1000,
+      "supports_qiskit_like": True,
+      "supports_cirq_like": True,
+  }
+
+
+def test_pure_python_helpers() -> None:
+  """Exercise Python-only capability and error mapping helpers."""
+  sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+  from quantx_engine import CircuitError, Engine
+
+  caps = _normalize_caps(None)
+  summary = Engine.circuit_capability_summary(caps)
+  if "backend=statevector" not in summary:
+    raise RuntimeError("capability summary should include backend")
+  if not Engine.circuit_supports_gate(caps, "cx"):
+    raise RuntimeError("capability helper should normalize CX to CNOT")
+  if not Engine.circuit_supports_noise_model(caps, "DEPOLARIZING"):
+    raise RuntimeError("capability helper should normalize noise model names")
+
+  ok_payload = {"ok": True, "value": 1}
+  if Engine.raise_for_circuit_error(ok_payload) is not ok_payload:
+    raise RuntimeError("successful circuit payload should pass through unchanged")
+
+  err_payload = {
+      "ok": False,
+      "error_code": "QX_UNSUPPORTED_GATE",
+      "error_message": "unsupported gate: foo",
+  }
+  try:
+    Engine.raise_for_circuit_error(err_payload)
+  except CircuitError as exc:
+    if exc.code != "QX_UNSUPPORTED_GATE":
+      raise RuntimeError("circuit error should preserve machine-readable code")
+    if "unsupported gate" not in str(exc):
+      raise RuntimeError("circuit error should preserve human-readable message")
+    if exc.payload.get("error_code") != "QX_UNSUPPORTED_GATE":
+      raise RuntimeError("circuit error payload should preserve the original response")
+  else:
+    raise RuntimeError("circuit error helper should raise on ok=false payloads")
+
+
+def _native_dll_is_compatible(root: Path) -> tuple[bool, str]:
+  """Return whether a native DLL exists and is compatible with the current Python runtime."""
+  dll = root / "build-vs" / "Debug" / "quantx.dll"
+  if not dll.exists():
+    return False, "native quantx.dll not found"
+
+  try:
+    data = dll.read_bytes()
+  except OSError as exc:
+    return False, f"unable to read native DLL: {exc}"
+
+  if len(data) < 0x40 or data[0:2] != b"MZ":
+    return False, "native quantx.dll is not a PE file"
+  pe_offset = int.from_bytes(data[0x3C:0x40], "little")
+  if pe_offset < 0 or pe_offset + 6 > len(data):
+    return False, "native quantx.dll is truncated"
+  machine = int.from_bytes(data[pe_offset + 4:pe_offset + 6], "little")
+  if machine != 0x8664:
+    return False, f"native quantx.dll is not x64-compatible: {dll}"
+  return True, str(dll)
+
+
 def main() -> int:
+  """Run Python adapter tests and skip native-dependent checks when needed."""
   root = Path(__file__).resolve().parents[1]
   sys.path.insert(0, str(root / "python"))
   from quantx_engine import Engine
 
-  dll = root / "build-vs" / "Debug" / "quantx.dll"
-  eng = Engine(str(dll))
+  test_pure_python_helpers()
+
+  compatible, detail = _native_dll_is_compatible(root)
+  if not compatible:
+    print(f"python adapter smoke skipped native integration: {detail}")
+    print("python adapter pure-python checks passed")
+    return 0
+
+  eng = Engine(detail)
 
   caps = eng.circuit_capabilities()
   if caps.get("backend") != "statevector":
