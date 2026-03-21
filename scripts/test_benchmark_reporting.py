@@ -197,6 +197,70 @@ def test_gate_classification() -> None:
   assert_true(len(strict_gate[0]) == 1, "performance threshold should fail in strict mode")
 
 
+def test_trend_classification_and_legend() -> None:
+  """Verify trend reports surface readable classes and a clear legend."""
+  perf = {"grid": "4x5", "export_volume": 40, "fft_provider": "eigen", "avg_step_ms_mean": 1.0}
+  assert_true(
+      sr.trend_issue_classification("mean_abs_error_mean", 0.01, 0.02, perf) == "accuracy regression",
+      "accuracy regression should be labeled explicitly",
+  )
+  assert_true(
+      sr.trend_issue_classification("core_elapsed_ms_mean", 10.0, 12.0, perf) == "perf warning",
+      "perf regression should be labeled as a perf warning",
+  )
+  assert_true(
+      sr.trend_issue_classification("core_elapsed_ms_mean", None, 12.0, perf) == "metadata warning",
+      "missing previous values should be labeled as metadata warnings",
+  )
+  assert_true(
+      sr.trend_issue_classification("mean_abs_error_mean", 0.02, 0.01, perf) == "ok",
+      "improvements should not be mislabeled as warnings",
+  )
+
+  prev = {
+      "cases": [
+          {
+              "id": "continuous",
+              "aggregate": {
+                  "core_elapsed_ms_mean": 12.0,
+                  "mean_abs_error_mean": 0.01,
+                  "max_abs_error_mean": 0.02,
+              },
+          }
+      ]
+  }
+  curr = {
+      "platform_profile": "github-windows",
+      "gate": {"perf_warnings_blocking": False},
+      "circuit_capability_diag": {"status": "warn", "diagnostic_tag": "warn: missing supported_gates"},
+      "circuit_capability_summary": "backend=statevector; gates=[H, CNOT]; noise=[none]; max_qubits=25; max_shots=1000",
+      "cases": [
+          {
+              "id": "continuous",
+              "aggregate": {
+                  "core_elapsed_ms_mean": 10.0,
+                  "mean_abs_error_mean": 0.02,
+                  "max_abs_error_mean": 0.02,
+              },
+              "performance": {
+                  "grid": "4x5",
+                  "export_volume": 40,
+                  "fft_provider": "eigen",
+                  "avg_step_ms_mean": 1.0,
+              },
+          }
+      ],
+  }
+  lines = clr.build_trend_lines(prev, curr, "prev.json", "curr.json", "circuit_accuracy_smoke")
+  text = "\n".join(lines)
+  assert_true("legend: accuracy regression" in text, "trend report should include an accuracy legend")
+  assert_true("legend: perf warning" in text, "trend report should include a perf legend")
+  assert_true("legend: metadata warning" in text, "trend report should include a metadata legend")
+  assert_true("circuit_capability_diag" in text, "trend report should surface capability diagnostics")
+  assert_true("accuracy regression" in text, "trend report should render accuracy regression labels")
+  assert_true("perf warning" in text, "trend report should render perf warning labels")
+
+
 def test_summary_and_trend_labels() -> None:
   """Verify report summaries and trends keep the new metadata visible."""
   report = {
