@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include "qx/json_utils.hpp"
 #include "qx/engine.hpp"
 #include "qx/version.hpp"
@@ -75,7 +77,7 @@ json parse_json_or_throw(const std::string& text) {
 template <typename T>
 T get_or(const json& j, const char* key, const T& def) {
   auto it = j.find(key);
-  if (it == j.end() || it->is_null()) {
+  if (it == nullptr || it->is_null()) {
     return def;
   }
   return it->get<T>();
@@ -102,7 +104,7 @@ CircuitOp parse_circuit_op(const json& item) {
 // Parse the nested continuous initial-state payload if present.
 void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig& out) {
   auto it = parent.find("initial_state");
-  if (it == parent.end() || !it->is_object()) {
+  if (it == nullptr || !it->is_object()) {
     return;
   }
   const auto& initial = *it;
@@ -111,10 +113,131 @@ void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig
   out.grid = get_or<std::vector<double>>(initial, "grid", out.grid);
 }
 
+// Read a numeric field as an unsigned 32-bit value and clamp it to a minimum.
+std::uint32_t read_clamped_u32(const json& j, const char* key, std::uint32_t def, std::uint32_t min_value);
+
+// Read a numeric field as size_t and clamp it to a minimum.
+std::size_t read_clamped_size(const json& j, const char* key, std::size_t def, std::size_t min_value);
+
+// Read a density-floor ratio and clamp it to the inclusive range [0, 1].
+double read_clamped_ratio(const json& j, const char* key, double def);
+
+// Normalize a continuous-export contract so serialization and runtime share the same bounds.
+ContinuousExportConfig sanitize_continuous_export_config_impl(const ContinuousExportConfig& config) {
+  ContinuousExportConfig out = config;
+  out.schema_version = std::max<std::uint32_t>(1U, out.schema_version);
+  out.export_frame_stride = std::max<std::uint32_t>(1U, out.export_frame_stride);
+  out.export_points_max = std::max<std::size_t>(1U, out.export_points_max);
+  if (!std::isfinite(out.export_density_floor_ratio)) {
+    out.export_density_floor_ratio = 0.0;
+  }
+  out.export_density_floor_ratio = std::clamp(out.export_density_floor_ratio, 0.0, 1.0);
+  return out;
+}
+
+// Read a continuous-export contract from JSON, accepting either the wrapper or the bare config object.
+ContinuousExportConfig parse_continuous_export_config_impl(const json& root) {
+  if (!root.is_object()) {
+    return sanitize_continuous_export_config_impl(ContinuousExportConfig{});
+  }
+
+  const json* node = &root;
+  if (node->contains("continuous_export") && (*node)["continuous_export"].is_object()) {
+    node = &(*node)["continuous_export"];
+  }
+  if (node->contains("export_config") && (*node)["export_config"].is_object()) {
+    node = &(*node)["export_config"];
+  }
+
+  ContinuousExportConfig config;
+  config.schema_version = read_clamped_u32(*node, "schema_version", config.schema_version, 1U);
+  config.export_frame_stride = read_clamped_u32(*node, "export_frame_stride", config.export_frame_stride, 1U);
+  config.export_points_max = read_clamped_size(*node, "export_points_max", config.export_points_max, 1U);
+  config.export_density_floor_ratio =
+      read_clamped_ratio(*node, "export_density_floor_ratio", config.export_density_floor_ratio);
+  return sanitize_continuous_export_config_impl(config);
+}
+
+// Read a numeric field as an unsigned 32-bit value and clamp it to a minimum.
+std::uint32_t read_clamped_u32(const json& j, const char* key, std::uint32_t def, std::uint32_t min_value) {
+  auto it = j.find(key);
+  if (it == nullptr || it->is_null()) {
+    return def;
+  }
+  double value = 0.0;
+  try {
+    value = it->get<double>();
+  } catch (...) {
+    return def;
+  }
+  if (!std::isfinite(value)) {
+    return def;
+  }
+  if (value < static_cast<double>(min_value)) {
+    return min_value;
+  }
+  if (value > static_cast<double>(std::numeric_limits<std::uint32_t>::max())) {
+    return std::numeric_limits<std::uint32_t>::max();
+  }
+  return static_cast<std::uint32_t>(value);
+}
+
+// Read a numeric field as size_t and clamp it to a minimum.
+std::size_t read_clamped_size(const json& j, const char* key, std::size_t def, std::size_t min_value) {
+  auto it = j.find(key);
+  if (it == nullptr || it->is_null()) {
+    return def;
+  }
+  long double value = 0.0L;
+  try {
+    value = it->get<long double>();
+  } catch (...) {
+    return def;
+  }
+  if (!std::isfinite(static_cast<double>(value))) {
+    return def;
+  }
+  if (value < static_cast<long double>(min_value)) {
+    return min_value;
+  }
+  const long double max_value = static_cast<long double>(std::numeric_limits<std::size_t>::max());
+  if (value > max_value) {
+    return std::numeric_limits<std::size_t>::max();
+  }
+  return static_cast<std::size_t>(value);
+}
+
+// Read a density-floor ratio and clamp it to the inclusive range [0, 1].
+double read_clamped_ratio(const json& j, const char* key, double def) {
+  auto it = j.find(key);
+  if (it == nullptr || it->is_null()) {
+    return def;
+  }
+  double value = 0.0;
+  try {
+    value = it->get<double>();
+  } catch (...) {
+    return def;
+  }
+  if (!std::isfinite(value)) {
+    return def;
+  }
+  return std::clamp(value, 0.0, 1.0);
+}
+
+// Read a numeric field as an unsigned 32-bit value and clamp it to a minimum.
+std::uint32_t read_clamped_u32(const json& j, const char* key, std::uint32_t def, std::uint32_t min_value);
+
+// Read a numeric field as size_t and clamp it to a minimum.
+std::size_t read_clamped_size(const json& j, const char* key, std::size_t def, std::size_t min_value);
+
+// Read a density-floor ratio and clamp it to the inclusive range [0, 1].
+double read_clamped_ratio(const json& j, const char* key, double def);
+
 // Parse the optional circuit noise payload and keep legacy fields synchronized.
 void parse_noise_config(const json& parent, QuantumCircuit& out) {
   auto it = parent.find("noise");
-  if (it == parent.end() || !it->is_object()) {
+  if (it == nullptr || !it->is_object()) {
     return;
   }
   const auto& noise = *it;
@@ -139,7 +262,11 @@ void parse_noise_config(const json& parent, QuantumCircuit& out) {
 json events_to_json(const std::vector<Event>& events) {
   json out = json::array();
   for (const auto& ev : events) {
-    out.push_back({{"name", ev.name}});
+    json item = {{"name", ev.name}};
+    if (!ev.metrics.empty()) {
+      item["metrics"] = ev.metrics;
+    }
+    out.push_back(std::move(item));
   }
   return out;
 }
@@ -213,10 +340,11 @@ std::vector<ContinuousDensityFrame> sample_continuous_export_frames(
 
 // Serialize the stable continuous-export contract metadata.
 json continuous_export_config_to_json(const ContinuousExportConfig& config) {
-  return json{{"schema_version", config.schema_version},
-              {"export_frame_stride", config.export_frame_stride},
-              {"export_points_max", config.export_points_max},
-              {"export_density_floor_ratio", config.export_density_floor_ratio}};
+  const ContinuousExportConfig sanitized = sanitize_continuous_export_config_impl(config);
+  return json{{"schema_version", sanitized.schema_version},
+              {"export_frame_stride", sanitized.export_frame_stride},
+              {"export_points_max", sanitized.export_points_max},
+              {"export_density_floor_ratio", sanitized.export_density_floor_ratio}};
 }
 
 // Serialize circuit capability metadata to a JSON object.
@@ -253,7 +381,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   p.observables = get_or<std::vector<std::string>>(j, "observables", p.observables);
 
   auto c2d_it = j.find("continuous_space_2d");
-  if (c2d_it != j.end() && c2d_it->is_object()) {
+  if (c2d_it != nullptr && c2d_it->is_object()) {
     const auto& c2d = *c2d_it;
     p.continuous_2d.nx = get_or<std::uint32_t>(c2d, "nx", p.continuous_2d.nx);
     p.continuous_2d.ny = get_or<std::uint32_t>(c2d, "ny", p.continuous_2d.ny);
@@ -271,7 +399,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   }
 
   auto c3d_it = j.find("continuous_space_3d");
-  if (c3d_it != j.end() && c3d_it->is_object()) {
+  if (c3d_it != nullptr && c3d_it->is_object()) {
     const auto& c3d = *c3d_it;
     p.continuous_3d.nx = get_or<std::uint32_t>(c3d, "nx", p.continuous_3d.nx);
     p.continuous_3d.ny = get_or<std::uint32_t>(c3d, "ny", p.continuous_3d.ny);
@@ -291,9 +419,10 @@ QuantumProblem problem_from_json(const std::string& json_text) {
   }
 
   auto h_it = j.find("hamiltonian_terms");
-  if (h_it != j.end() && h_it->is_array()) {
+  if (h_it != nullptr && h_it->is_array()) {
     p.hamiltonian_terms.clear();
-    for (const auto& item : *h_it) {
+    for (std::size_t i = 0; i < h_it->size(); ++i) {
+      const auto& item = h_it->at(i);
       if (!item.is_object()) {
         continue;
       }
@@ -314,18 +443,32 @@ RunOptions options_from_json(const std::string& json_text) {
   o.allow_mpi = get_or<bool>(j, "allow_mpi", o.allow_mpi);
   o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
   o.export_continuous_frames = get_or<bool>(j, "export_continuous_frames", o.export_continuous_frames);
-  o.export_frame_stride =
-      std::max<std::uint32_t>(1U, get_or<std::uint32_t>(j, "export_frame_stride", o.export_frame_stride));
-  o.export_points_max = static_cast<std::size_t>(
-      get_or<std::uint64_t>(j, "export_points_max", static_cast<std::uint64_t>(o.export_points_max)));
-  o.export_density_floor_ratio =
-      std::clamp(get_or<double>(j, "export_density_floor_ratio", o.export_density_floor_ratio), 0.0, 1.0);
   o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
   o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
   o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
   o.resources.mpi_ranks = get_or<std::uint32_t>(j, "mpi_ranks", o.resources.mpi_ranks);
   o.resources.max_memory_mb = get_or<std::uint64_t>(j, "max_memory_mb", o.resources.max_memory_mb);
+  ContinuousExportConfig export_config;
+  export_config.export_frame_stride = read_clamped_u32(j, "export_frame_stride", export_config.export_frame_stride, 1U);
+  export_config.export_points_max = read_clamped_size(j, "export_points_max", export_config.export_points_max, 1U);
+  export_config.export_density_floor_ratio =
+      read_clamped_ratio(j, "export_density_floor_ratio", export_config.export_density_floor_ratio);
+  export_config = sanitize_continuous_export_config_impl(export_config);
+  o.export_frame_stride = export_config.export_frame_stride;
+  o.export_points_max = export_config.export_points_max;
+  o.export_density_floor_ratio = export_config.export_density_floor_ratio;
   return o;
+}
+
+// Parse a continuous-export contract snapshot and normalize append-only fields.
+ContinuousExportConfig continuous_export_config_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
+  return parse_continuous_export_config_impl(j);
+}
+
+// Clamp continuous-export contract fields to stable append-only bounds.
+ContinuousExportConfig sanitize_continuous_export_config(const ContinuousExportConfig& config) {
+  return sanitize_continuous_export_config_impl(config);
 }
 
 // Parse circuit JSON and enforce at least one operation.
@@ -340,9 +483,10 @@ QuantumCircuit circuit_from_json(const std::string& json_text) {
   c.seed = get_or<std::uint64_t>(j, "seed", c.seed);
 
   auto ops_it = j.find("operations");
-  if (ops_it != j.end() && ops_it->is_array()) {
+  if (ops_it != nullptr && ops_it->is_array()) {
     c.operations.clear();
-    for (const auto& item : *ops_it) {
+    for (std::size_t i = 0; i < ops_it->size(); ++i) {
+      const auto& item = ops_it->at(i);
       if (!item.is_object()) {
         continue;
       }
@@ -370,13 +514,14 @@ std::string result_to_json(const SimulationResult& result) {
   j["engine_version"] = version_string();
   j["observables"] = result.observables;
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
+  const ContinuousExportConfig export_config = sanitize_continuous_export_config_impl(result.continuous_export);
   j["continuous_export"] = {
-      {"schema_version", result.continuous_export.schema_version},
-      {"export_config", continuous_export_config_to_json(result.continuous_export)},
+      {"schema_version", export_config.schema_version},
+      {"export_config", continuous_export_config_to_json(export_config)},
       {"frames",
        continuous_density_frames_to_json(
            sample_continuous_export_frames(result.continuous_density_frames,
-                                           result.continuous_export.export_frame_stride))},
+                                           export_config.export_frame_stride))},
   };
   j["events"] = events_to_json(result.events);
   return j.dump();
@@ -419,3 +564,5 @@ std::string backend_info_to_json(const BackendInfo& info) {
 }
 
 }  // namespace qx
+
+

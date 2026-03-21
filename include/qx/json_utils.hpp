@@ -10,6 +10,10 @@ namespace qx {
 QuantumProblem problem_from_json(const std::string& json);
 // Parse runtime options JSON into execution options.
 RunOptions options_from_json(const std::string& json);
+// Parse a continuous-export contract snapshot from JSON and normalize it defensively.
+ContinuousExportConfig continuous_export_config_from_json(const std::string& json);
+// Clamp continuous-export contract fields to stable append-only bounds.
+ContinuousExportConfig sanitize_continuous_export_config(const ContinuousExportConfig& config);
 // Parse circuit JSON into gate-level circuit representation.
 QuantumCircuit circuit_from_json(const std::string& json);
 // Serialize simulation result to JSON string.
