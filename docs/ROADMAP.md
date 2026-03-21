@@ -16,6 +16,14 @@ Engineering policy:
 - Prefer license-friendly mature OSS components for non-differentiating infrastructure (JSON/CLI/linear algebra/tooling).
 - Avoid rebuilding generic infrastructure in-house unless there is a measured bottleneck or compatibility blocker.
 
+Release execution policy:
+
+- Split multi-round integration work into three explicit rounds when the surface area is large enough to risk cross-task interference.
+- Keep each round in its own `codex/*` worktree on top of the latest `master` before editing.
+- Merge a round only after its smoke, benchmark, and documentation checks are green.
+- Rebase or recreate the round worktree when `master` advances instead of mixing stale and fresh branches.
+- Remove the branch, worktree, and temporary stash entries after merge so the next round starts cleanly.
+
 ## M1 (Week 1-2): Scaffold and API freeze
 
 - finalize IR types (`QuantumProblem`, `RunOptions`, `OperatorGraph`, `EquationType`)

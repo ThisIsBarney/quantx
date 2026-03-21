@@ -37,6 +37,23 @@
 - Failures must surface in the console; do not use debugger popups or modal error dialogs.
 - See `docs/ENGINEERING_STANDARDS.md` for the full workflow and quality checklist.
 
+### 3-Round Collaboration Convention
+
+When a release or integration effort is split into three rounds, keep the flow disciplined:
+
+- Round 1: docs and developer workflow updates in a dedicated `codex/*` worktree.
+- Round 2: SDK, reporting, or benchmark integration in its own worktree.
+- Round 3: release and verification cleanup in a separate worktree.
+- Rebase each round onto the latest `master` before starting new work if the base moved.
+- Merge only after the round-specific smoke and verification commands pass.
+- Remove the branch, worktree, and any temporary stash entries after merge so the next round starts cleanly.
+
+### Local vs CI Differences
+
+- Local smoke runs may skip heavier Python adapter or visualization checks when the available native DLL does not match the active Python architecture; the script prints the reason and continues with the lightweight checks.
+- CI uses the same console-only reporting, but the benchmark gate is labeled with the CI profile and keeps smoke-suite performance warnings non-blocking.
+- Local runs are expected to be more exploratory; CI is expected to be reproducible and quiet, especially around worktree guard messages.
+
 ## Benchmark coverage
 
 - unified benchmark gate:

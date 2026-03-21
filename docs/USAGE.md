@@ -276,6 +276,17 @@ The benchmark reports include:
 
 CI runs default to the `github-windows` platform profile, while local runs default to `local`. Performance threshold violations remain visible as warnings, but only accuracy/stability thresholds block the gate.
 
+For release work, keep the three-round collaboration convention in mind:
+
+- use one dedicated `codex/*` worktree per round
+- rebase onto the latest `master` before starting a new round if the base moved
+- merge only after the round-specific smoke and benchmark commands pass
+
+Local and CI runs may differ in how much they can verify in one pass:
+
+- local runs are optimized for iteration speed and may skip heavier checks when the native DLL is not architecture-compatible
+- CI keeps the same console output model, but smoke-suite performance warnings remain non-blocking while accuracy/stability thresholds stay strict
+
 CI integration uses the same script:
 
 ```powershell
