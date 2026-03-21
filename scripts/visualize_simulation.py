@@ -10,6 +10,23 @@ import sys
 from pathlib import Path
 
 
+CLI_EXAMPLES = """Examples:
+  python scripts/visualize_simulation.py --scenario spatial2d --solver-mode python
+  python scripts/visualize_simulation.py --scenario spatial2d --solver-mode engine --continuous-export-json out/export.json --strict-export-schema
+  python scripts/visualize_simulation.py --scenario spatial3d --continuous-export-json out/export.json --spatial3d-export-json
+"""
+
+
+def _user_cli_error(message: str, hint: str | None = None, example: str | None = None) -> RuntimeError:
+  """Build a user-facing CLI error with next-step guidance."""
+  parts = [message]
+  if hint:
+    parts.append(f"hint: {hint}")
+  if example:
+    parts.append(f"example: {example}")
+  return RuntimeError("\n".join(parts))
+
+
 def _animated_page(title: str, charts: list[dict]) -> str:
   """Render a lightweight SVG animation page for 1D time-series charts."""
   charts_json = json.dumps(charts, ensure_ascii=False)
@@ -206,24 +223,39 @@ def _prepare_continuous_export_payload(
   version = _continuous_export_schema_version(payload)
   if version is None or version < 1:
     message = f"{source}: continuous_export.schema_version is missing or below 1; expected version 1"
+    hint = "re-export the payload with continuous_export.schema_version=1, or omit --strict-export-schema to allow fallback"
     if strict_export_schema:
-      raise RuntimeError(message)
-    print(f"warning: {message}; {fallback_hint}", file=sys.stderr)
+      raise _user_cli_error(message, hint=hint)
+    print(f"warning: {message}; {fallback_hint}; {hint}", file=sys.stderr)
     return None
   if version > 1:
     message = (
         f"{source}: continuous_export.schema_version={version} is newer than supported version 1; "
         "best-effort rendering will continue"
     )
+    hint = "re-export the payload as schema_version=1 or update this visualizer to the newer export contract"
     if strict_export_schema:
-      raise RuntimeError(message)
-    print(f"warning: {message}", file=sys.stderr)
+      raise _user_cli_error(message, hint=hint)
+    print(f"warning: {message}; {hint}", file=sys.stderr)
   return _normalize_engine_export_payload(payload)
 
 
 def _load_continuous_export_file(path: Path, strict_export_schema: bool) -> dict | None:
   """Load a continuous-space export payload from a JSON file."""
-  data = json.loads(path.read_text(encoding="utf-8"))
+  if not path.exists() or not path.is_file():
+    raise _user_cli_error(
+        f"continuous export json file not found: {path}",
+        hint="pass an existing file path, or omit --continuous-export-json to let QuantX solve live",
+        example="python scripts/visualize_simulation.py --scenario spatial2d --continuous-export-json out/export.json",
+    )
+  try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+  except json.JSONDecodeError as ex:
+    raise _user_cli_error(
+        f"continuous export json is not valid JSON: {path}",
+        hint="re-run the exporter and make sure the file is a JSON object with a continuous_export.frames array",
+        example="python scripts/visualize_simulation.py --scenario spatial3d --continuous-export-json out/export.json",
+    ) from ex
   if isinstance(data, dict):
     if isinstance(data.get("continuous_export"), dict):
       return _prepare_continuous_export_payload(
@@ -257,7 +289,11 @@ def _load_continuous_export_file(path: Path, strict_export_schema: bool) -> dict
           strict_export_schema=strict_export_schema,
           fallback_hint="falling back to live engine execution or Python reference solver",
       )
-  raise RuntimeError(f"continuous export json must contain a frames payload: {path}")
+  raise _user_cli_error(
+      f"continuous export json must contain a frames payload: {path}",
+      hint="use an engine export file produced by QuantX, or omit --continuous-export-json to solve live",
+      example="python scripts/visualize_simulation.py --scenario spatial2d --solver-mode python",
+  )
 
 
 def _extract_continuous_export_from_result(result: dict) -> dict | None:
@@ -496,16 +532,33 @@ def _resolve_continuous_payload(
 ) -> dict:
   """Prefer engine-exported frames and fall back to the Python reference solver."""
   if export_json_path is not None:
+    if not export_json_path.exists() or not export_json_path.is_file():
+      raise _user_cli_error(
+          f"continuous export json file not found: {export_json_path}",
+          hint="pass an existing file path, or omit --continuous-export-json to let QuantX solve live",
+          example="python scripts/visualize_simulation.py --scenario spatial2d --continuous-export-json out/export.json",
+      )
     try:
       export = _load_continuous_export_file(export_json_path, strict_export_schema)
     except Exception as ex:
       if strict_export_schema:
-        raise RuntimeError(f"continuous visualization received invalid engine export file: {ex}") from ex
-      print(f"warning: {ex}; falling back to live engine execution or Python reference solver", file=sys.stderr)
+        raise _user_cli_error(
+            f"continuous visualization received invalid engine export file: {ex}",
+            hint="fix the export file or remove --strict-export-schema to allow fallback to live solving",
+            example="python scripts/visualize_simulation.py --scenario spatial2d --continuous-export-json out/export.json",
+        ) from ex
+      print(
+          f"warning: {ex}; falling back to live engine execution or Python reference solver",
+          file=sys.stderr,
+      )
     else:
       if export is None:
         if strict_export_schema:
-          raise RuntimeError("continuous visualization requested strict export-schema validation but the export schema is incompatible")
+          raise _user_cli_error(
+              "continuous visualization requested strict export-schema validation but the export schema is incompatible",
+              hint="re-export the payload with schema_version=1 or remove --strict-export-schema to continue best-effort rendering",
+              example="python scripts/visualize_simulation.py --scenario spatial2d --continuous-export-json out/export.json",
+          )
       else:
         return _attach_continuous_metadata(export, solver_mode, "engine-export-file")
 
@@ -527,7 +580,11 @@ def _resolve_continuous_payload(
         )
       except Exception as ex:
         if strict_export_schema:
-          raise RuntimeError(f"continuous visualization received invalid engine export payload: {ex}") from ex
+          raise _user_cli_error(
+              f"continuous visualization received invalid engine export payload: {ex}",
+              hint="check the native exporter contract or rerun without --strict-export-schema to allow a Python fallback",
+              example="python scripts/visualize_simulation.py --scenario spatial2d --solver-mode engine",
+          ) from ex
         print(f"warning: {ex}; falling back to Python reference solver", file=sys.stderr)
       else:
         if normalized is not None:
@@ -536,7 +593,11 @@ def _resolve_continuous_payload(
       raise RuntimeError("continuous visualization requested solver-mode=engine but the native result did not include a frames export")
 
   if solver_mode == "engine":
-    raise RuntimeError("continuous visualization requested solver-mode=engine but the native engine is unavailable")
+    raise _user_cli_error(
+        "continuous visualization requested solver-mode=engine but the native engine is unavailable",
+        hint="build the native engine with `powershell -Command .\\scripts\\build.ps1`, or provide --continuous-export-json to render a precomputed export",
+        example="python scripts/visualize_simulation.py --scenario spatial2d --solver-mode python",
+    )
 
   return _attach_continuous_metadata(reference_builder(), solver_mode, "python-reference")
 
@@ -1330,7 +1391,11 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
 
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
-  parser = argparse.ArgumentParser(description="Generate QuantX visualization HTML.")
+  parser = argparse.ArgumentParser(
+      description="Generate QuantX visualization HTML.",
+      formatter_class=argparse.RawDescriptionHelpFormatter,
+      epilog=CLI_EXAMPLES,
+  )
   parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
@@ -1484,4 +1549,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-  raise SystemExit(main())
+  try:
+    raise SystemExit(main())
+  except (FileNotFoundError, RuntimeError) as ex:
+    print(f"error: {ex}", file=sys.stderr)
+    raise SystemExit(1)

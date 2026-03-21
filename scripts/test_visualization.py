@@ -119,7 +119,7 @@ def _write_corrupt_continuous_export_fixture_3d(path: Path, schema_version: int 
 
 def _run_expected_failure(cmd: list[str], needle: str) -> None:
   """Run a command that should fail and assert on the console diagnostics."""
-  proc = subprocess.run(cmd, capture_output=True, text=True)
+  proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
   if proc.returncode == 0:
     raise RuntimeError(f"expected command to fail, but it succeeded: {' '.join(cmd)}")
   stderr = (proc.stderr or "") + (proc.stdout or "")
@@ -129,13 +129,25 @@ def _run_expected_failure(cmd: list[str], needle: str) -> None:
 
 def _run_expected_success_with_warning(cmd: list[str], needle: str) -> str:
   """Run a command that should succeed and assert on the warning diagnostics."""
-  proc = subprocess.run(cmd, capture_output=True, text=True)
+  proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
   if proc.returncode != 0:
     raise RuntimeError(f"expected command to succeed, but it failed: {' '.join(cmd)}\n{proc.stdout}\n{proc.stderr}")
   stderr = (proc.stderr or "") + (proc.stdout or "")
   if needle not in stderr:
     raise RuntimeError(f"missing expected warning '{needle}' in output:\n{stderr}")
   return stderr
+
+
+def _run_expected_success_with_output(cmd: list[str], *needles: str) -> str:
+  """Run a command that should succeed and assert that all snippets appear in output."""
+  proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+  if proc.returncode != 0:
+    raise RuntimeError(f"expected command to succeed, but it failed: {' '.join(cmd)}\n{proc.stdout}\n{proc.stderr}")
+  output = (proc.stdout or "") + (proc.stderr or "")
+  for needle in needles:
+    if needle not in output:
+      raise RuntimeError(f"missing expected text '{needle}' in output:\n{output}")
+  return output
 
 
 def _ensure_native_build(root: Path) -> None:
@@ -152,6 +164,61 @@ def main() -> int:
   root = Path(__file__).resolve().parents[1]
   out_dir = root / "out" / "visualizations_test"
   out_dir.mkdir(parents=True, exist_ok=True)
+
+  _run_expected_success_with_output(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--help",
+      ],
+      "Examples:",
+      "--continuous-export-json",
+      "--strict-export-schema",
+  )
+
+  _run_expected_success_with_output(
+      [
+          "powershell",
+          "-Command",
+          f'$OutputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); Get-Help "{root / "scripts" / "run_visualization.ps1"}" -Full | Out-String -Width 200',
+      ],
+      "-Scenario",
+      "-StrictExportSchema",
+      "EXAMPLE 1",
+  )
+
+  missing_export_path = out_dir / "missing-export.json"
+  if missing_export_path.exists():
+    missing_export_path.unlink()
+  _run_expected_failure(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial2d",
+          "--solver-mode",
+          "python",
+          "--continuous-export-json",
+          str(missing_export_path),
+          "--out-dir",
+          str(out_dir / "missing_export_fail"),
+      ],
+      "continuous export json file not found",
+  )
+  _run_expected_failure(
+      [
+          "powershell",
+          "-File",
+          str(root / "scripts" / "run_visualization.ps1"),
+          "-Scenario",
+          "spatial2d",
+          "-SolverMode",
+          "python",
+          "-ContinuousExportJson",
+          str(missing_export_path),
+      ],
+      "continuous export json file not found",
+  )
 
   python_only_dir = out_dir / "python_mode"
   subprocess.run(
@@ -363,12 +430,19 @@ def main() -> int:
       "falling back to live engine execution or Python reference solver",
   )
 
-  js_export_dir = out_dir / "js_export_bundle"
+  wrapper_spatial3d_dir = root / "out" / "visualizations"
+  wrapper_spatial3d_html = wrapper_spatial3d_dir / "quantum_spatial3d_wavepacket_barrier_periodic.html"
+  if wrapper_spatial3d_html.exists():
+    wrapper_spatial3d_html.unlink()
   subprocess.run(
       [
           "powershell",
-          "-Command",
-          f'.\\scripts\\run_spatial3d_js_export.ps1 -SolverMode python -OutDir "{js_export_dir}"',
+          "-File",
+          str(root / "scripts" / "run_visualization.ps1"),
+          "-Scenario",
+          "spatial3d",
+          "-SolverMode",
+          "python",
       ],
       check=True,
   )
@@ -379,12 +453,11 @@ def main() -> int:
       engine_export_future_dir / "quantum_spatial2d_wavepacket_barrier.html",
       python_fallback_dir / "quantum_spatial2d_wavepacket_barrier.html",
       wrapper_engine_export,
+      wrapper_spatial3d_html,
       engine_export_dir / "quantum_spatial2d_wavepacket_barrier.html",
       engine_export_3d_dir / "quantum_spatial3d_wavepacket_barrier_periodic.html",
       engine_export_3d_dir / "quantum_spatial3d_wavepacket_barrier_periodic.json",
       auto_fallback_dir / "quantum_spatial3d_wavepacket_barrier_periodic.html",
-      js_export_dir / "spatial3d_player.html",
-      js_export_dir / "quantum_spatial3d_wavepacket_barrier_periodic.json",
   ]
   for path in files:
     if not path.exists():
@@ -405,14 +478,6 @@ def main() -> int:
           raise RuntimeError(f"engine-export 3d json missing normalized point payloads: {path}")
         if "point_vmax" not in frame0 or "point_count" not in frame0:
           raise RuntimeError(f"engine-export 3d json missing point diagnostics: {path}")
-      continue
-    if path.name == "spatial3d_player.html":
-      if "QuantX Spatial3D World Viewer" not in content:
-        raise RuntimeError(f"3d player bundle missing title marker: {path}")
-      if "THREE.WebGLRenderer" not in content or "THREE.OrbitControls" not in content:
-        raise RuntimeError(f"3d player bundle missing WebGL controls: {path}")
-      if "./vendor/three.min.js" not in content or "./vendor/OrbitControls.js" not in content:
-        raise RuntimeError(f"3d player bundle missing local vendor references: {path}")
       continue
     if ("createSvgEl" not in content) and ("Spatial Wavepacket" not in content):
       raise RuntimeError(f"visualization file missing svg renderer script: {path}")

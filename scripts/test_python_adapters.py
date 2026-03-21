@@ -89,6 +89,7 @@ def main() -> int:
   compatible, detail = _native_dll_is_compatible(root)
   if not compatible:
     print(f"python adapter smoke skipped native integration: {detail}")
+    print("hint: run `powershell -Command .\\scripts\\build.ps1` to rebuild a compatible x64 DLL, then rerun this smoke")
     print("python adapter pure-python checks passed")
     return 0
 
