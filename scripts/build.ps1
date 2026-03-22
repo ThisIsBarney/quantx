@@ -1,5 +1,6 @@
 param(
-  [switch]$EnforceWorktreeGuard
+  [switch]$EnforceWorktreeGuard,
+  [switch]$ProbeToolchainOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +12,26 @@ if ($EnforceWorktreeGuard) {
   .\scripts\ensure_subagent_worktree.ps1 -Enforce
 } else {
   .\scripts\ensure_subagent_worktree.ps1
+}
+
+function Write-BuildProbeRecord {
+  <#
+    Emits a single machine-parseable probe record for toolchain diagnostics.
+  #>
+  param(
+    [bool]$Ok,
+    [string]$VsDevCmdPath = "",
+    [string]$ClPath = "",
+    [string]$ErrorMessage = ""
+  )
+
+  $record = [ordered]@{
+    ok = $Ok
+    vsdevcmd = $VsDevCmdPath
+    cl = $ClPath
+    error = $ErrorMessage
+  }
+  Write-Host ("QX_BUILD_PROBE|" + ($record | ConvertTo-Json -Compress -Depth 4))
 }
 
 function Get-VsDevCmdPath {
@@ -113,6 +134,20 @@ function Reset-InvalidBuildDirectory {
   if (-not $hasCompiler -or $generatorMismatch) {
     Remove-Item -Recurse -Force $BuildDir
   }
+}
+
+if ($ProbeToolchainOnly) {
+  $probeVsDevCmd = ""
+  $probeClPath = ""
+  try {
+    $probeVsDevCmd = Get-VsDevCmdPath
+    $probeClPath = (Get-VsCompilerPath -VsDevCmdPath $probeVsDevCmd).Replace('\', '/')
+    Write-BuildProbeRecord -Ok $true -VsDevCmdPath $probeVsDevCmd -ClPath $probeClPath
+  } catch {
+    Write-BuildProbeRecord -Ok $false -VsDevCmdPath $probeVsDevCmd -ClPath $probeClPath -ErrorMessage $_.Exception.Message
+    throw
+  }
+  return
 }
 
 $vsDevCmd = Get-VsDevCmdPath
