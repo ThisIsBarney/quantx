@@ -1,6 +1,7 @@
 param(
   [switch]$EnforceWorktreeGuard,
-  [switch]$NoPopup
+  [switch]$NoPopup,
+  [switch]$IncludeBuildProbe
 )
 
 $ErrorActionPreference = "Stop"
@@ -255,6 +256,12 @@ try {
     python $schemaScript $schemaFixture
     if ($LASTEXITCODE -ne 0) {
       throw "continuous export schema smoke failed: exit code $LASTEXITCODE"
+    }
+  }
+  Invoke-QxTestStep -Name "build_probe" -SkipReason $(if (-not $IncludeBuildProbe) { "build probe not requested; pass -IncludeBuildProbe to enable" } else { "" }) -Action {
+    .\scripts\test_cli_args.ps1 -BuildProbeOnly -EnforceWorktreeGuard:$EnforceWorktreeGuard
+    if ($LASTEXITCODE -ne 0) {
+      throw "build probe failed: exit code $LASTEXITCODE"
     }
   }
 
