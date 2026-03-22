@@ -30,6 +30,14 @@ QuantX is a C++20-first quantum simulation engine scaffold with:
 .\scripts\run_visualization.ps1 -SolverMode auto
 ```
 
+Build probe (toolchain check only, no compile):
+
+```powershell
+powershell -Command "$ErrorActionPreference='Stop'; $vswhere='C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'; if (Test-Path $vswhere) { $install=& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -format value | Select-Object -First 1; if (-not $install) { throw 'vswhere did not return a Visual Studio installation path' }; $dev=Join-Path $install 'Common7\Tools\VsDevCmd.bat'; if (-not (Test-Path $dev)) { throw \"VsDevCmd not found: $dev\" }; cmd /c \"`\"$dev`\" -arch=x64 -host_arch=x64 >nul && where cl\" } else { throw 'vswhere.exe not found' }"
+```
+
+If the probe fails, fix the toolchain path first; this probe only validates discovery and does not invoke `cmake -S` or `cmake --build`.
+
 ## Architecture
 
 - `IR`: `QuantumProblem`, `RunOptions`, `OperatorGraph`, `EquationType`
