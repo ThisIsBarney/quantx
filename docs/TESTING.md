@@ -60,6 +60,23 @@ When a release or integration effort is split into three rounds, keep the flow d
 - CI uses the same console-only reporting, but the benchmark gate is labeled with the CI profile and keeps smoke-suite performance warnings non-blocking.
 - Local runs are expected to be more exploratory; CI is expected to be reproducible and quiet, especially around worktree guard messages.
 
+### Build Probe (No Compile)
+
+Use this probe when you need to verify Windows toolchain discovery before running full build/test flows:
+
+```powershell
+powershell -Command "$ErrorActionPreference='Stop'; $vswhere='C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'; if (-not (Test-Path $vswhere)) { throw 'vswhere.exe not found' }; $install=& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -format value | Select-Object -First 1; if (-not $install) { throw 'Visual Studio VC toolchain not found' }; $dev=Join-Path $install 'Common7\Tools\VsDevCmd.bat'; if (-not (Test-Path $dev)) { throw \"VsDevCmd not found: $dev\" }; cmd /c \"`\"$dev`\" -arch=x64 -host_arch=x64 >nul && where cl\""
+```
+
+Probe failure hints:
+
+- `vswhere.exe not found`: image missing Visual Studio Installer tooling.
+- `Visual Studio VC toolchain not found`: missing C++ toolset component.
+- `VsDevCmd not found`: invalid install path or incomplete VS installation.
+- `where cl` fails: environment bootstrap failed; restart shell and rerun probe.
+
+This probe only validates toolchain discovery and compiler visibility. It does not invoke `cmake` and does not compile targets.
+
 ## Script Summary Format
 
 `scripts/test.ps1` writes one machine-parseable record per step and one final summary line:
@@ -124,6 +141,14 @@ The benchmark reports and trend files now include:
 .\scripts\test.ps1
 .\scripts\test.ps1 -NoPopup
 ```
+
+Minimal local and CI command examples:
+
+- local minimal:
+  - run the `Build Probe (No Compile)` command in this section
+  - `.\scripts\test.ps1 -NoPopup`
+- CI-style minimal:
+  - `.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild -EnforceWorktreeGuard`
 
 CLI sanity:
 

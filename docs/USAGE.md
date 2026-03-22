@@ -8,6 +8,21 @@ Build once:
 .\scripts\build.ps1
 ```
 
+Build probe (no compile):
+
+```powershell
+powershell -Command "$ErrorActionPreference='Stop'; $vswhere='C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'; if (-not (Test-Path $vswhere)) { throw 'vswhere.exe not found' }; $install=& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -format value | Select-Object -First 1; if (-not $install) { throw 'Visual Studio VC toolchain not found' }; $dev=Join-Path $install 'Common7\Tools\VsDevCmd.bat'; if (-not (Test-Path $dev)) { throw \"VsDevCmd not found: $dev\" }; cmd /c \"`\"$dev`\" -arch=x64 -host_arch=x64 >nul && where cl\""
+```
+
+Probe troubleshooting:
+
+- `vswhere.exe not found`: install Visual Studio Installer components or run on an image with VS Build Tools.
+- `Visual Studio VC toolchain not found`: ensure `Microsoft.VisualStudio.Component.VC.Tools.x86.x64` is installed.
+- `VsDevCmd not found`: verify `VSINSTALLDIR` or the discovered installation path.
+- `where cl` fails: toolchain environment failed to initialize; reopen shell and rerun the probe.
+
+The probe only checks toolchain discovery and compiler path resolution. It does not run `cmake` and does not trigger compilation.
+
 Run simulation:
 
 ```powershell
@@ -296,6 +311,14 @@ CI integration uses the same script:
 - workflow file: `.github/workflows/benchmark-gate.yml`
 - runs build + tests + unified benchmark gate on Windows
 - uploads `benchmarks/reports/` as CI artifact
+
+Minimal local and CI commands:
+
+- local minimal verification:
+  - run the `Build probe (no compile)` command in this section
+  - `.\scripts\test.ps1 -NoPopup`
+- CI-style minimal gate:
+  - `.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild -EnforceWorktreeGuard`
 
 Pre-commit verification matrix:
 
