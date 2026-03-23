@@ -22,8 +22,19 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path out/ci | Out-Null
-          .\scripts\build.ps1 -ProbeToolchainOnly *>&1 | Tee-Object -FilePath out/ci/toolchain_probe.log
-          if ($LASTEXITCODE -ne 0) { throw "toolchain probe failed: exit code $LASTEXITCODE" }
+          $probeLog = "out/ci/toolchain_probe.log"
+          .\scripts\build.ps1 -ProbeToolchainOnly *>&1 | Tee-Object -FilePath $probeLog
+          $probeExitCode = $LASTEXITCODE
+          if ($probeExitCode -ne 0) {
+            Write-Host "::group::Toolchain Probe Output (Failure Context)"
+            if (Test-Path $probeLog) {
+              Get-Content $probeLog
+            } else {
+              Write-Host "toolchain probe log missing: $probeLog"
+            }
+            Write-Host "::endgroup::"
+            throw "toolchain probe failed before build; see grouped probe output above (exit code $probeExitCode)"
+          }
 
       - name: Configure
         run: cmake -S . -B build-vs -G "Visual Studio 17 2022" -A x64
