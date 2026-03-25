@@ -12,6 +12,11 @@
     "depolarizing_prob": { "type": "number", "minimum": 0, "maximum": 1 },
     "amplitude_damping_gamma": { "type": "number", "minimum": 0, "maximum": 1 },
     "seed": { "type": "integer", "minimum": 0 },
+    "clbits": { "type": "integer", "minimum": 0 },
+    "parameter_map": {
+      "type": "object",
+      "additionalProperties": { "type": "number" }
+    },
     "operations": {
       "type": "array",
       "items": {
@@ -29,6 +34,10 @@
           "params": {
             "type": "array",
             "items": { "type": "number" }
+          },
+          "param_names": {
+            "type": "array",
+            "items": { "type": "string" }
           }
         },
         "required": ["name"],

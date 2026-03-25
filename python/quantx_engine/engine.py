@@ -353,17 +353,24 @@ class Engine:
       if "params" in raw:
         op["params"] = list(raw["params"])
       ops.append(op)
-    return {
+    out: dict = {
         "qubits": int(qubits),
         "shots": int(request.get("shots", 0)),
         "observables": list(request.get("observables", [])),
         "operations": ops,
         "seed": int(request.get("seed", 42)),
-        **({"noise": request["noise"]} if isinstance(request.get("noise"), dict) else {}),
-        **({"depolarizing_prob": float(request["depolarizing_prob"])} if "depolarizing_prob" in request else {}),
-        **({"amplitude_damping_gamma": float(request["amplitude_damping_gamma"])}
-           if "amplitude_damping_gamma" in request else {}),
     }
+    if isinstance(request.get("noise"), dict):
+      out["noise"] = request["noise"]
+    if "depolarizing_prob" in request:
+      out["depolarizing_prob"] = float(request["depolarizing_prob"])
+    if "amplitude_damping_gamma" in request:
+      out["amplitude_damping_gamma"] = float(request["amplitude_damping_gamma"])
+    if isinstance(request.get("parameter_map"), dict):
+      out["parameter_map"] = {str(k): float(v) for k, v in request["parameter_map"].items()}
+    if "clbits" in request:
+      out["clbits"] = int(request["clbits"])
+    return out
 
   def _from_cirq_like(self, request: dict) -> dict:
     """Convert a compact Cirq-like request into the native circuit schema."""
@@ -393,17 +400,24 @@ class Engine:
       ops.append(op)
 
     shots = request.get("shots", request.get("repetitions", 0))
-    return {
+    out: dict = {
         "qubits": int(qubits),
         "shots": int(shots),
         "observables": list(request.get("observables", [])),
         "operations": ops,
         "seed": int(request.get("seed", 42)),
-        **({"noise": request["noise"]} if isinstance(request.get("noise"), dict) else {}),
-        **({"depolarizing_prob": float(request["depolarizing_prob"])} if "depolarizing_prob" in request else {}),
-        **({"amplitude_damping_gamma": float(request["amplitude_damping_gamma"])}
-           if "amplitude_damping_gamma" in request else {}),
     }
+    if isinstance(request.get("noise"), dict):
+      out["noise"] = request["noise"]
+    if "depolarizing_prob" in request:
+      out["depolarizing_prob"] = float(request["depolarizing_prob"])
+    if "amplitude_damping_gamma" in request:
+      out["amplitude_damping_gamma"] = float(request["amplitude_damping_gamma"])
+    if isinstance(request.get("parameter_map"), dict):
+      out["parameter_map"] = {str(k): float(v) for k, v in request["parameter_map"].items()}
+    if "clbits" in request:
+      out["clbits"] = int(request["clbits"])
+    return out
 
   @staticmethod
   def _default_library_path():
@@ -419,5 +433,19 @@ class Engine:
           return p
       return candidates[0]
     if os.uname().sysname == "Darwin":
-      return os.path.join(cwd, "build", "libquantx.dylib")
-    return os.path.join(cwd, "build", "libquantx.so")
+      candidates = [
+          os.path.join(cwd, "build", "Debug", "libquantx.dylib"),
+          os.path.join(cwd, "build", "libquantx.dylib"),
+      ]
+      for p in candidates:
+        if os.path.exists(p):
+          return p
+      return candidates[0]
+    candidates = [
+        os.path.join(cwd, "build", "Debug", "libquantx.so"),
+        os.path.join(cwd, "build", "libquantx.so"),
+    ]
+    for p in candidates:
+      if os.path.exists(p):
+        return p
+    return candidates[0]

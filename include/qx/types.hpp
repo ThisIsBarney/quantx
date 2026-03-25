@@ -222,6 +222,9 @@ struct CircuitOp {
   std::vector<std::uint32_t> targets{};
   std::vector<std::uint32_t> controls{};
   std::vector<double> params{};
+  // Optional named parameter references resolved against QuantumCircuit::parameter_map.
+  // param_names[i] names the binding for params slot i; empty string means use params[i] directly.
+  std::vector<std::string> param_names{};
 };
 
 // Quantum circuit input for gate-model simulation path.
@@ -239,6 +242,10 @@ struct QuantumCircuit {
   double depolarizing_prob{0.0};
   double amplitude_damping_gamma{0.0};
   std::uint64_t seed{42};
+  // Classical register width. 0 means no classical register; MEASURE ops write here by index.
+  std::uint32_t clbits{0};
+  // Named parameter bindings resolved at circuit execution time by CircuitOp::param_names.
+  std::map<std::string, double> parameter_map{};
 };
 
 // Circuit execution output including exact and shot-based estimators.
@@ -254,6 +261,8 @@ struct CircuitResult {
   std::map<std::string, double> shot_variance{};
   std::map<std::string, double> shot_stderr{};
   std::map<std::string, double> error_summary{};
+  // Classical register outcomes from MEASURE operations (in clbit index order).
+  std::vector<std::uint32_t> measurement_results{};
   std::string message;
 };
 

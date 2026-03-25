@@ -60,7 +60,7 @@ void emit_continuous_export_contract_event(RuntimeContext& runtime,
 // Return the fixed gate vocabulary accepted by the circuit executor.
 const std::vector<std::string>& supported_circuit_gates() {
   static const std::vector<std::string> gates = {
-      "X", "Y", "Z", "H", "S", "T", "RX", "RY", "RZ", "CNOT", "CX", "CZ", "SWAP"};
+      "X", "Y", "Z", "H", "S", "T", "RX", "RY", "RZ", "CNOT", "CX", "CZ", "SWAP", "MEASURE"};
   return gates;
 }
 
@@ -264,6 +264,32 @@ void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double
   } else {  // Z
     apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
   }
+}
+
+// Collapse the statevector to the |outcome> subspace on the given qubit.
+// outcome must be 0 or 1. The state is renormalized after projection.
+void collapse_qubit(std::vector<Complex>& state, std::uint32_t qubit, std::uint32_t outcome) {
+  const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
+  for (std::size_t i = 0; i < state.size(); ++i) {
+    const bool is_one = (i & mask) != 0;
+    if ((outcome == 1) != is_one) {
+      state[i] = Complex{0.0, 0.0};
+    }
+  }
+  renormalize(state);
+}
+
+// Resolve the i-th parameter for an op: use param_names binding if available, else params[i].
+double resolve_gate_param(const CircuitOp& op, std::size_t i,
+                          const std::map<std::string, double>& param_map) {
+  if (i < op.param_names.size() && !op.param_names[i].empty()) {
+    const auto it = param_map.find(op.param_names[i]);
+    if (it == param_map.end()) {
+      throw CircuitError("QX_UNRESOLVED_PARAMETER", "unresolved parameter: " + op.param_names[i]);
+    }
+    return it->second;
+  }
+  return (i < op.params.size()) ? op.params[i] : 0.0;
 }
 
 // Apply configured noise channels after each gate.
@@ -565,6 +591,9 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   std::vector<Complex> state(n, Complex{0.0, 0.0});
   state[0] = Complex{1.0, 0.0};
 
+  // Classical register: pre-sized when clbits > 0, or grown dynamically by unaddressed MEASUREs.
+  std::vector<std::uint32_t> measurement_results(circuit.clbits, 0U);
+
   for (const auto& op : circuit.operations) {
     std::string g = op.name;
     std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
@@ -591,17 +620,17 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
         const double inv_sqrt2 = 0.7071067811865475244;
         apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {inv_sqrt2, inv_sqrt2});
       } else if (g == "RX") {
-        const double theta = op.params.empty() ? 0.0 : op.params[0];
+        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
         const double c = std::cos(theta * 0.5);
         const double s = std::sin(theta * 0.5);
         apply_single_qubit(state, t, {c, 0.0}, {0.0, -s}, {0.0, -s}, {c, 0.0});
       } else if (g == "RY") {
-        const double theta = op.params.empty() ? 0.0 : op.params[0];
+        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
         const double c = std::cos(theta * 0.5);
         const double s = std::sin(theta * 0.5);
         apply_single_qubit(state, t, {c, 0.0}, {-s, 0.0}, {s, 0.0}, {c, 0.0});
       } else if (g == "RZ") {
-        const double theta = op.params.empty() ? 0.0 : op.params[0];
+        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
         apply_single_qubit(state, t, std::exp(Complex{0.0, -theta * 0.5}), {0.0, 0.0}, {0.0, 0.0},
                            std::exp(Complex{0.0, theta * 0.5}));
       }
@@ -648,6 +677,36 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
       continue;
     }
 
+    if (g == "MEASURE") {
+      if (op.targets.size() != 1) {
+        throw invalid_circuit_error("MEASURE requires exactly 1 target qubit");
+      }
+      const std::uint32_t t = op.targets[0];
+      require_qubit(t, circuit.qubits, g);
+
+      // Determine destination classical bit index: controls[0] if present, else append.
+      std::uint32_t clbit = static_cast<std::uint32_t>(measurement_results.size());
+      if (!op.controls.empty()) {
+        clbit = op.controls[0];
+      }
+      if (circuit.clbits > 0 && clbit >= circuit.clbits) {
+        throw CircuitError("QX_INVALID_CLBIT_INDEX",
+                           "MEASURE targets out-of-range classical bit " + std::to_string(clbit));
+      }
+
+      const double p1 = qubit_one_population(state, t);
+      std::uniform_real_distribution<double> u01(0.0, 1.0);
+      const std::uint32_t outcome = (u01(rng) < p1) ? 1U : 0U;
+      collapse_qubit(state, t, outcome);
+
+      if (clbit < measurement_results.size()) {
+        measurement_results[clbit] = outcome;
+      } else {
+        measurement_results.push_back(outcome);
+      }
+      continue;
+    }
+
     throw unsupported_gate_error(g);
   }
 
@@ -655,6 +714,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   out.ok = true;
   out.backend = "statevector";
   out.state = state;
+  out.measurement_results = std::move(measurement_results);
   out.message = "Circuit executed";
 
   if (circuit.shots > 0) {

@@ -98,6 +98,7 @@ CircuitOp parse_circuit_op(const json& item) {
   op.targets = get_or<std::vector<std::uint32_t>>(item, "targets", {});
   op.controls = get_or<std::vector<std::uint32_t>>(item, "controls", {});
   op.params = get_or<std::vector<double>>(item, "params", {});
+  op.param_names = get_or<std::vector<std::string>>(item, "param_names", {});
   return op;
 }
 
@@ -496,6 +497,8 @@ QuantumCircuit circuit_from_json(const std::string& json_text) {
       }
     }
   }
+  c.clbits = get_or<std::uint32_t>(j, "clbits", c.clbits);
+  c.parameter_map = get_or<std::map<std::string, double>>(j, "parameter_map", c.parameter_map);
   parse_noise_config(j, c);
   if (c.operations.empty()) {
     throw std::runtime_error("circuit must contain at least one operation");
@@ -543,6 +546,9 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   j["shot_variance"] = result.shot_variance;
   j["shot_stderr"] = result.shot_stderr;
   j["error_summary"] = result.error_summary;
+  if (!result.measurement_results.empty()) {
+    j["measurement_results"] = result.measurement_results;
+  }
   return j.dump();
 }
 
