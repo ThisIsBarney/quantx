@@ -69,7 +69,7 @@ class Continuous3DBackend final : public IBackend {
     c.supports_mpi = false;
     c.supports_noisy = false;
     c.max_qubits_recommended = 0;
-    c.equation_scope = "Schrodinger";
+    c.equation_scope = "Schrodinger,KleinGordon";
     return c;
   }
 
@@ -165,6 +165,7 @@ class Continuous3DBackend final : public IBackend {
     dispersion_ = c.dispersion;
     mass_ = (c.mass > 0.0) ? c.mass : 1.0;
     speed_of_light_ = (c.speed_of_light > 0.0) ? c.speed_of_light : 1.0;
+    equation_ = problem.equation;
     potential_kind_ = c.potential_kind;
     completed_steps_ = 0;
     export_frame_payloads_ = options.export_continuous_frames;
@@ -187,11 +188,19 @@ class Continuous3DBackend final : public IBackend {
 
     const std::size_t n = static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_);
     state_.assign(n, Complex{0.0, 0.0});
+    pi_state_.assign(n, Complex{0.0, 0.0});
     kbuf_.assign(n, Complex{0.0, 0.0});
+    kpibuf_.assign(n, Complex{0.0, 0.0});
     potential_.assign(n, 0.0);
     potential_phase_.assign(n, Complex{1.0, 0.0});
     kinetic_half_phase_.assign(n, Complex{1.0, 0.0});
     absorbing_mask_.assign(n, 1.0);
+    kg_pot_c_.assign(n, 1.0);
+    kg_pot_sc_.assign(n, 0.0);
+    kg_pot_os_.assign(n, 0.0);
+    kg_kin_c_.assign(n, 1.0);
+    kg_kin_sc_.assign(n, 0.0);
+    kg_kin_os_.assign(n, 0.0);
 
     if (!c.potential_grid.empty()) {
       if (c.potential_grid.size() != n) {
@@ -204,6 +213,10 @@ class Continuous3DBackend final : public IBackend {
 
     initialize_wavepacket(c.initial_state, c.potential_params);
     precompute_phases();
+    if (equation_ == EquationType::KleinGordon) {
+      precompute_kg_phases();
+      initialize_pi_state(c.initial_state);
+    }
     precompute_boundary_mask(c.potential_params);
     const bool restored = apply_pending_checkpoint();
     if (!restored && boundary_ == "dirichlet") {
@@ -214,6 +227,10 @@ class Continuous3DBackend final : public IBackend {
   }
 
   void evolve(const QuantumProblem&, const RunOptions&) override {
+    if (equation_ == EquationType::KleinGordon) {
+      evolve_kg();
+      return;
+    }
     for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
       apply_half_kinetic();
       apply_potential();
@@ -222,6 +239,26 @@ class Continuous3DBackend final : public IBackend {
       enforce_dirichlet_boundary();
       if (boundary_ != "absorbing") {
         normalize_state();
+      }
+      completed_steps_ = s + 1;
+      update_observables();
+      record_frame();
+    }
+  }
+
+  void evolve_kg() {
+    for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
+      apply_half_potential_kg();
+      apply_full_kinetic_kg();
+      apply_half_potential_kg();
+      if (boundary_ == "absorbing") {
+        apply_absorbing_boundary();
+        for (std::size_t i = 0; i < pi_state_.size(); ++i) {
+          pi_state_[i] *= absorbing_mask_[i];
+        }
+      } else if (boundary_ == "dirichlet") {
+        enforce_dirichlet_boundary();
+        std::fill(pi_state_.begin(), pi_state_.end(), Complex{0.0, 0.0});
       }
       completed_steps_ = s + 1;
       update_observables();
@@ -653,6 +690,87 @@ class Continuous3DBackend final : public IBackend {
     }
   }
 
+  void precompute_kg_phases() {
+    const double two_pi = 6.28318530717958647692;
+    const double lx = static_cast<double>(nx_) * dx_;
+    const double ly = static_cast<double>(ny_) * dy_;
+    const double lz = static_cast<double>(nz_) * dz_;
+    const double half_dt = 0.5 * dt_;
+
+    for (std::size_t i = 0; i < potential_.size(); ++i) {
+      const double omega_v = std::sqrt(mass_ * mass_ + std::max(0.0, potential_[i]));
+      kg_pot_c_[i]  = std::cos(omega_v * half_dt);
+      kg_pot_sc_[i] = std::sin(omega_v * half_dt) / omega_v;
+      kg_pot_os_[i] = omega_v * std::sin(omega_v * half_dt);
+    }
+
+    for (std::uint32_t z = 0; z < nz_; ++z) {
+      const int kz_index = (z <= nz_ / 2) ? static_cast<int>(z) : static_cast<int>(z) - static_cast<int>(nz_);
+      const double kz = two_pi * static_cast<double>(kz_index) / lz;
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        const int ky_index = (y <= ny_ / 2) ? static_cast<int>(y) : static_cast<int>(y) - static_cast<int>(ny_);
+        const double ky = two_pi * static_cast<double>(ky_index) / ly;
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          const int kx_index = (x <= nx_ / 2) ? static_cast<int>(x) : static_cast<int>(x) - static_cast<int>(nx_);
+          const double kx = two_pi * static_cast<double>(kx_index) / lx;
+          const double omega_k = std::sqrt(kx * kx + ky * ky + kz * kz);
+          const std::size_t i = idx(x, y, z);
+          kg_kin_c_[i]  = std::cos(omega_k * dt_);
+          kg_kin_sc_[i] = (omega_k > 1e-14) ? std::sin(omega_k * dt_) / omega_k : dt_;
+          kg_kin_os_[i] = omega_k * std::sin(omega_k * dt_);
+        }
+      }
+    }
+  }
+
+  void initialize_pi_state(const ContinuousInitialStateConfig& ic) {
+    if (ic.pi_kind == "positive_frequency") {
+      const double two_pi = 6.28318530717958647692;
+      const double lx = static_cast<double>(nx_) * dx_;
+      const double ly = static_cast<double>(ny_) * dy_;
+      const double lz = static_cast<double>(nz_) * dz_;
+      fft3_forward(state_, kbuf_);
+      for (std::uint32_t z = 0; z < nz_; ++z) {
+        const int kz_index = (z <= nz_ / 2) ? static_cast<int>(z) : static_cast<int>(z) - static_cast<int>(nz_);
+        const double kz = two_pi * static_cast<double>(kz_index) / lz;
+        for (std::uint32_t y = 0; y < ny_; ++y) {
+          const int ky_index = (y <= ny_ / 2) ? static_cast<int>(y) : static_cast<int>(y) - static_cast<int>(ny_);
+          const double ky = two_pi * static_cast<double>(ky_index) / ly;
+          for (std::uint32_t x = 0; x < nx_; ++x) {
+            const int kx_index = (x <= nx_ / 2) ? static_cast<int>(x) : static_cast<int>(x) - static_cast<int>(nx_);
+            const double kx = two_pi * static_cast<double>(kx_index) / lx;
+            const double k2 = kx * kx + ky * ky + kz * kz;
+            const double omega_k = std::sqrt(k2 + mass_ * mass_);
+            kpibuf_[idx(x, y, z)] = Complex{0.0, -omega_k} * kbuf_[idx(x, y, z)];
+          }
+        }
+      }
+      fft3_inverse(kpibuf_, pi_state_);
+    }
+  }
+
+  void apply_half_potential_kg() {
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      const Complex phi = state_[i];
+      const Complex pi  = pi_state_[i];
+      state_[i]    = phi * kg_pot_c_[i]  + pi * kg_pot_sc_[i];
+      pi_state_[i] = -phi * kg_pot_os_[i] + pi * kg_pot_c_[i];
+    }
+  }
+
+  void apply_full_kinetic_kg() {
+    fft3_forward(state_, kbuf_);
+    fft3_forward(pi_state_, kpibuf_);
+    for (std::size_t i = 0; i < kbuf_.size(); ++i) {
+      const Complex phi_k = kbuf_[i];
+      const Complex pi_k  = kpibuf_[i];
+      kbuf_[i]   = phi_k * kg_kin_c_[i]  + pi_k * kg_kin_sc_[i];
+      kpibuf_[i] = -phi_k * kg_kin_os_[i] + pi_k * kg_kin_c_[i];
+    }
+    fft3_inverse(kbuf_, state_);
+    fft3_inverse(kpibuf_, pi_state_);
+  }
+
   void normalize_state() {
     double sum = 0.0;
     for (const auto& a : state_) {
@@ -836,6 +954,17 @@ class Continuous3DBackend final : public IBackend {
     observables_["dispersion_relativistic"] = (dispersion_ == "relativistic") ? 1.0 : 0.0;
     observables_["mass"] = mass_;
     observables_["speed_of_light"] = speed_of_light_;
+    observables_["equation_klein_gordon"] = (equation_ == EquationType::KleinGordon) ? 1.0 : 0.0;
+    if (equation_ == EquationType::KleinGordon) {
+      double charge = 0.0;
+      double pi_norm = 0.0;
+      for (std::size_t i = 0; i < state_.size(); ++i) {
+        charge += 2.0 * (std::conj(state_[i]) * pi_state_[i]).imag() * cell;
+        pi_norm += std::norm(pi_state_[i]) * cell;
+      }
+      observables_["kg_charge"] = charge;
+      observables_["kg_pi_norm"] = pi_norm;
+    }
   }
 
  private:
@@ -852,6 +981,7 @@ class Continuous3DBackend final : public IBackend {
   std::string dispersion_{"nonrelativistic"};
   double mass_{1.0};
   double speed_of_light_{1.0};
+  EquationType equation_{EquationType::Schrodinger};
   std::string potential_kind_{"none"};
   bool export_frame_payloads_{false};
   std::uint32_t export_frame_stride_{1};
@@ -859,11 +989,20 @@ class Continuous3DBackend final : public IBackend {
   double export_density_floor_ratio_{0.08};
 
   std::vector<Complex> state_;
+  std::vector<Complex> pi_state_;
   std::vector<Complex> kbuf_;
+  std::vector<Complex> kpibuf_;
   std::vector<double> potential_;
   std::vector<double> absorbing_mask_;
   std::vector<Complex> potential_phase_;
   std::vector<Complex> kinetic_half_phase_;
+  // Klein-Gordon split-step precomputed arrays.
+  std::vector<double> kg_pot_c_;
+  std::vector<double> kg_pot_sc_;
+  std::vector<double> kg_pot_os_;
+  std::vector<double> kg_kin_c_;
+  std::vector<double> kg_kin_sc_;
+  std::vector<double> kg_kin_os_;
   std::map<std::string, double> observables_;
   std::vector<ContinuousDensityFrame> frames_;
   PendingCheckpoint3D pending_checkpoint_{};

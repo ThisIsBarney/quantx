@@ -112,6 +112,7 @@ void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig
   out.kind = get_or<std::string>(initial, "kind", out.kind);
   out.params = get_or<std::map<std::string, double>>(initial, "params", out.params);
   out.grid = get_or<std::vector<double>>(initial, "grid", out.grid);
+  out.pi_kind = get_or<std::string>(initial, "pi_kind", out.pi_kind);
 }
 
 // Read a numeric field as an unsigned 32-bit value and clamp it to a minimum.

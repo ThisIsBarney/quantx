@@ -83,6 +83,11 @@ struct ContinuousInitialStateConfig {
   std::map<std::string, double> params{};
   // Optional flattened amplitude grid used by grid-based initial states.
   std::vector<double> grid{};
+  // Initial condition for the conjugate momentum field π = ∂φ/∂t (Klein-Gordon only).
+  // "zero":               π(x,0) = 0 (default — stationary wavepacket).
+  // "positive_frequency": π̃_k = -i·ω_k·φ̃_k, where ω_k = sqrt(k² + m²).
+  //                       Selects the positive-energy branch of the KG dispersion.
+  std::string pi_kind{"zero"};
 };
 
 // Continuous 2D spatial simulation configuration.
