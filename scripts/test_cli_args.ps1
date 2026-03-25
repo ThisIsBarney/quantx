@@ -1,7 +1,10 @@
 param(
   [switch]$EnforceWorktreeGuard,
   [switch]$SkipBuildProbe,
-  [switch]$BuildProbeOnly
+  [switch]$BuildProbeOnly,
+  # Skip the build probe and the build step entirely.
+  # Use this when the binary was already compiled by a prior CI step.
+  [switch]$SkipBuild
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,16 +101,20 @@ function Invoke-BuildProbe {
   return $true
 }
 
-if (-not $SkipBuildProbe) {
-  $null = Invoke-BuildProbe -ThrowOnFailure
-}
+if ($SkipBuild) {
+  Write-Host "skip-build mode: assuming binary was already compiled by a prior step."
+} else {
+  if (-not $SkipBuildProbe) {
+    $null = Invoke-BuildProbe -ThrowOnFailure
+  }
 
-if ($BuildProbeOnly) {
-  Write-Host "build probe only mode: skipping build and CLI argument checks."
-  exit 0
-}
+  if ($BuildProbeOnly) {
+    Write-Host "build probe only mode: skipping build and CLI argument checks."
+    exit 0
+  }
 
-.\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
+  .\scripts\build.ps1 -EnforceWorktreeGuard:$EnforceWorktreeGuard
+}
 
 # --help should succeed.
 & .\build-vs\Debug\qx_cli.exe --help | Out-Null
