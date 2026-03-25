@@ -556,6 +556,13 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   j["message"] = result.message;
   j["state_size"] = result.state.size();
   j["engine_version"] = version_string();
+  // Structured metadata block for framework adapters; mirrors top-level fields for
+  // backward compat but groups them under a stable key for transpiler integration.
+  j["metadata"] = {
+      {"engine_version", version_string()},
+      {"backend", result.backend},
+      {"elapsed_ms", result.elapsed_ms},
+  };
   j["counts"] = result.counts;
   j["expectation_exact"] = result.expectation_exact;
   j["expectation_shot"] = result.expectation_shot;

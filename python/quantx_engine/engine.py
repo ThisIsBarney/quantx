@@ -74,6 +74,10 @@ class Engine:
     finally:
       self._lib.qx_free_string(ptr)
 
+  def capabilities(self) -> dict:
+    """Alias for circuit_capabilities() — preferred entry point for M8 adapter integration."""
+    return self.circuit_capabilities()
+
   def circuit_capability_summary(self) -> str:
     """Return a compact human-readable summary of the native circuit capabilities."""
     return self.summarize_circuit_capabilities(self.circuit_capabilities())
@@ -312,6 +316,8 @@ class Engine:
     mapping = {
         "CX": "CNOT",
         "C-X": "CNOT",
+        "MEAS": "MEASURE",
+        "M": "MEASURE",
     }
     return mapping.get(n, n)
 
@@ -341,17 +347,22 @@ class Engine:
       q = list(raw.get("qubits", []))
       controls = list(raw.get("controls", []))
       targets = list(raw.get("targets", []))
+      clbits_ref = list(raw.get("clbits", []))
       if not targets:
         if name in {"CNOT", "CZ"} and len(q) >= 2:
           controls = controls or [q[0]]
           targets = [q[1]]
         else:
           targets = q
+      if name == "MEASURE" and not controls and clbits_ref:
+        controls = [clbits_ref[0]]
       op = {"name": name, "targets": targets}
       if controls:
         op["controls"] = controls
       if "params" in raw:
         op["params"] = list(raw["params"])
+      if "param_names" in raw:
+        op["param_names"] = list(raw["param_names"])
       ops.append(op)
     out: dict = {
         "qubits": int(qubits),
@@ -389,14 +400,19 @@ class Engine:
       name = self._normalize_gate_name(str(raw.get("gate", raw.get("name", ""))))
       targets = list(raw.get("targets", raw.get("qubits", [])))
       controls = list(raw.get("controls", []))
+      clbits_ref = list(raw.get("clbits", []))
       if name in {"CNOT", "CZ"} and not controls and len(targets) >= 2:
         controls = [targets[0]]
         targets = [targets[1]]
+      if name == "MEASURE" and not controls and clbits_ref:
+        controls = [clbits_ref[0]]
       op = {"name": name, "targets": targets}
       if controls:
         op["controls"] = controls
       if "params" in raw:
         op["params"] = list(raw["params"])
+      if "param_names" in raw:
+        op["param_names"] = list(raw["param_names"])
       ops.append(op)
 
     shots = request.get("shots", request.get("repetitions", 0))

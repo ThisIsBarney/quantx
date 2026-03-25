@@ -35,8 +35,9 @@ C ABI:
 Python:
 
 - `engine.run_circuit(circuit, options)`
-- `engine.run_qiskit_like(request, options)` (minimal adapter payload)
-- `engine.run_cirq_like(request, options)` (minimal adapter payload)
+- `engine.run_qiskit_like(request, options)` (Qiskit-style adapter; supports `parameter_map`, `clbits`, `MEASURE`)
+- `engine.run_cirq_like(request, options)` (Cirq-style adapter; supports `parameter_map`, `clbits`, `MEASURE`/`M`)
+- `engine.capabilities()` — preferred alias for `circuit_capabilities()`
 - `engine.circuit_capabilities()`
 
 ## 3) Capability query
@@ -55,12 +56,19 @@ The current native gate-model executor accepts:
 
 - single-qubit gates: `X`, `Y`, `Z`, `H`, `S`, `T`, `RX`, `RY`, `RZ`
 - two-qubit gates: `CNOT`/`CX`, `CZ`, `SWAP`
+- measurement: `MEASURE` (collapses statevector; `targets[0]` = qubit, `controls[0]` = classical bit index)
+
+Parametric binding: set `param_names` on an op and supply a `parameter_map` on the circuit to resolve angles at runtime.
 
 Supported noise model selectors:
 
 - `none`
-- `depolarizing`
-- `amplitude_damping`
+- `depolarizing` — random Pauli kick with `prob`
+- `amplitude_damping` — T1-style decay with `gamma`
+- `bit_flip` — X applied with `prob`
+- `phase_flip` — Z applied with `prob`
+- `t1_decay` — amplitude damping with `gamma = 1 - exp(-dt/T1)`; params: `T1`, `dt`
+- `t2_decay` — pure dephasing with `p = (1-exp(-dt/T2))/2`; params: `T2`, `dt`
 
 The advertised limits are practical execution limits for the current statevector path and are intended for planning, validation, and adapter routing.
 
@@ -92,10 +100,15 @@ print(caps["supported_noise_models"])
 
 ## 4) Result model
 
-- final state (optional)
-- shot counts (`{"bitstring": count}`)
-- expectation values (`{"obs_name": value}`)
-- runtime metadata (backend, elapsed time, method, precision)
+- `ok` — bool; false when an error_code is present
+- `counts` — shot-based bitstring counts `{"bitstring": count}`
+- `expectation_exact` / `expectation_shot` — observable expectation values
+- `measurement_results` — classical register outcomes from MEASURE ops (clbit index order)
+- `metadata` — structured block: `engine_version`, `backend`, `elapsed_ms`
+- `engine_version`, `backend`, `elapsed_ms` — top-level aliases for backward compat
+- `state_size` — number of amplitudes in the final statevector
+
+See `schemas/result.schema.json` for the full append-only field contract.
 
 ## 5) Error contract
 

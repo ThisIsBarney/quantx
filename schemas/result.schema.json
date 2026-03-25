@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CircuitResult",
+  "description": "Output schema for qx_run_circuit / Engine.run_circuit. All fields are append-only.",
+  "type": "object",
+  "properties": {
+    "ok": {
+      "type": "boolean",
+      "description": "True on success; false when an error_code is set."
+    },
+    "backend": { "type": "string", "description": "Name of the backend that executed the circuit." },
+    "elapsed_ms": { "type": "number", "description": "Wall-clock execution time in milliseconds." },
+    "message": { "type": "string", "description": "Human-readable status or error message." },
+    "engine_version": { "type": "string", "description": "Semantic version of the QuantX engine." },
+    "state_size": { "type": "integer", "description": "Number of amplitudes in the final statevector." },
+    "metadata": {
+      "type": "object",
+      "description": "Structured metadata for framework-adapter integration.",
+      "properties": {
+        "engine_version": { "type": "string" },
+        "backend": { "type": "string" },
+        "elapsed_ms": { "type": "number" }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "description": "Shot-based bitstring counts keyed by big-endian bitstring.",
+      "additionalProperties": { "type": "integer" }
+    },
+    "expectation_exact": {
+      "type": "object",
+      "description": "Exact <psi|O|psi> values keyed by observable label.",
+      "additionalProperties": { "type": "number" }
+    },
+    "expectation_shot": {
+      "type": "object",
+      "description": "Shot-based expectation estimates keyed by observable label.",
+      "additionalProperties": { "type": "number" }
+    },
+    "estimation_error": {
+      "type": "object",
+      "description": "Difference between shot and exact expectation values.",
+      "additionalProperties": { "type": "number" }
+    },
+    "shot_variance": {
+      "type": "object",
+      "description": "Empirical variance of shot-based estimates.",
+      "additionalProperties": { "type": "number" }
+    },
+    "shot_stderr": {
+      "type": "object",
+      "description": "Standard error of shot-based estimates.",
+      "additionalProperties": { "type": "number" }
+    },
+    "error_summary": {
+      "type": "object",
+      "description": "Aggregate error statistics: mean_abs_error, max_abs_error, num_observables.",
+      "additionalProperties": { "type": "number" }
+    },
+    "measurement_results": {
+      "type": "array",
+      "description": "Classical register outcomes from MEASURE operations (clbit index order).",
+      "items": { "type": "integer", "minimum": 0, "maximum": 1 }
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Machine-readable error code when ok=false (e.g. QX_UNSUPPORTED_GATE)."
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Human-readable error description when ok=false."
+    },
+    "error": {
+      "type": "string",
+      "description": "Alias of error_message for backward compatibility."
+    },
+    "error_kind": {
+      "type": "string",
+      "description": "Error category tag: 'circuit', 'internal', etc."
+    }
+  },
+  "required": ["ok"],
+  "additionalProperties": true
+}

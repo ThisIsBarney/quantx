@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CircuitCapabilities",
+  "description": "Output schema for qx_circuit_capabilities / Engine.capabilities. Append-only.",
+  "type": "object",
+  "properties": {
+    "backend": { "type": "string", "description": "Name of the gate-model execution backend." },
+    "engine_version": { "type": "string", "description": "Semantic version of the QuantX engine." },
+    "supported_gates": {
+      "type": "array",
+      "description": "Gate names accepted by the circuit executor.",
+      "items": { "type": "string" }
+    },
+    "supported_noise_models": {
+      "type": "array",
+      "description": "Noise model kind tokens accepted by the circuit executor.",
+      "items": { "type": "string" }
+    },
+    "max_qubits": {
+      "type": "integer",
+      "description": "Practical qubit limit for the current statevector path."
+    },
+    "max_shots": {
+      "type": "integer",
+      "description": "Practical shot limit exposed for caller planning."
+    },
+    "supports_qiskit_like": {
+      "type": "boolean",
+      "description": "True when run_qiskit_like adapter is available."
+    },
+    "supports_cirq_like": {
+      "type": "boolean",
+      "description": "True when run_cirq_like adapter is available."
+    }
+  },
+  "required": ["backend", "supported_gates", "supported_noise_models", "max_qubits", "max_shots"],
+  "additionalProperties": true
+}
