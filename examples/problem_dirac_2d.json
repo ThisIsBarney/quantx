@@ -1,0 +1,27 @@
+{
+  "kind": "continuous_space_2d",
+  "equation": "Dirac",
+  "observables": ["norm", "x_mean", "y_mean", "sigma_x", "sigma_y",
+                  "equation_dirac", "dirac_spin_z", "dirac_norm_up", "dirac_norm_down"],
+  "continuous_space_2d": {
+    "nx": 128,
+    "ny": 128,
+    "dx": 0.1,
+    "dy": 0.1,
+    "dt": 0.005,
+    "steps": 200,
+    "boundary": "periodic",
+    "mass": 1.0,
+    "potential_kind": "none",
+    "initial_state": {
+      "kind": "gaussian",
+      "params": {
+        "psi_x0": -3.0,
+        "psi_y0": 0.0,
+        "psi_sigma": 0.5,
+        "psi_kx": 2.0,
+        "psi_ky": 0.5
+      }
+    }
+  }
+}

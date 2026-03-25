@@ -121,8 +121,10 @@ class Continuous2DBackend final : public IBackend {
     kbuf_.assign(n, Complex{0.0, 0.0});
     kpibuf_.assign(n, Complex{0.0, 0.0});
     pi_state_.assign(n, Complex{0.0, 0.0});
+    dirac_s1_.assign(n, Complex{0.0, 0.0});
     potential_.assign(n, 0.0);
     potential_phase_.assign(n, Complex{1.0, 0.0});
+    potential_half_phase_.assign(n, Complex{1.0, 0.0});
     kinetic_half_phase_.assign(n, Complex{1.0, 0.0});
     kg_pot_c_.assign(n, 1.0);
     kg_pot_sc_.assign(n, 0.0);
@@ -146,6 +148,7 @@ class Continuous2DBackend final : public IBackend {
       precompute_kg_phases();
       initialize_pi_state(c.initial_state);
     }
+    // dirac_s1_ is already zero-initialized; ψ₀ = state_ gets the Gaussian wavepacket.
     precompute_boundary_mask(c.potential_params);
 
     const bool restored = apply_pending_checkpoint();
@@ -160,6 +163,10 @@ class Continuous2DBackend final : public IBackend {
   void evolve(const QuantumProblem&, const RunOptions&) override {
     if (equation_ == EquationType::KleinGordon) {
       evolve_kg();
+      return;
+    }
+    if (equation_ == EquationType::Dirac) {
+      evolve_dirac();
       return;
     }
     for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
@@ -533,8 +540,14 @@ class Continuous2DBackend final : public IBackend {
     // a stable subset without changing the full metadata timeline.
     if (export_frame_payloads_ && should_export_payload_frame()) {
       frame.density_xy_flat.resize(state_.size());
-      for (std::size_t i = 0; i < state_.size(); ++i) {
-        frame.density_xy_flat[i] = std::norm(state_[i]);
+      if (equation_ == EquationType::Dirac) {
+        for (std::size_t i = 0; i < state_.size(); ++i) {
+          frame.density_xy_flat[i] = std::norm(state_[i]) + std::norm(dirac_s1_[i]);
+        }
+      } else {
+        for (std::size_t i = 0; i < state_.size(); ++i) {
+          frame.density_xy_flat[i] = std::norm(state_[i]);
+        }
       }
     }
     frames_.push_back(frame);
@@ -571,6 +584,7 @@ class Continuous2DBackend final : public IBackend {
         }
         kinetic_half_phase_[i] = std::exp(Complex{0.0, -0.5 * dt_ * E_k});
         potential_phase_[i] = std::exp(Complex{0.0, -dt_ * potential_[i]});
+        potential_half_phase_[i] = std::exp(Complex{0.0, -0.5 * dt_ * potential_[i]});
       }
     }
   }
@@ -649,6 +663,69 @@ class Continuous2DBackend final : public IBackend {
     }
     fft2_inverse(kbuf_, state_);
     fft2_inverse(kpibuf_, pi_state_);
+  }
+
+  // ── Dirac solver (2-component spinor, 2+1 D) ──────────────────────────────
+  // H_D(k) = kx·σx + ky·σy + m·σz  →  U(k,dt) = cos(ω·dt)·I - i·sin(ω·dt)/ω · H_D(k)
+
+  void evolve_dirac() {
+    for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
+      apply_half_potential_dirac();
+      apply_full_kinetic_dirac_2d();
+      apply_half_potential_dirac();
+      if (boundary_ == "absorbing") {
+        apply_absorbing_boundary();
+        for (std::size_t i = 0; i < dirac_s1_.size(); ++i) {
+          dirac_s1_[i] *= absorbing_mask_[i];
+        }
+      } else if (boundary_ == "dirichlet") {
+        enforce_dirichlet_boundary();
+        std::fill(dirac_s1_.begin(), dirac_s1_.end(), Complex{0.0, 0.0});
+      }
+      completed_steps_ = s + 1;
+      update_observables();
+      record_frame();
+    }
+  }
+
+  void apply_half_potential_dirac() {
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      state_[i]   *= potential_half_phase_[i];
+      dirac_s1_[i] *= potential_half_phase_[i];
+    }
+  }
+
+  void apply_full_kinetic_dirac_2d() {
+    const double two_pi = 6.28318530717958647692;
+    const double lx = static_cast<double>(nx_) * dx_;
+    const double ly = static_cast<double>(ny_) * dy_;
+    fft2_forward(state_,    kbuf_);
+    fft2_forward(dirac_s1_, kpibuf_);
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const int ky_idx = (y <= ny_ / 2) ? static_cast<int>(y) : static_cast<int>(y) - static_cast<int>(ny_);
+      const double ky = two_pi * static_cast<double>(ky_idx) / ly;
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const int kx_idx = (x <= nx_ / 2) ? static_cast<int>(x) : static_cast<int>(x) - static_cast<int>(nx_);
+        const double kx = two_pi * static_cast<double>(kx_idx) / lx;
+        const double omega = std::sqrt(kx * kx + ky * ky + mass_ * mass_);
+        const double c = std::cos(omega * dt_);
+        const double s = (omega > 1e-14) ? std::sin(omega * dt_) / omega : dt_;
+        // U = c·I - i·s·H_D, H_D(k) = kx·σx + ky·σy + m·σz
+        // U₀₀ = c - i·s·m,  U₀₁ = -i·s·(kx - i·ky) = {-s·ky, -s·kx}
+        // U₁₀ = -i·s·(kx + i·ky) = {s·ky, -s·kx},  U₁₁ = c + i·s·m
+        const Complex u00 = Complex{c, -s * mass_};
+        const Complex u01 = Complex{-s * ky, -s * kx};
+        const Complex u10 = Complex{ s * ky, -s * kx};
+        const Complex u11 = Complex{c,  s * mass_};
+        const std::size_t i = idx(x, y);
+        const Complex p0 = kbuf_[i];
+        const Complex p1 = kpibuf_[i];
+        kbuf_[i]   = u00 * p0 + u01 * p1;
+        kpibuf_[i] = u10 * p0 + u11 * p1;
+      }
+    }
+    fft2_inverse(kbuf_,    state_);
+    fft2_inverse(kpibuf_,  dirac_s1_);
   }
 
   void normalize_state() {
@@ -745,11 +822,15 @@ class Continuous2DBackend final : public IBackend {
     double x2_mean = 0.0;
     double y2_mean = 0.0;
 
+    const bool is_dirac = (equation_ == EquationType::Dirac);
     for (std::uint32_t y = 0; y < ny_; ++y) {
       const double yy = y_coord(y);
       for (std::uint32_t x = 0; x < nx_; ++x) {
         const double xx = x_coord(x);
-        const double p = std::norm(state_[idx(x, y)]) * cell;
+        const std::size_t ii = idx(x, y);
+        double density = std::norm(state_[ii]);
+        if (is_dirac) density += std::norm(dirac_s1_[ii]);
+        const double p = density * cell;
         norm += p;
         x_mean += xx * p;
         y_mean += yy * p;
@@ -785,6 +866,25 @@ class Continuous2DBackend final : public IBackend {
     observables_["mass"] = mass_;
     observables_["speed_of_light"] = speed_of_light_;
     observables_["equation_klein_gordon"] = (equation_ == EquationType::KleinGordon) ? 1.0 : 0.0;
+    observables_["equation_dirac"] = (equation_ == EquationType::Dirac) ? 1.0 : 0.0;
+    if (equation_ == EquationType::Dirac) {
+      // Spin-z expectation: <σz> = integral of (|ψ₀|² - |ψ₁|²) dx / norm
+      double spin_z_num = 0.0;
+      for (std::size_t i = 0; i < state_.size(); ++i) {
+        spin_z_num += (std::norm(state_[i]) - std::norm(dirac_s1_[i])) * cell;
+      }
+      observables_["dirac_spin_z"] = (norm > 1e-30) ? spin_z_num / norm : 0.0;
+      observables_["dirac_norm_up"] = [&] {
+        double s = 0.0;
+        for (const auto& a : state_) s += std::norm(a) * cell;
+        return s;
+      }();
+      observables_["dirac_norm_down"] = [&] {
+        double s = 0.0;
+        for (const auto& a : dirac_s1_) s += std::norm(a) * cell;
+        return s;
+      }();
+    }
     if (equation_ == EquationType::KleinGordon) {
       // Conserved KG charge: Q = integral of i(φ*·π - π*·φ) dx = 2·integral of Im(φ*·π) dx
       double charge = 0.0;
@@ -816,12 +916,14 @@ class Continuous2DBackend final : public IBackend {
   std::uint32_t export_frame_stride_{1};
 
   std::vector<Complex> state_;
-  std::vector<Complex> pi_state_;
+  std::vector<Complex> pi_state_;   // KG conjugate momentum  π = ∂φ/∂t
+  std::vector<Complex> dirac_s1_;   // Dirac spinor component ψ₁ (down)
   std::vector<Complex> kbuf_;
-  std::vector<Complex> kpibuf_;
+  std::vector<Complex> kpibuf_;     // k-space buffer shared by KG-π and Dirac-ψ₁
   std::vector<double> potential_;
   std::vector<double> absorbing_mask_;
-  std::vector<Complex> potential_phase_;
+  std::vector<Complex> potential_phase_;       // exp(-i·dt·V)   — used by Schrödinger
+  std::vector<Complex> potential_half_phase_;  // exp(-i·dt/2·V) — used by Dirac
   std::vector<Complex> kinetic_half_phase_;
   // Klein-Gordon split-step precomputed arrays.
   std::vector<double> kg_pot_c_;   // cos(ω_V · dt/2)

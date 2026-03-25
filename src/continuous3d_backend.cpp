@@ -69,7 +69,7 @@ class Continuous3DBackend final : public IBackend {
     c.supports_mpi = false;
     c.supports_noisy = false;
     c.max_qubits_recommended = 0;
-    c.equation_scope = "Schrodinger,KleinGordon";
+    c.equation_scope = "Schrodinger,KleinGordon,Dirac";
     return c;
   }
 
@@ -189,10 +189,16 @@ class Continuous3DBackend final : public IBackend {
     const std::size_t n = static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_);
     state_.assign(n, Complex{0.0, 0.0});
     pi_state_.assign(n, Complex{0.0, 0.0});
+    dirac_s1_.assign(n, Complex{0.0, 0.0});
+    dirac_s2_.assign(n, Complex{0.0, 0.0});
+    dirac_s3_.assign(n, Complex{0.0, 0.0});
     kbuf_.assign(n, Complex{0.0, 0.0});
     kpibuf_.assign(n, Complex{0.0, 0.0});
+    dirac_kb2_.assign(n, Complex{0.0, 0.0});
+    dirac_kb3_.assign(n, Complex{0.0, 0.0});
     potential_.assign(n, 0.0);
     potential_phase_.assign(n, Complex{1.0, 0.0});
+    potential_half_phase_.assign(n, Complex{1.0, 0.0});
     kinetic_half_phase_.assign(n, Complex{1.0, 0.0});
     absorbing_mask_.assign(n, 1.0);
     kg_pot_c_.assign(n, 1.0);
@@ -217,6 +223,7 @@ class Continuous3DBackend final : public IBackend {
       precompute_kg_phases();
       initialize_pi_state(c.initial_state);
     }
+    // Dirac: ψ₀ = state_ (Gaussian wavepacket); ψ₁–ψ₃ already zero-initialized.
     precompute_boundary_mask(c.potential_params);
     const bool restored = apply_pending_checkpoint();
     if (!restored && boundary_ == "dirichlet") {
@@ -229,6 +236,10 @@ class Continuous3DBackend final : public IBackend {
   void evolve(const QuantumProblem&, const RunOptions&) override {
     if (equation_ == EquationType::KleinGordon) {
       evolve_kg();
+      return;
+    }
+    if (equation_ == EquationType::Dirac) {
+      evolve_dirac();
       return;
     }
     for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
@@ -586,24 +597,33 @@ class Continuous3DBackend final : public IBackend {
       frame.density_xz_flat.reserve(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(nz_));
       frame.density_yz_flat.reserve(static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_));
 
+      const bool is_dirac = (equation_ == EquationType::Dirac);
+      auto spinor_density = [&](std::size_t i) -> double {
+        if (is_dirac) {
+          return std::norm(state_[i]) + std::norm(dirac_s1_[i]) +
+                 std::norm(dirac_s2_[i]) + std::norm(dirac_s3_[i]);
+        }
+        return std::norm(state_[i]);
+      };
+
       double dens_max = 0.0;
-      for (const auto& a : state_) {
-        dens_max = std::max(dens_max, std::norm(a));
+      for (std::size_t i = 0; i < state_.size(); ++i) {
+        dens_max = std::max(dens_max, spinor_density(i));
       }
 
       for (std::uint32_t y = 0; y < ny_; ++y) {
         for (std::uint32_t x = 0; x < nx_; ++x) {
-          frame.density_xy_flat.push_back(std::norm(state_[idx(x, y, z_mid)]));
+          frame.density_xy_flat.push_back(spinor_density(idx(x, y, z_mid)));
         }
       }
       for (std::uint32_t z = 0; z < nz_; ++z) {
         for (std::uint32_t x = 0; x < nx_; ++x) {
-          frame.density_xz_flat.push_back(std::norm(state_[idx(x, y_mid, z)]));
+          frame.density_xz_flat.push_back(spinor_density(idx(x, y_mid, z)));
         }
       }
       for (std::uint32_t z = 0; z < nz_; ++z) {
         for (std::uint32_t y = 0; y < ny_; ++y) {
-          frame.density_yz_flat.push_back(std::norm(state_[idx(x_mid, y, z)]));
+          frame.density_yz_flat.push_back(spinor_density(idx(x_mid, y, z)));
         }
       }
 
@@ -623,7 +643,7 @@ class Continuous3DBackend final : public IBackend {
         for (std::uint32_t y = 0; y < ny_; ++y) {
           const double yy = y_coord(y);
           for (std::uint32_t x = 0; x < nx_; ++x) {
-            const double d = std::norm(state_[idx(x, y, z)]);
+            const double d = spinor_density(idx(x, y, z));
             if (d < floor) {
               continue;
             }
@@ -685,6 +705,7 @@ class Continuous3DBackend final : public IBackend {
           }
           kinetic_half_phase_[i] = std::exp(Complex{0.0, -0.5 * dt_ * E_k});
           potential_phase_[i] = std::exp(Complex{0.0, -dt_ * potential_[i]});
+          potential_half_phase_[i] = std::exp(Complex{0.0, -0.5 * dt_ * potential_[i]});
         }
       }
     }
@@ -769,6 +790,100 @@ class Continuous3DBackend final : public IBackend {
     }
     fft3_inverse(kbuf_, state_);
     fft3_inverse(kpibuf_, pi_state_);
+  }
+
+  // ── Dirac solver (4-component spinor, 3+1 D) ──────────────────────────────
+  // H_D(k) = α·k + β·m,  U(k,dt) = cos(ω·dt)·I₄ - i·sin(ω·dt)/ω · H_D(k)
+  // ω_k = sqrt(kx²+ky²+kz²+m²)
+
+  void evolve_dirac() {
+    for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
+      apply_half_potential_dirac();
+      apply_full_kinetic_dirac_3d();
+      apply_half_potential_dirac();
+      if (boundary_ == "absorbing") {
+        apply_absorbing_boundary();
+        for (std::size_t i = 0; i < dirac_s1_.size(); ++i) {
+          dirac_s1_[i] *= absorbing_mask_[i];
+          dirac_s2_[i] *= absorbing_mask_[i];
+          dirac_s3_[i] *= absorbing_mask_[i];
+        }
+      } else if (boundary_ == "dirichlet") {
+        enforce_dirichlet_boundary();
+        std::fill(dirac_s1_.begin(), dirac_s1_.end(), Complex{0.0, 0.0});
+        std::fill(dirac_s2_.begin(), dirac_s2_.end(), Complex{0.0, 0.0});
+        std::fill(dirac_s3_.begin(), dirac_s3_.end(), Complex{0.0, 0.0});
+      }
+      completed_steps_ = s + 1;
+      update_observables();
+      record_frame();
+    }
+  }
+
+  void apply_half_potential_dirac() {
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      state_[i]    *= potential_half_phase_[i];
+      dirac_s1_[i] *= potential_half_phase_[i];
+      dirac_s2_[i] *= potential_half_phase_[i];
+      dirac_s3_[i] *= potential_half_phase_[i];
+    }
+  }
+
+  void apply_full_kinetic_dirac_3d() {
+    const double two_pi = 6.28318530717958647692;
+    const double lx = static_cast<double>(nx_) * dx_;
+    const double ly = static_cast<double>(ny_) * dy_;
+    const double lz = static_cast<double>(nz_) * dz_;
+    fft3_forward(state_,    kbuf_);
+    fft3_forward(dirac_s1_, kpibuf_);
+    fft3_forward(dirac_s2_, dirac_kb2_);
+    fft3_forward(dirac_s3_, dirac_kb3_);
+    for (std::uint32_t z = 0; z < nz_; ++z) {
+      const int kz_idx = (z <= nz_ / 2) ? static_cast<int>(z) : static_cast<int>(z) - static_cast<int>(nz_);
+      const double kz = two_pi * static_cast<double>(kz_idx) / lz;
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        const int ky_idx = (y <= ny_ / 2) ? static_cast<int>(y) : static_cast<int>(y) - static_cast<int>(ny_);
+        const double ky = two_pi * static_cast<double>(ky_idx) / ly;
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          const int kx_idx = (x <= nx_ / 2) ? static_cast<int>(x) : static_cast<int>(x) - static_cast<int>(nx_);
+          const double kx = two_pi * static_cast<double>(kx_idx) / lx;
+          const double omega = std::sqrt(kx*kx + ky*ky + kz*kz + mass_*mass_);
+          const double c = std::cos(omega * dt_);
+          const double s = (omega > 1e-14) ? std::sin(omega * dt_) / omega : dt_;
+          // Diagonal elements:
+          //   u_ee = c - i·s·m  (electron block)
+          //   u_pp = c + i·s·m  (positron block) = conj(u_ee)
+          // Off-diagonal coupling (from σ·k):
+          //   u_kz      = -i·s·kz            = {0, -s·kz}
+          //   u_kz_neg  = +i·s·kz            = {0, +s·kz}
+          //   u_km      = -i·s·(kx - i·ky)   = {-s·ky, -s·kx}
+          //   u_kp      = -i·s·(kx + i·ky)   = {+s·ky, -s·kx}
+          const Complex u_ee     = Complex{c, -s * mass_};
+          const Complex u_pp     = Complex{c,  s * mass_};
+          const Complex u_kz     = Complex{0.0, -s * kz};
+          const Complex u_kz_neg = Complex{0.0,  s * kz};
+          const Complex u_km     = Complex{-s * ky, -s * kx};
+          const Complex u_kp     = Complex{ s * ky, -s * kx};
+          const std::size_t i = idx(x, y, z);
+          const Complex p0 = kbuf_[i];
+          const Complex p1 = kpibuf_[i];
+          const Complex p2 = dirac_kb2_[i];
+          const Complex p3 = dirac_kb3_[i];
+          // new_ψ̃₀ = u_ee·ψ₀ + u_kz·ψ₂ + u_km·ψ₃
+          // new_ψ̃₁ = u_ee·ψ₁ + u_kp·ψ₂ + u_kz_neg·ψ₃
+          // new_ψ̃₂ = u_kz·ψ₀ + u_km·ψ₁ + u_pp·ψ₂
+          // new_ψ̃₃ = u_kp·ψ₀ + u_kz_neg·ψ₁ + u_pp·ψ₃
+          kbuf_[i]     = u_ee * p0              + u_kz * p2     + u_km * p3;
+          kpibuf_[i]   =              u_ee * p1 + u_kp * p2     + u_kz_neg * p3;
+          dirac_kb2_[i]= u_kz * p0  + u_km * p1 + u_pp * p2;
+          dirac_kb3_[i]= u_kp * p0  + u_kz_neg * p1             + u_pp * p3;
+        }
+      }
+    }
+    fft3_inverse(kbuf_,     state_);
+    fft3_inverse(kpibuf_,   dirac_s1_);
+    fft3_inverse(dirac_kb2_, dirac_s2_);
+    fft3_inverse(dirac_kb3_, dirac_s3_);
   }
 
   void normalize_state() {
@@ -903,13 +1018,19 @@ class Continuous3DBackend final : public IBackend {
     double y2_mean = 0.0;
     double z2_mean = 0.0;
 
+    const bool is_dirac3d = (equation_ == EquationType::Dirac);
     for (std::uint32_t z = 0; z < nz_; ++z) {
       const double zz = z_coord(z);
       for (std::uint32_t y = 0; y < ny_; ++y) {
         const double yy = y_coord(y);
         for (std::uint32_t x = 0; x < nx_; ++x) {
           const double xx = x_coord(x);
-          const double p = std::norm(state_[idx(x, y, z)]) * cell;
+          const std::size_t i = idx(x, y, z);
+          double rho = std::norm(state_[i]);
+          if (is_dirac3d) {
+            rho += std::norm(dirac_s1_[i]) + std::norm(dirac_s2_[i]) + std::norm(dirac_s3_[i]);
+          }
+          const double p = rho * cell;
           norm += p;
           x_mean += xx * p;
           y_mean += yy * p;
@@ -955,6 +1076,7 @@ class Continuous3DBackend final : public IBackend {
     observables_["mass"] = mass_;
     observables_["speed_of_light"] = speed_of_light_;
     observables_["equation_klein_gordon"] = (equation_ == EquationType::KleinGordon) ? 1.0 : 0.0;
+    observables_["equation_dirac"] = (equation_ == EquationType::Dirac) ? 1.0 : 0.0;
     if (equation_ == EquationType::KleinGordon) {
       double charge = 0.0;
       double pi_norm = 0.0;
@@ -964,6 +1086,23 @@ class Continuous3DBackend final : public IBackend {
       }
       observables_["kg_charge"] = charge;
       observables_["kg_pi_norm"] = pi_norm;
+    }
+    if (equation_ == EquationType::Dirac) {
+      double norm_s0 = 0.0;
+      double norm_s1 = 0.0;
+      double norm_s2 = 0.0;
+      double norm_s3 = 0.0;
+      for (std::size_t i = 0; i < state_.size(); ++i) {
+        norm_s0 += std::norm(state_[i])    * cell;
+        norm_s1 += std::norm(dirac_s1_[i]) * cell;
+        norm_s2 += std::norm(dirac_s2_[i]) * cell;
+        norm_s3 += std::norm(dirac_s3_[i]) * cell;
+      }
+      observables_["dirac_norm_up"]   = norm_s0;
+      observables_["dirac_norm_down"] = norm_s1;
+      observables_["dirac_norm_s2"]   = norm_s2;
+      observables_["dirac_norm_s3"]   = norm_s3;
+      observables_["dirac_spin_z"]    = norm_s0 - norm_s1;
     }
   }
 
@@ -990,11 +1129,19 @@ class Continuous3DBackend final : public IBackend {
 
   std::vector<Complex> state_;
   std::vector<Complex> pi_state_;
+  // Dirac 4-spinor extra components (ψ₁, ψ₂, ψ₃; ψ₀ stored in state_).
+  std::vector<Complex> dirac_s1_;
+  std::vector<Complex> dirac_s2_;
+  std::vector<Complex> dirac_s3_;
   std::vector<Complex> kbuf_;
   std::vector<Complex> kpibuf_;
+  // Dirac k-space scratch buffers for ψ₂ and ψ₃.
+  std::vector<Complex> dirac_kb2_;
+  std::vector<Complex> dirac_kb3_;
   std::vector<double> potential_;
   std::vector<double> absorbing_mask_;
   std::vector<Complex> potential_phase_;
+  std::vector<Complex> potential_half_phase_;
   std::vector<Complex> kinetic_half_phase_;
   // Klein-Gordon split-step precomputed arrays.
   std::vector<double> kg_pot_c_;
