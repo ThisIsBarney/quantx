@@ -66,7 +66,8 @@ const std::vector<std::string>& supported_circuit_gates() {
 
 // Return the fixed noise vocabulary accepted by the circuit executor.
 const std::vector<std::string>& supported_circuit_noise_models() {
-  static const std::vector<std::string> noise_models = {"none", "depolarizing", "amplitude_damping"};
+  static const std::vector<std::string> noise_models = {
+      "none", "depolarizing", "amplitude_damping", "bit_flip", "phase_flip", "t1_decay", "t2_decay"};
   return noise_models;
 }
 
@@ -107,8 +108,10 @@ void require_supported_noise_model(const QuantumCircuit& circuit) {
   if (circuit.noise_model.empty() || circuit.noise_model == "none") {
     return;
   }
-  if (circuit.noise_model == "depolarizing" || circuit.noise_model == "amplitude_damping") {
-    return;
+  for (const auto& model : supported_circuit_noise_models()) {
+    if (circuit.noise_model == model) {
+      return;
+    }
   }
   throw unsupported_noise_error(circuit.noise_model);
 }
@@ -248,6 +251,26 @@ void apply_amplitude_damping(
   state.swap(out);
 }
 
+// Apply one-qubit bit-flip channel: X gate applied with probability p.
+void apply_bit_flip(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
+  if (p <= 0.0) return;
+  p = std::clamp(p, 0.0, 1.0);
+  std::uniform_real_distribution<double> u01(0.0, 1.0);
+  if (u01(rng) < p) {
+    apply_single_qubit(state, qubit, {0.0, 0.0}, {1.0, 0.0}, {1.0, 0.0}, {0.0, 0.0});
+  }
+}
+
+// Apply one-qubit phase-flip channel: Z gate applied with probability p.
+void apply_phase_flip(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
+  if (p <= 0.0) return;
+  p = std::clamp(p, 0.0, 1.0);
+  std::uniform_real_distribution<double> u01(0.0, 1.0);
+  if (u01(rng) < p) {
+    apply_single_qubit(state, qubit, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
+  }
+}
+
 // Apply one-qubit depolarizing channel via random Pauli kick.
 void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
   if (p <= 0.0) return;
@@ -292,11 +315,40 @@ double resolve_gate_param(const CircuitOp& op, std::size_t i,
   return (i < op.params.size()) ? op.params[i] : 0.0;
 }
 
+// Helper: look up a double value from noise_params with a default fallback.
+double noise_param(const QuantumCircuit& circuit, const std::string& key, double def = 0.0) {
+  const auto it = circuit.noise_params.find(key);
+  return (it != circuit.noise_params.end()) ? it->second : def;
+}
+
 // Apply configured noise channels after each gate.
 void apply_noise_after_gate(std::vector<Complex>& state, const QuantumCircuit& circuit, std::mt19937_64& rng) {
   for (std::uint32_t q = 0; q < circuit.qubits; ++q) {
+    // Legacy scalar fields applied unconditionally for backward compatibility.
     apply_depolarizing(state, q, circuit.depolarizing_prob, rng);
     apply_amplitude_damping(state, q, circuit.amplitude_damping_gamma, rng);
+
+    // Named noise model: dispatch from noise_params.
+    const std::string& nm = circuit.noise_model;
+    if (nm == "bit_flip") {
+      apply_bit_flip(state, q, noise_param(circuit, "prob"), rng);
+    } else if (nm == "phase_flip") {
+      apply_phase_flip(state, q, noise_param(circuit, "prob"), rng);
+    } else if (nm == "t1_decay") {
+      const double T1 = noise_param(circuit, "T1");
+      const double dt = noise_param(circuit, "dt");
+      if (T1 > 0.0 && dt > 0.0) {
+        apply_amplitude_damping(state, q, 1.0 - std::exp(-dt / T1), rng);
+      }
+    } else if (nm == "t2_decay") {
+      // Pure dephasing: off-diagonal decays as exp(-t/T2); Z applied with
+      // prob p = (1 - exp(-dt/T2)) / 2 per gate step.
+      const double T2 = noise_param(circuit, "T2");
+      const double dt = noise_param(circuit, "dt");
+      if (T2 > 0.0 && dt > 0.0) {
+        apply_phase_flip(state, q, 0.5 * (1.0 - std::exp(-dt / T2)), rng);
+      }
+    }
   }
 }
 

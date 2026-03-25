@@ -945,7 +945,7 @@ int main() {
   }
 
   try {
-    (void)qx::circuit_from_json(R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"phase_flip"}})");
+    (void)qx::circuit_from_json(R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"unknown_noise_xyz"}})");
     expect(false, "unsupported noise should throw CircuitError during parse");
   } catch (const qx::CircuitError& ex) {
     expect(ex.code() == "QX_UNSUPPORTED_NOISE", "unsupported noise should use QX_UNSUPPORTED_NOISE");
@@ -970,7 +970,7 @@ int main() {
   {
     const auto& c_api = c_api_bindings();
     const auto bad_noise_doc = parse_owned_json(
-        c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"phase_flip"}})",
+        c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"unknown_noise_xyz"}})",
         R"({"enable_checkpoint":false})");
     expect(!bad_noise_doc.at("ok").get<bool>(), "C API unsupported noise should return ok=false");
     expect(bad_noise_doc.at("error_kind").get<std::string>() == "circuit",

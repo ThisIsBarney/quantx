@@ -254,6 +254,23 @@ void parse_noise_config(const json& parent, QuantumCircuit& out) {
     if (out.noise_params.count("gamma") != 0U) {
       out.amplitude_damping_gamma = out.noise_params["gamma"];
     }
+  } else if (out.noise_model == "bit_flip" || out.noise_model == "phase_flip") {
+    const double p = get_or<double>(noise, "prob", 0.0);
+    out.noise_params["prob"] = (out.noise_params.count("prob") != 0U) ? out.noise_params["prob"] : p;
+  } else if (out.noise_model == "t1_decay") {
+    if (out.noise_params.find("T1") == out.noise_params.end()) {
+      out.noise_params["T1"] = get_or<double>(noise, "T1", 0.0);
+    }
+    if (out.noise_params.find("dt") == out.noise_params.end()) {
+      out.noise_params["dt"] = get_or<double>(noise, "dt", 0.0);
+    }
+  } else if (out.noise_model == "t2_decay") {
+    if (out.noise_params.find("T2") == out.noise_params.end()) {
+      out.noise_params["T2"] = get_or<double>(noise, "T2", 0.0);
+    }
+    if (out.noise_params.find("dt") == out.noise_params.end()) {
+      out.noise_params["dt"] = get_or<double>(noise, "dt", 0.0);
+    }
   } else if (out.noise_model != "none" && !out.noise_model.empty()) {
     throw CircuitError("QX_UNSUPPORTED_NOISE", "unsupported noise model: " + out.noise_model);
   }
