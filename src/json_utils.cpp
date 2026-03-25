@@ -408,6 +408,9 @@ QuantumProblem problem_from_json(const std::string& json_text) {
     p.continuous_2d.dt = get_or<double>(c2d, "dt", p.continuous_2d.dt);
     p.continuous_2d.steps = get_or<std::uint32_t>(c2d, "steps", p.continuous_2d.steps);
     p.continuous_2d.boundary = get_or<std::string>(c2d, "boundary", p.continuous_2d.boundary);
+    p.continuous_2d.dispersion = get_or<std::string>(c2d, "dispersion", p.continuous_2d.dispersion);
+    p.continuous_2d.mass = get_or<double>(c2d, "mass", p.continuous_2d.mass);
+    p.continuous_2d.speed_of_light = get_or<double>(c2d, "speed_of_light", p.continuous_2d.speed_of_light);
     p.continuous_2d.potential_kind = get_or<std::string>(c2d, "potential_kind", p.continuous_2d.potential_kind);
     p.continuous_2d.potential_params =
         get_or<std::map<std::string, double>>(c2d, "potential_params", p.continuous_2d.potential_params);
@@ -428,6 +431,9 @@ QuantumProblem problem_from_json(const std::string& json_text) {
     p.continuous_3d.dt = get_or<double>(c3d, "dt", p.continuous_3d.dt);
     p.continuous_3d.steps = get_or<std::uint32_t>(c3d, "steps", p.continuous_3d.steps);
     p.continuous_3d.boundary = get_or<std::string>(c3d, "boundary", p.continuous_3d.boundary);
+    p.continuous_3d.dispersion = get_or<std::string>(c3d, "dispersion", p.continuous_3d.dispersion);
+    p.continuous_3d.mass = get_or<double>(c3d, "mass", p.continuous_3d.mass);
+    p.continuous_3d.speed_of_light = get_or<double>(c3d, "speed_of_light", p.continuous_3d.speed_of_light);
     p.continuous_3d.potential_kind = get_or<std::string>(c3d, "potential_kind", p.continuous_3d.potential_kind);
     p.continuous_3d.potential_params =
         get_or<std::map<std::string, double>>(c3d, "potential_params", p.continuous_3d.potential_params);

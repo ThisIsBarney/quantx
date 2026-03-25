@@ -162,6 +162,9 @@ class Continuous3DBackend final : public IBackend {
     dt_ = c.dt;
     steps_ = c.steps;
     boundary_ = c.boundary;
+    dispersion_ = c.dispersion;
+    mass_ = (c.mass > 0.0) ? c.mass : 1.0;
+    speed_of_light_ = (c.speed_of_light > 0.0) ? c.speed_of_light : 1.0;
     potential_kind_ = c.potential_kind;
     completed_steps_ = 0;
     export_frame_payloads_ = options.export_continuous_frames;
@@ -620,6 +623,9 @@ class Continuous3DBackend final : public IBackend {
     const double lx = static_cast<double>(nx_) * dx_;
     const double ly = static_cast<double>(ny_) * dy_;
     const double lz = static_cast<double>(nz_) * dz_;
+    const bool relativistic = (dispersion_ == "relativistic");
+    const double mc2 = mass_ * speed_of_light_ * speed_of_light_;
+    const double c2 = speed_of_light_ * speed_of_light_;
 
     for (std::uint32_t z = 0; z < nz_; ++z) {
       const int kz_index = (z <= nz_ / 2) ? static_cast<int>(z) : static_cast<int>(z) - static_cast<int>(nz_);
@@ -632,7 +638,15 @@ class Continuous3DBackend final : public IBackend {
           const double kx = two_pi * static_cast<double>(kx_index) / lx;
           const double k2 = kx * kx + ky * ky + kz * kz;
           const std::size_t i = idx(x, y, z);
-          kinetic_half_phase_[i] = std::exp(Complex{0.0, -0.25 * dt_ * k2});
+          double E_k;
+          if (relativistic) {
+            // Relativistic kinetic energy: E_k = sqrt(k²c² + m²c⁴) - mc²  (ℏ=1)
+            E_k = std::sqrt(k2 * c2 + mc2 * mc2) - mc2;
+          } else {
+            // Non-relativistic: E_k = k²/(2m)  (ℏ=1)
+            E_k = k2 / (2.0 * mass_);
+          }
+          kinetic_half_phase_[i] = std::exp(Complex{0.0, -0.5 * dt_ * E_k});
           potential_phase_[i] = std::exp(Complex{0.0, -dt_ * potential_[i]});
         }
       }
@@ -819,6 +833,9 @@ class Continuous3DBackend final : public IBackend {
     observables_["boundary_periodic"] = boundary_ == "periodic" ? 1.0 : 0.0;
     observables_["boundary_absorbing"] = boundary_ == "absorbing" ? 1.0 : 0.0;
     observables_["boundary_dirichlet"] = boundary_ == "dirichlet" ? 1.0 : 0.0;
+    observables_["dispersion_relativistic"] = (dispersion_ == "relativistic") ? 1.0 : 0.0;
+    observables_["mass"] = mass_;
+    observables_["speed_of_light"] = speed_of_light_;
   }
 
  private:
@@ -832,6 +849,9 @@ class Continuous3DBackend final : public IBackend {
   std::uint32_t steps_{0};
   std::uint32_t completed_steps_{0};
   std::string boundary_{"periodic"};
+  std::string dispersion_{"nonrelativistic"};
+  double mass_{1.0};
+  double speed_of_light_{1.0};
   std::string potential_kind_{"none"};
   bool export_frame_payloads_{false};
   std::uint32_t export_frame_stride_{1};

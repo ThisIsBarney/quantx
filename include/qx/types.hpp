@@ -98,6 +98,14 @@ struct ContinuousSpace2DConfig {
   std::uint32_t steps{100};
   // Boundary mode token (e.g. periodic/dirichlet/absorbing).
   std::string boundary{"periodic"};
+  // Dispersion relation for the kinetic energy operator.
+  // "nonrelativistic": E_k = k²/(2m)  (default, ℏ=1 units)
+  // "relativistic":    E_k = √(k²c² + m²c⁴) - mc²  (ℏ=1 units)
+  std::string dispersion{"nonrelativistic"};
+  // Particle mass in natural units (ℏ=1). Default 1.0.
+  double mass{1.0};
+  // Speed of light in simulation units. Only used when dispersion="relativistic". Default 1.0.
+  double speed_of_light{1.0};
   // Potential descriptor.
   std::string potential_kind{"none"};
   std::map<std::string, double> potential_params{};
@@ -122,6 +130,14 @@ struct ContinuousSpace3DConfig {
   std::uint32_t steps{100};
   // Boundary mode token (e.g. periodic/dirichlet/absorbing).
   std::string boundary{"periodic"};
+  // Dispersion relation for the kinetic energy operator.
+  // "nonrelativistic": E_k = k²/(2m)  (default, ℏ=1 units)
+  // "relativistic":    E_k = √(k²c² + m²c⁴) - mc²  (ℏ=1 units)
+  std::string dispersion{"nonrelativistic"};
+  // Particle mass in natural units (ℏ=1). Default 1.0.
+  double mass{1.0};
+  // Speed of light in simulation units. Only used when dispersion="relativistic". Default 1.0.
+  double speed_of_light{1.0};
   // Potential descriptor.
   std::string potential_kind{"none"};
   std::map<std::string, double> potential_params{};

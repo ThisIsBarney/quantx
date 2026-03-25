@@ -1,0 +1,32 @@
+{
+  "kind": "continuous_space_3d",
+  "equation": "Schrodinger",
+  "observables": ["norm", "x_mean", "y_mean", "z_mean", "sigma_x", "sigma_y", "sigma_z"],
+  "continuous_space_3d": {
+    "nx": 32,
+    "ny": 32,
+    "nz": 32,
+    "dx": 0.3,
+    "dy": 0.3,
+    "dz": 0.3,
+    "dt": 0.005,
+    "steps": 100,
+    "boundary": "periodic",
+    "dispersion": "relativistic",
+    "mass": 1.0,
+    "speed_of_light": 1.0,
+    "potential_kind": "none",
+    "initial_state": {
+      "kind": "gaussian",
+      "params": {
+        "psi_x0": -2.0,
+        "psi_y0": 0.0,
+        "psi_z0": 0.0,
+        "psi_sigma": 0.6,
+        "psi_kx": 2.0,
+        "psi_ky": 0.5,
+        "psi_kz": 0.3
+      }
+    }
+  }
+}
