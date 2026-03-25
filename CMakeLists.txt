@@ -88,6 +88,7 @@ add_library(qx_core
   src/engine.cpp
   src/json_utils.cpp
 )
+set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(qx_core
   PUBLIC
@@ -137,6 +138,9 @@ qx_set_config_output_dirs(qx_capi)
 
 add_executable(qx_smoke tests/test_engine.cpp)
 target_link_libraries(qx_smoke PRIVATE qx_core)
+if(NOT WIN32)
+  target_link_libraries(qx_smoke PRIVATE dl)
+endif()
 qx_set_config_output_dirs(qx_smoke)
 
 add_executable(qx_fft_smoke tests/test_fft_provider.cpp)

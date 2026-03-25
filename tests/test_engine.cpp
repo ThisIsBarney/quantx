@@ -9,6 +9,9 @@
 #include <vector>
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <dlfcn.h>
+#include <unistd.h>
 #endif
 
 #include <nlohmann/json.hpp>
@@ -60,7 +63,11 @@ struct CApiBindings {
   using RunCircuitFn = const char* (*)(const char*, const char*);
   using FreeStringFn = void (*)(const char*);
 
+#ifdef _WIN32
   HMODULE module{nullptr};
+#else
+  void* module{nullptr};
+#endif
   RunCircuitFn run_circuit{nullptr};
   FreeStringFn free_string{nullptr};
 };
@@ -68,6 +75,7 @@ struct CApiBindings {
 // Load the DLL exports needed by the C API smoke checks.
 const CApiBindings& c_api_bindings() {
   static const CApiBindings bindings = [] {
+#ifdef _WIN32
     const char* candidates[] = {"Debug\\quantx.dll", "quantx.dll"};
     HMODULE module = nullptr;
     for (const char* candidate : candidates) {
@@ -84,6 +92,36 @@ const CApiBindings& c_api_bindings() {
     if (run_circuit == nullptr || free_string == nullptr) {
       throw std::runtime_error("failed to resolve qx_run_circuit/qx_free_string from quantx.dll");
     }
+#else
+    // On Linux: locate libquantx.so next to the running test binary via /proc/self/exe.
+    char self_buf[4096] = {};
+    const ssize_t self_len = readlink("/proc/self/exe", self_buf, sizeof(self_buf) - 1);
+    const std::string self_dir = (self_len > 0)
+        ? std::filesystem::path(self_buf).parent_path().string()
+        : std::string{};
+    std::vector<std::string> lib_candidates;
+    if (!self_dir.empty()) {
+      lib_candidates.push_back(self_dir + "/libquantx.so");
+    }
+    lib_candidates.push_back("Debug/libquantx.so");
+    lib_candidates.push_back("libquantx.so");
+    void* module = nullptr;
+    for (const auto& candidate : lib_candidates) {
+      module = dlopen(candidate.c_str(), RTLD_LAZY);
+      if (module != nullptr) {
+        break;
+      }
+    }
+    if (module == nullptr) {
+      const char* err = dlerror();
+      throw std::runtime_error(std::string("failed to load libquantx.so: ") + (err ? err : "unknown error"));
+    }
+    auto run_circuit = reinterpret_cast<CApiBindings::RunCircuitFn>(dlsym(module, "qx_run_circuit"));
+    auto free_string = reinterpret_cast<CApiBindings::FreeStringFn>(dlsym(module, "qx_free_string"));
+    if (run_circuit == nullptr || free_string == nullptr) {
+      throw std::runtime_error("failed to resolve C API symbols from libquantx.so");
+    }
+#endif
     return CApiBindings{module, run_circuit, free_string};
   }();
   return bindings;
@@ -133,21 +171,28 @@ int run_command(const std::string& command) {
 #endif
 }
 
-// Locate qx_cli.exe across the supported local build layouts.
+// Locate the qx_cli executable across supported build layouts.
 std::filesystem::path resolve_qx_cli_executable(const std::filesystem::path& repo_root) {
+#ifdef _WIN32
   const std::filesystem::path candidates[] = {
       repo_root / "build-nmake-local" / "qx_cli.exe",
       repo_root / "build-vs" / "Debug" / "qx_cli.exe",
       repo_root / "build-vs" / "qx_cli.exe",
       repo_root / "Debug" / "qx_cli.exe",
   };
+#else
+  const std::filesystem::path candidates[] = {
+      repo_root / "build" / "Debug" / "qx_cli",
+      repo_root / "build" / "qx_cli",
+  };
+#endif
   for (const auto& candidate : candidates) {
     if (std::filesystem::exists(candidate)) {
       return candidate;
     }
   }
   std::ostringstream msg;
-  msg << "unable to locate qx_cli.exe; checked:";
+  msg << "unable to locate qx_cli; checked:";
   for (const auto& candidate : candidates) {
     msg << ' ' << candidate.string();
   }
@@ -900,7 +945,7 @@ int main() {
   }
 
   try {
-    (void)qx::circuit_from_json(R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"phase_flip"}})");
+    (void)qx::circuit_from_json(R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"unknown_noise_xyz"}})");
     expect(false, "unsupported noise should throw CircuitError during parse");
   } catch (const qx::CircuitError& ex) {
     expect(ex.code() == "QX_UNSUPPORTED_NOISE", "unsupported noise should use QX_UNSUPPORTED_NOISE");
@@ -925,7 +970,7 @@ int main() {
   {
     const auto& c_api = c_api_bindings();
     const auto bad_noise_doc = parse_owned_json(
-        c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"phase_flip"}})",
+        c_api.run_circuit, R"({"qubits":1,"operations":[{"name":"X","targets":[0]}],"noise":{"kind":"unknown_noise_xyz"}})",
         R"({"enable_checkpoint":false})");
     expect(!bad_noise_doc.at("ok").get<bool>(), "C API unsupported noise should return ok=false");
     expect(bad_noise_doc.at("error_kind").get<std::string>() == "circuit",

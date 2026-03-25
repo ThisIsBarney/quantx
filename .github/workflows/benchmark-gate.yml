@@ -47,7 +47,7 @@ jobs:
 
       - name: CLI Argument Contract
         shell: pwsh
-        run: .\scripts\test_cli_args.ps1
+        run: .\scripts\test_cli_args.ps1 -SkipBuild
 
       - name: Dependency License Policy
         shell: pwsh

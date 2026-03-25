@@ -98,6 +98,7 @@ CircuitOp parse_circuit_op(const json& item) {
   op.targets = get_or<std::vector<std::uint32_t>>(item, "targets", {});
   op.controls = get_or<std::vector<std::uint32_t>>(item, "controls", {});
   op.params = get_or<std::vector<double>>(item, "params", {});
+  op.param_names = get_or<std::vector<std::string>>(item, "param_names", {});
   return op;
 }
 
@@ -252,6 +253,23 @@ void parse_noise_config(const json& parent, QuantumCircuit& out) {
     out.amplitude_damping_gamma = get_or<double>(noise, "gamma", out.amplitude_damping_gamma);
     if (out.noise_params.count("gamma") != 0U) {
       out.amplitude_damping_gamma = out.noise_params["gamma"];
+    }
+  } else if (out.noise_model == "bit_flip" || out.noise_model == "phase_flip") {
+    const double p = get_or<double>(noise, "prob", 0.0);
+    out.noise_params["prob"] = (out.noise_params.count("prob") != 0U) ? out.noise_params["prob"] : p;
+  } else if (out.noise_model == "t1_decay") {
+    if (out.noise_params.find("T1") == out.noise_params.end()) {
+      out.noise_params["T1"] = get_or<double>(noise, "T1", 0.0);
+    }
+    if (out.noise_params.find("dt") == out.noise_params.end()) {
+      out.noise_params["dt"] = get_or<double>(noise, "dt", 0.0);
+    }
+  } else if (out.noise_model == "t2_decay") {
+    if (out.noise_params.find("T2") == out.noise_params.end()) {
+      out.noise_params["T2"] = get_or<double>(noise, "T2", 0.0);
+    }
+    if (out.noise_params.find("dt") == out.noise_params.end()) {
+      out.noise_params["dt"] = get_or<double>(noise, "dt", 0.0);
     }
   } else if (out.noise_model != "none" && !out.noise_model.empty()) {
     throw CircuitError("QX_UNSUPPORTED_NOISE", "unsupported noise model: " + out.noise_model);
@@ -496,6 +514,8 @@ QuantumCircuit circuit_from_json(const std::string& json_text) {
       }
     }
   }
+  c.clbits = get_or<std::uint32_t>(j, "clbits", c.clbits);
+  c.parameter_map = get_or<std::map<std::string, double>>(j, "parameter_map", c.parameter_map);
   parse_noise_config(j, c);
   if (c.operations.empty()) {
     throw std::runtime_error("circuit must contain at least one operation");
@@ -536,6 +556,13 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   j["message"] = result.message;
   j["state_size"] = result.state.size();
   j["engine_version"] = version_string();
+  // Structured metadata block for framework adapters; mirrors top-level fields for
+  // backward compat but groups them under a stable key for transpiler integration.
+  j["metadata"] = {
+      {"engine_version", version_string()},
+      {"backend", result.backend},
+      {"elapsed_ms", result.elapsed_ms},
+  };
   j["counts"] = result.counts;
   j["expectation_exact"] = result.expectation_exact;
   j["expectation_shot"] = result.expectation_shot;
@@ -543,6 +570,9 @@ std::string circuit_result_to_json(const CircuitResult& result) {
   j["shot_variance"] = result.shot_variance;
   j["shot_stderr"] = result.shot_stderr;
   j["error_summary"] = result.error_summary;
+  if (!result.measurement_results.empty()) {
+    j["measurement_results"] = result.measurement_results;
+  }
   return j.dump();
 }
 
