@@ -4,6 +4,7 @@
 #include <bit>
 #include <cmath>
 #include <complex>
+#include <optional>
 #include <regex>
 #include <string>
 #include <vector>
@@ -148,6 +149,20 @@ struct CollapseOp {
   MatrixXcd LdagL;
 };
 
+// Extract the qubit index from a collapse-operator label, e.g. "AmplitudeDamping2" → 2.
+// Returns an empty optional when the suffix is missing or not a valid integer.
+std::optional<std::uint32_t> parse_collapse_qubit(const std::string& label,
+                                                    const std::string& prefix) {
+  if (label.size() <= prefix.size()) {
+    return std::nullopt;
+  }
+  try {
+    return static_cast<std::uint32_t>(std::stoul(label.substr(prefix.size())));
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
 // Parse collapse-operator entries from HamiltonianTerms.
 // Label formats:
 //   "AmplitudeDamping<q>"  coefficient = γ  →  L = sqrt(γ) σ⁻_q
@@ -157,17 +172,6 @@ struct CollapseOp {
 std::vector<CollapseOp> build_collapse_ops(const std::vector<HamiltonianTerm>& terms,
                                             std::uint32_t n) {
   std::vector<CollapseOp> ops;
-
-  auto parse_qubit = [](const std::string& label, const std::string& prefix) -> std::optional<std::uint32_t> {
-    if (label.size() <= prefix.size()) {
-      return std::nullopt;
-    }
-    try {
-      return static_cast<std::uint32_t>(std::stoul(label.substr(prefix.size())));
-    } catch (...) {
-      return std::nullopt;
-    }
-  };
 
   auto push_op = [&](const MatrixXcd& L) {
     CollapseOp op;
@@ -183,20 +187,20 @@ std::vector<CollapseOp> build_collapse_ops(const std::vector<HamiltonianTerm>& t
     const double sqrt_gamma = std::sqrt(gamma);
 
     if (label.rfind("AmplitudeDamping", 0) == 0) {
-      auto q = parse_qubit(label, "AmplitudeDamping");
+      auto q = parse_collapse_qubit(label, "AmplitudeDamping");
       if (!q || *q >= n) {
         continue;
       }
       push_op(sqrt_gamma * embed_operator(sigma_minus(), *q, n));
     } else if (label.rfind("Dephasing", 0) == 0) {
-      auto q = parse_qubit(label, "Dephasing");
+      auto q = parse_collapse_qubit(label, "Dephasing");
       if (!q || *q >= n) {
         continue;
       }
       // L = sqrt(γ) * σz / 2
       push_op((sqrt_gamma * 0.5) * embed_operator(pauli_z(), *q, n));
     } else if (label.rfind("Depolarizing", 0) == 0) {
-      auto q = parse_qubit(label, "Depolarizing");
+      auto q = parse_collapse_qubit(label, "Depolarizing");
       if (!q || *q >= n) {
         continue;
       }
