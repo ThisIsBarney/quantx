@@ -4,8 +4,10 @@
 #include <bit>
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <optional>
 #include <regex>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -17,6 +19,24 @@ namespace {
 
 using Complex = std::complex<double>;
 using MatrixXcd = Eigen::MatrixXcd;
+
+constexpr std::uint32_t kMaxLindbladQubits = 10U;
+
+std::size_t lindblad_dimension(std::uint32_t qubits) {
+  if (qubits >= std::numeric_limits<std::size_t>::digits) {
+    throw std::invalid_argument(
+        "Lindblad backend does not support qubit counts >= " +
+        std::to_string(std::numeric_limits<std::size_t>::digits) +
+        " due to dimension overflow risk.");
+  }
+  if (qubits > kMaxLindbladQubits) {
+    throw std::invalid_argument(
+        "Lindblad backend supports at most " +
+        std::to_string(kMaxLindbladQubits) +
+        " qubits to avoid excessive dense matrix allocations.");
+  }
+  return static_cast<std::size_t>(1ULL) << qubits;
+}
 
 // ── Single-qubit Pauli matrices ─────────────────────────────────────────────
 
@@ -53,8 +73,8 @@ MatrixXcd sigma_minus() {
 // Qubit numbering: qubit 0 = least significant bit of basis index.
 
 MatrixXcd embed_operator(const MatrixXcd& op2x2, std::uint32_t q, std::uint32_t n) {
-  const std::size_t dim = static_cast<std::size_t>(1U) << n;
-  const std::size_t q_mask = static_cast<std::size_t>(1U) << q;
+  const std::size_t dim = lindblad_dimension(n);
+  const std::size_t q_mask = static_cast<std::size_t>(1ULL) << q;
   MatrixXcd result = MatrixXcd::Zero(static_cast<Eigen::Index>(dim), static_cast<Eigen::Index>(dim));
   for (std::size_t col = 0; col < dim; ++col) {
     const Eigen::Index c_q = static_cast<Eigen::Index>((col >> q) & 1U);
@@ -74,7 +94,7 @@ MatrixXcd embed_operator(const MatrixXcd& op2x2, std::uint32_t q, std::uint32_t 
 // Ignores collapse-operator labels (AmplitudeDamping*, Dephasing*, Depolarizing*).
 
 MatrixXcd build_hamiltonian(const std::vector<HamiltonianTerm>& terms, std::uint32_t n) {
-  const std::size_t dim = static_cast<std::size_t>(1U) << n;
+  const std::size_t dim = lindblad_dimension(n);
   MatrixXcd H = MatrixXcd::Zero(static_cast<Eigen::Index>(dim), static_cast<Eigen::Index>(dim));
 
   const std::regex token_re("([XYZxyz])(\\d+)");
@@ -278,7 +298,8 @@ class LindbladBackend final : public IBackend {
 
   void initialize(const QuantumProblem& problem, const RunOptions&) override {
     n_ = problem.qubits;
-    const auto dim = static_cast<Eigen::Index>(static_cast<std::size_t>(1U) << n_);
+    const auto dim =
+        static_cast<Eigen::Index>(lindblad_dimension(n_));
     rho_ = MatrixXcd::Zero(dim, dim);
     rho_(0, 0) = Complex{1.0, 0.0};
     H_ = build_hamiltonian(problem.hamiltonian_terms, n_);
