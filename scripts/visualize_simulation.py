@@ -508,6 +508,15 @@ def _continuous_problem_2d_request(samples_t: int, nx: int, ny: int, potential_t
   }
 
 
+def _continuous_problem_2d_driven_request(
+    samples_t: int, nx: int, ny: int, potential_type: str, driving: dict
+) -> dict:
+  """Build the native 2D problem payload with a driving field for engine execution."""
+  base = _continuous_problem_2d_request(samples_t, nx, ny, potential_type)
+  base["continuous_space_2d"]["driving"] = driving
+  return base
+
+
 def _continuous_problem_3d_request(samples_t: int, nx: int, ny: int, nz: int, potential_type: str, boundary: str) -> dict:
   """Build the native 3D problem payload used when asking the engine for frames."""
   nx = max(16, nx)
@@ -1436,8 +1445,12 @@ def _driven_wavepacket_2d_page(data: dict) -> str:
     const ctx = cv.getContext("2d");
     const densArr = f.density, phaseArr = f.phase;
     const ny = densArr.length, nx = densArr[0].length;
-    const img = ctx.createImageData(nx, ny);
     const dmax = DATA.dens_max || 1;
+    // Render at grid resolution into an offscreen canvas, then scale to fill the viewport.
+    const off = document.createElement("canvas");
+    off.width = nx; off.height = ny;
+    const offCtx = off.getContext("2d");
+    const img = offCtx.createImageData(nx, ny);
     let p = 0;
     for (let j = 0; j < ny; j++) {{
       for (let i = 0; i < nx; i++) {{
@@ -1445,8 +1458,9 @@ def _driven_wavepacket_2d_page(data: dict) -> str:
         img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
       }}
     }}
-    ctx.putImageData(img, 0, 0);
-    ctx.drawImage(cv, 0, 0, cv.width, cv.height);
+    offCtx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, cv.width, cv.height);
     label.textContent = `t = ${{f.t.toFixed(3)}}  ⟨x⟩ = ${{f.exp_x.toFixed(2)}}  ⟨y⟩ = ${{f.exp_y.toFixed(2)}}`;
     if (f.driving_amplitude !== undefined) {{
       meta.textContent = `Drive A(t) = ${{f.driving_amplitude.toExponential(3)}}`;
@@ -2287,50 +2301,56 @@ def main() -> int:
     path.write_text(_dirac_spinor_page(dirac2d_data), encoding="utf-8")
     generated.append(path)
 
-  if args.scenario in {"driven_barrier", "all"}:
-    # Sine-driven Gaussian barrier — oscillating field modulates barrier height.
-    driven_barrier_data = _spatial_wavepacket_2d_frames(
-        args.samples_spatial2d_t,
-        args.samples_spatial2d_x,
-        args.samples_spatial2d_y,
-        "barrier",
-        driving={"type": "sine", "amplitude": 0.4, "frequency": 1.8, "spatial_profile": "uniform"},
+  _DRIVEN_SCENARIOS: dict[str, tuple[str, str, dict]] = {
+      # scenario_key -> (potential_type, output_filename_stem, driving_config)
+      "driven_barrier": (
+          "barrier",
+          "quantum_driven_barrier",
+          {"type": "sine", "amplitude": 0.4, "frequency": 1.8, "spatial_profile": "uniform"},
+      ),
+      "bloch": (
+          "free",
+          "quantum_bloch_oscillation",
+          {"type": "sine", "amplitude": 0.35, "frequency": 2.5, "spatial_profile": "dipole_x"},
+      ),
+      "gaussian_pulse": (
+          "harmonic",
+          "quantum_gaussian_pulse",
+          {
+              "type": "gaussian_pulse",
+              "amplitude": 0.6,
+              "frequency": 0.55,
+              "t_center": 1.2,
+              "t_width": 0.4,
+              "spatial_profile": "dipole_x",
+          },
+      ),
+  }
+  for scenario_key, (pot_type, stem, drv_cfg) in _DRIVEN_SCENARIOS.items():
+    if args.scenario not in {scenario_key, "all"}:
+      continue
+    driven_problem = _continuous_problem_2d_driven_request(
+        args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y,
+        pot_type, drv_cfg,
     )
-    path = out_dir / "quantum_driven_barrier.html"
-    path.write_text(_driven_wavepacket_2d_page(driven_barrier_data), encoding="utf-8")
-    generated.append(path)
-
-  if args.scenario in {"bloch", "all"}:
-    # Dipole-x driving of a free particle — produces Bloch-like momentum oscillations.
-    bloch_data = _spatial_wavepacket_2d_frames(
-        args.samples_spatial2d_t,
-        args.samples_spatial2d_x,
-        args.samples_spatial2d_y,
-        "free",
-        driving={"type": "sine", "amplitude": 0.35, "frequency": 2.5, "spatial_profile": "dipole_x"},
+    driven_data = _resolve_continuous_payload(
+        engine,
+        driven_problem,
+        args.solver_mode,
+        lambda pt=pot_type, dc=drv_cfg: _spatial_wavepacket_2d_frames(
+            args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y,
+            pt, driving=dc,
+        ),
+        export_json_path,
+        args.strict_export_schema,
     )
-    path = out_dir / "quantum_bloch_oscillation.html"
-    path.write_text(_driven_wavepacket_2d_page(bloch_data), encoding="utf-8")
-    generated.append(path)
-
-  if args.scenario in {"gaussian_pulse", "all"}:
-    # Chirped Gaussian pulse excitation of a harmonic trap.
-    pulse_data = _spatial_wavepacket_2d_frames(
-        args.samples_spatial2d_t,
-        args.samples_spatial2d_x,
-        args.samples_spatial2d_y,
-        "harmonic",
-        driving={
-            "type": "gaussian_pulse",
-            "amplitude": 0.6,
-            "frequency": 0.55,
-            "t_center": 1.2,
-            "t_width": 0.4,
-            "spatial_profile": "dipole_x",
-        },
-    )
-    path = out_dir / "quantum_gaussian_pulse.html"
-    path.write_text(_driven_wavepacket_2d_page(pulse_data), encoding="utf-8")
+    # Ensure the driving config is preserved in the payload for the page template.
+    if "driving" not in driven_data:
+      driven_data["driving"] = drv_cfg
+    if "has_driving" not in driven_data:
+      driven_data["has_driving"] = True
+    path = out_dir / f"{stem}.html"
+    path.write_text(_driven_wavepacket_2d_page(driven_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:
