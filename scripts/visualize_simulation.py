@@ -1680,6 +1680,7 @@ def _dirac_spinor_page(data: dict) -> str:
         <canvas class="hm" id="cv_spin" width="340" height="340"></canvas>
         <svg class="arrows" id="svg_arrows" width="340" height="340"></svg>
       </div>
+      <div class="colorbar-row"><canvas class="cb" id="cb_spin" width="200" height="12"></canvas><span id="cbl_spin"></span></div>
       <div class="colorbar-row"><span style="color:#2166ac">■ spin↓</span>&nbsp;&nbsp;<span style="color:#d6604d">■ spin↑</span>&nbsp;arrows = spin current (J<sub>x</sub>,J<sub>y</sub>)</div>
     </div>
   </div>
@@ -1804,7 +1805,7 @@ def _dirac_spinor_page(data: dict) -> str:
     // Panel 4: spin-z + arrows
     drawHeatmap("cv_spin", f.spin_z, colorMapSpinZ);
     drawSpinArrows(f);
-    drawColorbarH("cb_spin"||"cb_tot", "cbl_spin"||"cbl_tot", "spinz", 0);
+    drawColorbarH("cb_spin", "cbl_spin", "spinz", 0);
 
     label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
     meta.textContent = `potential=${{DATA.potential_type}}, mass=${{DATA.mass||1}}, <x,y>=(${{f.exp_x.toFixed(3)}},${{f.exp_y.toFixed(3)}})`;

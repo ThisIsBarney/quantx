@@ -326,6 +326,27 @@ json continuous_density_frame_to_json(const ContinuousDensityFrame& frame) {
   if (!frame.points_xyzd_flat.empty()) {
     out["points_xyzd_flat"] = frame.points_xyzd_flat;
   }
+  // Phase slices (arg ψ₀) — 2D midplane projections
+  if (!frame.phase_xy_flat.empty()) {
+    out["phase_xy_flat"] = frame.phase_xy_flat;
+  }
+  if (!frame.phase_xz_flat.empty()) {
+    out["phase_xz_flat"] = frame.phase_xz_flat;
+  }
+  if (!frame.phase_yz_flat.empty()) {
+    out["phase_yz_flat"] = frame.phase_yz_flat;
+  }
+  // Dirac spinor component densities
+  if (!frame.dirac_s0_xy_flat.empty()) {
+    out["dirac_s0_xy_flat"] = frame.dirac_s0_xy_flat;
+  }
+  if (!frame.dirac_s1_xy_flat.empty()) {
+    out["dirac_s1_xy_flat"] = frame.dirac_s1_xy_flat;
+  }
+  // Full 3D voxel grid for isosurface rendering
+  if (!frame.density_xyz_flat.empty()) {
+    out["density_xyz_flat"] = frame.density_xyz_flat;
+  }
   return out;
 }
 
