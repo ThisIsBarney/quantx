@@ -14,5 +14,7 @@ std::unique_ptr<IBackend> make_mps_backend();
 std::unique_ptr<IBackend> make_continuous2d_backend();
 // Factory for continuous-space 3D backend.
 std::unique_ptr<IBackend> make_continuous3d_backend();
+// Factory for Lindblad open-quantum-systems backend.
+std::unique_ptr<IBackend> make_lindblad_backend();
 
 }  // namespace qx

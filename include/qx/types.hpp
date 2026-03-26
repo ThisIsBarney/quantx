@@ -246,6 +246,22 @@ struct ContinuousExportConfig {
   double export_density_floor_ratio{0.08};
 };
 
+// One recorded frame from a Lindblad density-matrix evolution.
+struct LindbladFrame {
+  // Step index.
+  std::uint32_t step{0};
+  // Physical time.
+  double time{0.0};
+  // Purity Tr(ρ²) — 1.0 = pure state, 1/2^n = maximally mixed.
+  double purity{1.0};
+  // Von Neumann entropy -Tr(ρ log ρ) in nats.
+  double entropy{0.0};
+  // Diagonal population of each computational basis state |i⟩.
+  std::vector<double> populations{};
+  // Maximum off-diagonal |ρ_ij| for i≠j — quantifies coherence.
+  double coherence{0.0};
+};
+
 // Canonical simulation problem description used across API boundaries.
 struct QuantumProblem {
   ProblemKind kind{ProblemKind::Discrete};
@@ -346,6 +362,7 @@ struct SimulationResult {
   std::vector<std::complex<double>> state{};
   std::map<std::string, double> observables{};
   std::vector<ContinuousDensityFrame> continuous_density_frames{};
+  std::vector<LindbladFrame> lindblad_frames{};
   ContinuousExportConfig continuous_export{};
   std::vector<Event> events{};
   std::string message;

@@ -33,6 +33,8 @@ class IBackend {
   virtual std::vector<std::complex<double>> current_state() const = 0;
   // Return continuous density frame metadata; empty for non-continuous backends.
   virtual std::vector<ContinuousDensityFrame> continuous_density_frames() const = 0;
+  // Return Lindblad density-matrix frame metadata; empty for non-Lindblad backends.
+  virtual std::vector<LindbladFrame> lindblad_frames() const { return {}; }
 };
 
 using BackendFactory = std::function<std::unique_ptr<IBackend>()>;

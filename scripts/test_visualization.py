@@ -765,6 +765,28 @@ def main() -> int:
   if "has_driving" not in driven_exp_content:
     raise RuntimeError("driven engine-export html missing has_driving flag")
 
+  # ── M16: Lindblad open quantum systems ──────────────────────────────────────
+  lindblad_dir = tmp / "lindblad"
+  lindblad_dir.mkdir(parents=True, exist_ok=True)
+
+  _run_expected_success_with_output(
+      [py, vis_script, "--scenario", "lindblad",
+       "--lindblad-scenario", "amplitude_damping",
+       "--samples-lindblad-t", "10",
+       "--out-dir", str(lindblad_dir)],
+      "quantum_lindblad_amplitude_damping.html",
+  )
+  lindblad_html = lindblad_dir / "quantum_lindblad_amplitude_damping.html"
+  if not lindblad_html.exists():
+    raise RuntimeError(f"lindblad html not generated: {lindblad_html}")
+  lb_content = lindblad_html.read_text(encoding="utf-8")
+  if "purity" not in lb_content:
+    raise RuntimeError("lindblad html missing purity data")
+  if "entropy" not in lb_content:
+    raise RuntimeError("lindblad html missing entropy data")
+  if "cv_pop" not in lb_content:
+    raise RuntimeError("lindblad html missing population canvas")
+
   print("visualization smoke passed")
   return 0
 

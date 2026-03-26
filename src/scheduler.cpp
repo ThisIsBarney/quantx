@@ -27,6 +27,12 @@ BackendInfo explain_backend_choice_internal(const QuantumProblem& problem, const
     return info;
   }
 
+  if (problem.equation == EquationType::Lindblad) {
+    info.selected_backend = "lindblad";
+    info.reasons.push_back("Lindblad equation uses density-matrix open-systems backend.");
+    return info;
+  }
+
   if (problem.equation != EquationType::Schrodinger) {
     info.selected_backend = "statevector";
     info.reasons.push_back("Non-Schrodinger equations are reserved for future backends.");

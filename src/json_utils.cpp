@@ -376,6 +376,28 @@ json continuous_density_frames_to_json(const std::vector<ContinuousDensityFrame>
   return out;
 }
 
+// Serialize one Lindblad density-matrix frame.
+json lindblad_frame_to_json(const LindbladFrame& frame) {
+  json out{
+      {"step", frame.step},
+      {"time", frame.time},
+      {"purity", frame.purity},
+      {"entropy", frame.entropy},
+      {"coherence", frame.coherence},
+      {"populations", frame.populations},
+  };
+  return out;
+}
+
+// Serialize all Lindblad frames to a JSON array.
+json lindblad_frames_to_json(const std::vector<LindbladFrame>& frames) {
+  json out = json::array();
+  for (const auto& frame : frames) {
+    out.push_back(lindblad_frame_to_json(frame));
+  }
+  return out;
+}
+
 // Select a stride-sampled view of the continuous frame list for the public export wrapper.
 std::vector<ContinuousDensityFrame> sample_continuous_export_frames(
     const std::vector<ContinuousDensityFrame>& frames,
@@ -581,6 +603,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["engine_version"] = version_string();
   j["observables"] = result.observables;
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
+  j["lindblad_frames"] = lindblad_frames_to_json(result.lindblad_frames);
   const ContinuousExportConfig export_config = sanitize_continuous_export_config_impl(result.continuous_export);
   j["continuous_export"] = {
       {"schema_version", export_config.schema_version},
