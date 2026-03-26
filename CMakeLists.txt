@@ -85,6 +85,7 @@ add_library(qx_core
   src/mps_backend.cpp
   src/continuous2d_backend.cpp
   src/continuous3d_backend.cpp
+  src/lindblad_backend.cpp
   src/engine.cpp
   src/json_utils.cpp
 )

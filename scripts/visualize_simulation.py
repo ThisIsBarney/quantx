@@ -2088,6 +2088,399 @@ def _dirac_spinor_page(data: dict) -> str:
 </html>"""
 
 
+def _lindblad_frames(
+    n_qubits: int,
+    hamiltonian_terms: list[dict],
+    collapse_ops: list[dict],
+    total_time: float = 2.0,
+    dt: float = 0.01,
+    samples: int = 80,
+    source: str = "python-reference",
+) -> dict:
+    """Simulate Lindblad master equation and return animation frame data.
+
+    hamiltonian_terms: list of {"label": "X0Z1", "coefficient": 1.0}
+    collapse_ops: list of {"label": "AmplitudeDamping0", "coefficient": gamma}
+    Returns a dict with keys: n_qubits, frames, source, total_time
+    """
+    try:
+      import numpy as np
+    except ImportError as ex:
+      raise RuntimeError("Lindblad visualization requires numpy") from ex
+
+    dim = 1 << n_qubits
+    rho = np.zeros((dim, dim), dtype=complex)
+    rho[0, 0] = 1.0
+
+    # Build Hamiltonian matrix
+    H = np.zeros((dim, dim), dtype=complex)
+    import re
+    token_re = re.compile(r'([XYZxyz])(\d+)')
+
+    def _pauli_x():
+        return np.array([[0, 1], [1, 0]], dtype=complex)
+    def _pauli_y():
+        return np.array([[0, -1j], [1j, 0]], dtype=complex)
+    def _pauli_z():
+        return np.array([[1, 0], [0, -1]], dtype=complex)
+    def _sigma_minus():
+        return np.array([[0, 1], [0, 0]], dtype=complex)
+
+    def _embed(op2x2, q, n):
+        """Embed 2x2 op at qubit q (qubit 0 = LSB) in 2^n space."""
+        full_dim = 1 << n
+        q_mask = 1 << q
+        result = np.zeros((full_dim, full_dim), dtype=complex)
+        for col in range(full_dim):
+            c_q = (col >> q) & 1
+            col_rest = col & ~q_mask
+            for row in range(full_dim):
+                if (row & ~q_mask) == col_rest:
+                    r_q = (row >> q) & 1
+                    result[row, col] = op2x2[r_q, c_q]
+        return result
+
+    def _build_H(terms, n):
+        full_dim = 1 << n
+        H = np.zeros((full_dim, full_dim), dtype=complex)
+        for t in terms:
+            label = t.get("label", "")
+            coeff = t.get("coefficient", 0.0)
+            if any(label.startswith(p) for p in ("AmplitudeDamping", "Dephasing", "Depolarizing")):
+                continue
+            if not label:
+                continue
+            flip_mask = 0
+            yz_mask = 0
+            y_count = 0
+            valid = True
+            for m in token_re.finditer(label):
+                p = m.group(1).upper()
+                q = int(m.group(2))
+                if q >= n or q >= 63:
+                    valid = False; break
+                bit = 1 << q
+                if p == 'X':
+                    flip_mask |= bit
+                elif p == 'Y':
+                    flip_mask |= bit; yz_mask |= bit; y_count += 1
+                elif p == 'Z':
+                    yz_mask |= bit
+                else:
+                    valid = False; break
+            if not valid:
+                continue
+            phases = [1+0j, 0+1j, -1+0j, 0-1j]
+            global_phase = phases[y_count % 4]
+            for src in range(full_dim):
+                dst = src ^ flip_mask
+                sign_bits = bin(src & yz_mask).count('1')
+                sign = -1.0 if sign_bits % 2 else 1.0
+                H[dst, src] += coeff * global_phase * sign
+        return H
+
+    def _build_collapse_ops(ops_spec, n):
+        Lk = []
+        for op in ops_spec:
+            label = op.get("label", "")
+            gamma = max(0.0, op.get("coefficient", 0.0))
+            sqrt_gamma = math.sqrt(gamma)
+            if label.startswith("AmplitudeDamping"):
+                q = int(label[len("AmplitudeDamping"):])
+                if q < n:
+                    L = sqrt_gamma * _embed(_sigma_minus(), q, n)
+                    Lk.append(L)
+            elif label.startswith("Dephasing"):
+                q = int(label[len("Dephasing"):])
+                if q < n:
+                    L = (sqrt_gamma * 0.5) * _embed(_pauli_z(), q, n)
+                    Lk.append(L)
+            elif label.startswith("Depolarizing"):
+                q = int(label[len("Depolarizing"):])
+                if q < n:
+                    sqrt_g3 = math.sqrt(gamma / 3.0) if gamma > 0 else 0.0
+                    for op2x2 in [_pauli_x(), _pauli_y(), _pauli_z()]:
+                        Lk.append(sqrt_g3 * _embed(op2x2, q, n))
+        return Lk
+
+    H_mat = _build_H(hamiltonian_terms + collapse_ops, n_qubits)
+    Lk_list = _build_collapse_ops(hamiltonian_terms + collapse_ops, n_qubits)
+    LdagL_list = [L.conj().T @ L for L in Lk_list]
+
+    def lindblad_rhs(rho):
+        drho = -1j * (H_mat @ rho - rho @ H_mat)
+        for L, LdagL in zip(Lk_list, LdagL_list):
+            drho += L @ rho @ L.conj().T - 0.5 * (LdagL @ rho + rho @ LdagL)
+        return drho
+
+    def rk4_step(rho, dt):
+        k1 = lindblad_rhs(rho)
+        k2 = lindblad_rhs(rho + 0.5 * dt * k1)
+        k3 = lindblad_rhs(rho + 0.5 * dt * k2)
+        k4 = lindblad_rhs(rho + dt * k3)
+        rho_new = rho + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+        return 0.5 * (rho_new + rho_new.conj().T)  # symmetrise
+
+    def record_frame(rho, step, t):
+        pops = [max(0.0, rho[i, i].real) for i in range(dim)]
+        purity = max(0.0, (rho @ rho).trace().real)
+        # entropy from eigenvalues
+        evals = np.maximum(0.0, np.linalg.eigvalsh(rho))
+        entropy = float(-np.sum(evals * np.log(np.where(evals > 1e-15, evals, 1.0)) * (evals > 1e-15)))
+        off_diag = [abs(rho[i, j]) for i in range(dim) for j in range(dim) if i != j]
+        coherence = max(off_diag) if off_diag else 0.0
+        return {
+            "step": step,
+            "t": round(t, 10),
+            "purity": round(purity, 10),
+            "entropy": round(entropy, 10),
+            "populations": [round(p, 10) for p in pops],
+            "coherence": round(coherence, 10),
+        }
+
+    # Compute step stride for output frames
+    total_steps = max(1, round(total_time / dt))
+    stride = max(1, total_steps // max(1, samples - 1))
+
+    frames = [record_frame(rho, 0, 0.0)]
+    for s in range(total_steps):
+        rho = rk4_step(rho, dt)
+        t = (s + 1) * dt
+        if (s + 1) % stride == 0 or s + 1 == total_steps:
+            frames.append(record_frame(rho, s + 1, t))
+
+    return {
+        "n_qubits": n_qubits,
+        "dim": dim,
+        "source": source,
+        "total_time": total_time,
+        "frames": frames,
+        "hamiltonian_terms": hamiltonian_terms,
+        "collapse_ops": collapse_ops,
+    }
+
+
+def _lindblad_page(data: dict) -> str:
+    """Render an animated HTML page for Lindblad density-matrix evolution."""
+    data_json = json.dumps(data, ensure_ascii=False)
+    n_qubits = data.get("n_qubits", 1)
+    dim = data.get("dim", 1 << n_qubits)
+    state_labels = [f"|{i:0{n_qubits}b}\u27e9" for i in range(dim)]
+    labels_json = json.dumps(state_labels)
+
+    # Generate a distinct color for each basis state
+    colors = ["#0b84f3", "#e74c3c", "#2ecc71", "#f39c12", "#9b59b6",
+              "#1abc9c", "#e67e22", "#34495e"]
+    colors_json = json.dumps([colors[i % len(colors)] for i in range(dim)])
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>QuantX \u2014 Lindblad Open Quantum Systems</title>
+  <style>
+    body {{ font-family: Segoe UI, Arial, sans-serif; background: #0f1117; color: #e0e0e0;
+            margin: 0; padding: 16px; }}
+    h1 {{ font-size: 1.4em; margin-bottom: 4px; color: #90caf9; }}
+    .subtitle {{ color: #888; font-size: 0.9em; margin-bottom: 16px; }}
+    .panels {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 1100px; }}
+    .panel {{ background: #1a1d27; border-radius: 8px; padding: 12px; }}
+    .panel h2 {{ font-size: 1em; margin: 0 0 8px; color: #b0c4de; }}
+    canvas {{ width: 100%; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin: 12px 0; }}
+    button {{ padding: 4px 14px; background: #263040; border: 1px solid #4a90d9;
+             color: #e0e0e0; border-radius: 4px; cursor: pointer; }}
+    button:hover {{ background: #2d4060; }}
+    input[type=range] {{ flex: 1; accent-color: #4a90d9; }}
+    .info {{ font-size: 0.82em; color: #888; margin-top: 4px; }}
+    .legend {{ font-size: 0.82em; margin-top: 6px; }}
+    .legend span {{ margin-right: 12px; }}
+  </style>
+</head>
+<body>
+  <h1>Lindblad \u2014 Open Quantum System Evolution</h1>
+  <p class="subtitle">source: {data.get("source","python-reference")} &nbsp;|&nbsp;
+     qubits: {n_qubits} &nbsp;|&nbsp;
+     dim: {dim}\xd7{dim} density matrix</p>
+  <div class="controls">
+    <button id="play">\u25b6 Play</button>
+    <button id="pause">\u23f8 Pause</button>
+    <input type="range" id="slider" min="1" max="1" value="1"/>
+    <span id="label" class="info">frame 1</span>
+  </div>
+  <div class="panels">
+    <div class="panel">
+      <h2>Populations \u03c1\u1d62\u1d62</h2>
+      <canvas id="cv_pop" height="240"></canvas>
+      <div id="leg_pop" class="legend"></div>
+    </div>
+    <div class="panel">
+      <h2>Purity Tr(\u03c1\u00b2) &amp; Coherence max|\u03c1\u1d62\u2c7c|</h2>
+      <canvas id="cv_pur" height="240"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Von Neumann Entropy \u2212Tr(\u03c1 log \u03c1)</h2>
+      <canvas id="cv_ent" height="200"></canvas>
+    </div>
+    <div class="panel">
+      <h2>Density Matrix \u03c1 (real part at current frame)</h2>
+      <canvas id="cv_rho" height="200"></canvas>
+    </div>
+  </div>
+  <script>
+  const DATA = {data_json};
+  const STATE_LABELS = {labels_json};
+  const COLORS = {colors_json};
+  const DIM = DATA.dim;
+  const frames = DATA.frames;
+
+  const slider = document.getElementById("slider");
+  slider.max = String(frames.length);
+
+  // Build population legend
+  const legPop = document.getElementById("leg_pop");
+  COLORS.forEach((c, i) => {{
+    const sp = document.createElement("span");
+    sp.innerHTML = `<span style="color:${{c}}">&#9632;</span> ${{STATE_LABELS[i]}}`;
+    legPop.appendChild(sp);
+  }});
+
+  // \u2500 Generic line chart helper \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  function drawLineChart(canvasId, series, currentFrame) {{
+    const cv = document.getElementById(canvasId);
+    const W = cv.offsetWidth || 500, H = cv.height;
+    cv.width = W;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#1a1d27";
+    ctx.fillRect(0, 0, W, H);
+
+    const L = 48, R = 12, T = 8, B = 32;
+    const plotW = W - L - R, plotH = H - T - B;
+
+    // Find ranges
+    let yMin = Infinity, yMax = -Infinity;
+    for (const s of series) {{
+      for (const [, y] of s.points) {{
+        yMin = Math.min(yMin, y); yMax = Math.max(yMax, y);
+      }}
+    }}
+    if (!isFinite(yMin)) yMin = 0;
+    if (!isFinite(yMax)) yMax = 1;
+    if (Math.abs(yMax - yMin) < 1e-10) {{ yMin -= 0.1; yMax += 0.1; }}
+    const xMin = frames[0].t, xMax = frames[frames.length-1].t;
+    const sx = x => L + (x - xMin) / (xMax - xMin) * plotW;
+    const sy = y => T + (1 - (y - yMin) / (yMax - yMin)) * plotH;
+
+    // Axes
+    ctx.strokeStyle = "#444";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(L, T); ctx.lineTo(L, T + plotH); ctx.lineTo(L + plotW, T + plotH); ctx.stroke();
+    ctx.fillStyle = "#888"; ctx.font = "10px sans-serif"; ctx.textAlign = "right";
+    for (let i = 0; i <= 4; i++) {{
+      const v = yMin + (yMax - yMin) * i / 4;
+      const py = sy(v);
+      ctx.fillText(v.toFixed(2), L - 4, py + 3);
+      ctx.strokeStyle = "#2a2a3a"; ctx.beginPath(); ctx.moveTo(L, py); ctx.lineTo(L + plotW, py); ctx.stroke();
+    }}
+    ctx.textAlign = "center";
+    for (let i = 0; i <= 4; i++) {{
+      const v = xMin + (xMax - xMin) * i / 4;
+      ctx.fillText(v.toFixed(2), sx(v), T + plotH + 16);
+    }}
+
+    // Series
+    for (const s of series) {{
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      s.points.forEach(([x, y], i) => {{
+        if (i === 0) ctx.moveTo(sx(x), sy(y));
+        else ctx.lineTo(sx(x), sy(y));
+      }});
+      ctx.stroke();
+    }}
+
+    // Current time marker
+    const t_cur = frames[currentFrame - 1].t;
+    ctx.strokeStyle = "#ffffff44";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(sx(t_cur), T); ctx.lineTo(sx(t_cur), T + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+  }}
+
+  // \u2500 Density matrix heatmap \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+  function drawRhoHeatmap(frameIdx) {{
+    const cv = document.getElementById("cv_rho");
+    const W = cv.offsetWidth || 300;
+    cv.width = W;
+    const H = cv.height;
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#1a1d27";
+    ctx.fillRect(0, 0, W, H);
+
+    const f = frames[frameIdx - 1];
+    const pops = f.populations;
+    if (!pops) return;
+    const cellW = Math.floor(W / DIM), cellH = Math.floor(H / DIM);
+
+    // We only have populations (diagonal). Show diagonal bar chart as heatmap substitute.
+    const maxPop = Math.max(...pops, 1e-10);
+    for (let i = 0; i < DIM; ++i) {{
+      const v = pops[i] / maxPop;
+      const g = Math.round(v * 200);
+      ctx.fillStyle = `rgb(${{Math.round(v*80)}},${{Math.round(v*160)}},255)`;
+      const x = i * cellW + 2;
+      const barH = Math.round(v * (H - 20));
+      ctx.fillRect(x, H - barH - 10, Math.max(1, cellW - 4), barH);
+      ctx.fillStyle = "#888";
+      ctx.font = "9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(STATE_LABELS[i], x + (cellW - 4)/2, H - 2);
+    }}
+  }}
+
+  function render(frameIdx) {{
+    const popSeries = COLORS.map((c, i) => ({{
+      color: c,
+      points: frames.map(f => [f.t, f.populations[i] || 0]),
+    }}));
+    drawLineChart("cv_pop", popSeries, frameIdx);
+    drawLineChart("cv_pur", [
+      {{ color: "#4fc3f7", points: frames.map(f => [f.t, f.purity]) }},
+      {{ color: "#ffb74d", points: frames.map(f => [f.t, f.coherence]) }},
+    ], frameIdx);
+    drawLineChart("cv_ent", [
+      {{ color: "#a5d6a7", points: frames.map(f => [f.t, f.entropy]) }},
+    ], frameIdx);
+    drawRhoHeatmap(frameIdx);
+
+    const f = frames[frameIdx - 1];
+    document.getElementById("label").textContent =
+      `frame ${{frameIdx}}/${{frames.length}}, t=${{f.t.toFixed(4)}}, ` +
+      `purity=${{f.purity.toFixed(4)}}, entropy=${{f.entropy.toFixed(4)}}`;
+    slider.value = String(frameIdx);
+  }}
+
+  let timer = null;
+  function doPlay() {{
+    if (timer) return;
+    timer = setInterval(() => {{
+      let v = Number(slider.value);
+      v = v >= frames.length ? 1 : v + 1;
+      render(v);
+    }}, 60);
+  }}
+  function doPause() {{ if (!timer) return; clearInterval(timer); timer = null; }}
+  document.getElementById("play").onclick = doPlay;
+  document.getElementById("pause").onclick = doPause;
+  slider.oninput = () => render(Number(slider.value));
+  render(1);
+  </script>
+</body>
+</html>"""
+
+
 def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
   """Collect the simulation and analytic traces for the Rabi demo."""
   pts_sim = []
@@ -2140,7 +2533,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -2165,6 +2558,9 @@ def main() -> int:
   parser.add_argument("--spatial3d-json-path", default="")
   parser.add_argument("--dirac2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
   parser.add_argument("--dirac2d-mass", type=float, default=1.0)
+  parser.add_argument("--lindblad-scenario", choices=["amplitude_damping", "dephasing", "depolarizing", "rabi_decay"], default="amplitude_damping")
+  parser.add_argument("--lindblad-qubits", type=int, default=1)
+  parser.add_argument("--samples-lindblad-t", type=int, default=80)
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -2182,7 +2578,7 @@ def main() -> int:
   root = Path(__file__).resolve().parents[1]
   out_dir = root / args.out_dir
   out_dir.mkdir(parents=True, exist_ok=True)
-  engine = _make_engine(root) if args.scenario in {"rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"} or args.solver_mode not in {"python", None} else None
+  engine = _make_engine(root) if args.scenario in {"rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"} or args.solver_mode not in {"python", None} else None  # lindblad is python-only
   generated = []
   export_json_path = root / args.continuous_export_json if args.continuous_export_json else None
 
@@ -2351,6 +2747,28 @@ def main() -> int:
       driven_data["has_driving"] = True
     path = out_dir / f"{stem}.html"
     path.write_text(_driven_wavepacket_2d_page(driven_data), encoding="utf-8")
+    generated.append(path)
+
+  if args.scenario in {"lindblad", "all"}:
+    if args.lindblad_scenario == "amplitude_damping":
+      h_terms = [{"label": "X0", "coefficient": 0.5}]
+      c_ops = [{"label": "AmplitudeDamping0", "coefficient": 0.8}]
+    elif args.lindblad_scenario == "dephasing":
+      h_terms = [{"label": "X0", "coefficient": 1.0}]
+      c_ops = [{"label": "Dephasing0", "coefficient": 1.0}]
+    elif args.lindblad_scenario == "depolarizing":
+      h_terms = [{"label": "Z0", "coefficient": 0.5}]
+      c_ops = [{"label": "Depolarizing0", "coefficient": 0.5}]
+    else:  # rabi_decay
+      h_terms = [{"label": "X0", "coefficient": 1.0}, {"label": "Z0", "coefficient": -0.5}]
+      c_ops = [{"label": "AmplitudeDamping0", "coefficient": 0.3}]
+    lindblad_data = _lindblad_frames(
+        args.lindblad_qubits, h_terms, c_ops,
+        total_time=2.0, dt=0.02,
+        samples=args.samples_lindblad_t,
+    )
+    path = out_dir / f"quantum_lindblad_{args.lindblad_scenario}.html"
+    path.write_text(_lindblad_page(lindblad_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:
