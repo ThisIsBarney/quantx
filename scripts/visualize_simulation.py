@@ -463,6 +463,7 @@ def _normalize_engine_export_payload(payload: dict) -> dict:
   out["has_phase"] = bool(out.get("has_phase")) or any("phase" in f or "phase_xy" in f for f in normalized_frames)
   out["has_dirac"] = bool(out.get("has_dirac")) or any("dirac_s0" in f for f in normalized_frames)
   out["has_volume_grid"] = bool(out.get("has_volume_grid")) or any("density_xyz" in f for f in normalized_frames)
+  out["has_driving"] = bool(out.get("has_driving")) or any("driving_amplitude" in f for f in normalized_frames)
   return out
 
 
@@ -505,6 +506,15 @@ def _continuous_problem_2d_request(samples_t: int, nx: int, ny: int, potential_t
           },
       },
   }
+
+
+def _continuous_problem_2d_driven_request(
+    samples_t: int, nx: int, ny: int, potential_type: str, driving: dict
+) -> dict:
+  """Build the native 2D problem payload with a driving field for engine execution."""
+  base = _continuous_problem_2d_request(samples_t, nx, ny, potential_type)
+  base["continuous_space_2d"]["driving"] = driving
+  return base
 
 
 def _continuous_problem_3d_request(samples_t: int, nx: int, ny: int, nz: int, potential_type: str, boundary: str) -> dict:
@@ -882,9 +892,18 @@ def _spatial_wavepacket_page(data: dict) -> str:
 
 
 def _spatial_wavepacket_2d_frames(
-    samples_t: int, nx: int, ny: int, potential_type: str, source: str = "python-reference"
+    samples_t: int,
+    nx: int,
+    ny: int,
+    potential_type: str,
+    source: str = "python-reference",
+    driving: dict | None = None,
 ) -> dict:
-  """Build a 2D reference solution for the spatial wavepacket animation."""
+  """Build a 2D reference solution for the spatial wavepacket animation.
+
+  driving: optional dict with keys type (sine/gaussian_pulse/chirp),
+           amplitude, frequency, phase, t_center, t_width, spatial_profile.
+  """
   try:
     import numpy as np
   except ImportError as ex:
@@ -914,21 +933,51 @@ def _spatial_wavepacket_2d_frames(
   psi = envelope * phase
 
   if potential_type == "free":
-    V = np.zeros_like(X)
+    V_static = np.zeros_like(X)
   elif potential_type == "harmonic":
     omega = 0.28
-    V = 0.5 * (omega * omega) * (X * X + Y * Y)
+    V_static = 0.5 * (omega * omega) * (X * X + Y * Y)
   elif potential_type == "well":
     wall = 5.0
-    V = np.where((np.abs(X) <= 6.0) & (np.abs(Y) <= 6.0), 0.0, wall)
+    V_static = np.where((np.abs(X) <= 6.0) & (np.abs(Y) <= 6.0), 0.0, wall)
   else:  # barrier
-    V = 0.9 * np.exp(-(X * X) / (2.0 * 0.6 * 0.6))
+    V_static = 0.9 * np.exp(-(X * X) / (2.0 * 0.6 * 0.6))
 
-  kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
-  ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
-  KX, KY = np.meshgrid(kx, ky, indexing="xy")
+  # Driving field spatial profile.
+  has_driving = driving is not None and driving.get("type", "none") != "none" and driving.get("amplitude", 0.0) != 0.0
+  if has_driving:
+    sp = driving.get("spatial_profile", "uniform")
+    if sp == "dipole_x":
+      V_drive_spatial = X.copy()
+    elif sp == "dipole_y":
+      V_drive_spatial = Y.copy()
+    else:
+      V_drive_spatial = np.ones_like(X)
+
+    def drive_envelope(t: float) -> float:
+      A = driving.get("amplitude", 0.0)
+      f = driving.get("frequency", 1.0)
+      ph = driving.get("phase", 0.0)
+      dtype = driving.get("type", "sine")
+      if dtype == "sine":
+        return A * math.cos(f * t + ph)
+      if dtype == "gaussian_pulse":
+        tc = driving.get("t_center", 0.0)
+        tw = max(1e-30, driving.get("t_width", 1.0))
+        return A * math.exp(-0.5 * ((t - tc) / tw) ** 2) * math.cos(f * t + ph)
+      if dtype == "chirp":
+        tw = driving.get("t_width", 0.0)  # chirp rate α
+        return A * math.cos((f + 0.5 * tw * t) * t + ph)
+      return 0.0
+  else:
+    def drive_envelope(t: float) -> float:
+      return 0.0
+    V_drive_spatial = np.zeros_like(X)
+
+  kx_arr = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
+  ky_arr = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
+  KX, KY = np.meshgrid(kx_arr, ky_arr, indexing="xy")
   kinetic_phase = np.exp(-1j * 0.5 * (KX * KX + KY * KY) * dt)
-  potential_half = np.exp(-1j * V * dt * 0.5)
 
   def normalize(a):
     nrm = float(np.sum(np.abs(a) ** 2) * dx * dy)
@@ -946,26 +995,32 @@ def _spatial_wavepacket_2d_frames(
     dens_max = max(dens_max, float(np.max(dens)))
     exp_x = float(np.sum(X * dens) * dx * dy)
     exp_y = float(np.sum(Y * dens) * dx * dy)
-    frames.append(
-        {
-            "t": t,
-            "density": dens.tolist(),
-            "phase": np.angle(psi).tolist(),
-            "exp_x": exp_x,
-            "exp_y": exp_y,
-        }
-    )
+    drv_amp = drive_envelope(t)
+    frame: dict = {
+        "t": t,
+        "density": dens.tolist(),
+        "phase": np.angle(psi).tolist(),
+        "exp_x": exp_x,
+        "exp_y": exp_y,
+    }
+    if has_driving:
+      frame["driving_amplitude"] = drv_amp
+    frames.append(frame)
     if it == nt - 1:
       break
 
-    # Strang splitting: V/2 -> T -> V/2
+    # Strang splitting: V/2 -> T -> V/2 (time-centered potential at t+dt/2)
+    t_mid = t + 0.5 * dt
+    drv_mid = drive_envelope(t_mid)
+    V_total = V_static + drv_mid * V_drive_spatial
+    potential_half = np.exp(-1j * V_total * dt * 0.5)
     psi = potential_half * psi
     psi_k = np.fft.fft2(psi)
     psi = np.fft.ifft2(kinetic_phase * psi_k)
     psi = potential_half * psi
     psi = normalize(psi)
 
-  return {
+  out: dict = {
       "x_min": x_min,
       "x_max": x_max,
       "y_min": y_min,
@@ -976,6 +1031,10 @@ def _spatial_wavepacket_2d_frames(
       "has_phase": True,
       "source": source,
   }
+  if has_driving:
+    out["has_driving"] = True
+    out["driving"] = driving
+  return out
 
 
 def _spatial_wavepacket_2d_page(data: dict) -> str:
@@ -1271,6 +1330,203 @@ def _spatial_wavepacket_2d_dirac_frames(
       "has_dirac": True,
       "source": source,
   }
+
+
+def _driven_wavepacket_2d_page(data: dict) -> str:
+  """Render a driven-potential 2D animation with a driving field overlay panel."""
+  payload = json.dumps(data, ensure_ascii=False)
+  drv = data.get("driving", {})
+  drv_type = drv.get("type", "sine")
+  drv_info = f"type={drv_type}, A={drv.get('amplitude',0):.3g}, ω={drv.get('frequency',1):.3g}"
+  return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>QuantX Animation - Driven 2D ({data.get("potential_type","barrier")})</title>
+  <style>
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; background: #f4f6f8; }}
+    h1 {{ font-size: 18px; margin-bottom: 4px; }}
+    .layout {{ display: flex; gap: 14px; align-items: flex-start; max-width: 880px; }}
+    .colorbar-col {{ display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 4px; }}
+    canvas#colorbar {{ border: 1px solid #aaa; display: block; cursor: default; }}
+    .cb-labels {{ display: flex; flex-direction: column; justify-content: space-between;
+                  height: 400px; font-size: 11px; color: #555; margin-left: 2px; }}
+    .main-col {{ flex: 1; }}
+    .row-ctrl {{ display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }}
+    button {{ padding: 4px 10px; }}
+    .driving-panel {{ margin-top: 10px; background: #fff; border: 1px solid #ccc; border-radius: 8px;
+                      padding: 8px; max-width: 540px; }}
+    .driving-panel h3 {{ margin: 0 0 4px; font-size: 13px; color: #333; }}
+    canvas#drv_chart {{ display: block; border: 1px solid #bbb; background: #fafafa; }}
+    .meta {{ margin-top: 8px; font-size: 12px; color: #444; }}
+  </style>
+</head>
+<body>
+  <h1>QuantX Animation – Driven 2D Wavepacket ({data.get("potential_type","barrier")})</h1>
+  <p style="font-size:13px;color:#555">Driving field: <b>{drv_info}</b>. Source: <b>{data.get("source","python-reference")}</b>.</p>
+  <div class="controls">
+    <button id="play">Play</button>
+    <button id="pause">Pause</button>
+    <input id="slider" type="range" min="1" step="1" style="width:380px"/>
+    <span id="label" style="font-size:13px"></span>
+    <select id="colorMode" style="font-size:12px;padding:3px 6px">
+      <option value="density">Density</option>
+      <option value="phase">Phase HSL</option>
+    </select>
+  </div>
+  <div class="layout" style="margin-top:10px">
+    <div class="main-col">
+      <canvas id="main_canvas" width="540" height="540" style="display:block;border:1px solid #bbb"></canvas>
+    </div>
+    <div class="colorbar-col">
+      <canvas id="colorbar" width="28" height="400"></canvas>
+      <div class="cb-labels" id="cbLabels">
+        <span id="cb_top"></span><span id="cb_mid"></span><span id="cb_bot"></span>
+      </div>
+    </div>
+  </div>
+  <div class="driving-panel">
+    <h3>Driving field V_drive(t) = A·envelope(t)·spatial(r)</h3>
+    <canvas id="drv_chart" width="540" height="80"></canvas>
+  </div>
+  <div id="meta" class="meta"></div>
+  <script>
+  const DATA = {payload};
+  const slider = document.getElementById("slider");
+  const label  = document.getElementById("label");
+  const meta   = document.getElementById("meta");
+  const colorModeCtl = document.getElementById("colorMode");
+  slider.max = String(DATA.frames.length);
+  slider.value = "1";
+
+  function colorMapDensity(v) {{
+    const t = Math.max(0, Math.min(1, v));
+    return [Math.floor(255*Math.sqrt(t)), Math.floor(255*t*t), Math.floor(255*(1-t)), 255];
+  }}
+  function colorMapPhase(phi) {{
+    const h = ((phi + Math.PI) / (2*Math.PI)) * 360;
+    const s = 0.88, l = 0.52, a = s * Math.min(l, 1-l);
+    const f = n => Math.round(255*(l - a*Math.max(-1, Math.min((n+h/30)%12-3, 9-(n+h/30)%12, 1))));
+    return [f(0), f(8), f(4), 255];
+  }}
+
+  function drawColorbar(mode) {{
+    const cv = document.getElementById("colorbar");
+    const ctx = cv.getContext("2d");
+    const h = cv.height;
+    for (let y = 0; y < h; y++) {{
+      const t = 1 - y / (h - 1);
+      let c;
+      if (mode === "phase") {{
+        c = colorMapPhase((t * 2 - 1) * Math.PI);
+      }} else {{
+        c = colorMapDensity(t);
+      }}
+      ctx.fillStyle = `rgb(${{c[0]}},${{c[1]}},${{c[2]}})`;
+      ctx.fillRect(0, y, cv.width, 1);
+    }}
+    if (mode === "phase") {{
+      document.getElementById("cb_top").textContent = "+π";
+      document.getElementById("cb_mid").textContent = "0";
+      document.getElementById("cb_bot").textContent = "−π";
+    }} else {{
+      const mx = DATA.dens_max || 1;
+      document.getElementById("cb_top").textContent = mx.toExponential(1);
+      document.getElementById("cb_mid").textContent = (mx/2).toExponential(1);
+      document.getElementById("cb_bot").textContent = "0";
+    }}
+  }}
+
+  function drawFrame(fi) {{
+    const f = DATA.frames[fi];
+    const mode = colorModeCtl.value;
+    const cv = document.getElementById("main_canvas");
+    const ctx = cv.getContext("2d");
+    const densArr = f.density, phaseArr = f.phase;
+    const ny = densArr.length, nx = densArr[0].length;
+    const dmax = DATA.dens_max || 1;
+    // Render at grid resolution into an offscreen canvas, then scale to fill the viewport.
+    const off = document.createElement("canvas");
+    off.width = nx; off.height = ny;
+    const offCtx = off.getContext("2d");
+    const img = offCtx.createImageData(nx, ny);
+    let p = 0;
+    for (let j = 0; j < ny; j++) {{
+      for (let i = 0; i < nx; i++) {{
+        const c = mode === "phase" ? colorMapPhase(phaseArr[j][i]) : colorMapDensity(densArr[j][i] / dmax);
+        img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
+      }}
+    }}
+    offCtx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(off, 0, 0, cv.width, cv.height);
+    label.textContent = `t = ${{f.t.toFixed(3)}}  ⟨x⟩ = ${{f.exp_x.toFixed(2)}}  ⟨y⟩ = ${{f.exp_y.toFixed(2)}}`;
+    if (f.driving_amplitude !== undefined) {{
+      meta.textContent = `Drive A(t) = ${{f.driving_amplitude.toExponential(3)}}`;
+    }}
+    drawDrivingChart(fi);
+  }}
+
+  function drawDrivingChart(currentFi) {{
+    const cv = document.getElementById("drv_chart");
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    const W = cv.width, H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    const amps = DATA.frames.map(f => f.driving_amplitude !== undefined ? f.driving_amplitude : 0);
+    const maxA = Math.max(...amps.map(Math.abs), 1e-12);
+    const n = amps.length;
+    // Axis
+    ctx.strokeStyle = "#ccc"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+    // Driving curve
+    ctx.strokeStyle = "#1565c0"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {{
+      const x = (i / (n-1)) * W;
+      const y = H/2 - (amps[i] / maxA) * (H/2 - 4);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }}
+    ctx.stroke();
+    // Current time cursor
+    const cx = (currentFi / (n-1)) * W;
+    ctx.strokeStyle = "#e53935"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, H); ctx.stroke();
+    // Labels
+    ctx.fillStyle = "#888"; ctx.font = "10px sans-serif";
+    ctx.fillText(`t=${{DATA.frames[0].t.toFixed(1)}}`, 2, H-2);
+    ctx.fillText(`t=${{DATA.frames[n-1].t.toFixed(1)}}`, W-28, H-2);
+    ctx.fillText(`+${{maxA.toExponential(2)}}`, 2, 11);
+    ctx.fillText(`-${{maxA.toExponential(2)}}`, 2, H-12);
+  }}
+
+  function render(n) {{
+    const fi = Math.max(0, Math.min(n - 1, parseInt(slider.value, 10) - 1));
+    drawFrame(fi);
+    drawColorbar(colorModeCtl.value);
+  }}
+
+  slider.addEventListener("input", () => render(DATA.frames.length));
+  colorModeCtl.addEventListener("change", () => render(DATA.frames.length));
+
+  let playing = false, timer = null;
+  document.getElementById("play").onclick = () => {{
+    if (playing) return;
+    playing = true;
+    timer = setInterval(() => {{
+      let v = parseInt(slider.value, 10) + 1;
+      if (v > DATA.frames.length) v = 1;
+      slider.value = String(v);
+      render(DATA.frames.length);
+    }}, 80);
+  }};
+  document.getElementById("pause").onclick = () => {{ playing = false; clearInterval(timer); }};
+
+  render(DATA.frames.length);
+  </script>
+</body>
+</html>"""
 
 
 def _spatial_wavepacket_3d_frames(
@@ -1884,7 +2140,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -2043,6 +2299,58 @@ def main() -> int:
     )
     path = out_dir / f"quantum_dirac2d_{args.dirac2d_potential}.html"
     path.write_text(_dirac_spinor_page(dirac2d_data), encoding="utf-8")
+    generated.append(path)
+
+  _DRIVEN_SCENARIOS: dict[str, tuple[str, str, dict]] = {
+      # scenario_key -> (potential_type, output_filename_stem, driving_config)
+      "driven_barrier": (
+          "barrier",
+          "quantum_driven_barrier",
+          {"type": "sine", "amplitude": 0.4, "frequency": 1.8, "spatial_profile": "uniform"},
+      ),
+      "bloch": (
+          "free",
+          "quantum_bloch_oscillation",
+          {"type": "sine", "amplitude": 0.35, "frequency": 2.5, "spatial_profile": "dipole_x"},
+      ),
+      "gaussian_pulse": (
+          "harmonic",
+          "quantum_gaussian_pulse",
+          {
+              "type": "gaussian_pulse",
+              "amplitude": 0.6,
+              "frequency": 0.55,
+              "t_center": 1.2,
+              "t_width": 0.4,
+              "spatial_profile": "dipole_x",
+          },
+      ),
+  }
+  for scenario_key, (pot_type, stem, drv_cfg) in _DRIVEN_SCENARIOS.items():
+    if args.scenario not in {scenario_key, "all"}:
+      continue
+    driven_problem = _continuous_problem_2d_driven_request(
+        args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y,
+        pot_type, drv_cfg,
+    )
+    driven_data = _resolve_continuous_payload(
+        engine,
+        driven_problem,
+        args.solver_mode,
+        lambda pt=pot_type, dc=drv_cfg: _spatial_wavepacket_2d_frames(
+            args.samples_spatial2d_t, args.samples_spatial2d_x, args.samples_spatial2d_y,
+            pt, driving=dc,
+        ),
+        export_json_path,
+        args.strict_export_schema,
+    )
+    # Ensure the driving config is preserved in the payload for the page template.
+    if "driving" not in driven_data:
+      driven_data["driving"] = drv_cfg
+    if "has_driving" not in driven_data:
+      driven_data["has_driving"] = True
+    path = out_dir / f"{stem}.html"
+    path.write_text(_driven_wavepacket_2d_page(driven_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:

@@ -697,8 +697,120 @@ def main() -> int:
     if path == engine_export_dir / "quantum_spatial2d_wavepacket_barrier.html" and "engine-export" not in content:
       raise RuntimeError(f"engine-export visualization should mention its data source: {path}")
 
+  # ── M15: driven-potential scenarios ─────────────────────────────────────────
+  driven_dir = tmp / "driven"
+  driven_dir.mkdir(parents=True, exist_ok=True)
+
+  # driven_barrier scenario
+  _run_expected_success_with_output(
+      [py, vis_script, "--scenario", "driven_barrier",
+       "--samples-spatial2d-t", "8", "--samples-spatial2d-x", "16", "--samples-spatial2d-y", "16",
+       "--out-dir", str(driven_dir)],
+      "quantum_driven_barrier.html",
+  )
+  driven_barrier_html = driven_dir / "quantum_driven_barrier.html"
+  if not driven_barrier_html.exists():
+    raise RuntimeError(f"driven_barrier html not generated: {driven_barrier_html}")
+  content = driven_barrier_html.read_text(encoding="utf-8")
+  if "drv_chart" not in content:
+    raise RuntimeError("driven_barrier html missing drv_chart canvas")
+  if "drawDrivingChart" not in content:
+    raise RuntimeError("driven_barrier html missing drawDrivingChart function")
+  if "driving_amplitude" not in content:
+    raise RuntimeError("driven_barrier html missing driving_amplitude data")
+
+  # bloch scenario
+  _run_expected_success_with_output(
+      [py, vis_script, "--scenario", "bloch",
+       "--samples-spatial2d-t", "8", "--samples-spatial2d-x", "16", "--samples-spatial2d-y", "16",
+       "--out-dir", str(driven_dir)],
+      "quantum_bloch_oscillation.html",
+  )
+  bloch_html = driven_dir / "quantum_bloch_oscillation.html"
+  if not bloch_html.exists():
+    raise RuntimeError(f"bloch html not generated: {bloch_html}")
+  bloch_content = bloch_html.read_text(encoding="utf-8")
+  if "dipole_x" not in bloch_content:
+    raise RuntimeError("bloch html missing dipole_x spatial profile in payload")
+
+  # gaussian_pulse scenario
+  _run_expected_success_with_output(
+      [py, vis_script, "--scenario", "gaussian_pulse",
+       "--samples-spatial2d-t", "8", "--samples-spatial2d-x", "16", "--samples-spatial2d-y", "16",
+       "--out-dir", str(driven_dir)],
+      "quantum_gaussian_pulse.html",
+  )
+  gp_html = driven_dir / "quantum_gaussian_pulse.html"
+  if not gp_html.exists():
+    raise RuntimeError(f"gaussian_pulse html not generated: {gp_html}")
+  gp_content = gp_html.read_text(encoding="utf-8")
+  if "gaussian_pulse" not in gp_content:
+    raise RuntimeError("gaussian_pulse html missing gaussian_pulse type in payload")
+
+  # 2D engine-export with driving_amplitude field in frames
+  driven_export_dir = tmp / "driven_export"
+  driven_export_dir.mkdir(parents=True, exist_ok=True)
+  driven_fixture = driven_export_dir / "driven_export.json"
+  _write_continuous_export_fixture_2d_with_driving(driven_fixture)
+  _run_expected_success_with_output(
+      [py, vis_script, "--scenario", "spatial2d", "--solver-mode", "engine",
+       "--continuous-export-json", str(driven_fixture), "--strict-export-schema",
+       "--out-dir", str(driven_export_dir)],
+      "quantum_spatial2d_wavepacket_barrier.html",
+  )
+  driven_exp_html = driven_export_dir / "quantum_spatial2d_wavepacket_barrier.html"
+  if not driven_exp_html.exists():
+    raise RuntimeError(f"driven export html not generated: {driven_exp_html}")
+  driven_exp_content = driven_exp_html.read_text(encoding="utf-8")
+  if "has_driving" not in driven_exp_content:
+    raise RuntimeError("driven engine-export html missing has_driving flag")
+
   print("visualization smoke passed")
   return 0
+
+
+def _write_continuous_export_fixture_2d_with_driving(path: Path, schema_version: int | None = 1) -> None:
+  """Write a 2D engine-export payload with driving_amplitude fields for M15 smoke testing."""
+  import math
+  payload = {
+      "continuous_export": {
+          **({"schema_version": schema_version} if schema_version is not None else {}),
+          "kind": "continuous_space_2d",
+          "source": "engine-export",
+          "solver_mode": "engine",
+          "potential_type": "barrier",
+          "x_min": -1.0,
+          "x_max": 1.0,
+          "y_min": -1.0,
+          "y_max": 1.0,
+          "dens_max": 1.0,
+          "has_driving": True,
+          "driving": {"type": "sine", "amplitude": 0.4, "frequency": 1.8, "spatial_profile": "uniform"},
+          "frames": [
+              {
+                  "t": 0.0,
+                  "density_xy_flat": [0.1, 0.2, 0.3, 0.4],
+                  "nx": 2,
+                  "ny": 2,
+                  "norm": 1.0,
+                  "exp_x": 0.0,
+                  "exp_y": 0.0,
+                  "driving_amplitude": 0.4,
+              },
+              {
+                  "t": 0.1,
+                  "density_xy_flat": [0.2, 0.3, 0.4, 0.5],
+                  "nx": 2,
+                  "ny": 2,
+                  "norm": 0.98,
+                  "exp_x": 0.1,
+                  "exp_y": -0.05,
+                  "driving_amplitude": 0.28,
+              },
+          ],
+      }
+  }
+  path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":
