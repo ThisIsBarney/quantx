@@ -697,6 +697,11 @@ def main() -> int:
     if path == engine_export_dir / "quantum_spatial2d_wavepacket_barrier.html" and "engine-export" not in content:
       raise RuntimeError(f"engine-export visualization should mention its data source: {path}")
 
+  # Convenience aliases used from M15 onward.
+  py = sys.executable
+  vis_script = str(root / "scripts" / "visualize_simulation.py")
+  tmp = out_dir
+
   # ── M15: driven-potential scenarios ─────────────────────────────────────────
   driven_dir = tmp / "driven"
   driven_dir.mkdir(parents=True, exist_ok=True)
@@ -786,6 +791,32 @@ def main() -> int:
     raise RuntimeError("lindblad html missing entropy data")
   if "cv_pop" not in lb_content:
     raise RuntimeError("lindblad html missing population canvas")
+
+  # ── M17: Wigner quasi-probability and transport observables ─────────────────
+  wigner_dir = tmp / "wigner"
+  wigner_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key in ("wigner_free", "wigner_barrier"):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--samples-wigner-t", "6",
+         "--samples-spatial2d-x", "32",
+         "--samples-spatial2d-y", "32",
+         "--out-dir", str(wigner_dir)],
+        f"quantum_wigner_{scenario_key}.html",
+    )
+    wigner_html = wigner_dir / f"quantum_wigner_{scenario_key}.html"
+    if not wigner_html.exists():
+      raise RuntimeError(f"wigner html not generated: {wigner_html}")
+    wc = wigner_html.read_text(encoding="utf-8")
+    if "wigner_flat" not in wc:
+      raise RuntimeError(f"{scenario_key}: html missing wigner_flat data")
+    if "cv_wigner" not in wc:
+      raise RuntimeError(f"{scenario_key}: html missing Wigner canvas")
+    if "cv_jx" not in wc:
+      raise RuntimeError(f"{scenario_key}: html missing current canvas")
+    if "transmission" not in wc:
+      raise RuntimeError(f"{scenario_key}: html missing transmission data")
 
   print("visualization smoke passed")
   return 0

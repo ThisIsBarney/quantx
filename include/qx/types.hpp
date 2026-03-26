@@ -262,6 +262,41 @@ struct LindbladFrame {
   double coherence{0.0};
 };
 
+// One recorded frame from a Wigner quasi-probability and transport analysis.
+// Computed from the 2D Schrödinger wavefunction ψ(x, y) at the y=y_mid slice.
+struct WignerFrame {
+  // Step index and physical time.
+  std::uint32_t step{0};
+  double time{0.0};
+  // Wigner grid dimensions: nx x-positions × np momentum points (np == nx).
+  std::uint32_t nx{0};
+  std::uint32_t np{0};
+  // Spatial and momentum axis bounds for the Wigner array.
+  double x_min{0.0};
+  double x_max{0.0};
+  // Momentum range:  p_k = (k - N/2) * pi/(N*dx),  so
+  //   p_min = -pi/(2*dx),  p_max approx +pi/(2*dx).
+  double p_min{0.0};
+  double p_max{0.0};
+  // W(x_j, p_k) at y=y_mid, row-major [j*np + k].
+  // The Wigner function can be negative (quantum interference indicator).
+  std::vector<double> wigner_flat{};
+  // Probability current density J_x(x,y) and J_y(x,y) via spectral differentiation.
+  // Row-major [y*nx + x] (same layout as state_), size nx*ny.
+  std::vector<double> current_x_flat{};
+  std::vector<double> current_y_flat{};
+  // Integrated J_x at fixed x-planes for transport coefficient estimates (hbar=1 units):
+  //   transmission = sum_y  J_x(x_right, y) * dy   (x_right = 3/4 * Lx)
+  //   reflection   = -sum_y J_x(x_left,  y) * dy   (x_left  = 1/4 * Lx)
+  double transmission{0.0};
+  double reflection{0.0};
+  // Momentum-space expectation values (mass-independent, units of hbar/length).
+  double px_mean{0.0};
+  double py_mean{0.0};
+  // Kinetic energy <(px^2 + py^2)/(2m)> in energy units.
+  double kinetic_energy{0.0};
+};
+
 // Canonical simulation problem description used across API boundaries.
 struct QuantumProblem {
   ProblemKind kind{ProblemKind::Discrete};
@@ -294,6 +329,10 @@ struct RunOptions {
   std::uint32_t export_frame_stride{1};
   std::size_t export_points_max{2500};
   double export_density_floor_ratio{0.08};
+  // When true, the 2D continuous backend computes and exports Wigner quasi-probability
+  // frames (W(x,p), probability current, and transport coefficients).
+  // Guarded separately because the Wigner computation is O(nx^2 log nx) per frame.
+  bool export_wigner{false};
   std::string checkpoint_path{"./checkpoints"};
   ResourceConstraints resources{};
 };
@@ -363,6 +402,7 @@ struct SimulationResult {
   std::map<std::string, double> observables{};
   std::vector<ContinuousDensityFrame> continuous_density_frames{};
   std::vector<LindbladFrame> lindblad_frames{};
+  std::vector<WignerFrame> wigner_frames{};
   ContinuousExportConfig continuous_export{};
   std::vector<Event> events{};
   std::string message;

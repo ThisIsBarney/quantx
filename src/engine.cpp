@@ -606,6 +606,7 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   result.state = backend->current_state();
   result.continuous_density_frames = backend->continuous_density_frames();
   result.lindblad_frames = backend->lindblad_frames();
+  result.wigner_frames = backend->wigner_frames();
   result.events = runtime.events();
   result.message = "Simulation completed";
 

@@ -35,6 +35,8 @@ class IBackend {
   virtual std::vector<ContinuousDensityFrame> continuous_density_frames() const = 0;
   // Return Lindblad density-matrix frame metadata; empty for non-Lindblad backends.
   virtual std::vector<LindbladFrame> lindblad_frames() const { return {}; }
+  // Return Wigner quasi-probability and transport frames; empty for non-2D backends.
+  virtual std::vector<WignerFrame> wigner_frames() const { return {}; }
 };
 
 using BackendFactory = std::function<std::unique_ptr<IBackend>()>;
