@@ -568,6 +568,7 @@ RunOptions options_from_json(const std::string& json_text) {
   o.allow_mpi = get_or<bool>(j, "allow_mpi", o.allow_mpi);
   o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
   o.export_continuous_frames = get_or<bool>(j, "export_continuous_frames", o.export_continuous_frames);
+  o.export_wigner = get_or<bool>(j, "export_wigner", o.export_wigner);
   o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
   o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
   o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
@@ -703,5 +704,4 @@ std::string backend_info_to_json(const BackendInfo& info) {
 }
 
 }  // namespace qx
-
 

@@ -283,11 +283,13 @@ int main() {
 
   const auto parsed_options = qx::options_from_json(R"({
     "export_continuous_frames": true,
+    "export_wigner": true,
     "export_frame_stride": 5,
     "export_points_max": 42,
     "export_density_floor_ratio": 0.25
   })");
   expect(parsed_options.export_continuous_frames, "options json should parse export_continuous_frames");
+  expect(parsed_options.export_wigner, "options json should parse export_wigner");
   expect(parsed_options.export_frame_stride == 5U, "options json should parse export_frame_stride");
   expect(parsed_options.export_points_max == 42U, "options json should parse export_points_max");
   expect(std::abs(parsed_options.export_density_floor_ratio - 0.25) < 1e-12,
@@ -512,7 +514,7 @@ int main() {
     std::ostringstream cmd;
     cmd << quote_path(cli_path) << " --problem " << quote_path(cli_problem) << " --options "
         << quote_path(cli_options) << " --out " << quote_path(cli_export_out)
-        << " --export-continuous-frames --export-frame-stride 4 --export-points-max 32 --export-density-floor-ratio 0.2";
+        << " --export-continuous-frames --export-wigner --export-frame-stride 4 --export-points-max 32 --export-density-floor-ratio 0.2";
     expect(run_command(cmd.str()) == 0, "CLI with export flag should succeed");
   }
   const std::string cli_export_json = read_text_file(cli_export_out);
@@ -534,6 +536,9 @@ int main() {
     expect(frame.at("density_xy_flat").is_array(), "CLI export wrapper should retain 2D density payloads");
     expect(!frame.at("density_xy_flat").empty(), "CLI export wrapper payload should be non-empty");
   }
+  expect(cli_export_doc.at("wigner_frames").is_array(), "CLI output should expose wigner_frames");
+  expect(!cli_export_doc.at("wigner_frames").empty(),
+         "CLI with --export-wigner should include at least one wigner frame");
 
   auto o_gpu = o;
   o_gpu.use_gpu = true;
