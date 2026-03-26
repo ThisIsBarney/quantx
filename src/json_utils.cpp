@@ -398,6 +398,44 @@ json lindblad_frames_to_json(const std::vector<LindbladFrame>& frames) {
   return out;
 }
 
+// Serialize one WignerFrame to JSON. Large payload arrays are emitted conditionally.
+json wigner_frame_to_json(const WignerFrame& frame) {
+  json out{
+      {"step", frame.step},
+      {"time", frame.time},
+      {"nx", frame.nx},
+      {"np", frame.np},
+      {"x_min", frame.x_min},
+      {"x_max", frame.x_max},
+      {"p_min", frame.p_min},
+      {"p_max", frame.p_max},
+      {"transmission", frame.transmission},
+      {"reflection", frame.reflection},
+      {"px_mean", frame.px_mean},
+      {"py_mean", frame.py_mean},
+      {"kinetic_energy", frame.kinetic_energy},
+  };
+  if (!frame.wigner_flat.empty()) {
+    out["wigner_flat"] = frame.wigner_flat;
+  }
+  if (!frame.current_x_flat.empty()) {
+    out["current_x_flat"] = frame.current_x_flat;
+  }
+  if (!frame.current_y_flat.empty()) {
+    out["current_y_flat"] = frame.current_y_flat;
+  }
+  return out;
+}
+
+// Serialize all Wigner frames to a JSON array.
+json wigner_frames_to_json(const std::vector<WignerFrame>& frames) {
+  json out = json::array();
+  for (const auto& frame : frames) {
+    out.push_back(wigner_frame_to_json(frame));
+  }
+  return out;
+}
+
 // Select a stride-sampled view of the continuous frame list for the public export wrapper.
 std::vector<ContinuousDensityFrame> sample_continuous_export_frames(
     const std::vector<ContinuousDensityFrame>& frames,
@@ -530,6 +568,7 @@ RunOptions options_from_json(const std::string& json_text) {
   o.allow_mpi = get_or<bool>(j, "allow_mpi", o.allow_mpi);
   o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
   o.export_continuous_frames = get_or<bool>(j, "export_continuous_frames", o.export_continuous_frames);
+  o.export_wigner = get_or<bool>(j, "export_wigner", o.export_wigner);
   o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
   o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
   o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
@@ -604,6 +643,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["observables"] = result.observables;
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
   j["lindblad_frames"] = lindblad_frames_to_json(result.lindblad_frames);
+  j["wigner_frames"] = wigner_frames_to_json(result.wigner_frames);
   const ContinuousExportConfig export_config = sanitize_continuous_export_config_impl(result.continuous_export);
   j["continuous_export"] = {
       {"schema_version", export_config.schema_version},
@@ -664,5 +704,4 @@ std::string backend_info_to_json(const BackendInfo& info) {
 }
 
 }  // namespace qx
-
 

@@ -104,6 +104,8 @@ class Continuous2DBackend final : public IBackend {
     completed_steps_ = 0;
     export_frame_payloads_ = options.export_continuous_frames;
     export_frame_stride_ = std::max<std::uint32_t>(1U, options.export_frame_stride);
+    export_wigner_ = options.export_wigner;
+    wigner_frames_.clear();
     frames_.clear();
     absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_), 1.0);
 
@@ -176,6 +178,7 @@ class Continuous2DBackend final : public IBackend {
 
     update_observables();
     record_frame();
+    record_wigner_frame();
   }
 
   void evolve(const QuantumProblem&, const RunOptions&) override {
@@ -207,6 +210,7 @@ class Continuous2DBackend final : public IBackend {
       completed_steps_ = s + 1;
       update_observables();
       record_frame();
+      record_wigner_frame();
     }
   }
 
@@ -231,6 +235,7 @@ class Continuous2DBackend final : public IBackend {
       completed_steps_ = s + 1;
       update_observables();
       record_frame();
+      record_wigner_frame();
     }
   }
 
@@ -340,6 +345,8 @@ class Continuous2DBackend final : public IBackend {
   std::vector<std::complex<double>> current_state() const override { return state_; }
 
   std::vector<ContinuousDensityFrame> continuous_density_frames() const override { return frames_; }
+
+  std::vector<WignerFrame> wigner_frames() const override { return wigner_frames_; }
 
  private:
   std::size_t idx(std::uint32_t x, std::uint32_t y) const {
@@ -537,6 +544,147 @@ class Continuous2DBackend final : public IBackend {
   }
 
   // Capture a compact density-frame metadata record for export.
+  // ── Wigner quasi-probability and transport observables ─────────────────────
+
+  // Compute 1D Wigner W(x_j, p_k) from the y=y_mid row (periodic wrap, hbar=1).
+  //
+  // Algorithm:
+  //   a'_j[l] = psi[(j+l)%N] * conj(psi[(j-l)%N]) * (-1)^l
+  //   W[j, k]  = (dx/pi) * Re{ FFT(a'_j)[k] }
+  // Momentum axis: p_k = (k - N/2) * pi/(N*dx)  for k = 0..N-1.
+  // Normalization: sum_k W[j,k] * pi/(N*dx) = |psi(x_j, y_mid)|^2.
+  void compute_wigner_row(std::vector<double>& out) {
+    static constexpr double kPi = 3.14159265358979323846;
+    const std::uint32_t N = nx_;
+    const std::uint32_t y_mid = ny_ / 2U;
+    out.assign(static_cast<std::size_t>(N) * N, 0.0);
+    const double scale = dx_ / kPi;
+
+    std::vector<Complex> a_prime(N);
+    std::vector<Complex> w_fft(N);
+
+    for (std::uint32_t j = 0; j < N; ++j) {
+      for (std::uint32_t l = 0; l < N; ++l) {
+        const std::size_t iplus  = idx((j + l) % N, y_mid);
+        const std::size_t iminus = idx((j + N - l) % N, y_mid);
+        const double sign = (l % 2U == 0U) ? 1.0 : -1.0;
+        a_prime[l] = state_[iplus] * std::conj(state_[iminus]) * sign;
+      }
+      fft_provider_->forward(w_fft, a_prime);
+      for (std::uint32_t k = 0; k < N; ++k) {
+        out[static_cast<std::size_t>(j) * N + k] = scale * w_fft[k].real();
+      }
+    }
+  }
+
+  // Compute probability current J_x(x,y) and J_y(x,y) via spectral differentiation.
+  //   J = (1/m) * Im{ psi* * (-i * grad * psi) }  (hbar=1)
+  void compute_probability_current(std::vector<double>& Jx_out, std::vector<double>& Jy_out) {
+    static constexpr double kTwoPi = 6.28318530717958647692;
+    const double lx = static_cast<double>(nx_) * dx_;
+    const double ly = static_cast<double>(ny_) * dy_;
+    const double inv_mass = 1.0 / mass_;
+    const std::size_t n = state_.size();
+
+    std::vector<Complex> psi_k(n);
+    fft2_forward(state_, psi_k);
+
+    std::vector<Complex> dx_k(n), dy_k(n);
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const int ky_idx = (y <= ny_ / 2U) ? static_cast<int>(y) :
+                          static_cast<int>(y) - static_cast<int>(ny_);
+      const double ky = kTwoPi * static_cast<double>(ky_idx) / ly;
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const int kx_idx = (x <= nx_ / 2U) ? static_cast<int>(x) :
+                            static_cast<int>(x) - static_cast<int>(nx_);
+        const double kx = kTwoPi * static_cast<double>(kx_idx) / lx;
+        const std::size_t i = idx(x, y);
+        dx_k[i] = Complex{0.0, kx} * psi_k[i];
+        dy_k[i] = Complex{0.0, ky} * psi_k[i];
+      }
+    }
+
+    std::vector<Complex> dpsi_dx(n), dpsi_dy(n);
+    fft2_inverse(dx_k, dpsi_dx);
+    fft2_inverse(dy_k, dpsi_dy);
+
+    Jx_out.resize(n);
+    Jy_out.resize(n);
+    for (std::size_t i = 0; i < n; ++i) {
+      Jx_out[i] = inv_mass * (std::conj(state_[i]) * dpsi_dx[i]).imag();
+      Jy_out[i] = inv_mass * (std::conj(state_[i]) * dpsi_dy[i]).imag();
+    }
+  }
+
+  // Compute momentum-space expectation values from |psi_tilde(k)|^2.
+  void compute_momentum_observables(double& px_mean_out, double& py_mean_out,
+                                     double& ke_out) {
+    static constexpr double kTwoPi = 6.28318530717958647692;
+    const double lx = static_cast<double>(nx_) * dx_;
+    const double ly = static_cast<double>(ny_) * dy_;
+
+    std::vector<Complex> psi_k(state_.size());
+    fft2_forward(state_, psi_k);
+
+    double norm_k = 0.0, px_sum = 0.0, py_sum = 0.0, p2_sum = 0.0;
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      const int ky_idx = (y <= ny_ / 2U) ? static_cast<int>(y) :
+                          static_cast<int>(y) - static_cast<int>(ny_);
+      const double ky = kTwoPi * static_cast<double>(ky_idx) / ly;
+      for (std::uint32_t x = 0; x < nx_; ++x) {
+        const int kx_idx = (x <= nx_ / 2U) ? static_cast<int>(x) :
+                            static_cast<int>(x) - static_cast<int>(nx_);
+        const double kx = kTwoPi * static_cast<double>(kx_idx) / lx;
+        const double w = std::norm(psi_k[idx(x, y)]);
+        norm_k  += w;
+        px_sum  += kx * w;
+        py_sum  += ky * w;
+        p2_sum  += (kx * kx + ky * ky) * w;
+      }
+    }
+    const double inv_nk = (norm_k > 1e-30) ? 1.0 / norm_k : 0.0;
+    px_mean_out = px_sum * inv_nk;
+    py_mean_out = py_sum * inv_nk;
+    ke_out      = p2_sum * inv_nk / (2.0 * mass_);
+  }
+
+  // Assemble and store one Wigner frame on stride-aligned export steps.
+  void record_wigner_frame() {
+    if (!export_wigner_ || !export_frame_payloads_ || !should_export_payload_frame()) {
+      return;
+    }
+    // Skip non-Schrodinger equations (Wigner is well-defined for scalar wavefunctions).
+    if (equation_ != EquationType::Schrodinger) { return; }
+
+    static constexpr double kPi = 3.14159265358979323846;
+    WignerFrame wf;
+    wf.step = completed_steps_;
+    wf.time = static_cast<double>(completed_steps_) * dt_;
+    wf.nx   = nx_;
+    wf.np   = nx_;
+    wf.x_min = x_coord(0);
+    wf.x_max = x_coord(nx_ - 1U);
+    wf.p_min = -0.5 * kPi / dx_;
+    wf.p_max = (0.5 * static_cast<double>(nx_) - 1.0) * kPi /
+               (static_cast<double>(nx_) * dx_);
+
+    compute_wigner_row(wf.wigner_flat);
+    compute_probability_current(wf.current_x_flat, wf.current_y_flat);
+
+    const std::uint32_t x_left  = nx_ / 4U;
+    const std::uint32_t x_right = (3U * nx_) / 4U;
+    double t_sum = 0.0, r_sum = 0.0;
+    for (std::uint32_t y = 0; y < ny_; ++y) {
+      t_sum += wf.current_x_flat[idx(x_right, y)] * dy_;
+      r_sum += wf.current_x_flat[idx(x_left,  y)] * dy_;
+    }
+    wf.transmission = t_sum;
+    wf.reflection   = -r_sum;
+
+    compute_momentum_observables(wf.px_mean, wf.py_mean, wf.kinetic_energy);
+    wigner_frames_.push_back(std::move(wf));
+  }
+
   void record_frame() {
     ContinuousDensityFrame frame;
     frame.step = completed_steps_;
@@ -736,6 +884,7 @@ class Continuous2DBackend final : public IBackend {
       completed_steps_ = s + 1;
       update_observables();
       record_frame();
+      record_wigner_frame();
     }
   }
 
@@ -1044,6 +1193,8 @@ class Continuous2DBackend final : public IBackend {
   std::vector<double> kg_kin_os_;  // |k| · sin(|k| · dt)  (0 at k=0)
   std::map<std::string, double> observables_;
   std::vector<ContinuousDensityFrame> frames_;
+  bool export_wigner_{false};
+  std::vector<WignerFrame> wigner_frames_;
   PendingCheckpoint2D pending_checkpoint_{};
   bool has_pending_checkpoint_{false};
   std::unique_ptr<IFFTProvider> fft_provider_;

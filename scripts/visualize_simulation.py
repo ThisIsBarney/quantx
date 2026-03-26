@@ -2481,6 +2481,386 @@ def _lindblad_page(data: dict) -> str:
 </html>"""
 
 
+def _wigner_frames(
+    nx: int,
+    ny: int,
+    total_time: float,
+    dt: float,
+    potential_type: str,
+    samples: int,
+) -> dict:
+  """Python reference solver: Wigner quasi-probability and transport observables.
+
+  Evolves a 2D Gaussian wavepacket with split-step FFT and, at each sample step,
+  computes W(x, p_x) along y=y_mid, probability current J_x / J_y, and momentum
+  expectations.  Returns a dict consumable by _wigner_page().
+  """
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("Wigner visualization requires numpy") from ex
+
+  pi = math.pi
+  dx = 0.25
+  dy = 0.25
+  xs = np.array([(j - nx / 2.0) * dx for j in range(nx)])
+  ys = np.array([(j - ny / 2.0) * dy for j in range(ny)])
+  X, Y = np.meshgrid(xs, ys, indexing="ij")   # shape (nx, ny)
+
+  # Initial Gaussian wavepacket: centred at x0 with initial momentum kx0.
+  sigma = 1.5
+  kx0 = 1.8
+  x0, y0 = -4.0, 0.0
+  psi: "np.ndarray" = (
+      np.exp(-((X - x0) ** 2 + (Y - y0) ** 2) / (4.0 * sigma * sigma))
+      * np.exp(1j * kx0 * X)
+  )
+  nrm = float(np.sqrt(np.sum(np.abs(psi) ** 2) * dx * dy))
+  psi = psi / nrm
+
+  # Static potential.
+  if potential_type == "barrier":
+    V = np.where(np.abs(X) < 0.4, 2.5, 0.0).astype(float)
+  elif potential_type == "harmonic":
+    V = 0.05 * (X * X + Y * Y)
+  else:
+    V = np.zeros_like(X, dtype=float)
+
+  # Spectral propagators (mass=1, hbar=1).
+  kx_arr = 2.0 * pi * np.fft.fftfreq(nx, d=dx)
+  ky_arr = 2.0 * pi * np.fft.fftfreq(ny, d=dy)
+  KX, KY = np.meshgrid(kx_arr, ky_arr, indexing="ij")
+  kinetic_half = np.exp(-1j * 0.5 * dt * (KX * KX + KY * KY))
+  potential_full = np.exp(-1j * dt * V)
+
+  n_steps = max(1, int(round(total_time / dt)))
+  stride = max(1, n_steps // samples)
+  ny_mid = ny // 2
+  N = nx  # Wigner grid is square: N x N
+
+  def _record(step: int, t: float, psi_now: "np.ndarray") -> dict:
+    psi_row = psi_now[:, ny_mid]  # shape (nx,)
+
+    # Wigner function W(x_j, p_k).
+    ls = np.arange(N)
+    signs = np.where(ls % 2 == 0, 1.0, -1.0)
+    W = np.empty((N, N), dtype=float)
+    for j in range(N):
+      idx_plus = (j + ls) % N
+      idx_minus = (j - ls) % N
+      a_prime = psi_row[idx_plus] * np.conj(psi_row[idx_minus]) * signs
+      w_fft = np.fft.fft(a_prime)
+      W[j, :] = (dx / pi) * np.real(w_fft)
+
+    # Probability current J_x, J_y via spectral differentiation.
+    psi_k = np.fft.fft2(psi_now)
+    Jx = np.imag(np.conj(psi_now) * np.fft.ifft2(1j * KX * psi_k))  # shape (nx, ny)
+    Jy = np.imag(np.conj(psi_now) * np.fft.ifft2(1j * KY * psi_k))
+
+    # Transport: integrate J_x at x=1/4*L and x=3/4*L.
+    x_left = N // 4
+    x_right = (3 * N) // 4
+    transmission = float(np.sum(Jx[x_right, :]) * dy)
+    reflection = float(-np.sum(Jx[x_left, :]) * dy)
+
+    # Momentum-space expectation values.
+    dens_k = np.abs(psi_k) ** 2
+    norm_k = float(np.sum(dens_k))
+    inv_nk = 1.0 / norm_k if norm_k > 1e-30 else 0.0
+    px_mean = float(np.sum(KX * dens_k)) * inv_nk
+    py_mean = float(np.sum(KY * dens_k)) * inv_nk
+    p2 = float(np.sum((KX * KX + KY * KY) * dens_k)) * inv_nk
+    ke = p2 / 2.0  # mass=1
+
+    # p_min / p_max for Wigner axis (k=0 is leftmost momentum bin).
+    p_min = -0.5 * pi / dx
+    p_max = (0.5 * N - 1.0) * pi / (N * dx)
+
+    return {
+        "step": step,
+        "time": float(t),
+        "nx": N,
+        "np": N,
+        "x_min": float(xs[0]),
+        "x_max": float(xs[-1]),
+        "p_min": p_min,
+        "p_max": p_max,
+        # W[j,k] row-major → wigner_flat[j*np+k]
+        "wigner_flat": W.flatten().tolist(),
+        # current_x/y: C++ layout [y*nx + x] = Jx.T.flatten()
+        "current_x_flat": Jx.T.flatten().tolist(),
+        "current_y_flat": Jy.T.flatten().tolist(),
+        "transmission": transmission,
+        "reflection": reflection,
+        "px_mean": px_mean,
+        "py_mean": py_mean,
+        "kinetic_energy": ke,
+    }
+
+  frames = [_record(0, 0.0, psi)]
+  for s in range(1, n_steps + 1):
+    # Strang splitting: T/2 → V → T/2.
+    psi_k2 = np.fft.fft2(psi) * kinetic_half
+    psi = np.fft.ifft2(psi_k2) * potential_full
+    psi_k2 = np.fft.fft2(psi) * kinetic_half
+    psi = np.fft.ifft2(psi_k2)
+    # Normalize.
+    nrm2 = float(np.sqrt(np.sum(np.abs(psi) ** 2) * dx * dy))
+    if nrm2 > 1e-30:
+      psi = psi / nrm2
+    if s % stride == 0 or s == n_steps:
+      frames.append(_record(s, s * dt, psi))
+
+  return {
+      "frames": frames,
+      "potential_type": potential_type,
+      "nx": nx,
+      "ny": ny,
+      "x_min": float(xs[0]),
+      "x_max": float(xs[-1]),
+  }
+
+
+def _wigner_page(data: dict) -> str:
+  """Generate a self-contained HTML page visualising the Wigner function and transport."""
+  frames = data["frames"]
+  if not frames:
+    return "<html><body><p>No Wigner frames to display.</p></body></html>"
+
+  potential_type = data.get("potential_type", "unknown")
+  frames_json = json.dumps(frames, separators=(",", ":"))
+
+  # Build per-frame scalar time series for the chart panels.
+  times_json = json.dumps([f["time"] for f in frames], separators=(",", ":"))
+  px_json    = json.dumps([f["px_mean"] for f in frames], separators=(",", ":"))
+  ke_json    = json.dumps([f["kinetic_energy"] for f in frames], separators=(",", ":"))
+  trans_json = json.dumps([f["transmission"] for f in frames], separators=(",", ":"))
+  refl_json  = json.dumps([f["reflection"] for f in frames], separators=(",", ":"))
+
+  nx_val = frames[0].get("nx", 64)
+  np_val = frames[0].get("np", 64)
+  x_min  = frames[0].get("x_min", -8.0)
+  x_max  = frames[0].get("x_max",  8.0)
+  p_min  = frames[0].get("p_min", -6.3)
+  p_max  = frames[0].get("p_max",  6.3)
+
+  return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QuantX – Wigner Function ({potential_type})</title>
+<style>
+  body{{margin:0;padding:12px 16px;font-family:monospace;font-size:12px;background:#111;color:#ddd}}
+  h2{{margin:4px 0 10px;color:#7cf;font-size:14px}}
+  .row{{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px}}
+  .panel{{display:flex;flex-direction:column;align-items:center}}
+  .panel label{{font-size:11px;color:#aaa;margin-bottom:3px}}
+  canvas{{background:#000;border:1px solid #333;display:block}}
+  .slider-row{{display:flex;align-items:center;gap:10px;margin-bottom:10px}}
+  input[type=range]{{width:380px;accent-color:#7cf}}
+  #frame-info{{color:#7cf;min-width:120px}}
+  svg{{overflow:visible}}
+</style>
+</head>
+<body>
+<h2>Wigner Quasi-Probability  ·  {potential_type} potential</h2>
+
+<div class="slider-row">
+  <label>frame:</label>
+  <input type="range" id="sl" min="0" max="{len(frames)-1}" value="0" step="1">
+  <span id="frame-info">t = 0.000</span>
+</div>
+
+<div class="row">
+  <div class="panel">
+    <label>W(x, p&#x2093;) – Wigner quasi-probability  (red&gt;0 / blue&lt;0)</label>
+    <canvas id="cv_wigner" width="{nx_val * 4}" height="{np_val * 4}"></canvas>
+  </div>
+  <div class="panel">
+    <label>J&#x2093;(x, y) – x-probability current  (red&gt;0 / blue&lt;0)</label>
+    <canvas id="cv_jx" width="{nx_val * 4}" height="{nx_val * 4}"></canvas>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel">
+    <label>&#x27E8;p&#x2093;&#x27E9;(t) and kinetic energy K(t)</label>
+    <svg id="svg_mom" width="340" height="150"></svg>
+  </div>
+  <div class="panel">
+    <label>Transmission T(t) and Reflection R(t)</label>
+    <svg id="svg_tr" width="340" height="150"></svg>
+  </div>
+</div>
+
+<div style="font-size:10px;color:#555;margin-top:4px">
+  grid {nx_val}×{np_val} &nbsp;|&nbsp;
+  x ∈ [{x_min:.2f}, {x_max:.2f}] &nbsp;|&nbsp;
+  p ∈ [{p_min:.2f}, {p_max:.2f}]
+</div>
+
+<script>
+const FRAMES = {frames_json};
+const TIMES  = {times_json};
+const PX_MEAN = {px_json};
+const KE     = {ke_json};
+const TRANS  = {trans_json};
+const REFL   = {refl_json};
+
+const cvW  = document.getElementById("cv_wigner");
+const ctxW = cvW.getContext("2d");
+const cvJ  = document.getElementById("cv_jx");
+const ctxJ = cvJ.getContext("2d");
+
+function divergingColor(val, maxAbs) {{
+  const t = Math.min(1.0, Math.abs(val) / (maxAbs + 1e-30));
+  const bg = 255;
+  if (val >= 0) {{
+    return [Math.round(bg * (1-t) + 220 * t),
+            Math.round(bg * (1-t) + 30  * t),
+            Math.round(bg * (1-t) + 30  * t)];
+  }} else {{
+    return [Math.round(bg * (1-t) + 30  * t),
+            Math.round(bg * (1-t) + 30  * t),
+            Math.round(bg * (1-t) + 220 * t)];
+  }}
+}}
+
+function drawWigner(frame) {{
+  const nx = frame.nx, np = frame.np;
+  const W  = frame.wigner_flat;
+  let maxW = 0;
+  for (let v of W) maxW = Math.max(maxW, Math.abs(v));
+  const off = document.createElement("canvas");
+  off.width = nx; off.height = np;
+  const offCtx = off.getContext("2d");
+  const img = offCtx.createImageData(nx, np);
+  for (let iy = 0; iy < np; iy++) {{
+    const k = np - 1 - iy;   // flip: p_max at top
+    for (let ix = 0; ix < nx; ix++) {{
+      const w = W[ix * np + k];
+      const [r,g,b] = divergingColor(w, maxW);
+      const pi = 4 * (iy * nx + ix);
+      img.data[pi]=r; img.data[pi+1]=g; img.data[pi+2]=b; img.data[pi+3]=255;
+    }}
+  }}
+  offCtx.putImageData(img, 0, 0);
+  ctxW.imageSmoothingEnabled = false;
+  ctxW.drawImage(off, 0, 0, cvW.width, cvW.height);
+}}
+
+function drawCurrentX(frame) {{
+  const nx = frame.nx, ny_size = frame.current_x_flat.length / nx;
+  const J  = frame.current_x_flat;
+  let maxJ = 0;
+  for (let v of J) maxJ = Math.max(maxJ, Math.abs(v));
+  const off = document.createElement("canvas");
+  off.width = nx; off.height = ny_size;
+  const offCtx = off.getContext("2d");
+  const img = offCtx.createImageData(nx, ny_size);
+  for (let iy = 0; iy < ny_size; iy++) {{
+    const iy_flip = ny_size - 1 - iy;
+    for (let ix = 0; ix < nx; ix++) {{
+      const j_val = J[iy_flip * nx + ix];  // layout: [y*nx + x]
+      const [r,g,b] = divergingColor(j_val, maxJ);
+      const pi = 4 * (iy * nx + ix);
+      img.data[pi]=r; img.data[pi+1]=g; img.data[pi+2]=b; img.data[pi+3]=255;
+    }}
+  }}
+  offCtx.putImageData(img, 0, 0);
+  ctxJ.imageSmoothingEnabled = false;
+  ctxJ.drawImage(off, 0, 0, cvJ.width, cvJ.height);
+}}
+
+// ── SVG line charts ────────────────────────────────────────────────────────
+function makeSVGLine(svgId, series, yLabel) {{
+  const svg = document.getElementById(svgId);
+  const W = +svg.getAttribute("width"), H = +svg.getAttribute("height");
+  const mg = {{l:44,r:8,t:8,b:26}};
+  const pw = W - mg.l - mg.r, ph = H - mg.t - mg.b;
+
+  // Compute ranges.
+  const allT = TIMES;
+  const tMin = allT[0], tMax = allT[allT.length-1];
+  let yMin = Infinity, yMax = -Infinity;
+  for (const s of series) for (const v of s.vals) {{ yMin=Math.min(yMin,v); yMax=Math.max(yMax,v); }}
+  const yPad = (yMax - yMin) * 0.1 || 0.1;
+  yMin -= yPad; yMax += yPad;
+  const tRange = tMax - tMin || 1, yRange = yMax - yMin;
+
+  function tx(t){{ return mg.l + (t - tMin) / tRange * pw; }}
+  function ty(y){{ return mg.t + (1 - (y - yMin) / yRange) * ph; }}
+
+  let html = `<rect x="${{mg.l}}" y="${{mg.t}}" width="${{pw}}" height="${{ph}}" fill="#1a1a2e" stroke="#333"/>`;
+
+  // Grid lines.
+  for (let i=0;i<=4;i++) {{
+    const yv = yMin + i * yRange/4;
+    const yp = ty(yv);
+    html += `<line x1="${{mg.l}}" x2="${{mg.l+pw}}" y1="${{yp}}" y2="${{yp}}" stroke="#333" stroke-dasharray="3,3"/>`;
+    html += `<text x="${{mg.l-4}}" y="${{yp+4}}" text-anchor="end" fill="#888" font-size="9">${{yv.toFixed(2)}}</text>`;
+  }}
+
+  // Zero line if zero is in range.
+  if (yMin < 0 && yMax > 0) {{
+    html += `<line x1="${{mg.l}}" x2="${{mg.l+pw}}" y1="${{ty(0)}}" y2="${{ty(0)}}" stroke="#555" stroke-width="1"/>`;
+  }}
+
+  // Series.
+  const colors = ["#f55","#55f","#5f5","#fa0"];
+  for (let si=0; si<series.length; si++) {{
+    const s = series[si];
+    const pts = TIMES.map((t,i)=>`${{tx(t).toFixed(1)}},${{ty(s.vals[i]).toFixed(1)}}`).join(" ");
+    html += `<polyline points="${{pts}}" fill="none" stroke="${{colors[si]}}" stroke-width="1.5"/>`;
+    html += `<text x="${{mg.l+pw-4}}" y="${{mg.t+14+si*14}}" text-anchor="end" fill="${{colors[si]}}" font-size="9">${{s.name}}</text>`;
+  }}
+
+  // Current time marker (updated in render()).
+  html += `<line id="${{svgId}}_tm" x1="${{mg.l}}" x2="${{mg.l}}" y1="${{mg.t}}" y2="${{mg.t+ph}}" stroke="#7cf" stroke-width="1" stroke-dasharray="4,3"/>`;
+
+  // Axes.
+  html += `<line x1="${{mg.l}}" x2="${{mg.l+pw}}" y1="${{mg.t+ph}}" y2="${{mg.t+ph}}" stroke="#666"/>`;
+  html += `<line x1="${{mg.l}}" x2="${{mg.l}}" y1="${{mg.t}}" y2="${{mg.t+ph}}" stroke="#666"/>`;
+  html += `<text x="${{mg.l+pw/2}}" y="${{H-4}}" text-anchor="middle" fill="#888" font-size="9">t</text>`;
+  html += `<text x="10" y="${{mg.t+ph/2}}" text-anchor="middle" transform="rotate(-90,10,${{mg.t+ph/2}})" fill="#888" font-size="9">${{yLabel}}</text>`;
+
+  svg.innerHTML = html;
+}}
+
+makeSVGLine("svg_mom", [{{name:"⟨px⟩", vals:PX_MEAN}}, {{name:"K.E.", vals:KE}}], "energy");
+makeSVGLine("svg_tr",  [{{name:"T", vals:TRANS}}, {{name:"R", vals:REFL}}], "flux");
+
+function updateTimeLine(svgId, t) {{
+  const svg = document.getElementById(svgId);
+  const W = +svg.getAttribute("width");
+  const mg = {{l:44,r:8,t:8,b:26}};
+  const pw = W - mg.l - mg.r;
+  const tMin = TIMES[0], tMax = TIMES[TIMES.length-1], tRange = tMax-tMin||1;
+  const xp = (mg.l + (t-tMin)/tRange*pw).toFixed(1);
+  const el = document.getElementById(svgId+"_tm");
+  if (el) {{ el.setAttribute("x1",xp); el.setAttribute("x2",xp); }}
+}}
+
+function render(idx) {{
+  const frame = FRAMES[idx];
+  document.getElementById("frame-info").textContent = `t = ${{frame.time.toFixed(3)}}`;
+  drawWigner(frame);
+  drawCurrentX(frame);
+  updateTimeLine("svg_mom", frame.time);
+  updateTimeLine("svg_tr",  frame.time);
+}}
+
+document.getElementById("sl").addEventListener("input", function() {{
+  render(+this.value);
+}});
+
+render(0);
+</script>
+</body>
+</html>
+"""
+
+
 def _rabi_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tuple[float, float]]]:
   """Collect the simulation and analytic traces for the Rabi demo."""
   pts_sim = []
@@ -2533,7 +2913,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -2561,6 +2941,7 @@ def main() -> int:
   parser.add_argument("--lindblad-scenario", choices=["amplitude_damping", "dephasing", "depolarizing", "rabi_decay"], default="amplitude_damping")
   parser.add_argument("--lindblad-qubits", type=int, default=1)
   parser.add_argument("--samples-lindblad-t", type=int, default=80)
+  parser.add_argument("--samples-wigner-t", type=int, default=50)
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -2769,6 +3150,27 @@ def main() -> int:
     )
     path = out_dir / f"quantum_lindblad_{args.lindblad_scenario}.html"
     path.write_text(_lindblad_page(lindblad_data), encoding="utf-8")
+    generated.append(path)
+
+  _WIGNER_SCENARIOS: dict[str, str] = {
+      "wigner_free":    "free",
+      "wigner_barrier": "barrier",
+  }
+  for scenario_key, pot_type in _WIGNER_SCENARIOS.items():
+    if args.scenario not in {scenario_key, "all"}:
+      continue
+    nx_w = args.samples_spatial2d_x
+    ny_w = args.samples_spatial2d_y
+    wigner_data = _wigner_frames(
+        nx=nx_w,
+        ny=ny_w,
+        total_time=6.0,
+        dt=0.05,
+        potential_type=pot_type,
+        samples=args.samples_wigner_t,
+    )
+    path = out_dir / f"quantum_wigner_{scenario_key}.html"
+    path.write_text(_wigner_page(wigner_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:
