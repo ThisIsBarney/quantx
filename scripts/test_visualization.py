@@ -117,6 +117,114 @@ def _write_corrupt_continuous_export_fixture_3d(path: Path, schema_version: int 
   path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _write_continuous_export_fixture_2d_with_phase(path: Path, schema_version: int | None = 1) -> None:
+  """Write a 2D engine-export payload with phase, dirac_s0, and dirac_s1 fields for M14 smoke testing."""
+  import math
+  payload = {
+      "continuous_export": {
+          **({"schema_version": schema_version} if schema_version is not None else {}),
+          "kind": "continuous_space_2d",
+          "source": "engine-export",
+          "solver_mode": "engine",
+          "x_min": -1.0,
+          "x_max": 1.0,
+          "y_min": -1.0,
+          "y_max": 1.0,
+          "dens_max": 1.0,
+          "has_phase": True,
+          "has_dirac": True,
+          "frames": [
+              {
+                  "t": 0.0,
+                  "density": [[0.1, 0.2], [0.3, 0.4]],
+                  "phase_xy_flat": [0.0, math.pi / 4, math.pi / 2, math.pi],
+                  "dirac_s0_xy_flat": [0.1, 0.2, 0.3, 0.4],
+                  "dirac_s1_xy_flat": [0.05, 0.1, 0.15, 0.2],
+                  "exp_x": 0.0,
+                  "exp_y": 0.0,
+              },
+              {
+                  "t": 0.1,
+                  "density": [[0.2, 0.3], [0.4, 0.5]],
+                  "phase_xy_flat": [0.1, math.pi / 3, math.pi, -math.pi / 2],
+                  "dirac_s0_xy_flat": [0.2, 0.3, 0.4, 0.5],
+                  "dirac_s1_xy_flat": [0.1, 0.12, 0.18, 0.22],
+                  "exp_x": 0.1,
+                  "exp_y": -0.1,
+              },
+          ],
+      }
+  }
+  path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_continuous_export_fixture_3d_with_phase_and_volume(path: Path, schema_version: int | None = 1) -> None:
+  """Write a 3D engine-export payload with phase slices and full volume grid for M14 smoke testing."""
+  import math
+  # 2×2×2 grid → 4 elements per slice, 8 elements for full volume
+  payload = {
+      "continuous_export": {
+          **({"schema_version": schema_version} if schema_version is not None else {}),
+          "kind": "continuous_space_3d",
+          "source": "engine-export",
+          "solver_mode": "engine",
+          "boundary": "periodic",
+          "potential_type": "barrier",
+          "x_min": -1.0,
+          "x_max": 1.0,
+          "y_min": -1.0,
+          "y_max": 1.0,
+          "z_min": -1.0,
+          "z_max": 1.0,
+          "dens_max": 0.4,
+          "has_phase": True,
+          "has_volume_grid": True,
+          "nx": 2,
+          "ny": 2,
+          "nz": 2,
+          "frames": [
+              {
+                  "t": 0.0,
+                  "nx": 2,
+                  "ny": 2,
+                  "nz": 2,
+                  "norm": 1.0,
+                  "exp_x": 0.0,
+                  "exp_y": 0.1,
+                  "exp_z": -0.1,
+                  "density_xy_flat": [0.1, 0.2, 0.3, 0.4],
+                  "density_xz_flat": [0.1, 0.2, 0.3, 0.4],
+                  "density_yz_flat": [0.1, 0.2, 0.3, 0.4],
+                  "phase_xy_flat": [0.0, math.pi / 4, math.pi / 2, math.pi],
+                  "phase_xz_flat": [0.1, 0.3, 0.6, 1.0],
+                  "phase_yz_flat": [-0.5, 0.0, 0.5, 1.2],
+                  "density_xyz_flat": [0.1, 0.2, 0.15, 0.25, 0.3, 0.35, 0.4, 0.38],
+                  "points_xyzd_flat": [0.0, 0.0, 0.0, 0.1, 0.5, 0.0, 0.0, 0.2],
+              },
+              {
+                  "t": 0.1,
+                  "nx": 2,
+                  "ny": 2,
+                  "nz": 2,
+                  "norm": 0.95,
+                  "exp_x": 0.1,
+                  "exp_y": 0.0,
+                  "exp_z": 0.2,
+                  "density_xy_flat": [0.2, 0.3, 0.2, 0.1],
+                  "density_xz_flat": [0.1, 0.1, 0.2, 0.2],
+                  "density_yz_flat": [0.05, 0.1, 0.15, 0.2],
+                  "phase_xy_flat": [0.2, math.pi / 3, -0.8, 2.0],
+                  "phase_xz_flat": [0.0, 0.4, 0.9, -1.1],
+                  "phase_yz_flat": [-1.0, -0.5, 0.2, 0.8],
+                  "density_xyz_flat": [0.2, 0.25, 0.18, 0.12, 0.3, 0.28, 0.22, 0.15],
+                  "points_xyzd_flat": [0.0, 0.0, 0.0, 0.2, -0.5, 0.5, 0.5, 0.15],
+              },
+          ],
+      }
+  }
+  path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def _run_expected_failure(cmd: list[str], needle: str) -> None:
   """Run a command that should fail and assert on the console diagnostics."""
   proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -446,6 +554,109 @@ def main() -> int:
       ],
       check=True,
   )
+
+  # --- M14: dirac2d scenario (Python reference solver) ---
+  dirac2d_dir = out_dir / "python_dirac2d"
+  subprocess.run(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "dirac2d",
+          "--solver-mode",
+          "python",
+          "--out-dir",
+          str(dirac2d_dir),
+          "--samples-spatial2d-t",
+          "6",
+          "--samples-spatial2d-x",
+          "16",
+          "--samples-spatial2d-y",
+          "16",
+      ],
+      check=True,
+  )
+  dirac2d_html = dirac2d_dir / "quantum_dirac2d_barrier.html"
+  if not dirac2d_html.exists():
+    raise RuntimeError(f"missing Dirac spinor visualization: {dirac2d_html}")
+  dirac2d_content = dirac2d_html.read_text(encoding="utf-8")
+  for needle in ('"has_phase":true', '"has_dirac":true', "Play", "range"):
+    # allow for spaces around colon in JSON
+    if needle not in dirac2d_content and needle.replace(":", ": ") not in dirac2d_content:
+      raise RuntimeError(f"dirac2d HTML missing expected content '{needle}': {dirac2d_html}")
+
+  # --- M14: 2D engine-export with phase + dirac fields ---
+  export_fixture_2d_phase = out_dir / "continuous2d_export_phase_fixture.json"
+  _write_continuous_export_fixture_2d_with_phase(export_fixture_2d_phase)
+  engine_export_2d_phase_dir = out_dir / "engine_export_mode_2d_phase"
+  subprocess.run(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial2d",
+          "--solver-mode",
+          "engine",
+          "--continuous-export-json",
+          str(export_fixture_2d_phase),
+          "--strict-export-schema",
+          "--out-dir",
+          str(engine_export_2d_phase_dir),
+      ],
+      check=True,
+  )
+  engine_export_2d_phase_html = engine_export_2d_phase_dir / "quantum_spatial2d_wavepacket_barrier.html"
+  if not engine_export_2d_phase_html.exists():
+    raise RuntimeError(f"missing 2D phase visualization: {engine_export_2d_phase_html}")
+  phase_html_content = engine_export_2d_phase_html.read_text(encoding="utf-8")
+  for needle in ('"has_phase"', '"has_dirac"'):
+    if needle not in phase_html_content:
+      raise RuntimeError(f"2D phase engine-export HTML missing '{needle}': {engine_export_2d_phase_html}")
+
+  # --- M14: 3D engine-export with phase slices + volume grid ---
+  export_fixture_3d_phase = out_dir / "continuous3d_export_phase_volume_fixture.json"
+  _write_continuous_export_fixture_3d_with_phase_and_volume(export_fixture_3d_phase)
+  engine_export_3d_phase_dir = out_dir / "engine_export_mode_3d_phase"
+  subprocess.run(
+      [
+          sys.executable,
+          str(root / "scripts" / "visualize_simulation.py"),
+          "--scenario",
+          "spatial3d",
+          "--solver-mode",
+          "engine",
+          "--continuous-export-json",
+          str(export_fixture_3d_phase),
+          "--strict-export-schema",
+          "--spatial3d-export-json",
+          "--out-dir",
+          str(engine_export_3d_phase_dir),
+      ],
+      check=True,
+  )
+  engine_export_3d_phase_json = engine_export_3d_phase_dir / "quantum_spatial3d_wavepacket_barrier_periodic.json"
+  if not engine_export_3d_phase_json.exists():
+    raise RuntimeError(f"missing 3D phase JSON export: {engine_export_3d_phase_json}")
+  phase3d_data = json.loads(engine_export_3d_phase_json.read_text(encoding="utf-8"))
+  phase3d_frame0 = phase3d_data.get("frames", [{}])[0]
+  for key in ("phase_xy", "phase_xz", "phase_yz"):
+    if not isinstance(phase3d_frame0.get(key), list):
+      raise RuntimeError(f"3D phase JSON export missing normalized '{key}' slice: {engine_export_3d_phase_json}")
+  if not isinstance(phase3d_frame0.get("density_xyz"), list):
+    raise RuntimeError(f"3D phase JSON export missing 'density_xyz' volume grid: {engine_export_3d_phase_json}")
+  if not phase3d_data.get("has_phase"):
+    raise RuntimeError(f"3D phase JSON export missing 'has_phase' flag: {engine_export_3d_phase_json}")
+  if not phase3d_data.get("has_volume_grid"):
+    raise RuntimeError(f"3D phase JSON export missing 'has_volume_grid' flag: {engine_export_3d_phase_json}")
+
+  # --- M14: 2D spatial page phase toggle present in Python-mode output ---
+  phase_toggle_content = python_only_2d_dir / "quantum_spatial2d_wavepacket_barrier.html"
+  if phase_toggle_content.exists():
+    page2d_text = phase_toggle_content.read_text(encoding="utf-8")
+    if "colorMapPhase" not in page2d_text:
+      raise RuntimeError(f"2D spatial page missing phase colormap function: {phase_toggle_content}")
+    if "colorMode" not in page2d_text:
+      raise RuntimeError(f"2D spatial page missing color mode selector: {phase_toggle_content}")
 
   files = [
       python_only_dir / "quantum_spatial_wavepacket_barrier.html",

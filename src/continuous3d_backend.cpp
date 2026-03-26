@@ -172,6 +172,8 @@ class Continuous3DBackend final : public IBackend {
     export_frame_stride_ = std::max<std::uint32_t>(1U, options.export_frame_stride);
     export_points_max_ = options.export_points_max;
     export_density_floor_ratio_ = std::clamp(options.export_density_floor_ratio, 0.0, 1.0);
+    export_volume_grid_ = options.export_volume_grid;
+    export_volume_max_voxels_ = options.export_volume_max_voxels;
     frames_.clear();
     absorbing_mask_.assign(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_),
                            1.0);
@@ -666,6 +668,34 @@ class Continuous3DBackend final : public IBackend {
         frame.points_xyzd_flat.push_back(p.z);
         frame.points_xyzd_flat.push_back(p.d);
       }
+
+      // Phase slices: arg(ψ₀) at midplanes
+      frame.phase_xy_flat.reserve(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(ny_));
+      for (std::uint32_t y = 0; y < ny_; ++y) {
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          frame.phase_xy_flat.push_back(std::arg(state_[idx(x, y, z_mid)]));
+        }
+      }
+      frame.phase_xz_flat.reserve(static_cast<std::size_t>(nx_) * static_cast<std::size_t>(nz_));
+      for (std::uint32_t z = 0; z < nz_; ++z) {
+        for (std::uint32_t x = 0; x < nx_; ++x) {
+          frame.phase_xz_flat.push_back(std::arg(state_[idx(x, y_mid, z)]));
+        }
+      }
+      frame.phase_yz_flat.reserve(static_cast<std::size_t>(ny_) * static_cast<std::size_t>(nz_));
+      for (std::uint32_t z = 0; z < nz_; ++z) {
+        for (std::uint32_t y = 0; y < ny_; ++y) {
+          frame.phase_yz_flat.push_back(std::arg(state_[idx(x_mid, y, z)]));
+        }
+      }
+
+      // Full 3D voxel grid for marching cubes (guarded by size limit)
+      if (export_volume_grid_ && state_.size() <= export_volume_max_voxels_) {
+        frame.density_xyz_flat.resize(state_.size());
+        for (std::size_t i = 0; i < state_.size(); ++i) {
+          frame.density_xyz_flat[i] = spinor_density(i);
+        }
+      }
     }
     frames_.push_back(frame);
   }
@@ -1126,6 +1156,8 @@ class Continuous3DBackend final : public IBackend {
   std::uint32_t export_frame_stride_{1};
   std::size_t export_points_max_{2500};
   double export_density_floor_ratio_{0.08};
+  bool export_volume_grid_{false};
+  std::size_t export_volume_max_voxels_{131072};
 
   std::vector<Complex> state_;
   std::vector<Complex> pi_state_;

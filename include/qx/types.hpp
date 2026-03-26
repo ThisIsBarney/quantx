@@ -191,6 +191,17 @@ struct ContinuousDensityFrame {
   std::vector<double> density_yz_flat{};
   // Optional point-cloud payload encoded as flat [x,y,z,density] tuples.
   std::vector<double> points_xyzd_flat{};
+  // Optional phase payload: arg(ψ₀) in radians.
+  // 2D: nx*ny entries. 3D: slice payloads at respective midplanes.
+  std::vector<double> phase_xy_flat{};
+  std::vector<double> phase_xz_flat{};
+  std::vector<double> phase_yz_flat{};
+  // Optional per-spinor-component density slices for Dirac equation (nx*ny each).
+  std::vector<double> dirac_s0_xy_flat{};
+  std::vector<double> dirac_s1_xy_flat{};
+  // Optional full 3D voxel grid for marching cubes (nx*ny*nz, x-fastest indexing).
+  // Only emitted when RunOptions::export_volume_grid is true and grid is small enough.
+  std::vector<double> density_xyz_flat{};
 };
 
 // Stable contract metadata for the continuous-export wrapper.
@@ -229,6 +240,10 @@ struct RunOptions {
   bool enable_checkpoint{true};
   // When enabled, continuous backends export frame payloads for visualization.
   bool export_continuous_frames{false};
+  // When enabled, 3D backends export the full nx*ny*nz density grid per frame
+  // (for marching cubes isosurface rendering). Guarded by export_volume_max_voxels.
+  bool export_volume_grid{false};
+  std::size_t export_volume_max_voxels{131072};  // 128k voxel limit
   // Append-only controls for the stable continuous-export wrapper.
   std::uint32_t export_frame_stride{1};
   std::size_t export_points_max{2500};
