@@ -549,6 +549,20 @@ class Continuous2DBackend final : public IBackend {
           frame.density_xy_flat[i] = std::norm(state_[i]);
         }
       }
+      // Phase of the primary spinor component: arg(ψ₀)
+      frame.phase_xy_flat.resize(state_.size());
+      for (std::size_t i = 0; i < state_.size(); ++i) {
+        frame.phase_xy_flat[i] = std::arg(state_[i]);
+      }
+      // Per-component densities for Dirac equation
+      if (equation_ == EquationType::Dirac) {
+        frame.dirac_s0_xy_flat.resize(state_.size());
+        frame.dirac_s1_xy_flat.resize(state_.size());
+        for (std::size_t i = 0; i < state_.size(); ++i) {
+          frame.dirac_s0_xy_flat[i] = std::norm(state_[i]);
+          frame.dirac_s1_xy_flat[i] = std::norm(dirac_s1_[i]);
+        }
+      }
     }
     frames_.push_back(frame);
   }

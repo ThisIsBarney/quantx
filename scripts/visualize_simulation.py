@@ -397,6 +397,17 @@ def _normalize_engine_export_payload(payload: dict) -> dict:
       frame["exp_y"] = float(frame.get("exp_y", frame.get("y_mean", 0.0)) or 0.0)
       frame["t"] = float(frame.get("t", frame.get("time", 0.0)) or 0.0)
       dens_max = max(dens_max, max((max(row) for row in density), default=0.0))
+      # Optional phase data (arg(ψ₀))
+      if "phase_xy_flat" in frame and nx > 0 and ny > 0:
+        frame["phase"] = _reshape_flat_to_rows(
+            [float(v) for v in frame["phase_xy_flat"]], ny, nx, f"frames[{frame_idx}].phase_xy_flat"
+        )
+      # Optional Dirac spinor component densities
+      for comp, key in (("dirac_s0_xy_flat", "dirac_s0"), ("dirac_s1_xy_flat", "dirac_s1")):
+        if comp in frame and nx > 0 and ny > 0:
+          frame[key] = _reshape_flat_to_rows(
+              [float(v) for v in frame[comp]], ny, nx, f"frames[{frame_idx}].{comp}"
+          )
     else:
       if nx <= 0 or ny <= 0 or nz <= 0:
         raise RuntimeError(f"engine-export frame {frame_idx} requires nx, ny and nz for 3D density normalization")
@@ -417,6 +428,22 @@ def _normalize_engine_export_payload(payload: dict) -> dict:
           max((max(row) for row in frame["xz"]), default=0.0),
           max((max(row) for row in frame["yz"]), default=0.0),
       )
+      # Optional phase slices
+      if "phase_xy_flat" in frame:
+        frame["phase_xy"] = _reshape_flat_to_rows(
+            [float(v) for v in frame["phase_xy_flat"]], ny, nx, f"frames[{frame_idx}].phase_xy_flat"
+        )
+      if "phase_xz_flat" in frame:
+        frame["phase_xz"] = _reshape_flat_to_rows(
+            [float(v) for v in frame["phase_xz_flat"]], nz, nx, f"frames[{frame_idx}].phase_xz_flat"
+        )
+      if "phase_yz_flat" in frame:
+        frame["phase_yz"] = _reshape_flat_to_rows(
+            [float(v) for v in frame["phase_yz_flat"]], nz, ny, f"frames[{frame_idx}].phase_yz_flat"
+        )
+      # Optional full voxel grid for marching cubes (kept as flat list)
+      if "density_xyz_flat" in frame:
+        frame["density_xyz"] = [float(v) for v in frame["density_xyz_flat"]]
 
     normalized_frames.append(frame)
 
@@ -432,6 +459,10 @@ def _normalize_engine_export_payload(payload: dict) -> dict:
   out.setdefault("z_max", float(first.get("z_max", 1.0)))
   out.setdefault("boundary", first.get("boundary", out.get("boundary", "periodic")))
   out.setdefault("potential_type", first.get("potential_kind", out.get("potential_type", "none")))
+  # Propagate feature flags derived from the normalized frames
+  out["has_phase"] = bool(out.get("has_phase")) or any("phase" in f or "phase_xy" in f for f in normalized_frames)
+  out["has_dirac"] = bool(out.get("has_dirac")) or any("dirac_s0" in f for f in normalized_frames)
+  out["has_volume_grid"] = bool(out.get("has_volume_grid")) or any("density_xyz" in f for f in normalized_frames)
   return out
 
 
@@ -919,6 +950,7 @@ def _spatial_wavepacket_2d_frames(
         {
             "t": t,
             "density": dens.tolist(),
+            "phase": np.angle(psi).tolist(),
             "exp_x": exp_x,
             "exp_y": exp_y,
         }
@@ -941,33 +973,54 @@ def _spatial_wavepacket_2d_frames(
       "potential_type": potential_type,
       "frames": frames,
       "dens_max": dens_max,
+      "has_phase": True,
       "source": source,
   }
 
 
 def _spatial_wavepacket_2d_page(data: dict) -> str:
-  """Render the 2D spatial wavepacket heatmap animation page."""
+  """Render the 2D spatial wavepacket heatmap animation page with phase toggle and colorbar."""
   payload = json.dumps(data, ensure_ascii=False)
+  has_phase = bool(data.get("has_phase"))
   return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <title>QuantX Animation - 2D Spatial Wavepacket ({data.get("potential_type","barrier")})</title>
   <style>
-    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; }}
-    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 8px; }}
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; background: #f8f8f8; }}
+    h1 {{ font-size: 18px; margin-bottom: 4px; }}
+    .row {{ display: flex; gap: 12px; align-items: flex-start; margin-top: 8px; }}
+    .cv-wrap {{ position: relative; }}
+    canvas#cv {{ border: 1px solid #aaa; display: block; }}
+    canvas#colorbar {{ border: 1px solid #aaa; display: block; cursor: default; }}
+    .cb-labels {{ display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; color: #555; height: 400px; padding: 2px 0; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }}
     button {{ padding: 4px 10px; }}
+    select {{ padding: 3px 6px; }}
+    label {{ font-size: 13px; }}
   </style>
 </head>
 <body>
   <h1>QuantX Animation - 2D Spatial Wavepacket ({data.get("potential_type","barrier")})</h1>
-  <p>Numerical 2D Schrodinger evolution (split-step Fourier): heatmap of |psi(x,y,t)|^2 with center-of-mass marker and <b>data source:</b> {data.get("source","python-reference")}.</p>
-  <canvas id="cv" width="640" height="640" style="border:1px solid #ccc"></canvas>
+  <p style="font-size:13px;color:#555">Split-step Fourier: |ψ(x,y,t)|² heatmap. Source: <b>{data.get("source","python-reference")}</b>.</p>
   <div class="controls">
     <button id="play">Play</button>
     <button id="pause">Pause</button>
-    <input id="slider" type="range" min="1" step="1" style="width:520px"/>
-    <span id="label"></span>
+    <input id="slider" type="range" min="1" step="1" style="width:400px"/>
+    <span id="label" style="font-size:13px"></span>
+    {"<label>Color: <select id='colorMode'><option value='density'>Density |ψ|²</option><option value='phase'>Phase arg(ψ)</option></select></label>" if has_phase else ""}
+  </div>
+  <div class="row">
+    <div class="cv-wrap">
+      <canvas id="cv" width="512" height="512"></canvas>
+    </div>
+    <div>
+      <canvas id="colorbar" width="28" height="400"></canvas>
+    </div>
+    <div class="cb-labels" id="cbLabels">
+      <span>max</span><span></span><span>0</span>
+    </div>
   </div>
   <script>
   const DATA = {payload};
@@ -975,34 +1028,60 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
   const ctx = cv.getContext("2d");
   const slider = document.getElementById("slider");
   const label = document.getElementById("label");
-  const play = document.getElementById("play");
-  const pause = document.getElementById("pause");
+  const cbCanvas = document.getElementById("colorbar");
+  const cbCtx = cbCanvas.getContext("2d");
+  const cbLabels = document.getElementById("cbLabels");
   slider.max = String(DATA.frames.length);
   slider.value = "1";
 
-  function colorMap(v) {{
+  function colorMapDensity(v) {{
     const t = Math.max(0, Math.min(1, v));
-    const r = Math.floor(255 * Math.sqrt(t));
-    const g = Math.floor(255 * (t * t));
-    const b = Math.floor(255 * (1 - t));
-    return [r, g, b, 255];
+    return [Math.floor(255*Math.sqrt(t)), Math.floor(255*t*t), Math.floor(255*(1-t)), 255];
+  }}
+  function colorMapPhase(phi) {{
+    const h = ((phi + Math.PI) / (2*Math.PI)) * 360;
+    const s = 0.88, l = 0.52, a = s * Math.min(l, 1-l);
+    const f = n => Math.round(255*(l - a*Math.max(-1, Math.min((n+h/30)%12-3, 9-(n+h/30)%12, 1))));
+    return [f(0), f(8), f(4), 255];
+  }}
+
+  function drawColorbar(mode) {{
+    const h = cbCanvas.height;
+    for (let y = 0; y < h; y++) {{
+      const t = 1 - y/h;
+      const rgba = (mode === "phase") ? colorMapPhase((t*2-1)*Math.PI) : colorMapDensity(t);
+      cbCtx.fillStyle = `rgb(${{rgba[0]}},${{rgba[1]}},${{rgba[2]}})`;
+      cbCtx.fillRect(0, y, cbCanvas.width, 1);
+    }}
+    if (mode === "phase") {{
+      cbLabels.innerHTML = "<span>+π</span><span>0</span><span>−π</span>";
+    }} else {{
+      const densMax = Math.max(1e-12, DATA.dens_max||0);
+      cbLabels.innerHTML = `<span>${{densMax.toExponential(1)}}</span><span></span><span>0</span>`;
+    }}
   }}
 
   function render(frameIdx) {{
     const f = DATA.frames[frameIdx - 1];
-    const densMax = Math.max(1e-12, DATA.dens_max || 0, ...DATA.frames.flatMap(fr => fr.density.flat()));
+    const mode = document.getElementById("colorMode")?.value || "density";
+    const densMax = Math.max(1e-12, DATA.dens_max || 0);
     const ny = f.density.length;
     const nx = f.density[0].length;
     const img = ctx.createImageData(nx, ny);
     let p = 0;
-    for (let j = 0; j < ny; j++) {{
-      for (let i = 0; i < nx; i++) {{
-        const v = f.density[j][i] / densMax;
-        const c = colorMap(v);
-        img.data[p++] = c[0];
-        img.data[p++] = c[1];
-        img.data[p++] = c[2];
-        img.data[p++] = c[3];
+    if (mode === "phase" && f.phase && DATA.has_phase) {{
+      for (let j = 0; j < ny; j++) {{
+        for (let i = 0; i < nx; i++) {{
+          const c = colorMapPhase(f.phase[j][i]);
+          img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
+        }}
+      }}
+    }} else {{
+      for (let j = 0; j < ny; j++) {{
+        for (let i = 0; i < nx; i++) {{
+          const c = colorMapDensity(f.density[j][i] / densMax);
+          img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
+        }}
       }}
     }}
     const tmp = document.createElement("canvas");
@@ -1011,19 +1090,33 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(tmp, 0, 0, cv.width, cv.height);
 
+    // Center-of-mass marker
     const sx = x => (x - DATA.x_min) / (DATA.x_max - DATA.x_min) * cv.width;
     const sy = y => cv.height - (y - DATA.y_min) / (DATA.y_max - DATA.y_min) * cv.height;
     ctx.beginPath();
-    ctx.arc(sx(f.exp_x), sy(f.exp_y), 6, 0, Math.PI * 2);
-    ctx.fillStyle = "#ffffff";
-    ctx.strokeStyle = "#000000";
+    ctx.arc(sx(f.exp_x), sy(f.exp_y), 6, 0, Math.PI*2);
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#000";
     ctx.lineWidth = 2;
     ctx.fill();
     ctx.stroke();
 
+    // Axis tick labels
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.font = "11px sans-serif";
+    ctx.fillText(DATA.x_min.toFixed(1), 3, cv.height-4);
+    ctx.fillText(DATA.x_max.toFixed(1), cv.width-28, cv.height-4);
+    ctx.save(); ctx.translate(12, cv.height/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText(`y:[${DATA.y_min.toFixed(1)},${DATA.y_max.toFixed(1)}]`, -40, 0);
+    ctx.restore();
+
     label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
     slider.value = String(frameIdx);
+    drawColorbar(mode);
   }}
+
+  const colorModeEl = document.getElementById("colorMode");
+  if (colorModeEl) colorModeEl.onchange = () => render(Number(slider.value));
 
   let timer = null;
   function doPlay() {{
@@ -1039,13 +1132,145 @@ def _spatial_wavepacket_2d_page(data: dict) -> str:
     clearInterval(timer);
     timer = null;
   }}
-  play.onclick = doPlay;
-  pause.onclick = doPause;
+  document.getElementById("play").onclick = doPlay;
+  document.getElementById("pause").onclick = doPause;
   slider.oninput = () => render(Number(slider.value));
   render(1);
   </script>
 </body>
 </html>"""
+
+
+def _spatial_wavepacket_2d_dirac_frames(
+    samples_t: int,
+    nx: int,
+    ny: int,
+    potential_type: str,
+    mass: float = 1.0,
+    source: str = "python-reference",
+) -> dict:
+  """Build a 2D (2+1D) Dirac spinor reference solution using split-step Fourier.
+
+  Two-component spinor: (ψ₀ up, ψ₁ down).  Algorithm matches continuous2d_backend.cpp
+  evolve_dirac(): V/2 → T_Dirac(k-space) → V/2.
+  """
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("Dirac 2D visualization requires numpy") from ex
+
+  x_min, x_max = -8.0, 8.0
+  y_min, y_max = -8.0, 8.0
+  t_min, t_max = 0.0, 3.0
+  nx = max(32, nx)
+  ny = max(32, ny)
+  nt = max(16, samples_t)
+
+  xs = np.linspace(x_min, x_max, nx)
+  ys = np.linspace(y_min, y_max, ny)
+  dx = float(xs[1] - xs[0])
+  dy = float(ys[1] - ys[0])
+  dt = (t_max - t_min) / max(1, nt - 1)
+
+  X, Y = np.meshgrid(xs, ys, indexing="xy")  # shape: (ny, nx)
+
+  # Initial state: Gaussian wavepacket in ψ₀, zero in ψ₁
+  x0, y0, sigma = -4.5, -2.0, 0.7
+  kx0, ky0 = 2.2, 1.1
+  envelope = np.exp(-((X - x0) ** 2 + (Y - y0) ** 2) / (4.0 * sigma ** 2))
+  phase_init = np.exp(1j * (kx0 * X + ky0 * Y))
+  psi0 = (envelope * phase_init).astype(complex)
+  psi1 = np.zeros_like(psi0)
+
+  nrm = float(np.sum(np.abs(psi0) ** 2) * dx * dy)
+  if nrm > 0:
+    psi0 /= math.sqrt(nrm)
+
+  # Potential (same profiles as _spatial_wavepacket_2d_frames)
+  if potential_type == "free":
+    V = np.zeros_like(X)
+  elif potential_type == "harmonic":
+    V = 0.5 * (0.28 ** 2) * (X * X + Y * Y)
+  elif potential_type == "well":
+    V = np.where((np.abs(X) <= 6.0) & (np.abs(Y) <= 6.0), 0.0, 5.0)
+  else:  # barrier
+    V = 0.9 * np.exp(-(X * X) / (2.0 * 0.6 ** 2))
+
+  potential_half = np.exp(-1j * V * (dt * 0.5))
+
+  # Kinetic step: precompute Dirac unitary matrices in k-space
+  kx = 2.0 * np.pi * np.fft.fftfreq(nx, d=dx)
+  ky = 2.0 * np.pi * np.fft.fftfreq(ny, d=dy)
+  KX, KY = np.meshgrid(kx, ky, indexing="xy")  # shape: (ny, nx)
+  omega = np.sqrt(KX ** 2 + KY ** 2 + mass ** 2)
+  cos_wdt = np.cos(omega * dt)
+  sin_wdt_ov_w = np.where(omega > 1e-14, np.sin(omega * dt) / omega, dt * np.ones_like(omega))
+  # U₀₀ = cos - i·sin/ω·m,  U₀₁ = -sin/ω·(ky + i·kx)
+  # U₁₀ = -sin/ω·(-ky + i·kx), U₁₁ = cos + i·sin/ω·m
+  # Matches continuous2d_backend.cpp apply_full_kinetic_dirac_2d() matrix elements
+  s = sin_wdt_ov_w
+  u00 = cos_wdt - 1j * s * mass
+  u01 = -s * KY - 1j * s * KX
+  u10 = s * KY - 1j * s * KX
+  u11 = cos_wdt + 1j * s * mass
+
+  def apply_kinetic_dirac(p0: np.ndarray, p1: np.ndarray):
+    p0k = np.fft.fft2(p0)
+    p1k = np.fft.fft2(p1)
+    return np.fft.ifft2(u00 * p0k + u01 * p1k), np.fft.ifft2(u10 * p0k + u11 * p1k)
+
+  frames = []
+  dens_max = 1e-12
+
+  for it in range(nt):
+    t = t_min + (t_max - t_min) * it / max(1, nt - 1)
+    dens0 = np.abs(psi0) ** 2
+    dens1 = np.abs(psi1) ** 2
+    density = dens0 + dens1
+    dens_max = max(dens_max, float(np.max(density)))
+    exp_x = float(np.sum(X * density) * dx * dy)
+    exp_y = float(np.sum(Y * density) * dx * dy)
+    frames.append({
+        "t": t,
+        "density": density.tolist(),
+        "phase": np.angle(psi0).tolist(),
+        "dirac_s0": dens0.tolist(),
+        "dirac_s1": dens1.tolist(),
+        "spin_x": (2.0 * np.real(np.conj(psi0) * psi1)).tolist(),
+        "spin_y": (2.0 * np.imag(np.conj(psi0) * psi1)).tolist(),
+        "spin_z": (dens0 - dens1).tolist(),
+        "exp_x": exp_x,
+        "exp_y": exp_y,
+    })
+    if it == nt - 1:
+      break
+
+    # Strang splitting: V/2 → T_Dirac → V/2
+    psi0 = potential_half * psi0
+    psi1 = potential_half * psi1
+    psi0, psi1 = apply_kinetic_dirac(psi0, psi1)
+    psi0 = potential_half * psi0
+    psi1 = potential_half * psi1
+    # Renormalise total spinor
+    nrm = float(np.sum(np.abs(psi0) ** 2 + np.abs(psi1) ** 2) * dx * dy)
+    if nrm > 0:
+      inv_sqrt = 1.0 / math.sqrt(nrm)
+      psi0 *= inv_sqrt
+      psi1 *= inv_sqrt
+
+  return {
+      "x_min": x_min,
+      "x_max": x_max,
+      "y_min": y_min,
+      "y_max": y_max,
+      "potential_type": potential_type,
+      "mass": mass,
+      "frames": frames,
+      "dens_max": dens_max,
+      "has_phase": True,
+      "has_dirac": True,
+      "source": source,
+  }
 
 
 def _spatial_wavepacket_3d_frames(
@@ -1186,12 +1411,15 @@ def _spatial_wavepacket_3d_frames(
     exp_x = float(np.sum(X * dens) * dx * dy * dz)
     exp_y = float(np.sum(Y * dens) * dx * dy * dz)
     exp_z = float(np.sum(Z * dens) * dx * dy * dz)
-    frames.append(
-        {
+    psi_phase = np.angle(psi)
+    frame_entry: dict = {
             "t": t,
             "xy": dens[:, :, z_mid].tolist(),
             "xz": dens[:, y_mid, :].tolist(),
             "yz": dens[x_mid, :, :].tolist(),
+            "phase_xy": psi_phase[:, :, z_mid].tolist(),
+            "phase_xz": psi_phase[:, y_mid, :].tolist(),
+            "phase_yz": psi_phase[x_mid, :, :].tolist(),
             "exp_x": exp_x,
             "exp_y": exp_y,
             "exp_z": exp_z,
@@ -1199,8 +1427,10 @@ def _spatial_wavepacket_3d_frames(
             "points": points,
             "point_vmax": point_vmax,
             "point_count": len(points),
-        }
-    )
+    }
+    if nx * ny * nz <= 131072:
+      frame_entry["density_xyz"] = dens.ravel(order="C").tolist()
+    frames.append(frame_entry)
     if it == nt - 1:
       break
 
@@ -1222,10 +1452,15 @@ def _spatial_wavepacket_3d_frames(
       "y_max": y_max,
       "z_min": z_min,
       "z_max": z_max,
+      "nx": nx,
+      "ny": ny,
+      "nz": nz,
       "potential_type": potential_type,
       "boundary": boundary,
       "frames": frames,
       "dens_max": dens_max,
+      "has_phase": True,
+      "has_volume_grid": nx * ny * nz <= 131072,
       "volume_point_fields": ["x", "y", "z", "density"],
       "volume_points_max_per_frame": points_max_per_frame,
       "volume_points_density_floor_ratio": points_density_floor_ratio,
@@ -1234,36 +1469,52 @@ def _spatial_wavepacket_3d_frames(
 
 
 def _spatial_wavepacket_3d_page(data: dict) -> str:
-  """Render the 3D slice-based spatial wavepacket animation page."""
+  """Render the 3D slice-based spatial wavepacket animation page with phase toggle and colorbar."""
   payload = json.dumps(data, ensure_ascii=False)
+  has_phase = bool(data.get("has_phase"))
   return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <title>QuantX Animation - 3D Spatial Wavepacket ({data.get("potential_type","barrier")}, {data.get("boundary","periodic")})</title>
   <style>
-    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; }}
-    .grid {{ display: grid; grid-template-columns: repeat(3, minmax(260px, 1fr)); gap: 16px; }}
-    .panel {{ border: 1px solid #ccc; border-radius: 8px; padding: 10px; }}
-    canvas {{ width: 100%; max-width: 360px; aspect-ratio: 1/1; border: 1px solid #bbb; }}
-    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 12px; }}
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; background: #f8f8f8; }}
+    h1 {{ font-size: 18px; margin-bottom: 4px; }}
+    .row {{ display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }}
+    .grid {{ display: grid; grid-template-columns: repeat(3, minmax(220px, 1fr)); gap: 12px; }}
+    .panel {{ border: 1px solid #ccc; border-radius: 8px; padding: 8px; background: #fff; }}
+    .panel h3 {{ margin: 0 0 6px; font-size: 13px; }}
+    canvas.slice {{ width: 100%; aspect-ratio: 1/1; border: 1px solid #bbb; display: block; }}
+    canvas#colorbar {{ border: 1px solid #aaa; display: block; }}
+    .cb-labels {{ display: flex; flex-direction: column; justify-content: space-between; font-size: 11px; color: #555; height: 280px; padding: 2px 0; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }}
     button {{ padding: 4px 10px; }}
-    .meta {{ margin-top: 8px; font-size: 13px; color: #333; }}
+    select {{ padding: 3px 6px; }}
+    .meta {{ margin-top: 8px; font-size: 12px; color: #444; }}
   </style>
 </head>
 <body>
   <h1>QuantX Animation - 3D Spatial Wavepacket</h1>
-  <p>Numerical 3D Schrodinger evolution (split-step Fourier). Panels show orthogonal slices of <code>|psi(x,y,z,t)|^2</code>: XY(z=0), XZ(y=0), YZ(x=0). Data source: <b>{data.get("source","python-reference")}</b>.</p>
-  <div class="grid">
-    <div class="panel"><h3>XY Slice</h3><canvas id="cv_xy" width="280" height="280"></canvas></div>
-    <div class="panel"><h3>XZ Slice</h3><canvas id="cv_xz" width="280" height="280"></canvas></div>
-    <div class="panel"><h3>YZ Slice</h3><canvas id="cv_yz" width="280" height="280"></canvas></div>
-  </div>
+  <p style="font-size:13px;color:#555">Split-step Fourier. Orthogonal midplane slices of |ψ|². Source: <b>{data.get("source","python-reference")}</b>.</p>
   <div class="controls">
     <button id="play">Play</button>
     <button id="pause">Pause</button>
-    <input id="slider" type="range" min="1" step="1" style="width:520px"/>
-    <span id="label"></span>
+    <input id="slider" type="range" min="1" step="1" style="width:400px"/>
+    <span id="label" style="font-size:13px"></span>
+    {"<label>Color: <select id='colorMode'><option value='density'>Density |ψ|²</option><option value='phase'>Phase arg(ψ)</option></select></label>" if has_phase else ""}
+  </div>
+  <div class="row">
+    <div class="grid">
+      <div class="panel"><h3>XY (z-mid)</h3><canvas class="slice" id="cv_xy" width="240" height="240"></canvas></div>
+      <div class="panel"><h3>XZ (y-mid)</h3><canvas class="slice" id="cv_xz" width="240" height="240"></canvas></div>
+      <div class="panel"><h3>YZ (x-mid)</h3><canvas class="slice" id="cv_yz" width="240" height="240"></canvas></div>
+    </div>
+    <div>
+      <canvas id="colorbar" width="26" height="280"></canvas>
+    </div>
+    <div class="cb-labels" id="cbLabels">
+      <span>max</span><span></span><span>0</span>
+    </div>
   </div>
   <div id="meta" class="meta"></div>
   <script>
@@ -1271,41 +1522,64 @@ def _spatial_wavepacket_3d_page(data: dict) -> str:
   const slider = document.getElementById("slider");
   const label = document.getElementById("label");
   const meta = document.getElementById("meta");
-  const play = document.getElementById("play");
-  const pause = document.getElementById("pause");
+  const cbCanvas = document.getElementById("colorbar");
+  const cbCtx = cbCanvas.getContext("2d");
+  const cbLabels = document.getElementById("cbLabels");
   const ctxXY = document.getElementById("cv_xy").getContext("2d");
   const ctxXZ = document.getElementById("cv_xz").getContext("2d");
   const ctxYZ = document.getElementById("cv_yz").getContext("2d");
   slider.max = String(DATA.frames.length);
   slider.value = "1";
 
-  function colorMap(v) {{
+  function colorMapDensity(v) {{
     const t = Math.max(0, Math.min(1, v));
-    const r = Math.floor(255 * Math.pow(t, 0.55));
-    const g = Math.floor(255 * t * t);
-    const b = Math.floor(255 * (1 - t));
-    return [r, g, b, 255];
+    return [Math.floor(255*Math.pow(t,0.55)), Math.floor(255*t*t), Math.floor(255*(1-t)), 255];
+  }}
+  function colorMapPhase(phi) {{
+    const h = ((phi + Math.PI) / (2*Math.PI)) * 360;
+    const s = 0.88, l = 0.52, a = s * Math.min(l, 1-l);
+    const f = n => Math.round(255*(l - a*Math.max(-1, Math.min((n+h/30)%12-3, 9-(n+h/30)%12, 1))));
+    return [f(0), f(8), f(4), 255];
   }}
 
-  function drawSlice(ctx, arr2d) {{
-    const nx = arr2d.length;
-    const ny = arr2d[0].length;
-    const img = ctx.createImageData(nx, ny);
-    const densMax = Math.max(1e-12, DATA.dens_max || 0, ...DATA.frames.flatMap(fr => fr.xy.flat()));
+  function drawColorbar(mode) {{
+    const h = cbCanvas.height;
+    for (let y = 0; y < h; y++) {{
+      const t = 1 - y/h;
+      const rgba = (mode === "phase") ? colorMapPhase((t*2-1)*Math.PI) : colorMapDensity(t);
+      cbCtx.fillStyle = `rgb(${{rgba[0]}},${{rgba[1]}},${{rgba[2]}})`;
+      cbCtx.fillRect(0, y, cbCanvas.width, 1);
+    }}
+    if (mode === "phase") {{
+      cbLabels.innerHTML = "<span>+π</span><span>0</span><span>−π</span>";
+    }} else {{
+      cbLabels.innerHTML = `<span>${{(DATA.dens_max||0).toExponential(1)}}</span><span></span><span>0</span>`;
+    }}
+  }}
+
+  function drawSlice(ctx, densArr, phaseArr, mode) {{
+    const rows = densArr.length;
+    const cols = densArr[0].length;
+    const img = ctx.createImageData(cols, rows);
+    const densMax = Math.max(1e-12, DATA.dens_max || 0);
     let p = 0;
-    for (let j = 0; j < ny; j++) {{
-      for (let i = 0; i < nx; i++) {{
-        const v = arr2d[i][j] / densMax;
-        const c = colorMap(v);
-        img.data[p++] = c[0];
-        img.data[p++] = c[1];
-        img.data[p++] = c[2];
-        img.data[p++] = c[3];
+    if (mode === "phase" && phaseArr && DATA.has_phase) {{
+      for (let j = 0; j < rows; j++) {{
+        for (let i = 0; i < cols; i++) {{
+          const c = colorMapPhase(phaseArr[j][i]);
+          img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
+        }}
+      }}
+    }} else {{
+      for (let j = 0; j < rows; j++) {{
+        for (let i = 0; i < cols; i++) {{
+          const c = colorMapDensity(densArr[j][i] / densMax);
+          img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
+        }}
       }}
     }}
     const tmp = document.createElement("canvas");
-    tmp.width = nx;
-    tmp.height = ny;
+    tmp.width = cols; tmp.height = rows;
     tmp.getContext("2d").putImageData(img, 0, 0);
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.drawImage(tmp, 0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -1313,13 +1587,18 @@ def _spatial_wavepacket_3d_page(data: dict) -> str:
 
   function render(frameIdx) {{
     const f = DATA.frames[frameIdx - 1];
-    drawSlice(ctxXY, f.xy);
-    drawSlice(ctxXZ, f.xz);
-    drawSlice(ctxYZ, f.yz);
+    const mode = document.getElementById("colorMode")?.value || "density";
+    drawSlice(ctxXY, f.xy, f.phase_xy, mode);
+    drawSlice(ctxXZ, f.xz, f.phase_xz, mode);
+    drawSlice(ctxYZ, f.yz, f.phase_yz, mode);
     label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
-    meta.textContent = `boundary=${{DATA.boundary}}, potential=${{DATA.potential_type}}, norm=${{f.norm.toFixed(6)}}, <x,y,z>=(${{f.exp_x.toFixed(3)}}, ${{f.exp_y.toFixed(3)}}, ${{f.exp_z.toFixed(3)}})`;
+    meta.textContent = `boundary=${{DATA.boundary}}, potential=${{DATA.potential_type}}, norm=${{(f.norm||0).toFixed(6)}}, <x,y,z>=(${{(f.exp_x||0).toFixed(3)}}, ${{(f.exp_y||0).toFixed(3)}}, ${{(f.exp_z||0).toFixed(3)}})`;
     slider.value = String(frameIdx);
+    drawColorbar(mode);
   }}
+
+  const colorModeEl = document.getElementById("colorMode");
+  if (colorModeEl) colorModeEl.onchange = () => render(Number(slider.value));
 
   let timer = null;
   function doPlay() {{
@@ -1335,8 +1614,216 @@ def _spatial_wavepacket_3d_page(data: dict) -> str:
     clearInterval(timer);
     timer = null;
   }}
-  play.onclick = doPlay;
-  pause.onclick = doPause;
+  document.getElementById("play").onclick = doPlay;
+  document.getElementById("pause").onclick = doPause;
+  slider.oninput = () => render(Number(slider.value));
+  render(1);
+  </script>
+</body>
+</html>"""
+
+
+def _dirac_spinor_page(data: dict) -> str:
+  """Render the Dirac spinor 2D visualization: 4-component panels + spin current arrows."""
+  payload = json.dumps(data, ensure_ascii=False)
+  return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>QuantX Animation - 2D Dirac Spinor ({data.get("potential_type","barrier")})</title>
+  <style>
+    body {{ font-family: Segoe UI, Arial, sans-serif; margin: 20px; background: #f4f6f8; }}
+    h1 {{ font-size: 18px; margin-bottom: 4px; }}
+    .grid2x2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; max-width: 1100px; }}
+    .panel {{ background: #fff; border: 1px solid #ccc; border-radius: 8px; padding: 8px; }}
+    .panel h3 {{ margin: 0 0 5px; font-size: 13px; color: #333; }}
+    .cv-wrap {{ position: relative; display: inline-block; }}
+    canvas.hm {{ display: block; border: 1px solid #bbb; }}
+    svg.arrows {{ position: absolute; top: 0; left: 0; pointer-events: none; }}
+    .row-ctrl {{ display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }}
+    .colorbar-row {{ display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 11px; color: #555; }}
+    canvas.cb {{ border: 1px solid #aaa; }}
+    .controls {{ display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }}
+    button {{ padding: 4px 10px; }}
+    select {{ padding: 3px 6px; font-size: 12px; }}
+    .meta {{ margin-top: 8px; font-size: 12px; color: #444; }}
+  </style>
+</head>
+<body>
+  <h1>QuantX Animation - 2D Dirac Spinor ({data.get("potential_type","barrier")})</h1>
+  <p style="font-size:13px;color:#555">Split-step Fourier Dirac solver (m={data.get("mass",1.0):.2f}). Source: <b>{data.get("source","python-reference")}</b>.</p>
+  <div class="controls">
+    <button id="play">Play</button>
+    <button id="pause">Pause</button>
+    <input id="slider" type="range" min="1" step="1" style="width:380px"/>
+    <span id="label" style="font-size:13px"></span>
+  </div>
+  <div class="grid2x2" style="margin-top:10px">
+    <div class="panel">
+      <h3>ψ₀ density |ψ₀|²  (up spinor)</h3>
+      <div class="cv-wrap"><canvas class="hm" id="cv_s0" width="340" height="340"></canvas></div>
+      <div class="colorbar-row"><canvas class="cb" id="cb_s0" width="200" height="12"></canvas><span id="cbl_s0"></span></div>
+    </div>
+    <div class="panel">
+      <h3>ψ₁ density |ψ₁|²  (down spinor)</h3>
+      <div class="cv-wrap"><canvas class="hm" id="cv_s1" width="340" height="340"></canvas></div>
+      <div class="colorbar-row"><canvas class="cb" id="cb_s1" width="200" height="12"></canvas><span id="cbl_s1"></span></div>
+    </div>
+    <div class="panel">
+      <h3>Total density + phase arg(ψ₀)  <select id="totalMode"><option value="density">Density</option><option value="phase">Phase HSL</option></select></h3>
+      <div class="cv-wrap"><canvas class="hm" id="cv_tot" width="340" height="340"></canvas></div>
+      <div class="colorbar-row"><canvas class="cb" id="cb_tot" width="200" height="12"></canvas><span id="cbl_tot"></span></div>
+    </div>
+    <div class="panel">
+      <h3>Spin-z density + current arrows</h3>
+      <div class="cv-wrap">
+        <canvas class="hm" id="cv_spin" width="340" height="340"></canvas>
+        <svg class="arrows" id="svg_arrows" width="340" height="340"></svg>
+      </div>
+      <div class="colorbar-row"><span style="color:#2166ac">■ spin↓</span>&nbsp;&nbsp;<span style="color:#d6604d">■ spin↑</span>&nbsp;arrows = spin current (J<sub>x</sub>,J<sub>y</sub>)</div>
+    </div>
+  </div>
+  <div id="meta" class="meta"></div>
+  <script>
+  const DATA = {payload};
+  const slider = document.getElementById("slider");
+  const label = document.getElementById("label");
+  const meta = document.getElementById("meta");
+  slider.max = String(DATA.frames.length);
+  slider.value = "1";
+
+  function colorMapDensity(v) {{
+    const t = Math.max(0, Math.min(1, v));
+    return [Math.floor(255*Math.sqrt(t)), Math.floor(255*t*t), Math.floor(255*(1-t)), 255];
+  }}
+  function colorMapPhase(phi) {{
+    const h = ((phi + Math.PI) / (2*Math.PI)) * 360;
+    const s = 0.88, l = 0.52, a = s * Math.min(l, 1-l);
+    const f = n => Math.round(255*(l - a*Math.max(-1, Math.min((n+h/30)%12-3, 9-(n+h/30)%12, 1))));
+    return [f(0), f(8), f(4), 255];
+  }}
+  // Blue (-1) to white (0) to red (+1) for spin-z
+  function colorMapSpinZ(v) {{
+    const t = Math.max(-1, Math.min(1, v));
+    if (t < 0) {{
+      const s = -t;
+      return [Math.round(255*(1-s*0.66)), Math.round(255*(1-s*0.58)), 255, 255];
+    }}
+    return [255, Math.round(255*(1-t*0.62)), Math.round(255*(1-t*0.69)), 255];
+  }}
+
+  function drawHeatmap(canvasId, arr2d, colorFn) {{
+    const cv = document.getElementById(canvasId);
+    const ctx = cv.getContext("2d");
+    const ny = arr2d.length, nx = arr2d[0].length;
+    const img = ctx.createImageData(nx, ny);
+    let p = 0;
+    for (let j = 0; j < ny; j++) {{
+      for (let i = 0; i < nx; i++) {{
+        const c = colorFn(arr2d[j][i]);
+        img.data[p++]=c[0]; img.data[p++]=c[1]; img.data[p++]=c[2]; img.data[p++]=c[3];
+      }}
+    }}
+    const tmp = document.createElement("canvas");
+    tmp.width = nx; tmp.height = ny;
+    tmp.getContext("2d").putImageData(img, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(tmp, 0, 0, cv.width, cv.height);
+  }}
+
+  function drawColorbarH(canvasId, labelId, mode, maxVal) {{
+    const cv = document.getElementById(canvasId);
+    const ctx = cv.getContext("2d");
+    const w = cv.width;
+    for (let x = 0; x < w; x++) {{
+      const t = x / w;
+      let rgba;
+      if (mode === "phase") rgba = colorMapPhase((t*2-1)*Math.PI);
+      else if (mode === "spinz") rgba = colorMapSpinZ(t*2-1);
+      else rgba = colorMapDensity(t);
+      ctx.fillStyle = `rgb(${{rgba[0]}},${{rgba[1]}},${{rgba[2]}})`;
+      ctx.fillRect(x, 0, 1, cv.height);
+    }}
+    const lbl = document.getElementById(labelId);
+    if (mode === "phase") lbl.textContent = " −π → +π";
+    else if (mode === "spinz") lbl.textContent = " −1 → 0 → +1";
+    else lbl.textContent = ` 0 → ${{(maxVal||0).toExponential(2)}}`;
+  }}
+
+  function drawSpinArrows(f) {{
+    const svg = document.getElementById("svg_arrows");
+    const W = 340, H = 340;
+    svg.setAttribute("width", W); svg.setAttribute("height", H);
+    svg.innerHTML = "";
+    const ny = f.spin_x.length, nx = f.spin_x[0].length;
+    const step = Math.max(4, Math.floor(Math.min(nx, ny) / 18));
+    const scaleX = W / nx, scaleY = H / ny;
+    const arrowLen = Math.min(scaleX, scaleY) * step * 0.7;
+    for (let j = step; j < ny - step; j += step) {{
+      for (let i = step; i < nx - step; i += step) {{
+        const jx = f.spin_x[j][i], jy = f.spin_y[j][i], sz = f.spin_z[j][i];
+        const mag = Math.sqrt(jx*jx + jy*jy);
+        if (mag < 1e-10) continue;
+        const px = (i + 0.5) * scaleX, py = (j + 0.5) * scaleY;
+        const dx = (jx/mag) * arrowLen * Math.min(1, mag*3);
+        const dy = (jy/mag) * arrowLen * Math.min(1, mag*3);
+        const col = sz > 0 ? `hsl(0,80%,${{40+Math.abs(sz)*20|0}}%)` : `hsl(220,80%,${{40+Math.abs(sz)*20|0}}%)`;
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", px); line.setAttribute("y1", py);
+        line.setAttribute("x2", px+dx); line.setAttribute("y2", py+dy);
+        line.setAttribute("stroke", col);
+        line.setAttribute("stroke-width", "1.5");
+        line.setAttribute("stroke-linecap", "round");
+        svg.appendChild(line);
+      }}
+    }}
+  }}
+
+  function render(frameIdx) {{
+    const f = DATA.frames[frameIdx - 1];
+    const densMax = Math.max(1e-12, DATA.dens_max||0);
+    const totalMode = document.getElementById("totalMode").value;
+
+    // Panel 1: |ψ₀|²
+    drawHeatmap("cv_s0", f.dirac_s0, v => colorMapDensity(v/densMax));
+    drawColorbarH("cb_s0", "cbl_s0", "density", densMax);
+
+    // Panel 2: |ψ₁|²
+    drawHeatmap("cv_s1", f.dirac_s1, v => colorMapDensity(v/densMax));
+    drawColorbarH("cb_s1", "cbl_s1", "density", densMax);
+
+    // Panel 3: total density or phase
+    if (totalMode === "phase") {{
+      drawHeatmap("cv_tot", f.phase, colorMapPhase);
+      drawColorbarH("cb_tot", "cbl_tot", "phase", 0);
+    }} else {{
+      drawHeatmap("cv_tot", f.density, v => colorMapDensity(v/densMax));
+      drawColorbarH("cb_tot", "cbl_tot", "density", densMax);
+    }}
+
+    // Panel 4: spin-z + arrows
+    drawHeatmap("cv_spin", f.spin_z, colorMapSpinZ);
+    drawSpinArrows(f);
+    drawColorbarH("cb_spin"||"cb_tot", "cbl_spin"||"cbl_tot", "spinz", 0);
+
+    label.textContent = `frame ${{frameIdx}}/${{DATA.frames.length}}, t=${{f.t.toFixed(3)}}`;
+    meta.textContent = `potential=${{DATA.potential_type}}, mass=${{DATA.mass||1}}, <x,y>=(${{f.exp_x.toFixed(3)}},${{f.exp_y.toFixed(3)}})`;
+    slider.value = String(frameIdx);
+  }}
+
+  document.getElementById("totalMode").onchange = () => render(Number(slider.value));
+  let timer = null;
+  function doPlay() {{
+    if (timer) return;
+    timer = setInterval(() => {{
+      let f = Number(slider.value);
+      f = f >= DATA.frames.length ? 1 : f + 1;
+      render(f);
+    }}, 90);
+  }}
+  function doPause() {{ if (!timer) return; clearInterval(timer); timer = null; }}
+  document.getElementById("play").onclick = doPlay;
+  document.getElementById("pause").onclick = doPause;
   slider.oninput = () => render(Number(slider.value));
   render(1);
   </script>
@@ -1396,7 +1883,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -1419,6 +1906,8 @@ def main() -> int:
   parser.add_argument("--spatial3d-boundary", choices=["periodic", "absorbing", "dirichlet"], default="periodic")
   parser.add_argument("--spatial3d-export-json", action="store_true")
   parser.add_argument("--spatial3d-json-path", default="")
+  parser.add_argument("--dirac2d-potential", choices=["barrier", "free", "harmonic", "well"], default="barrier")
+  parser.add_argument("--dirac2d-mass", type=float, default=1.0)
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -1436,7 +1925,7 @@ def main() -> int:
   root = Path(__file__).resolve().parents[1]
   out_dir = root / args.out_dir
   out_dir.mkdir(parents=True, exist_ok=True)
-  engine = _make_engine(root) if args.scenario in {"rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"} or args.solver_mode != "python" else None
+  engine = _make_engine(root) if args.scenario in {"rabi", "mps", "spatial", "spatial2d", "spatial3d", "all"} or args.solver_mode not in {"python", None} else None
   generated = []
   export_json_path = root / args.continuous_export_json if args.continuous_export_json else None
 
@@ -1542,6 +2031,18 @@ def main() -> int:
       json_path.parent.mkdir(parents=True, exist_ok=True)
       json_path.write_text(json.dumps(spatial3d, ensure_ascii=False), encoding="utf-8")
       generated.append(json_path)
+
+  if args.scenario in {"dirac2d", "all"}:
+    dirac2d_data = _spatial_wavepacket_2d_dirac_frames(
+        args.samples_spatial2d_t,
+        args.samples_spatial2d_x,
+        args.samples_spatial2d_y,
+        args.dirac2d_potential,
+        args.dirac2d_mass,
+    )
+    path = out_dir / f"quantum_dirac2d_{args.dirac2d_potential}.html"
+    path.write_text(_dirac_spinor_page(dirac2d_data), encoding="utf-8")
+    generated.append(path)
 
   for p in generated:
     print(f"wrote visualization: {p}")
