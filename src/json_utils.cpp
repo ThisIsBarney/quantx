@@ -102,6 +102,22 @@ CircuitOp parse_circuit_op(const json& item) {
   return op;
 }
 
+// Parse the nested DrivingConfig payload if present.
+void parse_driving_config(const json& parent, DrivingConfig& out) {
+  auto it = parent.find("driving");
+  if (it == parent.end() || !it->is_object()) {
+    return;
+  }
+  const auto& d = *it;
+  out.type = get_or<std::string>(d, "type", out.type);
+  out.amplitude = get_or<double>(d, "amplitude", out.amplitude);
+  out.frequency = get_or<double>(d, "frequency", out.frequency);
+  out.phase = get_or<double>(d, "phase", out.phase);
+  out.t_center = get_or<double>(d, "t_center", out.t_center);
+  out.t_width = get_or<double>(d, "t_width", out.t_width);
+  out.spatial_profile = get_or<std::string>(d, "spatial_profile", out.spatial_profile);
+}
+
 // Parse the nested continuous initial-state payload if present.
 void parse_initial_state_config(const json& parent, ContinuousInitialStateConfig& out) {
   auto it = parent.find("initial_state");
@@ -313,6 +329,7 @@ json continuous_density_frame_to_json(const ContinuousDensityFrame& frame) {
       {"z_min", frame.z_min},
       {"z_max", frame.z_max},
       {"potential_kind", frame.potential_kind},
+      {"driving_amplitude", frame.driving_amplitude},
   };
   if (!frame.density_xy_flat.empty()) {
     out["density_xy_flat"] = frame.density_xy_flat;
@@ -437,6 +454,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
     p.continuous_2d.potential_params =
         get_or<std::map<std::string, double>>(c2d, "potential_params", p.continuous_2d.potential_params);
     p.continuous_2d.potential_grid = get_or<std::vector<double>>(c2d, "potential_grid", p.continuous_2d.potential_grid);
+    parse_driving_config(c2d, p.continuous_2d.driving);
     parse_initial_state_config(c2d, p.continuous_2d.initial_state);
     p.kind = ProblemKind::ContinuousSpace2D;
   }
@@ -460,6 +478,7 @@ QuantumProblem problem_from_json(const std::string& json_text) {
     p.continuous_3d.potential_params =
         get_or<std::map<std::string, double>>(c3d, "potential_params", p.continuous_3d.potential_params);
     p.continuous_3d.potential_grid = get_or<std::vector<double>>(c3d, "potential_grid", p.continuous_3d.potential_grid);
+    parse_driving_config(c3d, p.continuous_3d.driving);
     parse_initial_state_config(c3d, p.continuous_3d.initial_state);
     p.kind = ProblemKind::ContinuousSpace3D;
   }

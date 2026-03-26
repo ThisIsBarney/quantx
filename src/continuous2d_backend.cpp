@@ -99,6 +99,8 @@ class Continuous2DBackend final : public IBackend {
     speed_of_light_ = (c.speed_of_light > 0.0) ? c.speed_of_light : 1.0;
     equation_ = problem.equation;
     potential_kind_ = c.potential_kind;
+    driving_config_ = c.driving;
+    has_driving_ = (c.driving.type != "none" && c.driving.amplitude != 0.0);
     completed_steps_ = 0;
     export_frame_payloads_ = options.export_continuous_frames;
     export_frame_stride_ = std::max<std::uint32_t>(1U, options.export_frame_stride);
@@ -142,6 +144,22 @@ class Continuous2DBackend final : public IBackend {
       build_analytic_potential(c.potential_kind, c.potential_params);
     }
 
+    // Build spatial driving profile (precomputed once at initialization).
+    driving_spatial_.assign(n, 1.0);
+    if (has_driving_) {
+      const std::string& sp = driving_config_.spatial_profile;
+      if (sp == "dipole_x") {
+        for (std::uint32_t y = 0; y < ny_; ++y)
+          for (std::uint32_t x = 0; x < nx_; ++x)
+            driving_spatial_[idx(x, y)] = x_coord(x);
+      } else if (sp == "dipole_y") {
+        for (std::uint32_t y = 0; y < ny_; ++y)
+          for (std::uint32_t x = 0; x < nx_; ++x)
+            driving_spatial_[idx(x, y)] = y_coord(y);
+      }
+      // "uniform" or default: driving_spatial_ stays 1.0
+    }
+
     initialize_wavepacket(c.initial_state, c.potential_params);
     precompute_phases();
     if (equation_ == EquationType::KleinGordon) {
@@ -170,8 +188,13 @@ class Continuous2DBackend final : public IBackend {
       return;
     }
     for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
+      const double t = static_cast<double>(s) * dt_;
       apply_half_kinetic();
-      apply_potential();
+      if (has_driving_) {
+        apply_potential_driven(t + 0.5 * dt_);
+      } else {
+        apply_potential();
+      }
       apply_half_kinetic();
       if (boundary_ == "absorbing") {
         apply_absorbing_boundary();
@@ -189,6 +212,10 @@ class Continuous2DBackend final : public IBackend {
 
   void evolve_kg() {
     for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
+      const double t = static_cast<double>(s) * dt_;
+      if (has_driving_) {
+        recompute_kg_potential_phases(t);
+      }
       apply_half_potential_kg();
       apply_full_kinetic_kg();
       apply_half_potential_kg();
@@ -536,6 +563,7 @@ class Continuous2DBackend final : public IBackend {
     frame.z_min = 0.0;
     frame.z_max = 0.0;
     frame.potential_kind = potential_kind_;
+    frame.driving_amplitude = has_driving_ ? driving_envelope(frame.time) : 0.0;
     // Export the dense payload only on stride-aligned frames so the wrapper can sample
     // a stable subset without changing the full metadata timeline.
     if (export_frame_payloads_ && should_export_payload_frame()) {
@@ -684,9 +712,18 @@ class Continuous2DBackend final : public IBackend {
 
   void evolve_dirac() {
     for (std::uint32_t s = completed_steps_; s < steps_; ++s) {
-      apply_half_potential_dirac();
+      const double t = static_cast<double>(s) * dt_;
+      if (has_driving_) {
+        apply_half_potential_dirac_driven(t);
+      } else {
+        apply_half_potential_dirac();
+      }
       apply_full_kinetic_dirac_2d();
-      apply_half_potential_dirac();
+      if (has_driving_) {
+        apply_half_potential_dirac_driven(t + dt_);
+      } else {
+        apply_half_potential_dirac();
+      }
       if (boundary_ == "absorbing") {
         apply_absorbing_boundary();
         for (std::size_t i = 0; i < dirac_s1_.size(); ++i) {
@@ -706,6 +743,62 @@ class Continuous2DBackend final : public IBackend {
     for (std::size_t i = 0; i < state_.size(); ++i) {
       state_[i]   *= potential_half_phase_[i];
       dirac_s1_[i] *= potential_half_phase_[i];
+    }
+  }
+
+  // ── Time-dependent driving helpers ─────────────────────────────────────────
+
+  // Returns the scalar envelope multiplier at time t (before spatial weighting).
+  double driving_envelope(double t) const {
+    const double A = driving_config_.amplitude;
+    const double f = driving_config_.frequency;
+    const double ph = driving_config_.phase;
+    const double tc = driving_config_.t_center;
+    const double tw = std::max(1e-30, driving_config_.t_width);
+    if (driving_config_.type == "sine") {
+      return A * std::cos(f * t + ph);
+    }
+    if (driving_config_.type == "gaussian_pulse") {
+      const double dt_c = t - tc;
+      return A * std::exp(-0.5 * dt_c * dt_c / (tw * tw)) * std::cos(f * t + ph);
+    }
+    if (driving_config_.type == "chirp") {
+      // chirp: ω(t) = frequency + t_width * t  (t_width doubles as chirp rate α)
+      return A * std::cos((f + 0.5 * tw * t) * t + ph);
+    }
+    return 0.0;
+  }
+
+  // Full-step potential with time-dependent driving (Schrödinger).
+  void apply_potential_driven(double t) {
+    const double drive = driving_envelope(t);
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      const double V_total = potential_[i] + drive * driving_spatial_[i];
+      state_[i] *= std::exp(Complex{0.0, -dt_ * V_total});
+    }
+  }
+
+  // Half-step potential with time-dependent driving (Dirac).
+  void apply_half_potential_dirac_driven(double t) {
+    const double drive = driving_envelope(t);
+    for (std::size_t i = 0; i < state_.size(); ++i) {
+      const double V_total = potential_[i] + drive * driving_spatial_[i];
+      const Complex hp = std::exp(Complex{0.0, -0.5 * dt_ * V_total});
+      state_[i]    *= hp;
+      dirac_s1_[i] *= hp;
+    }
+  }
+
+  // Recompute Klein-Gordon potential matrices for the current time step.
+  void recompute_kg_potential_phases(double t) {
+    const double drive = driving_envelope(t + 0.5 * dt_);
+    const double half_dt = 0.5 * dt_;
+    for (std::size_t i = 0; i < potential_.size(); ++i) {
+      const double V_total = potential_[i] + drive * driving_spatial_[i];
+      const double omega_v = std::sqrt(mass_ * mass_ + std::max(0.0, V_total));
+      kg_pot_c_[i]  = std::cos(omega_v * half_dt);
+      kg_pot_sc_[i] = std::sin(omega_v * half_dt) / omega_v;
+      kg_pot_os_[i] = omega_v * std::sin(omega_v * half_dt);
     }
   }
 
@@ -926,6 +1019,9 @@ class Continuous2DBackend final : public IBackend {
   double speed_of_light_{1.0};
   EquationType equation_{EquationType::Schrodinger};
   std::string potential_kind_{"none"};
+  DrivingConfig driving_config_{};
+  bool has_driving_{false};
+  std::vector<double> driving_spatial_;  // precomputed spatial profile
   bool export_frame_payloads_{false};
   std::uint32_t export_frame_stride_{1};
 

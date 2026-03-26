@@ -90,6 +90,30 @@ struct ContinuousInitialStateConfig {
   std::string pi_kind{"zero"};
 };
 
+// Time-dependent driving field configuration for continuous-space solvers.
+// The driving potential adds V_drive(r,t) = amplitude * envelope(t) * spatial_profile(r)
+// on top of the static potential at each split-step half/full step.
+//
+// Driving types:
+//   "none"           — no driving (default; fast path using precomputed phases)
+//   "sine"           — envelope(t) = cos(frequency * t + phase)
+//   "gaussian_pulse" — envelope(t) = exp(-(t-t_center)²/(2·t_width²)) * cos(frequency·t + phase)
+//   "chirp"          — envelope(t) = cos((frequency + 0.5·chirp_rate·t)·t + phase)
+//
+// Spatial profile:
+//   "uniform" — spatial_profile(r) = 1  (homogeneous field)
+//   "dipole_x" — spatial_profile(r) = x  (x-polarized dipole coupling)
+//   "dipole_y" — spatial_profile(r) = y  (y-polarized dipole coupling)
+struct DrivingConfig {
+  std::string type{"none"};
+  double amplitude{0.0};
+  double frequency{1.0};       // ω in rad/time-unit
+  double phase{0.0};           // initial phase offset (radians)
+  double t_center{0.0};        // gaussian_pulse: center time
+  double t_width{1.0};         // gaussian_pulse: σ; chirp: linear sweep rate α
+  std::string spatial_profile{"uniform"};
+};
+
 // Continuous 2D spatial simulation configuration.
 struct ContinuousSpace2DConfig {
   // Uniform Cartesian grid resolution.
@@ -116,6 +140,8 @@ struct ContinuousSpace2DConfig {
   std::map<std::string, double> potential_params{};
   // Optional flattened potential grid (row-major, size nx*ny).
   std::vector<double> potential_grid{};
+  // Time-dependent driving field (default: none).
+  DrivingConfig driving{};
   // Initial condition descriptor for the wavefunction.
   ContinuousInitialStateConfig initial_state{};
 };
@@ -148,6 +174,8 @@ struct ContinuousSpace3DConfig {
   std::map<std::string, double> potential_params{};
   // Optional flattened potential grid (row-major, size nx*ny*nz).
   std::vector<double> potential_grid{};
+  // Time-dependent driving field (default: none).
+  DrivingConfig driving{};
   // Initial condition descriptor for the wavefunction.
   ContinuousInitialStateConfig initial_state{};
 };
@@ -181,6 +209,8 @@ struct ContinuousDensityFrame {
   double z_max{0.0};
   // Potential tag used to generate this frame.
   std::string potential_kind{"none"};
+  // Instantaneous driving field amplitude at this frame's time (0 when no driving).
+  double driving_amplitude{0.0};
   // Optional flattened slice payloads.
   // 2D: density_xy_flat has nx*ny entries.
   // 3D: density_xy_flat has nx*ny entries at z-mid.
