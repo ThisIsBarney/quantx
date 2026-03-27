@@ -2533,18 +2533,21 @@ def _mps_frames(
                 op = kron2(_p(s1 if q1<q2 else s2), _p(s2 if q1<q2 else s1))
                 two_body[b] = two_body.get(b, np.zeros((4,4), complex)) + coeff * op
 
-    # Build gates: U = exp(-i * dt * H).
+    # Build gates for 2nd-order Suzuki-Trotter:
+    # even bonds use half-steps at start/end, odd bonds use full step in middle.
     def _expm_small(H):
         vals, vecs = np.linalg.eigh(H)
         return (vecs * np.exp(-1j * vals)) @ vecs.conj().T
 
-    two_site_gates = {b: _expm_small(dt * H) for b, H in two_body.items()}
+    even_half_gates = {b: _expm_small(0.5 * dt * H) for b, H in two_body.items() if b % 2 == 0}
+    odd_full_gates = {b: _expm_small(dt * H) for b, H in two_body.items() if b % 2 == 1}
     # Single-site half-step gates for 2nd-order ST (½ dt each end of sweep).
     single_half = {s: _expm_small(0.5 * dt * H) for s, H in single_body.items()}
 
     # MPS state: list of site tensors A[i] shape (chi_L*d, chi_R).
     tensors = [np.zeros((d, 1), dtype=complex) for _ in range(n_sites)]
     for t in tensors: t[0, 0] = 1.0  # |0⟩
+    schmidt = [np.array([1.0], dtype=float) for _ in range(max(0, n_sites - 1))]
 
     def bond_dim(i): return tensors[i].shape[1]
 
@@ -2584,6 +2587,7 @@ def _mps_frames(
         U, sv, Vh = np.linalg.svd(Tp, full_matrices=False)
         abs_tol = trunc_tol * sv[0] if sv.size > 0 else 1e-30
         chi_new = max(1, min(max_bond, int(np.sum(sv > abs_tol))))
+        schmidt[b] = sv[:chi_new].copy()
         tensors[b]   = U[:, :chi_new]
         SV = np.diag(sv[:chi_new]) @ Vh[:chi_new, :]  # (chi_new, d*chi_R)
         Aip1_new = np.zeros((chi_new*d, chi_R), complex)
@@ -2595,16 +2599,15 @@ def _mps_frames(
     def tebd_step():
         for s, U in single_half.items(): apply_1site(s, U)
         for b in range(0, n_sites-1, 2):
-            if b in two_site_gates: apply_2site(b, two_site_gates[b])
+            if b in even_half_gates: apply_2site(b, even_half_gates[b])
         for b in range(1, n_sites-1, 2):
-            if b in two_site_gates: apply_2site(b, two_site_gates[b])
+            if b in odd_full_gates: apply_2site(b, odd_full_gates[b])
         for b in range(0, n_sites-1, 2):
-            if b in two_site_gates: apply_2site(b, two_site_gates[b])
+            if b in even_half_gates: apply_2site(b, even_half_gates[b])
         for s, U in single_half.items(): apply_1site(s, U)
 
     def bond_entropy(b):
-        A = tensors[b]
-        sv = np.linalg.svd(A, compute_uv=False)
+        sv = schmidt[b]
         norm2 = np.sum(sv**2)
         if norm2 < 1e-30: return 0.0
         p = sv**2 / norm2

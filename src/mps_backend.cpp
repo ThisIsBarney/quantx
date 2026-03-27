@@ -19,7 +19,7 @@
 // 3. SVD  Theta' = U · Σ · V†,  truncate to chi_new ≤ max_bond_.
 // 4. Absorb singular values into right tensor; update A[i], A[i+1].
 //
-// Suzuki-Trotter order-2 sweep: odd bonds → even bonds → odd bonds (× ½ dt each).
+// Suzuki-Trotter order-2 sweep: even(½dt) → odd(dt) → even(½dt).
 
 #include "qx/backends.hpp"
 
@@ -170,8 +170,10 @@ MatrixXcd site_hamiltonian(const std::vector<ParsedTerm>& terms, std::uint32_t s
 
 // Precomputed gates for one TEBD sweep.
 struct GateCache {
-  // two_site_gates[bond] = exp(-i * dt_bond * H_bond) for bond = site-left of NN pair.
-  std::vector<MatrixXcd> two_site_gates;
+  // even_half_gates[bond] = exp(-i * (dt/2) * H_bond) for even bonds.
+  std::vector<MatrixXcd> even_half_gates;
+  // odd_full_gates[bond] = exp(-i * dt * H_bond) for odd bonds.
+  std::vector<MatrixXcd> odd_full_gates;
   // single_site_gates[site] = exp(-i * dt_site * H_site) embedded per half-step.
   std::vector<MatrixXcd> single_site_half;
 };
@@ -179,12 +181,14 @@ struct GateCache {
 GateCache build_gates(const std::vector<ParsedTerm>& terms,
                        std::uint32_t n_sites, double dt) {
   GateCache gc;
-  gc.two_site_gates.resize(n_sites - 1U);
+  gc.even_half_gates.resize(n_sites - 1U);
+  gc.odd_full_gates.resize(n_sites - 1U);
   gc.single_site_half.resize(n_sites);
 
   for (std::uint32_t b = 0; b < n_sites - 1U; ++b) {
     const MatrixXcd H = bond_hamiltonian(terms, b);
-    gc.two_site_gates[b] = (Complex{0.0, -1.0} * dt * H).exp();
+    gc.even_half_gates[b] = (Complex{0.0, -0.5} * dt * H).exp();
+    gc.odd_full_gates[b] = (Complex{0.0, -1.0} * dt * H).exp();
   }
   for (std::uint32_t s = 0; s < n_sites; ++s) {
     const MatrixXcd H = site_hamiltonian(terms, s);
@@ -206,6 +210,8 @@ struct MpsState {
 
   // tensors[i]: (chi_L*d) x chi_R
   std::vector<MatrixXcd> tensors;
+  // schmidt[b]: singular values at bond b from last canonicalization update.
+  std::vector<VectorXd> schmidt;
 
   // Initialize from |00…0⟩ product state.
   void init(std::uint32_t n_sites, std::uint32_t max_bond_dim, double tol) {
@@ -214,9 +220,13 @@ struct MpsState {
     trunc_tol = tol;
     truncation_error = 0.0;
     tensors.resize(n);
+    schmidt.resize(n > 0U ? n - 1U : 0U);
     for (std::uint32_t i = 0; i < n; ++i) {
       tensors[i] = MatrixXcd::Zero(kPhysDim, 1);  // chi_L=1, chi_R=1
       tensors[i](0, 0) = Complex{1.0, 0.0};        // |0⟩
+    }
+    for (std::uint32_t b = 0; b + 1U < n; ++b) {
+      schmidt[b] = VectorXd::Ones(1);
     }
   }
 
@@ -320,6 +330,7 @@ void apply_two_site_gate(MpsState& mps, std::uint32_t site, const MatrixXcd& U4)
   // A[site+1] = diag(S) * V†[:chi_new, :]  →   shape (chi_new*d, chi_R)
   const auto idx = static_cast<Eigen::Index>(chi_new);
   Ai = svd.matrixU().leftCols(idx);
+  mps.schmidt[site] = sv.head(idx);
 
   // S * V†: (chi_new, d*chi_R)  → reshape to (chi_new*d, chi_R)
   const MatrixXcd SV = svd.singularValues().head(idx).asDiagonal() *
@@ -334,13 +345,11 @@ void apply_two_site_gate(MpsState& mps, std::uint32_t site, const MatrixXcd& U4)
 
 // ── Observables ────────────────────────────────────────────────────────────
 
-// Von Neumann entropy at bond b from the singular values at that bond.
-// After SVD, the singular values of A[b] (viewed as chi_L*d × chi_R) give
-// the Schmidt coefficients.  We expose them directly by doing a reduced SVD.
+// Von Neumann entropy at bond b from cached Schmidt coefficients produced by
+// the latest two-site SVD update on that bond.
 double bond_entropy(const MpsState& mps, std::uint32_t b) {
-  // Quick SVD of the (chi_L*d x chi_R) tensor.
-  Eigen::JacobiSVD<MatrixXcd> svd(mps.tensors[b], Eigen::ComputeThinU | Eigen::ComputeThinV);
-  const VectorXd& sv = svd.singularValues();
+  if (b >= mps.schmidt.size()) return 0.0;
+  const VectorXd& sv = mps.schmidt[b];
   // Normalise.
   const double norm2 = sv.squaredNorm();
   if (norm2 < 1e-30) return 0.0;
@@ -373,14 +382,14 @@ double site_magnetization_z(const MpsState& mps, std::uint32_t site) {
 
 // ── TEBD sweep helpers ─────────────────────────────────────────────────────
 
-void apply_even_bonds(MpsState& mps, const GateCache& gc) {
+void apply_even_bonds_half(MpsState& mps, const GateCache& gc) {
   for (std::uint32_t b = 0; b + 1U < mps.n; b += 2U)
-    apply_two_site_gate(mps, b, gc.two_site_gates[b]);
+    apply_two_site_gate(mps, b, gc.even_half_gates[b]);
 }
 
-void apply_odd_bonds(MpsState& mps, const GateCache& gc) {
+void apply_odd_bonds_full(MpsState& mps, const GateCache& gc) {
   for (std::uint32_t b = 1U; b + 1U < mps.n; b += 2U)
-    apply_two_site_gate(mps, b, gc.two_site_gates[b]);
+    apply_two_site_gate(mps, b, gc.odd_full_gates[b]);
 }
 
 void apply_single_site_half_all(MpsState& mps, const GateCache& gc) {
@@ -392,9 +401,9 @@ void apply_single_site_half_all(MpsState& mps, const GateCache& gc) {
 //   single-half → even → odd → even → single-half
 void tebd_step(MpsState& mps, const GateCache& gc) {
   apply_single_site_half_all(mps, gc);
-  apply_even_bonds(mps, gc);
-  apply_odd_bonds(mps, gc);
-  apply_even_bonds(mps, gc);
+  apply_even_bonds_half(mps, gc);
+  apply_odd_bonds_full(mps, gc);
+  apply_even_bonds_half(mps, gc);
   apply_single_site_half_all(mps, gc);
 }
 
