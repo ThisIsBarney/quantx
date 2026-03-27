@@ -3686,6 +3686,530 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
   return bond, trunc
 
 
+# ── M20: VQE / QAOA variational optimizer ─────────────────────────────────────
+
+def _vqe_frames(
+    n_qubits: int,
+    cost_hamiltonian: list[dict],
+    ansatz_type: str = "hardware_efficient",
+    n_layers: int = 2,
+    optimizer: str = "adam",
+    max_iterations: int = 120,
+    learning_rate: float = 0.1,
+    initial_params: list[float] | None = None,
+    seed: int = 42,
+) -> dict:
+  """Numpy VQE reference solver.
+
+  Returns a dict with keys:
+    frames        list of {iteration, energy, gradient_norm, params}
+    optimal_energy  float
+    optimal_params  list[float]
+    converged       bool
+    n_qubits        int
+    ansatz_type     str
+    n_layers        int
+    n_params        int
+  """
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("VQE visualization requires numpy") from ex
+
+  # ── Gate matrices ──────────────────────────────────────────────────────────
+  I2 = np.eye(2, dtype=complex)
+  X  = np.array([[0, 1], [1, 0]], dtype=complex)
+  Y  = np.array([[0, -1j], [1j, 0]], dtype=complex)
+  Z  = np.array([[1, 0], [0, -1]], dtype=complex)
+  H_gate = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+  CNOT = np.array([[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]], dtype=complex).reshape(4, 4)
+
+  PAULI = {"I": I2, "X": X, "Y": Y, "Z": Z}
+
+  def kron_n(ops: list) -> np.ndarray:
+    """Tensor-product of a list of 2×2 matrices → 2^n × 2^n."""
+    result = ops[0]
+    for op in ops[1:]:
+      result = np.kron(result, op)
+    return result
+
+  def pauli_string_matrix(label: str, n: int) -> np.ndarray:
+    """Build 2^n × 2^n matrix for a Pauli string like 'X0Z1'."""
+    import re
+    ops = ["I"] * n
+    for m in re.finditer(r"([XYZI])(\d+)", label.upper()):
+      p, q = m.group(1), int(m.group(2))
+      if q < n:
+        ops[q] = p
+    return kron_n([PAULI[p] for p in ops])
+
+  # ── Build cost Hamiltonian matrix ──────────────────────────────────────────
+  dim = 1 << n_qubits
+  H_cost = np.zeros((dim, dim), dtype=complex)
+  for term in cost_hamiltonian:
+    label = term.get("label", "")
+    coeff = float(term.get("coefficient", 0.0))
+    if not label or label.upper() == "I":
+      H_cost += coeff * np.eye(dim, dtype=complex)
+    else:
+      H_cost += coeff * pauli_string_matrix(label, n_qubits)
+
+  # ── Ansatz circuits ────────────────────────────────────────────────────────
+  def ry_mat(theta: float) -> np.ndarray:
+    c, s = np.cos(theta / 2), np.sin(theta / 2)
+    return np.array([[c, -s], [s, c]], dtype=complex)
+
+  def rx_mat(theta: float) -> np.ndarray:
+    c, s = np.cos(theta / 2), np.sin(theta / 2)
+    return np.array([[c, -1j * s], [-1j * s, c]], dtype=complex)
+
+  def rz_mat(theta: float) -> np.ndarray:
+    return np.array([[np.exp(-1j * theta / 2), 0], [0, np.exp(1j * theta / 2)]], dtype=complex)
+
+  def single_qubit_op(gate_2x2: np.ndarray, qubit: int, n: int) -> np.ndarray:
+    """Embed a 2×2 gate on `qubit` into the n-qubit space."""
+    ops = [I2] * n
+    ops[qubit] = gate_2x2
+    return kron_n(ops)
+
+  def two_qubit_cnot(ctrl: int, targ: int, n: int) -> np.ndarray:
+    """Exact CNOT(ctrl, targ) in n-qubit space."""
+    dim_n = 1 << n
+    mat = np.eye(dim_n, dtype=complex)
+    for idx in range(dim_n):
+      if (idx >> (n - 1 - ctrl)) & 1:
+        flipped = idx ^ (1 << (n - 1 - targ))
+        mat[:, idx] = 0
+        mat[flipped, idx] = 1.0
+    return mat
+
+  def build_hea_state(params: np.ndarray) -> np.ndarray:
+    """Hardware-efficient ansatz: n_layers × (RY on each qubit + CNOT chain) + final RY."""
+    state = np.zeros(dim, dtype=complex)
+    state[0] = 1.0
+    p = 0
+    for _ in range(n_layers):
+      for q in range(n_qubits):
+        state = single_qubit_op(ry_mat(params[p]), q, n_qubits) @ state
+        p += 1
+      for q in range(n_qubits - 1):
+        state = two_qubit_cnot(q, q + 1, n_qubits) @ state
+    for q in range(n_qubits):
+      state = single_qubit_op(ry_mat(params[p]), q, n_qubits) @ state
+      p += 1
+    return state
+
+  def build_qaoa_state(params: np.ndarray, edges: list[tuple[int, int]]) -> np.ndarray:
+    """QAOA: |+⟩^n + p rounds of cost + mixer."""
+    state = np.zeros(dim, dtype=complex)
+    state[0] = 1.0
+    # Prepare |+⟩^n.
+    for q in range(n_qubits):
+      state = single_qubit_op(H_gate, q, n_qubits) @ state
+    for layer in range(n_layers):
+      gamma = params[2 * layer]
+      beta  = params[2 * layer + 1]
+      # Cost unitary: CNOT·RZ(γ)·CNOT per edge → exp(-iγ/2 Z_iZ_j).
+      # This keeps the gate in the standard form exp(-iθG/2) with θ=γ, G=ZiZj,
+      # so the parameter-shift rule ∂E/∂γ = (E(γ+π/2)-E(γ-π/2))/2 is valid.
+      for (qi, qj) in edges:
+        cx = two_qubit_cnot(qi, qj, n_qubits)
+        state = cx @ state
+        state = single_qubit_op(rz_mat(gamma), qj, n_qubits) @ state
+        state = cx @ state
+      # Mixer: RX(β) on each qubit → exp(-iβ/2 Xi), standard form with θ=β.
+      for q in range(n_qubits):
+        state = single_qubit_op(rx_mat(beta), q, n_qubits) @ state
+    return state
+
+  # Detect QAOA mode from cost_hamiltonian structure.
+  is_qaoa = (ansatz_type == "qaoa")
+  # Extract QAOA edges from ZiZj terms in cost_hamiltonian.
+  import re as _re
+  qaoa_edges: list[tuple[int, int]] = []
+  if is_qaoa:
+    for term in cost_hamiltonian:
+      lbl = term.get("label", "")
+      m = _re.match(r"^Z(\d+)Z(\d+)$", lbl.upper())
+      if m:
+        qaoa_edges.append((int(m.group(1)), int(m.group(2))))
+
+  if is_qaoa:
+    n_params = 2 * n_layers
+  else:
+    n_params = (n_layers + 1) * n_qubits
+
+  def build_state(params: np.ndarray) -> np.ndarray:
+    if is_qaoa:
+      return build_qaoa_state(params, qaoa_edges)
+    return build_hea_state(params)
+
+  def eval_energy(params: np.ndarray) -> float:
+    psi = build_state(params)
+    return float(np.real(psi.conj() @ H_cost @ psi))
+
+  # ── Gradient ───────────────────────────────────────────────────────────────
+  # HEA: parameter-shift rule (each param appears in exactly one gate).
+  # QAOA: parameter-shift is invalid for shared parameters (γ/β appear across
+  #       all edge/qubit gates in the same round).  Use central finite differences.
+  if is_qaoa:
+    FD_EPS = 1e-3  # small finite-difference step
+
+    def gradient(params: np.ndarray) -> np.ndarray:
+      grad = np.zeros(n_params)
+      for k in range(n_params):
+        tp = params.copy(); tp[k] += FD_EPS
+        tm = params.copy(); tm[k] -= FD_EPS
+        grad[k] = (eval_energy(tp) - eval_energy(tm)) / (2.0 * FD_EPS)
+      return grad
+  else:
+    def gradient(params: np.ndarray) -> np.ndarray:
+      shift = np.pi / 2
+      grad = np.zeros(n_params)
+      for k in range(n_params):
+        tp = params.copy(); tp[k] += shift
+        tm = params.copy(); tm[k] -= shift
+        grad[k] = (eval_energy(tp) - eval_energy(tm)) / 2.0
+      return grad
+
+  # ── Adam optimizer ─────────────────────────────────────────────────────────
+  rng = np.random.default_rng(seed)
+  if initial_params is not None:
+    params = np.array(initial_params, dtype=float)
+  elif is_qaoa:
+    # QAOA: initialize γ ∈ [0, π/2] and β ∈ [0, π/4] to avoid barren plateaus.
+    # Interleaved layout: [γ₁, β₁, γ₂, β₂, ...]
+    params = np.zeros(n_params)
+    for layer in range(n_layers):
+      params[2 * layer]     = rng.uniform(0.05, np.pi / 2)   # γ
+      params[2 * layer + 1] = rng.uniform(0.05, np.pi / 4)   # β
+  else:
+    params = rng.uniform(0, 2 * np.pi, n_params)
+
+  b1, b2, eps = 0.9, 0.999, 1e-8
+  m_adam = np.zeros(n_params)
+  v_adam = np.zeros(n_params)
+  t_adam = 0
+
+  frames = []
+  converged = False
+  prev_energy = eval_energy(params)
+
+  for it in range(max_iterations):
+    energy = eval_energy(params)
+    grad = gradient(params)
+    gnorm = float(np.linalg.norm(grad))
+
+    frames.append({
+      "iteration": it,
+      "energy": float(energy),
+      "gradient_norm": gnorm,
+      "params": params.tolist(),
+    })
+
+    if gnorm < 1e-5 or (it > 0 and abs(energy - prev_energy) < 1e-7):
+      converged = True
+      break
+
+    if optimizer == "gradient_descent":
+      params = params - learning_rate * grad
+    else:
+      # Adam
+      t_adam += 1
+      m_adam = b1 * m_adam + (1 - b1) * grad
+      v_adam = b2 * v_adam + (1 - b2) * grad ** 2
+      m_hat = m_adam / (1 - b1 ** t_adam)
+      v_hat = v_adam / (1 - b2 ** t_adam)
+      params = params - learning_rate * m_hat / (np.sqrt(v_hat) + eps)
+
+    prev_energy = energy
+
+  # Final energy.
+  final_energy = eval_energy(params)
+  frames.append({
+    "iteration": len(frames),
+    "energy": float(final_energy),
+    "gradient_norm": 0.0,
+    "params": params.tolist(),
+  })
+
+  return {
+    "frames": frames,
+    "optimal_energy": float(final_energy),
+    "optimal_params": params.tolist(),
+    "converged": converged,
+    "n_qubits": n_qubits,
+    "ansatz_type": ansatz_type,
+    "n_layers": n_layers,
+    "n_params": n_params,
+  }
+
+
+def _vqe_page(data: dict) -> str:
+  """HTML page with VQE/QAOA optimization visualization:
+    - Energy convergence curve
+    - Gradient norm convergence curve
+    - Parameter trajectory heatmap
+    - Final-state probability distribution
+  """
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("VQE page requires numpy") from ex
+
+  frames = data["frames"]
+  optimal_energy = data["optimal_energy"]
+  converged = data["converged"]
+  n_params = data["n_params"]
+  ansatz_type = data["ansatz_type"]
+  n_qubits = data["n_qubits"]
+  n_layers = data["n_layers"]
+
+  iterations   = [f["iteration"] for f in frames]
+  energies     = [f["energy"]    for f in frames]
+  grad_norms   = [f["gradient_norm"] for f in frames]
+  params_mat   = [f["params"]    for f in frames]  # list of lists
+
+  # Rebuild final state for probability distribution.
+  import re as _re
+  I2 = np.eye(2, dtype=complex)
+  X  = np.array([[0, 1], [1, 0]], dtype=complex)
+  Y  = np.array([[0, -1j], [1j, 0]], dtype=complex)
+  Z  = np.array([[1, 0], [0, -1]], dtype=complex)
+  H_gate = np.array([[1, 1], [1, -1]], dtype=complex) / np.sqrt(2)
+  PAULI = {"I": I2, "X": X, "Y": Y, "Z": Z}
+  dim = 1 << n_qubits
+
+  def kron_n(ops):
+    r = ops[0]
+    for o in ops[1:]: r = np.kron(r, o)
+    return r
+
+  def ry_mat(theta):
+    c, s = np.cos(theta / 2), np.sin(theta / 2)
+    return np.array([[c, -s], [s, c]], dtype=complex)
+
+  def rx_mat(theta):
+    c, s = np.cos(theta / 2), np.sin(theta / 2)
+    return np.array([[c, -1j * s], [-1j * s, c]], dtype=complex)
+
+  def rz_mat(theta):
+    return np.diag([np.exp(-1j * theta / 2), np.exp(1j * theta / 2)]).astype(complex)
+
+  def sq(gate, q, n):
+    ops = [I2] * n
+    ops[q] = gate
+    return kron_n(ops)
+
+  def cx_mat(ctrl, targ, n):
+    d = 1 << n
+    mat = np.eye(d, dtype=complex)
+    for idx in range(d):
+      if (idx >> (n - 1 - ctrl)) & 1:
+        fl = idx ^ (1 << (n - 1 - targ))
+        mat[:, idx] = 0
+        mat[fl, idx] = 1.0
+    return mat
+
+  best_params = np.array(data["optimal_params"])
+  is_qaoa = (ansatz_type == "qaoa")
+
+  if is_qaoa:
+    # Extract edges from cost_hamiltonian if available (stored in data).
+    qaoa_edges = data.get("qaoa_edges", [])
+    state = np.zeros(dim, dtype=complex); state[0] = 1.0
+    for q in range(n_qubits): state = sq(H_gate, q, n_qubits) @ state
+    for layer in range(n_layers):
+      gamma = best_params[2 * layer]
+      beta  = best_params[2 * layer + 1]
+      for (qi, qj) in qaoa_edges:
+        cx = cx_mat(qi, qj, n_qubits)
+        state = cx @ state
+        state = sq(rz_mat(gamma), qj, n_qubits) @ state
+        state = cx @ state
+      for q in range(n_qubits):
+        state = sq(rx_mat(beta), q, n_qubits) @ state
+  else:
+    state = np.zeros(dim, dtype=complex); state[0] = 1.0
+    p = 0
+    for _ in range(n_layers):
+      for q in range(n_qubits):
+        state = sq(ry_mat(best_params[p]), q, n_qubits) @ state; p += 1
+      for q in range(n_qubits - 1):
+        state = cx_mat(q, q + 1, n_qubits) @ state
+    for q in range(n_qubits):
+      state = sq(ry_mat(best_params[p]), q, n_qubits) @ state; p += 1
+
+  probs = np.abs(state) ** 2
+  bitstrings = [format(i, f"0{n_qubits}b") for i in range(dim)]
+
+  # ── Build JSON data blobs ─────────────────────────────────────────────────
+  import json as _json
+  energy_series  = _json.dumps(list(zip(iterations, energies)))
+  grad_series    = _json.dumps(list(zip(iterations, grad_norms)))
+  params_json    = _json.dumps(params_mat)
+  probs_json     = _json.dumps(list(zip(bitstrings, [float(p) for p in probs])))
+  param_labels   = _json.dumps([f"θ{k}" for k in range(n_params)])
+  iter_labels    = _json.dumps(iterations)
+
+  title_suffix = "QAOA" if is_qaoa else "VQE"
+  conv_str = "converged" if converged else "max iterations"
+  status_line = f"optimal energy = {optimal_energy:.6f} ({conv_str})"
+
+  return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>QuantX {title_suffix} Optimization</title>
+<style>
+  body{{font-family:sans-serif;background:#0a0a14;color:#e0e0f0;margin:0;padding:20px;}}
+  h1{{color:#a0c8ff;text-align:center;font-size:1.4em;margin-bottom:4px;}}
+  .subtitle{{text-align:center;color:#7090b0;font-size:0.9em;margin-bottom:20px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:1100px;margin:0 auto;}}
+  .panel{{background:#111827;border:1px solid #1e3050;border-radius:8px;padding:14px;}}
+  canvas{{width:100%;}}
+  h2{{color:#60a8e0;font-size:1em;margin:0 0 10px;}}
+</style>
+</head>
+<body>
+<h1>QuantX — {title_suffix} Optimization ({n_qubits} qubits, {n_layers} layers)</h1>
+<div class="subtitle">{status_line}</div>
+<div class="grid">
+  <div class="panel">
+    <h2>Energy Convergence</h2>
+    <canvas id="cvEnergy" height="220"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Gradient Norm</h2>
+    <canvas id="cvGrad" height="220"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Parameter Trajectory Heatmap (θ vs iteration)</h2>
+    <canvas id="cvParams" height="220"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Final State Probability Distribution</h2>
+    <canvas id="cvProbs" height="220"></canvas>
+  </div>
+</div>
+<script>
+const energySeries  = {energy_series};
+const gradSeries    = {grad_series};
+const paramsMat     = {params_json};
+const probsData     = {probs_json};
+const paramLabels   = {param_labels};
+const iterLabels    = {iter_labels};
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function linspace(a, b, n) {{
+  if (n < 2) return [a];
+  return Array.from({{length: n}}, (_, i) => a + i * (b - a) / (n - 1));
+}}
+
+function drawLineChart(cvId, series, xlabel, ylabel, color) {{
+  const cv = document.getElementById(cvId);
+  const W = cv.clientWidth, H = 220;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const pad = {{l:50, r:15, t:10, b:36}};
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, W, H);
+  if (!series.length) return;
+  const xs = series.map(p => p[0]), ys = series.map(p => p[1]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys) - 0.05 * (Math.max(...ys) - Math.min(...ys) + 1e-9);
+  const yMax = Math.max(...ys) + 0.05 * (Math.max(...ys) - Math.min(...ys) + 1e-9);
+  const tx = x => pad.l + (x - xMin) / (xMax - xMin + 1e-9) * pw;
+  const ty = y => pad.t + ph - (y - yMin) / (yMax - yMin + 1e-9) * ph;
+  ctx.strokeStyle = "#1e3050"; ctx.lineWidth = 1;
+  [0.0, 0.25, 0.5, 0.75, 1.0].forEach(r => {{
+    const x = pad.l + r * pw, y = pad.t + r * ph;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ph); ctx.stroke();
+  }});
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath();
+  series.forEach(([x, y], i) => i === 0 ? ctx.moveTo(tx(x), ty(y)) : ctx.lineTo(tx(x), ty(y)));
+  ctx.stroke();
+  // Axis labels.
+  ctx.fillStyle = "#7090b0"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(xlabel, pad.l + pw / 2, H - 4);
+  ctx.save(); ctx.translate(12, pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText(ylabel, 0, 0); ctx.restore();
+  ctx.textAlign = "right";
+  [yMin, yMax].forEach(v => ctx.fillText(v.toFixed(3), pad.l - 4, ty(v) + 4));
+}}
+
+function drawParamHeatmap(cvId) {{
+  const cv = document.getElementById(cvId);
+  const W = cv.clientWidth, H = 220;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, W, H);
+  const pad = {{l:50, r:15, t:10, b:36}};
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+  const nIter = paramsMat.length, nP = paramsMat[0].length;
+  if (!nIter || !nP) return;
+  // Flatten to find global min/max for color scaling.
+  const allVals = paramsMat.flat();
+  const vMin = Math.min(...allVals), vMax = Math.max(...allVals);
+  const cellW = pw / nIter, cellH = ph / nP;
+  for (let i = 0; i < nIter; ++i) {{
+    for (let p = 0; p < nP; ++p) {{
+      const t = (paramsMat[i][p] - vMin) / (vMax - vMin + 1e-9);
+      const r = Math.round(20 + t * 180), g = Math.round(60 + t * 80), b = Math.round(180 - t * 80);
+      ctx.fillStyle = `rgb(${{r}},${{g}},${{b}})`;
+      ctx.fillRect(pad.l + i * cellW, pad.t + p * cellH, cellW + 1, cellH + 1);
+    }}
+  }}
+  ctx.fillStyle = "#7090b0"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("iteration", pad.l + pw / 2, H - 4);
+  ctx.save(); ctx.translate(12, pad.t + ph / 2); ctx.rotate(-Math.PI / 2);
+  ctx.fillText("parameter", 0, 0); ctx.restore();
+}}
+
+function drawProbBars(cvId) {{
+  const cv = document.getElementById(cvId);
+  const W = cv.clientWidth, H = 220;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, W, H);
+  const pad = {{l:30, r:10, t:10, b:42}};
+  const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+  const n = probsData.length;
+  const barW = pw / n - 2;
+  const pMax = Math.max(...probsData.map(d => d[1]));
+  probsData.forEach(([bs, prob], i) => {{
+    const barH = ph * prob / (pMax + 1e-9);
+    const x = pad.l + i * (pw / n) + 1;
+    const y = pad.t + ph - barH;
+    const t = prob / (pMax + 1e-9);
+    ctx.fillStyle = `rgb(${{Math.round(30 + t * 100)}}, ${{Math.round(100 + t * 100)}}, ${{Math.round(200 + t * 55)}})`;
+    ctx.fillRect(x, y, barW, barH);
+    if (n <= 16) {{
+      ctx.fillStyle = "#7090b0"; ctx.font = "9px sans-serif";
+      ctx.textAlign = "center"; ctx.save();
+      ctx.translate(x + barW / 2, pad.t + ph + 2);
+      ctx.rotate(-Math.PI / 3);
+      ctx.fillText("|" + bs + "⟩", 0, 0);
+      ctx.restore();
+    }}
+  }});
+  ctx.fillStyle = "#7090b0"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("basis state", pad.l + pw / 2, H - 2);
+}}
+
+window.addEventListener("load", () => {{
+  drawLineChart("cvEnergy", energySeries, "iteration", "⟨H⟩", "#4ca3dd");
+  drawLineChart("cvGrad",   gradSeries,   "iteration", "|∇E|", "#e87040");
+  drawParamHeatmap("cvParams");
+  drawProbBars("cvProbs");
+}});
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -3693,7 +4217,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -3726,6 +4250,9 @@ def main() -> int:
   parser.add_argument("--samples-mps-t", type=int, default=60)
   parser.add_argument("--mps-sites", type=int, default=12)
   parser.add_argument("--mps-max-bond", type=int, default=16)
+  parser.add_argument("--vqe-max-iter", type=int, default=120, help="max VQE/QAOA optimizer iterations")
+  parser.add_argument("--vqe-layers", type=int, default=2, help="number of HEA layers / QAOA rounds")
+  parser.add_argument("--vqe-qubits", type=int, default=4, help="number of qubits for VQE scenarios")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -4031,6 +4558,51 @@ def main() -> int:
     )
     path = out_dir / "quantum_entanglement_decay.html"
     path.write_text(_entanglement_page(ent_decay_data), encoding="utf-8")
+    generated.append(path)
+
+  # ── M20: VQE / QAOA variational algorithms ───────────────────────────────────
+
+  # vqe_ising: VQE on the transverse-field Ising model
+  # H = -Σ Z_iZ_{i+1} - 0.5 Σ X_i  (4 qubits, HEA ansatz)
+  if args.scenario in {"vqe_ising", "all"}:
+    n = args.vqe_qubits
+    ising_ham = (
+        [{"label": f"Z{i}Z{i+1}", "coefficient": -1.0} for i in range(n - 1)]
+        + [{"label": f"X{i}", "coefficient": -0.5} for i in range(n)]
+    )
+    vqe_ising_data = _vqe_frames(
+        n_qubits=n,
+        cost_hamiltonian=ising_ham,
+        ansatz_type="hardware_efficient",
+        n_layers=args.vqe_layers,
+        optimizer="adam",
+        max_iterations=args.vqe_max_iter,
+        learning_rate=0.12,
+    )
+    path = out_dir / "quantum_vqe_ising.html"
+    path.write_text(_vqe_page(vqe_ising_data), encoding="utf-8")
+    generated.append(path)
+
+  # vqe_qaoa: QAOA MaxCut on a 4-node cycle graph
+  if args.scenario in {"vqe_qaoa", "all"}:
+    n = args.vqe_qubits
+    # 4-node cycle: 0-1-2-3-0
+    edges = [(i, (i + 1) % n) for i in range(n)]
+    # Cost Hamiltonian for MaxCut: minimize Σ Z_iZ_j (equivalent to maximising cut)
+    qaoa_ham = [{"label": f"Z{i}Z{j}", "coefficient": 1.0} for (i, j) in edges]
+    vqe_qaoa_data = _vqe_frames(
+        n_qubits=n,
+        cost_hamiltonian=qaoa_ham,
+        ansatz_type="qaoa",
+        n_layers=args.vqe_layers,
+        optimizer="adam",
+        max_iterations=args.vqe_max_iter,
+        learning_rate=0.15,
+    )
+    # Attach edges so _vqe_page can rebuild the final state.
+    vqe_qaoa_data["qaoa_edges"] = edges
+    path = out_dir / "quantum_vqe_qaoa.html"
+    path.write_text(_vqe_page(vqe_qaoa_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:

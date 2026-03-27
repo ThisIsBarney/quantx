@@ -26,5 +26,7 @@ BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptio
 CircuitCapabilities circuit_backend_capabilities();
 // Execute quantum circuit and optionally sample shot statistics.
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions& options);
+// Run variational eigensolver (VQE) or QAOA optimization.
+VqeResult run_vqe(const VqeOptions& opts);
 
 }  // namespace qx

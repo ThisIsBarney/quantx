@@ -439,6 +439,56 @@ struct Event {
   std::map<std::string, double> metrics;
 };
 
+// One iteration snapshot from a VQE/QAOA optimizer run.
+struct VqeFrame {
+  std::uint32_t iteration{0};
+  double energy{0.0};
+  double gradient_norm{0.0};
+  bool accepted{true};
+  std::vector<double> params{};
+};
+
+// Options for variational (VQE/QAOA) optimization.
+struct VqeOptions {
+  // Number of qubits in the ansatz.
+  std::uint32_t n_qubits{2};
+  // Ansatz type: "hardware_efficient" | "qaoa".
+  std::string ansatz_type{"hardware_efficient"};
+  // Number of ansatz repetitions (HEA layers) or QAOA rounds.
+  std::uint32_t n_layers{1};
+  // Optimizer: "adam" | "gradient_descent".
+  std::string optimizer{"adam"};
+  // Step size / Adam learning rate.
+  double learning_rate{0.1};
+  // Adam β₁, β₂, ε hyper-parameters.
+  double adam_beta1{0.9};
+  double adam_beta2{0.999};
+  double adam_epsilon{1e-8};
+  // Termination conditions.
+  std::uint32_t max_iterations{200};
+  double convergence_tol{1e-6};
+  // Cost Hamiltonian: VQE minimises ⟨H⟩ = Σ c_k ⟨P_k⟩.
+  std::vector<HamiltonianTerm> cost_hamiltonian{};
+  // User-supplied initial parameters (random if empty).
+  std::vector<double> initial_params{};
+  // Graph edges for QAOA MaxCut; each pair (i,j) is an undirected edge.
+  std::vector<std::pair<std::uint32_t, std::uint32_t>> qaoa_edges{};
+  // RNG seed for random initial parameters.
+  std::uint64_t seed{42};
+};
+
+// Summary of a completed VQE/QAOA optimization run.
+struct VqeResult {
+  bool ok{true};
+  bool converged{false};
+  std::uint32_t n_iterations{0};
+  double optimal_energy{0.0};
+  std::vector<double> optimal_params{};
+  std::vector<VqeFrame> frames{};
+  std::string message;
+  double elapsed_ms{0.0};
+};
+
 // Hamiltonian simulation output.
 struct SimulationResult {
   bool ok{true};
