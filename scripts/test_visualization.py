@@ -900,6 +900,37 @@ def main() -> int:
     if "optimal energy" not in vc:
       raise RuntimeError(f"{scenario_key}: html missing optimal energy status line")
 
+  # ── M21: QPE — Quantum Phase Estimation ──────────────────────────────────────
+  qpe_dir = tmp / "qpe"
+  qpe_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key, html_name, extra_args in (
+      ("qpe_phase",      "quantum_qpe_phase.html",      ["--qpe-phase", "0.375"]),
+      ("qpe_hamiltonian","quantum_qpe_hamiltonian.html", []),
+  ):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--qpe-ancilla", "4",
+         "--qpe-shots", "256",
+         "--qpe-sweep-max", "5",
+         "--out-dir", str(qpe_dir)] + extra_args,
+        html_name,
+    )
+    qpe_html = qpe_dir / html_name
+    if not qpe_html.exists():
+      raise RuntimeError(f"qpe html not generated: {qpe_html}")
+    qc = qpe_html.read_text(encoding="utf-8")
+    if "cvPhase" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing phase probability canvas (cvPhase)")
+    if "cvShots" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing shot histogram canvas (cvShots)")
+    if "phase_probs" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing phase_probs data")
+    if "estimated_phase" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing estimated_phase field")
+    if "sweepPanel" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing precision sweep panel (sweepPanel)")
+
   print("visualization smoke passed")
   return 0
 

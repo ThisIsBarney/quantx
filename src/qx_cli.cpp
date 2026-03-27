@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
     std::string problem_path;
     std::string circuit_path;
     std::string vqe_path;
+    std::string qpe_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -62,6 +63,7 @@ int main(int argc, char** argv) {
     app.add_option("--problem", problem_path, "problem json path");
     app.add_option("--circuit", circuit_path, "circuit json path");
     app.add_option("--vqe", vqe_path, "VQE/QAOA options json path (run variational optimization)");
+    app.add_option("--qpe", qpe_path, "QPE options json path (run Quantum Phase Estimation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -102,15 +104,16 @@ int main(int argc, char** argv) {
       return 0;
     }
 
-    if (problem_path.empty() && circuit_path.empty() && vqe_path.empty()) {
-      throw std::runtime_error("missing required --problem, --circuit, or --vqe");
+    if (problem_path.empty() && circuit_path.empty() && vqe_path.empty() && qpe_path.empty()) {
+      throw std::runtime_error("missing required --problem, --circuit, --vqe, or --qpe");
     }
     {
       int modes = (!problem_path.empty() ? 1 : 0) +
                   (!circuit_path.empty()  ? 1 : 0) +
-                  (!vqe_path.empty()      ? 1 : 0);
+                  (!vqe_path.empty()      ? 1 : 0) +
+                  (!qpe_path.empty()      ? 1 : 0);
       if (modes > 1) {
-        throw std::runtime_error("use exactly one of --problem, --circuit, or --vqe");
+        throw std::runtime_error("use exactly one of --problem, --circuit, --vqe, or --qpe");
       }
     }
 
@@ -154,7 +157,7 @@ int main(int argc, char** argv) {
       } else {
         output_json = qx::circuit_result_to_json(qx::run_circuit(circuit, options));
       }
-    } else {
+    } else if (!vqe_path.empty()) {
       // VQE mode.
       if (explain || validate_only) {
         throw std::runtime_error("--explain and --validate-only are not supported in --vqe mode");
@@ -163,6 +166,15 @@ int main(int argc, char** argv) {
       const qx::VqeOptions vqe_opts = qx::vqe_options_from_json(vqe_json);
       qx::log::info("loaded vqe options file: " + vqe_path);
       output_json = qx::vqe_result_to_json(qx::run_vqe(vqe_opts));
+    } else {
+      // QPE mode.
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --qpe mode");
+      }
+      const std::string qpe_json = read_text_file(qpe_path);
+      const qx::QpeOptions qpe_opts = qx::qpe_options_from_json(qpe_json);
+      qx::log::info("loaded qpe options file: " + qpe_path);
+      output_json = qx::qpe_result_to_json(qx::run_qpe(qpe_opts));
     }
 
     if (out_path.empty()) {

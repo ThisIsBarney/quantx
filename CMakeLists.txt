@@ -88,6 +88,7 @@ add_library(qx_core
   src/lindblad_backend.cpp
   src/engine.cpp
   src/vqe.cpp
+  src/qpe.cpp
   src/json_utils.cpp
 )
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

@@ -792,6 +792,44 @@ VqeOptions vqe_options_from_json(const std::string& json_text) {
   return o;
 }
 
+// Parse QPE options from JSON.
+QpeOptions qpe_options_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
+  QpeOptions o;
+  o.n_ancilla      = get_or<std::uint32_t>(j, "n_ancilla",      o.n_ancilla);
+  o.n_target       = get_or<std::uint32_t>(j, "n_target",       o.n_target);
+  o.unitary_type   = get_or<std::string>  (j, "unitary_type",   o.unitary_type);
+  o.phase_angle    = get_or<double>       (j, "phase_angle",    o.phase_angle);
+  o.evolution_time = get_or<double>       (j, "evolution_time", o.evolution_time);
+  o.n_shots        = get_or<std::uint32_t>(j, "n_shots",        o.n_shots);
+  o.seed           = get_or<std::uint64_t>(j, "seed",           o.seed);
+  auto ht_it = j.find("hamiltonian_terms");
+  if (ht_it != j.end() && ht_it->is_array()) {
+    for (const auto& item : *ht_it) {
+      if (item.is_object()) {
+        o.hamiltonian_terms.push_back(parse_hamiltonian_term(item));
+      }
+    }
+  }
+  return o;
+}
+
+// Serialize QPE result.
+std::string qpe_result_to_json(const QpeResult& result) {
+  json j;
+  j["ok"]                 = result.ok;
+  j["n_ancilla"]          = result.n_ancilla;
+  j["n_target"]           = result.n_target;
+  j["estimated_phase"]    = result.estimated_phase;
+  j["true_phase"]         = result.true_phase;
+  j["elapsed_ms"]         = result.elapsed_ms;
+  j["message"]            = result.message;
+  j["engine_version"]     = version_string();
+  j["measurement_counts"] = result.measurement_counts;
+  j["phase_probs"]        = result.phase_probs;
+  return j.dump();
+}
+
 // Serialize VQE result.
 std::string vqe_result_to_json(const VqeResult& result) {
   json j;
