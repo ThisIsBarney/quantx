@@ -3,7 +3,9 @@
 // Implements:
 //   - Hardware-efficient ansatz (RY + CNOT ladder, n_layers reps)
 //   - QAOA ansatz (H init + cost unitary + mixer, p rounds, MaxCut)
-//   - Parameter-shift gradient: ∂E/∂θ = (E(θ+π/2) - E(θ-π/2)) / 2
+//   - Gradient computation:
+//       * HEA: exact parameter-shift rule
+//       * QAOA: central finite differences for shared γ/β parameters
 //   - Adam optimizer and vanilla gradient descent
 //
 // The optimizer reuses run_circuit() for all energy evaluations so it
@@ -164,7 +166,7 @@ double eval_energy(const VqeOptions& opts, const Params& params) {
 
 // ── Gradient ──────────────────────────────────────────────────────────────────
 
-// Compute analytical gradient via the parameter-shift rule.
+// Compute exact gradient for independent parameters using the parameter-shift rule.
 // ∂E/∂θ_k = (E(θ + π/2 * e_k) − E(θ − π/2 * e_k)) / 2
 Params parameter_shift_gradient(const VqeOptions& opts, const Params& theta) {
   constexpr double shift = 1.5707963267948966;  // π/2
@@ -179,6 +181,32 @@ Params parameter_shift_gradient(const VqeOptions& opts, const Params& theta) {
     tm[k] = theta[k];
   }
   return grad;
+}
+
+// Compute central-difference gradient for shared parameters.
+// Used for QAOA, where each γ/β controls multiple gates per layer.
+Params finite_difference_gradient(const VqeOptions& opts, const Params& theta) {
+  constexpr double eps = 1e-4;
+  Params grad(theta.size(), 0.0);
+  Params tp = theta;
+  Params tm = theta;
+  for (std::size_t k = 0; k < theta.size(); ++k) {
+    tp[k] += eps;
+    tm[k] -= eps;
+    grad[k] = (eval_energy(opts, tp) - eval_energy(opts, tm)) / (2.0 * eps);
+    tp[k] = theta[k];
+    tm[k] = theta[k];
+  }
+  return grad;
+}
+
+Params compute_gradient(const VqeOptions& opts, const Params& theta) {
+  if (opts.ansatz_type == "qaoa") {
+    // QAOA layer parameters are shared across many gates; applying a single
+    // global ±π/2 shift to a shared parameter is not the exact shift rule.
+    return finite_difference_gradient(opts, theta);
+  }
+  return parameter_shift_gradient(opts, theta);
 }
 
 // ── Adam optimizer ────────────────────────────────────────────────────────────
@@ -274,7 +302,7 @@ VqeResult run_vqe(const VqeOptions& opts) {
     frame.energy    = energy;
     frame.params    = theta;
 
-    const Params grad = parameter_shift_gradient(opts, theta);
+    const Params grad = compute_gradient(opts, theta);
     double gnorm = 0.0;
     for (double g : grad) gnorm += g * g;
     gnorm = std::sqrt(gnorm);
