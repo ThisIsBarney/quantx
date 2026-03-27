@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
     bool validate_only = false;
     bool export_continuous_frames = false;
     bool export_wigner = false;
+    std::uint32_t entanglement_cut = 0U;
     std::uint32_t export_frame_stride = 1U;
     std::size_t export_points_max = 2500U;
     double export_density_floor_ratio = 0.08;
@@ -70,6 +71,8 @@ int main(int argc, char** argv) {
                  "include native continuous-frame payloads in continuous results");
     app.add_flag("--export-wigner", export_wigner,
                  "include Wigner quasi-probability payloads when continuous-frame exports are enabled");
+    app.add_option("--entanglement-cut", entanglement_cut,
+                   "bipartite cut qubit index n_a: subsystem A=[0,n_a), B=[n_a,n); 0 disables");
     app.add_option("--export-frame-stride", export_frame_stride,
                    "sample continuous export frames every N steps (minimum 1)");
     app.add_option("--export-points-max", export_points_max,
@@ -111,6 +114,9 @@ int main(int argc, char** argv) {
     }
     if (export_wigner) {
       options.export_wigner = true;
+    }
+    if (entanglement_cut > 0U) {
+      options.entanglement_cut = entanglement_cut;
     }
     options.export_frame_stride = export_frame_stride;
     options.export_points_max = export_points_max;

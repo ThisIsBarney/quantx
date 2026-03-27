@@ -227,6 +227,66 @@ std::size_t arnoldi(
   return std::min<std::size_t>(m, used);
 }
 
+// Compute bipartite entanglement measures for a pure state via SVD.
+// Subsystem A = qubits [0, n_a); subsystem B = qubits [n_a, n).
+// State is indexed |b_hi...b_na...b_0⟩ with qubit 0 in the LSB.
+EntanglementFrame compute_entanglement_pure(const std::vector<Complex>& psi,
+                                            std::uint32_t n_a,
+                                            std::uint32_t step, double time) {
+  EntanglementFrame frame;
+  frame.step = step;
+  frame.time = time;
+  const std::size_t total = psi.size();
+  if (total == 0 || n_a == 0) return frame;
+
+  const std::size_t da = static_cast<std::size_t>(1ULL << n_a);
+  if (da > total) return frame;
+  const std::size_t db = total / da;
+  if (da * db != total) return frame;
+  const std::uint32_t n_b = static_cast<std::uint32_t>(
+      std::bit_width(static_cast<std::uint64_t>(db)) - 1U);
+
+  frame.n_a = n_a;
+  frame.n_b = n_b;
+
+  // Build da×db matrix M where M[ia][ib] = ψ[ib*da + ia].
+  // Low n_a bits = subsystem A (LSB-indexed).
+  Eigen::MatrixXcd M(static_cast<Eigen::Index>(da), static_cast<Eigen::Index>(db));
+  for (std::size_t ia = 0; ia < da; ++ia) {
+    for (std::size_t ib = 0; ib < db; ++ib) {
+      M(static_cast<Eigen::Index>(ia), static_cast<Eigen::Index>(ib)) = psi[ib * da + ia];
+    }
+  }
+
+  Eigen::JacobiSVD<Eigen::MatrixXcd> svd(M, Eigen::ComputeThinU | Eigen::ComputeThinV);
+  const Eigen::VectorXd& sv = svd.singularValues();
+  const std::size_t k = static_cast<std::size_t>(sv.size());
+
+  frame.schmidt_values.resize(k);
+  double entropy = 0.0;
+  for (std::size_t i = 0; i < k; ++i) {
+    const double s = sv(static_cast<Eigen::Index>(i));
+    frame.schmidt_values[i] = s;
+    const double p = s * s;
+    if (p > 1e-15) entropy -= p * std::log(p);
+  }
+  frame.entropy_a = entropy;
+  // Pure state: S_A = S_B, so I(A:B) = S_A + S_B - S_total = 2*S_A.
+  frame.mutual_info = 2.0 * entropy;
+
+  // Concurrence for 2-qubit (da=db=2): C = 2*σ_0*σ_1.
+  if (n_a == 1 && n_b == 1 && k >= 2) {
+    frame.concurrence = 2.0 * std::abs(sv(0)) * std::abs(sv(1));
+  }
+
+  // Log-negativity for pure bipartite state: E_N = log2(Σ σ_i).
+  double sv_sum = 0.0;
+  for (std::size_t i = 0; i < k; ++i) sv_sum += frame.schmidt_values[i];
+  frame.log_negativity = std::log2(std::max(1.0, sv_sum));
+
+  return frame;
+}
+
 // Dense statevector backend with trotter and Krylov propagators.
 class StatevectorBackend final : public IBackend {
  public:
@@ -246,7 +306,7 @@ class StatevectorBackend final : public IBackend {
   }
 
   // Initialize dense state and parsed Hamiltonian terms.
-  void initialize(const QuantumProblem& problem, const RunOptions&) override {
+  void initialize(const QuantumProblem& problem, const RunOptions& options) override {
     std::size_t n = static_cast<std::size_t>(1ULL << problem.qubits);
     if (problem.qubits >= 26) {
       // Limit memory footprint for scaffold-mode runs.
@@ -255,6 +315,8 @@ class StatevectorBackend final : public IBackend {
     state_.assign(n, {0.0, 0.0});
     state_[0] = {1.0, 0.0};
     terms_ = parse_terms(problem);
+    entanglement_cut_ = options.entanglement_cut;
+    entanglement_frames_.clear();
   }
 
   // Evolve state by selected method ("krylov" or trotter-like product formula).
@@ -268,6 +330,7 @@ class StatevectorBackend final : public IBackend {
     const std::string method = problem.evolution.method;
 
     for (std::size_t s = 0; s < steps; ++s) {
+      const double t = (static_cast<double>(s) + 1.0) * problem.evolution.dt;
       if (method == "krylov") {
         std::vector<Complex> v0 = state_;
         const double psi_norm = std::sqrt(std::max(0.0, norm_sq(v0)));
@@ -311,12 +374,17 @@ class StatevectorBackend final : public IBackend {
           apply_pauli_term(state_, hpsi, term);
           const double theta = problem.evolution.dt * term.coefficient;
           const Complex c = Complex{std::cos(theta), 0.0};
-          const Complex s = Complex{0.0, -std::sin(theta)};
+          const Complex sc = Complex{0.0, -std::sin(theta)};
           for (std::size_t i = 0; i < state_.size(); ++i) {
-            tmp[i] = c * state_[i] + s * hpsi[i];
+            tmp[i] = c * state_[i] + sc * hpsi[i];
           }
           state_.swap(tmp);
         }
+      }
+      if (entanglement_cut_ > 0) {
+        const auto step_idx = static_cast<std::uint32_t>(s + 1);
+        entanglement_frames_.push_back(
+            compute_entanglement_pure(state_, entanglement_cut_, step_idx, t));
       }
     }
   }
@@ -365,9 +433,16 @@ class StatevectorBackend final : public IBackend {
   // Dense statevector backend does not emit continuous density frames.
   std::vector<ContinuousDensityFrame> continuous_density_frames() const override { return {}; }
 
+  // Return bipartite entanglement frames computed during evolution.
+  std::vector<EntanglementFrame> entanglement_frames() const override {
+    return entanglement_frames_;
+  }
+
  private:
   std::vector<Complex> state_;
   std::vector<ParsedTerm> terms_;
+  std::uint32_t entanglement_cut_{0};
+  std::vector<EntanglementFrame> entanglement_frames_;
 };
 
 }  // namespace
