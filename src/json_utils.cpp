@@ -743,5 +743,73 @@ std::string backend_info_to_json(const BackendInfo& info) {
   return j.dump();
 }
 
+// ── VQE serialization helpers ────────────────────────────────────────────────
+
+static json vqe_frame_to_json_obj(const VqeFrame& f) {
+  json j;
+  j["iteration"]     = f.iteration;
+  j["energy"]        = f.energy;
+  j["gradient_norm"] = f.gradient_norm;
+  j["accepted"]      = f.accepted;
+  j["params"]        = f.params;
+  return j;
+}
+
+// Parse VQE options from JSON.
+VqeOptions vqe_options_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
+  VqeOptions o;
+  o.n_qubits       = get_or<std::uint32_t>(j, "n_qubits",       o.n_qubits);
+  o.ansatz_type    = get_or<std::string>  (j, "ansatz_type",    o.ansatz_type);
+  o.n_layers       = get_or<std::uint32_t>(j, "n_layers",       o.n_layers);
+  o.optimizer      = get_or<std::string>  (j, "optimizer",      o.optimizer);
+  o.learning_rate  = get_or<double>       (j, "learning_rate",  o.learning_rate);
+  o.adam_beta1     = get_or<double>       (j, "adam_beta1",     o.adam_beta1);
+  o.adam_beta2     = get_or<double>       (j, "adam_beta2",     o.adam_beta2);
+  o.adam_epsilon   = get_or<double>       (j, "adam_epsilon",   o.adam_epsilon);
+  o.max_iterations = get_or<std::uint32_t>(j, "max_iterations", o.max_iterations);
+  o.convergence_tol= get_or<double>       (j, "convergence_tol",o.convergence_tol);
+  o.seed           = get_or<std::uint64_t>(j, "seed",           o.seed);
+  o.initial_params = get_or<std::vector<double>>(j, "initial_params", o.initial_params);
+
+  auto ht_it = j.find("cost_hamiltonian");
+  if (ht_it != j.end() && ht_it->is_array()) {
+    for (const auto& item : *ht_it) {
+      if (item.is_object()) {
+        o.cost_hamiltonian.push_back(parse_hamiltonian_term(item));
+      }
+    }
+  }
+
+  auto edges_it = j.find("qaoa_edges");
+  if (edges_it != j.end() && edges_it->is_array()) {
+    for (const auto& e : *edges_it) {
+      if (e.is_array() && e.size() == 2) {
+        o.qaoa_edges.emplace_back(e[0].get<std::uint32_t>(), e[1].get<std::uint32_t>());
+      }
+    }
+  }
+  return o;
+}
+
+// Serialize VQE result.
+std::string vqe_result_to_json(const VqeResult& result) {
+  json j;
+  j["ok"]             = result.ok;
+  j["converged"]      = result.converged;
+  j["n_iterations"]   = result.n_iterations;
+  j["optimal_energy"] = result.optimal_energy;
+  j["optimal_params"] = result.optimal_params;
+  j["elapsed_ms"]     = result.elapsed_ms;
+  j["message"]        = result.message;
+  j["engine_version"] = version_string();
+  json frames = json::array();
+  for (const auto& f : result.frames) {
+    frames.push_back(vqe_frame_to_json_obj(f));
+  }
+  j["frames"] = frames;
+  return j.dump();
+}
+
 }  // namespace qx
 

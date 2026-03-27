@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
 
     std::string problem_path;
     std::string circuit_path;
+    std::string vqe_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -60,6 +61,7 @@ int main(int argc, char** argv) {
     CLI::App app{"QuantX CLI"};
     app.add_option("--problem", problem_path, "problem json path");
     app.add_option("--circuit", circuit_path, "circuit json path");
+    app.add_option("--vqe", vqe_path, "VQE/QAOA options json path (run variational optimization)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -100,11 +102,16 @@ int main(int argc, char** argv) {
       return 0;
     }
 
-    if (problem_path.empty() && circuit_path.empty()) {
-      throw std::runtime_error("missing required --problem or --circuit");
+    if (problem_path.empty() && circuit_path.empty() && vqe_path.empty()) {
+      throw std::runtime_error("missing required --problem, --circuit, or --vqe");
     }
-    if (!problem_path.empty() && !circuit_path.empty()) {
-      throw std::runtime_error("use either --problem or --circuit, not both");
+    {
+      int modes = (!problem_path.empty() ? 1 : 0) +
+                  (!circuit_path.empty()  ? 1 : 0) +
+                  (!vqe_path.empty()      ? 1 : 0);
+      if (modes > 1) {
+        throw std::runtime_error("use exactly one of --problem, --circuit, or --vqe");
+      }
     }
 
     const std::string options_json = options_path.empty() ? "{}" : read_text_file(options_path);
@@ -135,7 +142,7 @@ int main(int argc, char** argv) {
       } else {
         output_json = qx::result_to_json(qx::run(problem, options));
       }
-    } else {
+    } else if (!circuit_path.empty()) {
       if (explain) {
         throw std::runtime_error("--explain currently supports --problem mode only");
       }
@@ -147,6 +154,15 @@ int main(int argc, char** argv) {
       } else {
         output_json = qx::circuit_result_to_json(qx::run_circuit(circuit, options));
       }
+    } else {
+      // VQE mode.
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --vqe mode");
+      }
+      const std::string vqe_json = read_text_file(vqe_path);
+      const qx::VqeOptions vqe_opts = qx::vqe_options_from_json(vqe_json);
+      qx::log::info("loaded vqe options file: " + vqe_path);
+      output_json = qx::vqe_result_to_json(qx::run_vqe(vqe_opts));
     }
 
     if (out_path.empty()) {

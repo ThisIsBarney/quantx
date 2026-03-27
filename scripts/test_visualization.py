@@ -870,6 +870,36 @@ def main() -> int:
     if "cvHeatEntropy" not in mc:
       raise RuntimeError(f"{scenario_key}: html missing heatmap canvas (cvHeatEntropy)")
 
+  # ── M20: VQE / QAOA variational algorithms ───────────────────────────────────
+  vqe_dir = tmp / "vqe"
+  vqe_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key, html_name in (("vqe_ising", "quantum_vqe_ising.html"), ("vqe_qaoa", "quantum_vqe_qaoa.html")):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--vqe-qubits", "2",
+         "--vqe-layers", "1",
+         "--vqe-max-iter", "20",
+         "--out-dir", str(vqe_dir)],
+        html_name,
+    )
+    vqe_html = vqe_dir / html_name
+    if not vqe_html.exists():
+      raise RuntimeError(f"vqe html not generated: {vqe_html}")
+    vc = vqe_html.read_text(encoding="utf-8")
+    if "gradSeries" not in vc:
+      raise RuntimeError(f"{scenario_key}: html missing gradient series data (gradSeries)")
+    if "energySeries" not in vc:
+      raise RuntimeError(f"{scenario_key}: html missing energy series data (energySeries)")
+    if "cvEnergy" not in vc:
+      raise RuntimeError(f"{scenario_key}: html missing energy canvas (cvEnergy)")
+    if "cvGrad" not in vc:
+      raise RuntimeError(f"{scenario_key}: html missing gradient canvas (cvGrad)")
+    if "cvProbs" not in vc:
+      raise RuntimeError(f"{scenario_key}: html missing probability canvas (cvProbs)")
+    if "optimal energy" not in vc:
+      raise RuntimeError(f"{scenario_key}: html missing optimal energy status line")
+
   print("visualization smoke passed")
   return 0
 
