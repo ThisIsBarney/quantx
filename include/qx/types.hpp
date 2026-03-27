@@ -297,6 +297,29 @@ struct WignerFrame {
   double kinetic_energy{0.0};
 };
 
+// One recorded frame from a bipartite entanglement analysis.
+// Computed from a pure statevector (Schmidt decomposition via SVD) or a
+// Lindblad density matrix (partial trace + eigendecomposition).
+struct EntanglementFrame {
+  // Step index and physical time.
+  std::uint32_t step{0};
+  double time{0.0};
+  // Bipartite cut: subsystem A = qubits [0, n_a), subsystem B = [n_a, n).
+  std::uint32_t n_a{0};
+  std::uint32_t n_b{0};
+  // Von Neumann entanglement entropy S(ρ_A) = -Tr(ρ_A log ρ_A) in nats.
+  double entropy_a{0.0};
+  // Mutual information I(A:B) = S_A + S_B − S_total (0 for pure states since S=S_A+S_B).
+  double mutual_info{0.0};
+  // Concurrence C ∈ [0,1] for 2-qubit systems (pure: 2σ₀σ₁; mixed: Wootters trace).
+  // Set to -1.0 when the system is not 2 qubits.
+  double concurrence{-1.0};
+  // Logarithmic negativity E_N = log2(‖ρ^{T_A}‖₁) — non-zero only for entangled mixed states.
+  double log_negativity{0.0};
+  // Schmidt coefficients (singular values), largest first.
+  std::vector<double> schmidt_values{};
+};
+
 // Canonical simulation problem description used across API boundaries.
 struct QuantumProblem {
   ProblemKind kind{ProblemKind::Discrete};
@@ -333,6 +356,9 @@ struct RunOptions {
   // frames (W(x,p), probability current, and transport coefficients).
   // Guarded separately because the Wigner computation is O(nx^2 log nx) per frame.
   bool export_wigner{false};
+  // When > 0, statevector and Lindblad backends compute bipartite entanglement measures
+  // each step, splitting qubit register at [0, entanglement_cut) | [entanglement_cut, n).
+  std::uint32_t entanglement_cut{0};
   std::string checkpoint_path{"./checkpoints"};
   ResourceConstraints resources{};
 };
@@ -403,6 +429,7 @@ struct SimulationResult {
   std::vector<ContinuousDensityFrame> continuous_density_frames{};
   std::vector<LindbladFrame> lindblad_frames{};
   std::vector<WignerFrame> wigner_frames{};
+  std::vector<EntanglementFrame> entanglement_frames{};
   ContinuousExportConfig continuous_export{};
   std::vector<Event> events{};
   std::string message;

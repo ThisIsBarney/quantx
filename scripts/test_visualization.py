@@ -818,6 +818,30 @@ def main() -> int:
     if "transmission" not in wc:
       raise RuntimeError(f"{scenario_key}: html missing transmission data")
 
+  # ── M18: Entanglement measures & subsystem correlations ──────────────────────
+  ent_dir = tmp / "entanglement"
+  ent_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key in ("entanglement_rabi", "entanglement_decay"):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--samples-entanglement-t", "8",
+         "--out-dir", str(ent_dir)],
+        f"quantum_{scenario_key}.html",
+    )
+    ent_html = ent_dir / f"quantum_{scenario_key}.html"
+    if not ent_html.exists():
+      raise RuntimeError(f"entanglement html not generated: {ent_html}")
+    ec = ent_html.read_text(encoding="utf-8")
+    if "entropy_a" not in ec:
+      raise RuntimeError(f"{scenario_key}: html missing entropy_a data")
+    if "cvEntropy" not in ec:
+      raise RuntimeError(f"{scenario_key}: html missing entropy canvas")
+    if "schmidt_values" not in ec:
+      raise RuntimeError(f"{scenario_key}: html missing schmidt_values data")
+    if "mutual_info" not in ec:
+      raise RuntimeError(f"{scenario_key}: html missing mutual_info data")
+
   print("visualization smoke passed")
   return 0
 

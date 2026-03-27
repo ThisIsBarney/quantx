@@ -37,6 +37,8 @@ class IBackend {
   virtual std::vector<LindbladFrame> lindblad_frames() const { return {}; }
   // Return Wigner quasi-probability and transport frames; empty for non-2D backends.
   virtual std::vector<WignerFrame> wigner_frames() const { return {}; }
+  // Return bipartite entanglement frames; empty for backends that don't compute them.
+  virtual std::vector<EntanglementFrame> entanglement_frames() const { return {}; }
 };
 
 using BackendFactory = std::function<std::unique_ptr<IBackend>()>;

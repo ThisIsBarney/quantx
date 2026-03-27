@@ -436,6 +436,26 @@ json wigner_frames_to_json(const std::vector<WignerFrame>& frames) {
   return out;
 }
 
+// Serialize one entanglement frame to JSON.
+json entanglement_frame_to_json(const EntanglementFrame& frame) {
+  json out{{"step", frame.step},    {"time", frame.time},
+           {"n_a", frame.n_a},      {"n_b", frame.n_b},
+           {"entropy_a", frame.entropy_a}, {"mutual_info", frame.mutual_info},
+           {"concurrence", frame.concurrence},
+           {"log_negativity", frame.log_negativity}};
+  if (!frame.schmidt_values.empty()) {
+    out["schmidt_values"] = frame.schmidt_values;
+  }
+  return out;
+}
+
+// Serialize all entanglement frames to a JSON array.
+json entanglement_frames_to_json(const std::vector<EntanglementFrame>& frames) {
+  json out = json::array();
+  for (const auto& f : frames) out.push_back(entanglement_frame_to_json(f));
+  return out;
+}
+
 // Select a stride-sampled view of the continuous frame list for the public export wrapper.
 std::vector<ContinuousDensityFrame> sample_continuous_export_frames(
     const std::vector<ContinuousDensityFrame>& frames,
@@ -569,6 +589,7 @@ RunOptions options_from_json(const std::string& json_text) {
   o.enable_checkpoint = get_or<bool>(j, "enable_checkpoint", o.enable_checkpoint);
   o.export_continuous_frames = get_or<bool>(j, "export_continuous_frames", o.export_continuous_frames);
   o.export_wigner = get_or<bool>(j, "export_wigner", o.export_wigner);
+  o.entanglement_cut = get_or<std::uint32_t>(j, "entanglement_cut", o.entanglement_cut);
   o.checkpoint_path = get_or<std::string>(j, "checkpoint_path", o.checkpoint_path);
   o.resources.max_threads = get_or<std::uint32_t>(j, "max_threads", o.resources.max_threads);
   o.resources.max_gpus = get_or<std::uint32_t>(j, "max_gpus", o.resources.max_gpus);
@@ -644,6 +665,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
   j["lindblad_frames"] = lindblad_frames_to_json(result.lindblad_frames);
   j["wigner_frames"] = wigner_frames_to_json(result.wigner_frames);
+  j["entanglement_frames"] = entanglement_frames_to_json(result.entanglement_frames);
   const ContinuousExportConfig export_config = sanitize_continuous_export_config_impl(result.continuous_export);
   j["continuous_export"] = {
       {"schema_version", export_config.schema_version},

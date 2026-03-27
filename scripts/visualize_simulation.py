@@ -2481,6 +2481,452 @@ def _lindblad_page(data: dict) -> str:
 </html>"""
 
 
+def _entanglement_frames(
+    n_qubits: int,
+    hamiltonian_terms: list[dict],
+    collapse_ops: list[dict],
+    n_a: int,
+    total_time: float = 4.0,
+    dt: float = 0.02,
+    samples: int = 80,
+    source: str = "python-reference",
+) -> dict:
+    """Compute bipartite entanglement measures via numpy.
+
+    For pure-state time evolution (no collapse ops), uses exact matrix
+    exponentiation and Schmidt decomposition via SVD.  For mixed-state runs
+    (collapse_ops non-empty) uses Lindblad RK4 then partial-trace + SVD.
+
+    Returns a dict with keys: n_qubits, n_a, n_b, frames, source, total_time.
+    Each frame: step, t, entropy_a, mutual_info, concurrence, log_negativity,
+                schmidt_values.
+    """
+    try:
+      import numpy as np
+    except ImportError as ex:
+      raise RuntimeError("Entanglement visualization requires numpy") from ex
+
+    import re
+    token_re = re.compile(r'([XYZxyz])(\d+)')
+
+    dim = 1 << n_qubits
+    n_b = n_qubits - n_a
+    da = 1 << n_a
+    db = 1 << n_b
+
+    # ── Hamiltonian builder (replicates _lindblad_frames logic) ─────────────
+    def _pauli_x():
+        return np.array([[0, 1], [1, 0]], dtype=complex)
+    def _pauli_y():
+        return np.array([[0, -1j], [1j, 0]], dtype=complex)
+    def _pauli_z():
+        return np.array([[1, 0], [0, -1]], dtype=complex)
+    def _sigma_minus():
+        return np.array([[0, 1], [0, 0]], dtype=complex)
+
+    def _embed(op2x2, q, n):
+        full_dim = 1 << n
+        q_mask = 1 << q
+        result = np.zeros((full_dim, full_dim), dtype=complex)
+        for col in range(full_dim):
+            c_q = (col >> q) & 1
+            col_rest = col & ~q_mask
+            for row in range(full_dim):
+                if (row & ~q_mask) == col_rest:
+                    r_q = (row >> q) & 1
+                    result[row, col] = op2x2[r_q, c_q]
+        return result
+
+    def _build_H(terms, n):
+        H = np.zeros((1 << n, 1 << n), dtype=complex)
+        for t in terms:
+            label = t.get("label", "")
+            coeff = t.get("coefficient", 0.0)
+            if any(label.startswith(p) for p in ("AmplitudeDamping", "Dephasing", "Depolarizing")):
+                continue
+            if not label:
+                continue
+            flip_mask = yz_mask = y_count = 0
+            valid = True
+            for m in token_re.finditer(label):
+                p = m.group(1).upper()
+                q = int(m.group(2))
+                if q >= n or q >= 63:
+                    valid = False; break
+                bit = 1 << q
+                if p == 'X':
+                    flip_mask |= bit
+                elif p == 'Y':
+                    flip_mask |= bit; yz_mask |= bit; y_count += 1
+                elif p == 'Z':
+                    yz_mask |= bit
+                else:
+                    valid = False; break
+            if not valid:
+                continue
+            global_phase = [1+0j, 0+1j, -1+0j, 0-1j][y_count % 4]
+            for src in range(1 << n):
+                dst = src ^ flip_mask
+                sign = -1.0 if bin(src & yz_mask).count('1') % 2 else 1.0
+                H[dst, src] += coeff * global_phase * sign
+        return H
+
+    def _build_collapse_ops(ops_spec, n):
+        Lk = []
+        for op in ops_spec:
+            label = op.get("label", "")
+            gamma = max(0.0, op.get("coefficient", 0.0))
+            sg = math.sqrt(gamma)
+            if label.startswith("AmplitudeDamping"):
+                q = int(label[len("AmplitudeDamping"):])
+                if q < n:
+                    Lk.append(sg * _embed(_sigma_minus(), q, n))
+            elif label.startswith("Dephasing"):
+                q = int(label[len("Dephasing"):])
+                if q < n:
+                    Lk.append((sg * 0.5) * _embed(_pauli_z(), q, n))
+            elif label.startswith("Depolarizing"):
+                q = int(label[len("Depolarizing"):])
+                if q < n:
+                    sg3 = math.sqrt(gamma / 3.0) if gamma > 0 else 0.0
+                    for op2x2 in [_pauli_x(), _pauli_y(), _pauli_z()]:
+                        Lk.append(sg3 * _embed(op2x2, q, n))
+        return Lk
+
+    all_terms = hamiltonian_terms + collapse_ops
+    H_mat = _build_H(all_terms, n_qubits)
+    Lk_list = _build_collapse_ops(all_terms, n_qubits)
+
+    # ── Entanglement measures ────────────────────────────────────────────────
+    def _entropy(rho_sub):
+        evals = np.maximum(0.0, np.linalg.eigvalsh(rho_sub))
+        return float(-np.sum(evals * np.log(np.where(evals > 1e-15, evals, 1.0)) * (evals > 1e-15)))
+
+    def _partial_trace_b(rho):
+        """Trace over B: ρ_A[ia, ia'] = Σ_ib ρ[ia + ib*da, ia' + ib*da]."""
+        rho_a = np.zeros((da, da), dtype=complex)
+        for ib in range(db):
+            rho_a += rho[ib*da:(ib+1)*da, ib*da:(ib+1)*da]
+        return rho_a
+
+    def _partial_trace_a(rho):
+        """Trace over A: ρ_B[ib, ib'] = Σ_ia ρ[ia + ib*da, ia + ib'*da]."""
+        rho_b = np.zeros((db, db), dtype=complex)
+        for ia in range(da):
+            rows = np.arange(db) * da + ia
+            rho_b += rho[np.ix_(rows, rows)]
+        return rho_b
+
+    def _partial_transpose_a(rho):
+        """Partial transpose w.r.t. A."""
+        out = np.zeros((dim, dim), dtype=complex)
+        for ib in range(db):
+            for ibp in range(db):
+                block = rho[ib*da:(ib+1)*da, ibp*da:(ibp+1)*da]
+                out[ib*da:(ib+1)*da, ibp*da:(ibp+1)*da] = block.T
+        return out
+
+    def _wootters_concurrence(rho):
+        """Wootters concurrence for 2-qubit density matrix."""
+        sy_sy = np.array([[0,0,0,-1],[0,0,1,0],[0,1,0,0],[-1,0,0,0]], dtype=complex)
+        rho_tilde = sy_sy @ rho.conj() @ sy_sy
+        R = rho @ rho_tilde
+        evals = np.linalg.eigvals(R)
+        lambdas = np.sort(np.sqrt(np.maximum(0.0, evals.real)))[::-1]
+        return float(max(0.0, lambdas[0] - lambdas[1] - lambdas[2] - lambdas[3]))
+
+    def record_frame_pure(psi, step, t):
+        """Compute entanglement from pure statevector via SVD."""
+        M = psi.reshape(db, da)  # psi[ib*da + ia] → M[ib, ia]
+        sv = np.linalg.svd(M, compute_uv=False)  # descending order
+        probs = sv**2
+        probs = probs[probs > 1e-15]
+        entropy_a = float(-np.sum(probs * np.log(probs)))
+        mutual_info = 2.0 * entropy_a  # pure state: S_A = S_B
+        concurrence = float(2.0 * sv[0] * sv[1]) if (n_a == 1 and n_b == 1 and len(sv) >= 2) else -1.0
+        sv_sum = float(np.sum(sv))
+        log_neg = float(np.log2(max(1.0, sv_sum)))
+        return {
+            "step": step, "t": round(t, 10),
+            "entropy_a": round(entropy_a, 10),
+            "mutual_info": round(mutual_info, 10),
+            "concurrence": round(concurrence, 10),
+            "log_negativity": round(log_neg, 10),
+            "schmidt_values": [round(float(s), 10) for s in sv],
+        }
+
+    def record_frame_mixed(rho, step, t):
+        """Compute entanglement from density matrix via partial trace."""
+        rho_a = _partial_trace_b(rho)
+        rho_b = _partial_trace_a(rho)
+        entropy_a = _entropy(rho_a)
+        entropy_b = _entropy(rho_b)
+        entropy_total = _entropy(rho)
+        mutual_info = entropy_a + entropy_b - entropy_total
+        rho_pt = _partial_transpose_a(rho)
+        pt_evals = np.linalg.eigvalsh(rho_pt)
+        trace_norm = float(np.sum(np.abs(pt_evals)))
+        log_neg = float(np.log2(max(1.0, trace_norm)))
+        sv_a = np.sqrt(np.maximum(0.0, np.linalg.eigvalsh(rho_a)))[::-1]
+        concurrence = _wootters_concurrence(rho) if n_qubits == 2 else -1.0
+        return {
+            "step": step, "t": round(t, 10),
+            "entropy_a": round(entropy_a, 10),
+            "mutual_info": round(mutual_info, 10),
+            "concurrence": round(float(concurrence), 10),
+            "log_negativity": round(log_neg, 10),
+            "schmidt_values": [round(float(s), 10) for s in sv_a],
+        }
+
+    total_steps = max(1, round(total_time / dt))
+    stride = max(1, total_steps // max(1, samples - 1))
+
+    is_mixed = len(Lk_list) > 0
+
+    if is_mixed:
+        # Mixed: Lindblad RK4
+        rho = np.zeros((dim, dim), dtype=complex)
+        rho[0, 0] = 1.0
+        LdagL_list = [L.conj().T @ L for L in Lk_list]
+
+        def lindblad_rhs(r):
+            dr = -1j * (H_mat @ r - r @ H_mat)
+            for L, LdagL in zip(Lk_list, LdagL_list):
+                dr += L @ r @ L.conj().T - 0.5 * (LdagL @ r + r @ LdagL)
+            return dr
+
+        def rk4_step(r):
+            k1 = lindblad_rhs(r)
+            k2 = lindblad_rhs(r + 0.5 * dt * k1)
+            k3 = lindblad_rhs(r + 0.5 * dt * k2)
+            k4 = lindblad_rhs(r + dt * k3)
+            r_new = r + (dt / 6.0) * (k1 + 2.0*k2 + 2.0*k3 + k4)
+            return 0.5 * (r_new + r_new.conj().T)
+
+        frames = [record_frame_mixed(rho, 0, 0.0)]
+        for s in range(total_steps):
+            rho = rk4_step(rho)
+            t_s = (s + 1) * dt
+            if (s + 1) % stride == 0 or s + 1 == total_steps:
+                frames.append(record_frame_mixed(rho, s + 1, t_s))
+    else:
+        # Pure: exact matrix exponential
+        evals, evecs = np.linalg.eigh(H_mat)
+        psi = np.zeros(dim, dtype=complex)
+        psi[0] = 1.0
+
+        frames = [record_frame_pure(psi, 0, 0.0)]
+        U_dt = evecs @ np.diag(np.exp(-1j * evals * dt)) @ evecs.conj().T
+        for s in range(total_steps):
+            psi = U_dt @ psi
+            t_s = (s + 1) * dt
+            if (s + 1) % stride == 0 or s + 1 == total_steps:
+                frames.append(record_frame_pure(psi, s + 1, t_s))
+
+    return {
+        "n_qubits": n_qubits,
+        "n_a": n_a,
+        "n_b": n_b,
+        "is_mixed": is_mixed,
+        "source": source,
+        "total_time": total_time,
+        "frames": frames,
+        "hamiltonian_terms": hamiltonian_terms,
+        "collapse_ops": collapse_ops,
+    }
+
+
+def _entanglement_page(data: dict) -> str:
+    """Render an animated HTML page for bipartite entanglement measures."""
+    data_json = json.dumps(data, ensure_ascii=False)
+    n_a = data.get("n_a", 1)
+    n_b = data.get("n_b", 1)
+    n_qubits = data.get("n_qubits", n_a + n_b)
+    is_mixed = data.get("is_mixed", False)
+    title = f"Entanglement: {n_qubits}-qubit ({n_a}|{n_b} cut)"
+    mixed_label = "Mixed (Lindblad)" if is_mixed else "Pure (Schrödinger)"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif;padding:20px}}
+h1{{font-size:1.1rem;font-weight:600;margin-bottom:12px;color:#58a6ff}}
+.meta{{font-size:0.78rem;color:#8b949e;margin-bottom:16px}}
+.controls{{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}}
+.controls label{{font-size:0.8rem;color:#8b949e}}
+button{{background:#21262d;border:1px solid #30363d;color:#e6edf3;
+        padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem}}
+button:hover{{background:#30363d}}
+input[type=range]{{width:200px;accent-color:#58a6ff}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:960px}}
+.panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}}
+.panel h2{{font-size:0.85rem;font-weight:600;color:#8b949e;margin-bottom:10px}}
+canvas{{display:block;width:100%;height:200px}}
+.tick{{font-size:9px;fill:#8b949e}}
+.schmidt-bar{{display:flex;gap:3px;align-items:flex-end;height:80px;margin-top:8px}}
+.sbar{{background:#58a6ff;border-radius:2px 2px 0 0;min-width:8px;transition:height 0.15s}}
+.info{{font-size:0.75rem;color:#8b949e;margin-top:8px}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="meta">Type: {mixed_label} &nbsp;|&nbsp; Subsystem A: qubits [0,{n_a}) &nbsp;|&nbsp; Subsystem B: qubits [{n_a},{n_qubits})</div>
+<div class="controls">
+  <button id="btnPlay">&#9654; Play</button>
+  <label>Step: <input type="range" id="slider" min="1" max="1" value="1"></label>
+  <span id="timeLabel" style="font-size:0.8rem;color:#58a6ff"></span>
+</div>
+<div class="grid">
+  <div class="panel">
+    <h2>S(ρ_A) — Entanglement Entropy</h2>
+    <canvas id="cvEntropy"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Mutual Information I(A:B)</h2>
+    <canvas id="cvMutual"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Concurrence{"" if n_qubits == 2 else " (N/A — not 2-qubit)"} &amp; Log-Negativity</h2>
+    <canvas id="cvConc"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Schmidt Spectrum</h2>
+    <div class="schmidt-bar" id="schmidtBars"></div>
+    <div class="info" id="schmidtInfo"></div>
+  </div>
+</div>
+<script>
+const DATA = {data_json};
+const frames = DATA.frames;
+const N = frames.length;
+
+const slider = document.getElementById("slider");
+const timeLabel = document.getElementById("timeLabel");
+slider.max = N;
+
+// ── Canvas chart helper ──────────────────────────────────────────────────────
+function initCanvas(id) {{
+  const cv = document.getElementById(id);
+  cv.width = cv.offsetWidth || 440;
+  cv.height = 200;
+  return cv.getContext("2d");
+}}
+
+function drawChart(ctx, series, color, label, yMin, yMax) {{
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const pad = {{l:40,r:12,t:10,b:30}};
+  const w = W - pad.l - pad.r, h = H - pad.t - pad.b;
+  ctx.clearRect(0, 0, W, H);
+  // axes
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+h); ctx.lineTo(pad.l+w,pad.t+h); ctx.stroke();
+  // tick labels
+  ctx.fillStyle = "#8b949e"; ctx.font = "9px system-ui"; ctx.textAlign = "right";
+  const range = yMax - yMin || 1;
+  for (let i = 0; i <= 4; i++) {{
+    const v = yMin + (range * i / 4);
+    const y = pad.t + h - (v - yMin) / range * h;
+    ctx.fillText(v.toFixed(2), pad.l - 3, y + 3);
+    ctx.strokeStyle = "#21262d"; ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+w, y); ctx.stroke();
+  }}
+  // line
+  if (series.length < 2) return;
+  ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.beginPath();
+  series.forEach((v, i) => {{
+    const x = pad.l + i / (series.length - 1) * w;
+    const y = pad.t + h - (v - yMin) / range * h;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }});
+  ctx.stroke();
+  // label
+  ctx.fillStyle = color; ctx.font = "9px system-ui"; ctx.textAlign = "left";
+  ctx.fillText(label, pad.l + 2, pad.t + 12);
+}}
+
+const entropy_series = frames.map(f => f.entropy_a);
+const mutual_series = frames.map(f => f.mutual_info);
+const conc_series = frames.map(f => f.concurrence);
+const lneg_series = frames.map(f => f.log_negativity);
+
+const e_max = Math.max(...entropy_series, 0.01);
+const m_max = Math.max(...mutual_series, 0.01);
+const c_max = Math.max(...conc_series.filter(v=>v>=0), ...lneg_series, 0.01);
+
+const ctxE = initCanvas("cvEntropy");
+const ctxM = initCanvas("cvMutual");
+const ctxC = initCanvas("cvConc");
+
+function drawAll() {{
+  drawChart(ctxE, entropy_series, "#58a6ff", "S(ρ_A) [nats]", 0, e_max);
+  drawChart(ctxM, mutual_series, "#3fb950", "I(A:B) [nats]", 0, m_max);
+  const conc_valid = conc_series[0] >= 0;
+  if (conc_valid) {{
+    drawChart(ctxC, conc_series, "#f0883e", "Concurrence", 0, c_max);
+  }} else {{
+    drawChart(ctxC, lneg_series, "#bc8cff", "Log-Neg", 0, c_max);
+  }}
+}}
+drawAll();
+
+// ── Cursor lines ─────────────────────────────────────────────────────────────
+function drawCursor(ctx, idx) {{
+  const W = ctx.canvas.width, H = ctx.canvas.height;
+  const pad = {{l:40,r:12,t:10,b:30}};
+  const w = W - pad.l - pad.r;
+  const x = pad.l + idx / (N - 1) * w;
+  ctx.strokeStyle = "rgba(255,255,255,0.35)"; ctx.lineWidth = 1;
+  ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + H - pad.t - pad.b); ctx.stroke();
+  ctx.setLineDash([]);
+}}
+
+// ── Schmidt bars ──────────────────────────────────────────────────────────────
+function updateSchmidt(f) {{
+  const container = document.getElementById("schmidtBars");
+  const sv = f.schmidt_values || [];
+  const maxSv = Math.max(...sv, 0.01);
+  container.innerHTML = sv.map((s, i) => {{
+    const h = Math.round(s / maxSv * 76);
+    const col = `hsl(${{200 + i*30}},70%,55%)`;
+    return `<div class="sbar" style="height:${{h}}px;background:${{col}}" title="σ${{i}}=${{s.toFixed(4)}}"></div>`;
+  }}).join("");
+  const rank = sv.filter(s => s > 1e-4).length;
+  document.getElementById("schmidtInfo").textContent =
+    `Schmidt rank ≈ ${{rank}} · max σ = ${{sv[0]?.toFixed(4) ?? "—"}}`;
+}}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(idx) {{
+  const f = frames[idx - 1];
+  timeLabel.textContent = `t = ${{f.t.toFixed(3)}}  S = ${{f.entropy_a.toFixed(4)}}  I = ${{f.mutual_info.toFixed(4)}}`;
+  drawAll();
+  [ctxE, ctxM, ctxC].forEach(c => drawCursor(c, idx - 1));
+  updateSchmidt(f);
+}}
+render(1);
+slider.addEventListener("input", () => render(+slider.value));
+
+// ── Play/pause ────────────────────────────────────────────────────────────────
+let timer = null;
+document.getElementById("btnPlay").addEventListener("click", function() {{
+  if (timer) {{ clearInterval(timer); timer = null; this.textContent = "▶ Play"; return; }}
+  this.textContent = "⏸ Pause";
+  let idx = +slider.value;
+  timer = setInterval(() => {{
+    idx = idx >= N ? 1 : idx + 1;
+    slider.value = idx;
+    render(idx);
+    if (idx >= N) {{ clearInterval(timer); timer = null; document.getElementById("btnPlay").textContent = "▶ Play"; }}
+  }}, 80);
+}});
+</script>
+</body>
+</html>"""
+
+
 def _wigner_frames(
     nx: int,
     ny: int,
@@ -2913,7 +3359,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -2942,6 +3388,7 @@ def main() -> int:
   parser.add_argument("--lindblad-qubits", type=int, default=1)
   parser.add_argument("--samples-lindblad-t", type=int, default=80)
   parser.add_argument("--samples-wigner-t", type=int, default=50)
+  parser.add_argument("--samples-entanglement-t", type=int, default=80)
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -3171,6 +3618,48 @@ def main() -> int:
     )
     path = out_dir / f"quantum_wigner_{scenario_key}.html"
     path.write_text(_wigner_page(wigner_data), encoding="utf-8")
+    generated.append(path)
+
+  # M18 — Entanglement scenarios
+  # entanglement_rabi: transverse-field Ising model — X0+X1 drives, Z0Z1 creates entanglement
+  if args.scenario in {"entanglement_rabi", "all"}:
+    h_terms_rabi = [
+        {"label": "X0", "coefficient": 0.5},
+        {"label": "X1", "coefficient": 0.5},
+        {"label": "Z0Z1", "coefficient": 1.0},
+    ]
+    ent_rabi_data = _entanglement_frames(
+        n_qubits=2,
+        hamiltonian_terms=h_terms_rabi,
+        collapse_ops=[],
+        n_a=1,
+        total_time=math.pi * 2,
+        dt=0.02,
+        samples=args.samples_entanglement_t,
+    )
+    path = out_dir / "quantum_entanglement_rabi.html"
+    path.write_text(_entanglement_page(ent_rabi_data), encoding="utf-8")
+    generated.append(path)
+
+  # entanglement_decay: 2-qubit Heisenberg XX + amplitude damping on qubit 1
+  if args.scenario in {"entanglement_decay", "all"}:
+    h_terms_decay = [
+        {"label": "X0X1", "coefficient": 1.0},
+        {"label": "Z0",   "coefficient": 0.2},
+        {"label": "Z1",   "coefficient": 0.2},
+    ]
+    c_ops_decay = [{"label": "AmplitudeDamping1", "coefficient": 0.5}]
+    ent_decay_data = _entanglement_frames(
+        n_qubits=2,
+        hamiltonian_terms=h_terms_decay,
+        collapse_ops=c_ops_decay,
+        n_a=1,
+        total_time=6.0,
+        dt=0.02,
+        samples=args.samples_entanglement_t,
+    )
+    path = out_dir / "quantum_entanglement_decay.html"
+    path.write_text(_entanglement_page(ent_decay_data), encoding="utf-8")
     generated.append(path)
 
   for p in generated:

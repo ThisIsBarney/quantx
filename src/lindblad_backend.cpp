@@ -279,6 +279,139 @@ double compute_entropy(const MatrixXcd& rho) {
   return std::max(0.0, entropy);
 }
 
+// ── Entanglement measures for mixed states ──────────────────────────────────
+
+// Partial trace over subsystem B: ρ_A[ia, ia'] = Σ_{ib} ρ[ia + ib*da, ia' + ib*da].
+// Qubit 0 = LSB → subsystem A spans low n_a bits, B spans high bits.
+MatrixXcd partial_trace_b(const MatrixXcd& rho, std::uint32_t n_a, std::uint32_t n_b) {
+  const std::size_t da = static_cast<std::size_t>(1ULL << n_a);
+  const std::size_t db = static_cast<std::size_t>(1ULL << n_b);
+  MatrixXcd rho_a = MatrixXcd::Zero(static_cast<Eigen::Index>(da), static_cast<Eigen::Index>(da));
+  for (std::size_t ib = 0; ib < db; ++ib) {
+    for (std::size_t ia = 0; ia < da; ++ia) {
+      for (std::size_t iap = 0; iap < da; ++iap) {
+        rho_a(static_cast<Eigen::Index>(ia), static_cast<Eigen::Index>(iap)) +=
+            rho(static_cast<Eigen::Index>(ia + ib * da),
+                static_cast<Eigen::Index>(iap + ib * da));
+      }
+    }
+  }
+  return rho_a;
+}
+
+// Partial trace over subsystem A: ρ_B[ib, ib'] = Σ_{ia} ρ[ia + ib*da, ia + ib'*da].
+MatrixXcd partial_trace_a(const MatrixXcd& rho, std::uint32_t n_a, std::uint32_t n_b) {
+  const std::size_t da = static_cast<std::size_t>(1ULL << n_a);
+  const std::size_t db = static_cast<std::size_t>(1ULL << n_b);
+  MatrixXcd rho_b = MatrixXcd::Zero(static_cast<Eigen::Index>(db), static_cast<Eigen::Index>(db));
+  for (std::size_t ia = 0; ia < da; ++ia) {
+    for (std::size_t ib = 0; ib < db; ++ib) {
+      for (std::size_t ibp = 0; ibp < db; ++ibp) {
+        rho_b(static_cast<Eigen::Index>(ib), static_cast<Eigen::Index>(ibp)) +=
+            rho(static_cast<Eigen::Index>(ia + ib * da),
+                static_cast<Eigen::Index>(ia + ibp * da));
+      }
+    }
+  }
+  return rho_b;
+}
+
+// Partial transpose with respect to A:
+// ρ^{T_A}[ia + ib*da, ia' + ib'*da] = ρ[ia' + ib*da, ia + ib'*da].
+MatrixXcd partial_transpose_a(const MatrixXcd& rho, std::uint32_t n_a, std::uint32_t n_b) {
+  const std::size_t da = static_cast<std::size_t>(1ULL << n_a);
+  const std::size_t db = static_cast<std::size_t>(1ULL << n_b);
+  const std::size_t dim = da * db;
+  MatrixXcd out = MatrixXcd::Zero(static_cast<Eigen::Index>(dim), static_cast<Eigen::Index>(dim));
+  for (std::size_t ib = 0; ib < db; ++ib) {
+    for (std::size_t ia = 0; ia < da; ++ia) {
+      for (std::size_t ibp = 0; ibp < db; ++ibp) {
+        for (std::size_t iap = 0; iap < da; ++iap) {
+          out(static_cast<Eigen::Index>(ia + ib * da),
+              static_cast<Eigen::Index>(iap + ibp * da)) =
+              rho(static_cast<Eigen::Index>(iap + ib * da),
+                  static_cast<Eigen::Index>(ia + ibp * da));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Wootters concurrence for a 2-qubit mixed state.
+double wootters_concurrence(const MatrixXcd& rho) {
+  // spin-flip basis: σ_y ⊗ σ_y (in computational basis |00⟩,|01⟩,|10⟩,|11⟩)
+  // R_tilde = ρ * (σ_y⊗σ_y) * ρ* * (σ_y⊗σ_y)
+  static const Complex sy_sy_data[16] = {
+      {0,0},{0,0},{0,0},{-1,0},
+      {0,0},{0,0},{1,0},{0,0},
+      {0,0},{1,0},{0,0},{0,0},
+      {-1,0},{0,0},{0,0},{0,0}
+  };
+  MatrixXcd sy_sy = Eigen::Map<const MatrixXcd>(sy_sy_data, 4, 4).transpose();
+  const MatrixXcd rho_tilde = sy_sy * rho.conjugate() * sy_sy;
+  // R = ρ * rho_tilde, eigenvalues of R are sqrt'd in descending order
+  const MatrixXcd R = rho * rho_tilde;
+  // Use ComplexEigenSolver; eigenvalues may have small imaginary parts
+  Eigen::ComplexEigenSolver<MatrixXcd> es(R, false);
+  Eigen::VectorXd lambdas(4);
+  for (Eigen::Index i = 0; i < 4; ++i) {
+    lambdas(i) = std::sqrt(std::max(0.0, es.eigenvalues()(i).real()));
+  }
+  std::sort(lambdas.data(), lambdas.data() + 4, std::greater<double>());
+  return std::max(0.0, lambdas(0) - lambdas(1) - lambdas(2) - lambdas(3));
+}
+
+// Compute bipartite entanglement measures from a Lindblad density matrix.
+EntanglementFrame compute_entanglement_mixed(const MatrixXcd& rho,
+                                              std::uint32_t n_a, std::uint32_t n,
+                                              std::uint32_t step, double time) {
+  EntanglementFrame frame;
+  frame.step = step;
+  frame.time = time;
+  if (n_a == 0 || n_a >= n) return frame;
+
+  const std::uint32_t n_b = n - n_a;
+  frame.n_a = n_a;
+  frame.n_b = n_b;
+
+  // Partial traces
+  const MatrixXcd rho_a = partial_trace_b(rho, n_a, n_b);
+  const MatrixXcd rho_b = partial_trace_a(rho, n_a, n_b);
+
+  frame.entropy_a = compute_entropy(rho_a);
+  const double entropy_b = compute_entropy(rho_b);
+  const double entropy_total = compute_entropy(rho);
+
+  // Mutual information I(A:B) = S_A + S_B - S_total
+  frame.mutual_info = frame.entropy_a + entropy_b - entropy_total;
+
+  // Log-negativity: E_N = log2(||ρ^{T_A}||_1)
+  const MatrixXcd rho_pt = partial_transpose_a(rho, n_a, n_b);
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> solver(rho_pt, Eigen::EigenvaluesOnly);
+  double trace_norm = 0.0;
+  for (Eigen::Index i = 0; i < solver.eigenvalues().size(); ++i) {
+    trace_norm += std::abs(solver.eigenvalues()(i));
+  }
+  frame.log_negativity = std::log2(std::max(1.0, trace_norm));
+
+  // Schmidt values from eigenvalues of ρ_A (square roots of eigenvalues)
+  Eigen::SelfAdjointEigenSolver<MatrixXcd> sa(rho_a, Eigen::EigenvaluesOnly);
+  const std::size_t ka = static_cast<std::size_t>(sa.eigenvalues().size());
+  frame.schmidt_values.resize(ka);
+  for (std::size_t i = 0; i < ka; ++i) {
+    frame.schmidt_values[i] = std::sqrt(std::max(0.0, sa.eigenvalues()(static_cast<Eigen::Index>(i))));
+  }
+  std::sort(frame.schmidt_values.begin(), frame.schmidt_values.end(), std::greater<double>());
+
+  // Concurrence for 2-qubit only
+  if (n == 2U) {
+    frame.concurrence = wootters_concurrence(rho);
+  }
+
+  return frame;
+}
+
 // ── LindbladBackend ─────────────────────────────────────────────────────────
 
 class LindbladBackend final : public IBackend {
@@ -296,7 +429,7 @@ class LindbladBackend final : public IBackend {
     return c;
   }
 
-  void initialize(const QuantumProblem& problem, const RunOptions&) override {
+  void initialize(const QuantumProblem& problem, const RunOptions& options) override {
     n_ = problem.qubits;
     const auto dim =
         static_cast<Eigen::Index>(lindblad_dimension(n_));
@@ -306,7 +439,9 @@ class LindbladBackend final : public IBackend {
     ops_ = build_collapse_ops(problem.hamiltonian_terms, n_);
     dt_ = problem.evolution.dt;
     total_time_ = problem.evolution.total_time;
+    entanglement_cut_ = options.entanglement_cut;
     frames_.clear();
+    entanglement_frames_.clear();
   }
 
   void evolve(const QuantumProblem&, const RunOptions&) override {
@@ -314,12 +449,21 @@ class LindbladBackend final : public IBackend {
         std::max(1.0, std::round(total_time_ / dt_)));
 
     record_frame(0U, 0.0);
+    if (entanglement_cut_ > 0 && entanglement_cut_ < n_) {
+      entanglement_frames_.push_back(
+          compute_entanglement_mixed(rho_, entanglement_cut_, n_, 0U, 0.0));
+    }
 
     for (std::uint32_t s = 0; s < steps; ++s) {
       rho_ = rk4_step(rho_, dt_, H_, ops_);
       // Re-symmetrise to prevent numerical drift from breaking Hermiticity.
       rho_ = (rho_ + rho_.adjoint()) * 0.5;
-      record_frame(s + 1U, static_cast<double>(s + 1U) * dt_);
+      const double t = static_cast<double>(s + 1U) * dt_;
+      record_frame(s + 1U, t);
+      if (entanglement_cut_ > 0 && entanglement_cut_ < n_) {
+        entanglement_frames_.push_back(
+            compute_entanglement_mixed(rho_, entanglement_cut_, n_, s + 1U, t));
+      }
     }
   }
 
@@ -351,6 +495,10 @@ class LindbladBackend final : public IBackend {
 
   std::vector<LindbladFrame> lindblad_frames() const override { return frames_; }
 
+  std::vector<EntanglementFrame> entanglement_frames() const override {
+    return entanglement_frames_;
+  }
+
  private:
   void record_frame(std::uint32_t step, double t) {
     LindbladFrame f;
@@ -380,10 +528,12 @@ class LindbladBackend final : public IBackend {
   std::uint32_t n_{1};
   double dt_{0.01};
   double total_time_{1.0};
+  std::uint32_t entanglement_cut_{0};
   MatrixXcd rho_;
   MatrixXcd H_;
   std::vector<CollapseOp> ops_;
   std::vector<LindbladFrame> frames_;
+  std::vector<EntanglementFrame> entanglement_frames_;
 };
 
 }  // namespace
