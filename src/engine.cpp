@@ -605,6 +605,7 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   result.observables = backend->measure(problem);
   result.state = backend->current_state();
   result.continuous_density_frames = backend->continuous_density_frames();
+  result.mps_frames = backend->mps_frames();
   result.lindblad_frames = backend->lindblad_frames();
   result.wigner_frames = backend->wigner_frames();
   result.entanglement_frames = backend->entanglement_frames();

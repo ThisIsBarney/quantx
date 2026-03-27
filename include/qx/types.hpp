@@ -297,6 +297,26 @@ struct WignerFrame {
   double kinetic_energy{0.0};
 };
 
+// One recorded diagnostics frame from a real TEBD/MPS time evolution.
+// Emitted by MpsBackend each exported step.
+struct MpsFrame {
+  // Step index and physical time.
+  std::uint32_t step{0};
+  double time{0.0};
+  // Number of sites (qubits) in the MPS.
+  std::uint32_t n_sites{0};
+  // Maximum bond dimension observed across all bonds at this step.
+  std::uint32_t max_bond_dim{0};
+  // Cumulative truncation error (sum of discarded singular-value weight).
+  double truncation_error{0.0};
+  // Bond dimension χ_j at each of the (n_sites−1) inter-site bonds.
+  std::vector<std::uint32_t> bond_dims{};
+  // Bipartite von Neumann entropy S_j = −Σ σ²_k log σ²_k at each bond.
+  std::vector<double> bond_entropies{};
+  // Single-site magnetisation ⟨Z_i⟩ for each site.
+  std::vector<double> magnetization{};
+};
+
 // One recorded frame from a bipartite entanglement analysis.
 // Computed from a pure statevector (Schmidt decomposition via SVD) or a
 // Lindblad density matrix (partial trace + eigendecomposition).
@@ -427,6 +447,7 @@ struct SimulationResult {
   std::vector<std::complex<double>> state{};
   std::map<std::string, double> observables{};
   std::vector<ContinuousDensityFrame> continuous_density_frames{};
+  std::vector<MpsFrame> mps_frames{};
   std::vector<LindbladFrame> lindblad_frames{};
   std::vector<WignerFrame> wigner_frames{};
   std::vector<EntanglementFrame> entanglement_frames{};

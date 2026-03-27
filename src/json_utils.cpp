@@ -427,6 +427,23 @@ json wigner_frame_to_json(const WignerFrame& frame) {
   return out;
 }
 
+// Serialize one MPS diagnostics frame to JSON.
+json mps_frame_to_json(const MpsFrame& f) {
+  json out{{"step", f.step}, {"time", f.time}, {"n_sites", f.n_sites},
+           {"max_bond_dim", f.max_bond_dim}, {"truncation_error", f.truncation_error}};
+  if (!f.bond_dims.empty())     out["bond_dims"]      = f.bond_dims;
+  if (!f.bond_entropies.empty()) out["bond_entropies"] = f.bond_entropies;
+  if (!f.magnetization.empty())  out["magnetization"]  = f.magnetization;
+  return out;
+}
+
+// Serialize all MPS frames to a JSON array.
+json mps_frames_to_json(const std::vector<MpsFrame>& frames) {
+  json out = json::array();
+  for (const auto& f : frames) out.push_back(mps_frame_to_json(f));
+  return out;
+}
+
 // Serialize all Wigner frames to a JSON array.
 json wigner_frames_to_json(const std::vector<WignerFrame>& frames) {
   json out = json::array();
@@ -663,6 +680,7 @@ std::string result_to_json(const SimulationResult& result) {
   j["engine_version"] = version_string();
   j["observables"] = result.observables;
   j["continuous_density_frames"] = continuous_density_frames_to_json(result.continuous_density_frames);
+  j["mps_frames"] = mps_frames_to_json(result.mps_frames);
   j["lindblad_frames"] = lindblad_frames_to_json(result.lindblad_frames);
   j["wigner_frames"] = wigner_frames_to_json(result.wigner_frames);
   j["entanglement_frames"] = entanglement_frames_to_json(result.entanglement_frames);

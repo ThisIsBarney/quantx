@@ -842,6 +842,34 @@ def main() -> int:
     if "mutual_info" not in ec:
       raise RuntimeError(f"{scenario_key}: html missing mutual_info data")
 
+  # ── M19: MPS / TEBD time evolution ───────────────────────────────────────────
+  mps_dir = tmp / "mps"
+  mps_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key, html_name in (("mps_ising", "quantum_mps_ising.html"), ("mps_xx", "quantum_mps_xx.html")):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--samples-mps-t", "6",
+         "--mps-sites", "4",
+         "--mps-max-bond", "8",
+         "--out-dir", str(mps_dir)],
+        html_name,
+    )
+    mps_html = mps_dir / html_name
+    if not mps_html.exists():
+      raise RuntimeError(f"mps html not generated: {mps_html}")
+    mc = mps_html.read_text(encoding="utf-8")
+    if "bond_entropies" not in mc:
+      raise RuntimeError(f"{scenario_key}: html missing bond_entropies data")
+    if "bond_dims" not in mc:
+      raise RuntimeError(f"{scenario_key}: html missing bond_dims data")
+    if "magnetization" not in mc:
+      raise RuntimeError(f"{scenario_key}: html missing magnetization data")
+    if "cvEntropy" not in mc:
+      raise RuntimeError(f"{scenario_key}: html missing entropy canvas (cvEntropy)")
+    if "cvHeatEntropy" not in mc:
+      raise RuntimeError(f"{scenario_key}: html missing heatmap canvas (cvHeatEntropy)")
+
   print("visualization smoke passed")
   return 0
 
