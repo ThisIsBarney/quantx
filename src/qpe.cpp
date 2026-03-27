@@ -174,13 +174,10 @@ QuantumCircuit build_phase_gate_qpe(const QpeOptions& opts) {
   // Inverse QFT on ancilla qubits [0, n_anc).
   append_iqft(c.operations, 0, n_anc);
 
-  // Measure all ancilla qubits.
-  for (std::uint32_t k = 0; k < n_anc; ++k) {
-    CircuitOp m;
-    m.name = "MEASURE"; m.targets = {k}; m.controls = {k};
-    c.operations.push_back(m);
-  }
-  c.clbits = n_anc;
+  // Do not insert explicit MEASURE ops: run_circuit shot sampling draws from the
+  // final statevector. Mid-circuit measurement would collapse ancilla once and
+  // destroy the intended per-shot QPE histogram for non-dyadic phases.
+  c.clbits = 0;
   c.shots = opts.n_shots;
 
   return c;
@@ -235,20 +232,19 @@ QpeResult run_qpe(const QpeOptions& opts) {
   const CircuitResult cr = run_circuit(circ, ro);
 
   // Decode measurement outcomes.
-  // Each shot produces n_ancilla measurement results. We read from cr.counts
-  // which maps binary strings → count.
+  // Each shot produces one sampled computational-basis bitstring; cr.counts maps
+  // sampled bitstrings -> counts.
   for (const auto& [bitstr, cnt] : cr.counts) {
-    // The n_ancilla + n_target bit string: first n_ancilla bits are ancilla.
-    // cr counts over the full n_ancilla+n_target qubit register (but target
-    // collapses independently; we care only about ancilla bits).
-    // Extract ancilla bits (qubits 0..n_ancilla-1 = first n_ancilla chars).
+    // Bitstrings are big-endian text with qubit 0 on the rightmost character.
+    // Ancilla qubits are 0..n_ancilla-1, i.e. the rightmost n_ancilla bits.
     if (bitstr.size() < opts.n_ancilla) continue;
-    const std::string anc_str = bitstr.substr(0, opts.n_ancilla);
+    const std::string anc_str = bitstr.substr(bitstr.size() - opts.n_ancilla);
     std::uint32_t anc_val = 0;
     for (std::uint32_t b = 0; b < opts.n_ancilla; ++b) {
-      if (anc_str[b] == '1') {
-        // Qubit 0 is MSB in the bitstring from run_circuit.
-        anc_val |= (1U << (opts.n_ancilla - 1 - b));
+      // anc_str rightmost char is qubit 0 (LSB), then qubit 1, ...
+      const char bit = anc_str[anc_str.size() - 1 - b];
+      if (bit == '1') {
+        anc_val |= (1U << b);
       }
     }
     if (anc_val < dim_anc) {
@@ -273,10 +269,6 @@ QpeResult run_qpe(const QpeOptions& opts) {
   {
     QuantumCircuit circ_exact = build_phase_gate_qpe(opts);
     circ_exact.shots = 0;
-    circ_exact.operations.erase(
-        std::remove_if(circ_exact.operations.begin(), circ_exact.operations.end(),
-                       [](const CircuitOp& op) { return op.name == "MEASURE"; }),
-        circ_exact.operations.end());
     circ_exact.clbits = 0;
     const CircuitResult cr_exact = run_circuit(circ_exact, ro);
     const std::size_t dim_total = cr_exact.state.size();
@@ -284,7 +276,9 @@ QpeResult run_qpe(const QpeOptions& opts) {
     for (std::uint32_t a = 0; a < dim_anc; ++a) {
       double prob = 0.0;
       for (std::size_t t = 0; t < dim_tgt; ++t) {
-        const std::size_t idx = static_cast<std::size_t>(a) * dim_tgt + t;
+        // Basis index is little-endian: ancilla occupy low-order bits.
+        // Combined index for |target=t, ancilla=a> is t * dim_anc + a.
+        const std::size_t idx = t * static_cast<std::size_t>(dim_anc) + a;
         if (idx < dim_total) {
           prob += std::norm(cr_exact.state[idx]);
         }
