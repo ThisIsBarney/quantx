@@ -2481,6 +2481,340 @@ def _lindblad_page(data: dict) -> str:
 </html>"""
 
 
+def _mps_frames(
+    n_sites: int,
+    hamiltonian_terms: list[dict],
+    total_time: float = 6.0,
+    dt: float = 0.05,
+    max_bond: int = 32,
+    trunc_tol: float = 1e-8,
+    samples: int = 60,
+    source: str = "python-reference",
+) -> dict:
+    """Numpy TEBD reference solver for 1D nearest-neighbour Hamiltonians.
+
+    Supports Pauli-string terms with |i-j|=1 (NN two-body) and single-site.
+    Returns bond entropies, bond dimensions, and site magnetisation over time.
+    """
+    try:
+        import numpy as np
+    except ImportError as ex:
+        raise RuntimeError("MPS visualization requires numpy") from ex
+
+    import re
+    d = 2  # qubit physical dimension
+    tok = re.compile(r'([XYZxyz])(\d+)')
+
+    def _px(): return np.array([[0,1],[1,0]], dtype=complex)
+    def _py(): return np.array([[0,-1j],[1j,0]], dtype=complex)
+    def _pz(): return np.array([[1,0],[0,-1]], dtype=complex)
+    def _pi(): return np.eye(2, dtype=complex)
+    def _p(c):
+        c = c.upper()
+        return _px() if c=='X' else _py() if c=='Y' else _pz() if c=='Z' else _pi()
+
+    def kron2(A, B): return np.kron(A, B)
+
+    # Parse Hamiltonian into NN 2-body and single-site terms.
+    two_body: dict[int, np.ndarray] = {}   # bond b → 4×4 Hermitian
+    single_body: dict[int, np.ndarray] = {}  # site → 2×2 Hermitian
+    for ht in hamiltonian_terms:
+        label, coeff = ht.get("label",""), ht.get("coefficient", 0.0)
+        ops = [(m.group(1).upper(), int(m.group(2))) for m in tok.finditer(label)]
+        if not ops: continue
+        if len(ops) == 1:
+            s, q = ops[0]
+            if 0 <= q < n_sites:
+                single_body[q] = single_body.get(q, np.zeros((2,2), complex)) + coeff * _p(s)
+        elif len(ops) == 2:
+            (s1,q1),(s2,q2) = ops
+            if abs(q1-q2) == 1 and 0 <= q1 < n_sites and 0 <= q2 < n_sites:
+                b = min(q1,q2)
+                op = kron2(_p(s1 if q1<q2 else s2), _p(s2 if q1<q2 else s1))
+                two_body[b] = two_body.get(b, np.zeros((4,4), complex)) + coeff * op
+
+    # Build gates for 2nd-order Suzuki-Trotter:
+    # even bonds use half-steps at start/end, odd bonds use full step in middle.
+    def _expm_small(H):
+        vals, vecs = np.linalg.eigh(H)
+        return (vecs * np.exp(-1j * vals)) @ vecs.conj().T
+
+    even_half_gates = {b: _expm_small(0.5 * dt * H) for b, H in two_body.items() if b % 2 == 0}
+    odd_full_gates = {b: _expm_small(dt * H) for b, H in two_body.items() if b % 2 == 1}
+    # Single-site half-step gates for 2nd-order ST (½ dt each end of sweep).
+    single_half = {s: _expm_small(0.5 * dt * H) for s, H in single_body.items()}
+
+    # MPS state: list of site tensors A[i] shape (chi_L*d, chi_R).
+    tensors = [np.zeros((d, 1), dtype=complex) for _ in range(n_sites)]
+    for t in tensors: t[0, 0] = 1.0  # |0⟩
+    schmidt = [np.array([1.0], dtype=float) for _ in range(max(0, n_sites - 1))]
+
+    def bond_dim(i): return tensors[i].shape[1]
+
+    def apply_1site(s, U2):
+        A = tensors[s]
+        chi_L = A.shape[0] // d
+        chi_R = A.shape[1]
+        for il in range(chi_L):
+            for ir in range(chi_R):
+                a0, a1 = A[il*d, ir], A[il*d+1, ir]
+                A[il*d,   ir] = U2[0,0]*a0 + U2[0,1]*a1
+                A[il*d+1, ir] = U2[1,0]*a0 + U2[1,1]*a1
+
+    def apply_2site(b, U4):
+        Ai, Aip1 = tensors[b], tensors[b+1]
+        chi_L = Ai.shape[0] // d
+        chi_M = Ai.shape[1]
+        chi_R = Aip1.shape[1]
+        # Reshape Aip1: (chi_M*d, chi_R) → (chi_M, d*chi_R)
+        Aip1_r = np.zeros((chi_M, d*chi_R), complex)
+        for im in range(chi_M):
+            for s in range(d):
+                Aip1_r[im, s*chi_R:(s+1)*chi_R] = Aip1[im*d+s, :]
+        Theta = Ai @ Aip1_r  # (chi_L*d, d*chi_R)
+        # Apply gate.
+        Tp = np.zeros_like(Theta)
+        for il in range(chi_L):
+            for ir in range(chi_R):
+                for s1n in range(d):
+                    for s2n in range(d):
+                        v = complex(0)
+                        for s1o in range(d):
+                            for s2o in range(d):
+                                v += U4[s1n*d+s2n, s1o*d+s2o] * Theta[il*d+s1o, s2o*chi_R+ir]
+                        Tp[il*d+s1n, s2n*chi_R+ir] = v
+        # SVD and truncate.
+        U, sv, Vh = np.linalg.svd(Tp, full_matrices=False)
+        abs_tol = trunc_tol * sv[0] if sv.size > 0 else 1e-30
+        chi_new = max(1, min(max_bond, int(np.sum(sv > abs_tol))))
+        schmidt[b] = sv[:chi_new].copy()
+        tensors[b]   = U[:, :chi_new]
+        SV = np.diag(sv[:chi_new]) @ Vh[:chi_new, :]  # (chi_new, d*chi_R)
+        Aip1_new = np.zeros((chi_new*d, chi_R), complex)
+        for im in range(chi_new):
+            for s in range(d):
+                Aip1_new[im*d+s, :] = SV[im, s*chi_R:(s+1)*chi_R]
+        tensors[b+1] = Aip1_new
+
+    def tebd_step():
+        for s, U in single_half.items(): apply_1site(s, U)
+        for b in range(0, n_sites-1, 2):
+            if b in even_half_gates: apply_2site(b, even_half_gates[b])
+        for b in range(1, n_sites-1, 2):
+            if b in odd_full_gates: apply_2site(b, odd_full_gates[b])
+        for b in range(0, n_sites-1, 2):
+            if b in even_half_gates: apply_2site(b, even_half_gates[b])
+        for s, U in single_half.items(): apply_1site(s, U)
+
+    def bond_entropy(b):
+        sv = schmidt[b]
+        norm2 = np.sum(sv**2)
+        if norm2 < 1e-30: return 0.0
+        p = sv**2 / norm2
+        p = p[p > 1e-15]
+        return float(-np.sum(p * np.log(p)))
+
+    def magnetization_z(s):
+        A = tensors[s]
+        chi_L = A.shape[0] // d
+        chi_R = A.shape[1]
+        val = 0.0
+        for il in range(chi_L):
+            for ir in range(chi_R):
+                val += abs(A[il*d, ir])**2 - abs(A[il*d+1, ir])**2
+        return float(val)
+
+    def collect():
+        bds = [int(bond_dim(i)) for i in range(n_sites-1)]
+        bes = [round(bond_entropy(b), 10) for b in range(n_sites-1)]
+        mag = [round(magnetization_z(s), 10) for s in range(n_sites)]
+        return {"bond_dims": bds, "bond_entropies": bes, "magnetization": mag,
+                "max_bond_dim": max(bds) if bds else 1}
+
+    total_steps = max(1, round(total_time / dt))
+    stride = max(1, total_steps // max(1, samples - 1))
+
+    frames = [{"step": 0, "t": 0.0, **collect()}]
+    for s in range(total_steps):
+        tebd_step()
+        if (s+1) % stride == 0 or s+1 == total_steps:
+            frames.append({"step": s+1, "t": round((s+1)*dt, 10), **collect()})
+
+    return {
+        "n_sites": n_sites, "max_bond": max_bond, "total_time": total_time,
+        "source": source, "frames": frames,
+        "hamiltonian_terms": hamiltonian_terms,
+    }
+
+
+def _mps_page(data: dict) -> str:
+    """Render an animated HTML page for MPS/TEBD bond entropies and magnetization."""
+    data_json = json.dumps(data, ensure_ascii=False)
+    n_sites = data.get("n_sites", 4)
+    title = f"MPS TEBD — {n_sites}-site chain"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#e6edf3;font-family:system-ui,sans-serif;padding:20px}}
+h1{{font-size:1.1rem;font-weight:600;margin-bottom:12px;color:#58a6ff}}
+.meta{{font-size:0.78rem;color:#8b949e;margin-bottom:16px}}
+.controls{{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}}
+button{{background:#21262d;border:1px solid #30363d;color:#e6edf3;
+        padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.82rem}}
+button:hover{{background:#30363d}}
+input[type=range]{{width:220px;accent-color:#58a6ff}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:980px}}
+.panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:14px}}
+.panel h2{{font-size:0.85rem;font-weight:600;color:#8b949e;margin-bottom:10px}}
+canvas{{display:block}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="meta">TEBD 2nd-order Suzuki-Trotter &nbsp;|&nbsp; {n_sites} sites</div>
+<div class="controls">
+  <button id="btnPlay">&#9654; Play</button>
+  <label style="font-size:.8rem;color:#8b949e">Step: <input type="range" id="slider" min="1" max="1" value="1"></label>
+  <span id="tLabel" style="font-size:.8rem;color:#58a6ff"></span>
+</div>
+<div class="grid">
+  <div class="panel">
+    <h2>Bond Entanglement Entropy S(bond j)</h2>
+    <canvas id="cvEntropy" width="440" height="200"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Site Magnetisation ⟨Z_i⟩</h2>
+    <canvas id="cvMag" width="440" height="200"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Bond Entropy vs Time (heatmap)</h2>
+    <canvas id="cvHeatEntropy" width="440" height="200"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Magnetisation vs Time (heatmap)</h2>
+    <canvas id="cvHeatMag" width="440" height="200"></canvas>
+  </div>
+</div>
+<script>
+const DATA = {data_json};
+const frames = DATA.frames;
+const N = frames.length;
+const nSites = DATA.n_sites;
+const nBonds = nSites - 1;
+
+const slider = document.getElementById("slider");
+slider.max = N;
+
+// ── Colour helpers ──────────────────────────────────────────────────────────
+function lerp(a,b,t){{return a+(b-a)*t;}}
+function heatColour(v, vMin, vMax, palette){{
+  const t=vMax>vMin?(v-vMin)/(vMax-vMin):0.5;
+  const ti=Math.min(palette.length-2,Math.floor(t*(palette.length-1)));
+  const tf=t*(palette.length-1)-ti;
+  const c0=palette[ti],c1=palette[ti+1];
+  return `rgb(${{Math.round(lerp(c0[0],c1[0],tf))}},${{Math.round(lerp(c0[1],c1[1],tf))}},${{Math.round(lerp(c0[2],c1[2],tf))}})`;
+}}
+const HOT  =[[13,17,23],[30,80,160],[88,166,255],[63,185,80],[255,220,80],[255,120,40],[255,40,40]];
+const COOL =[[13,17,23],[30,30,120],[60,60,200],[80,150,220],[200,200,255]];
+const RWB  =[[0,80,200],[255,255,255],[200,0,0]];
+
+// ── Static heatmaps ─────────────────────────────────────────────────────────
+function drawHeatmap(canvasId, nCols, seriesKey, vMin, vMax, palette){{
+  const cv=document.getElementById(canvasId);
+  const W=cv.width, H=cv.height;
+  const ctx=cv.getContext("2d");
+  ctx.clearRect(0,0,W,H);
+  const cellW=W/N, cellH=H/nCols;
+  frames.forEach((f,fi)=>{{
+    const vals=f[seriesKey]||[];
+    for(let j=0;j<nCols;j++){{
+      ctx.fillStyle=heatColour(vals[j]??0,vMin,vMax,palette);
+      ctx.fillRect(fi*cellW,j*cellH,Math.ceil(cellW),Math.ceil(cellH));
+    }}
+  }});
+}}
+
+const maxEnt=Math.max(...frames.flatMap(f=>f.bond_entropies||[0]),0.01);
+const maxMag=1.0;
+drawHeatmap("cvHeatEntropy", nBonds, "bond_entropies", 0, maxEnt, HOT);
+drawHeatmap("cvHeatMag",    nSites, "magnetization",  -1, 1,      RWB);
+
+// ── Bar charts ──────────────────────────────────────────────────────────────
+function drawBars(canvasId, vals, vMin, vMax, colour, label){{
+  const cv=document.getElementById(canvasId);
+  const W=cv.width,H=cv.height;
+  const ctx=cv.getContext("2d");
+  const pad={{l:36,r:8,t:8,b:28}};
+  const w=W-pad.l-pad.r, h=H-pad.t-pad.b;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle="#30363d"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+h); ctx.lineTo(pad.l+w,pad.t+h); ctx.stroke();
+  const range=vMax-vMin||1;
+  ctx.fillStyle="#8b949e"; ctx.font="9px system-ui"; ctx.textAlign="right";
+  for(let i=0;i<=4;i++){{
+    const v=vMin+range*i/4;
+    const y=pad.t+h-(v-vMin)/range*h;
+    ctx.fillText(v.toFixed(2),pad.l-2,y+3);
+    ctx.strokeStyle="#21262d"; ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+w,y); ctx.stroke();
+  }}
+  if(!vals||!vals.length)return;
+  const bw=w/vals.length*0.8;
+  const gap=w/vals.length;
+  vals.forEach((v,i)=>{{
+    const x=pad.l+i*gap+(gap-bw)/2;
+    const y0=pad.t+h-(0-vMin)/range*h;
+    const y=pad.t+h-(v-vMin)/range*h;
+    ctx.fillStyle=colour;
+    ctx.fillRect(x,Math.min(y,y0),bw,Math.abs(y-y0)+0.5);
+  }});
+  ctx.fillStyle=colour; ctx.font="9px system-ui"; ctx.textAlign="left";
+  ctx.fillText(label, pad.l+2, pad.t+12);
+}}
+
+// Cursor overlay on heatmap.
+function drawCursor(canvasId, fi){{
+  const cv=document.getElementById(canvasId);
+  const ctx=cv.getContext("2d");
+  const x=cv.width*fi/N;
+  ctx.strokeStyle="rgba(255,255,255,0.5)"; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,cv.height); ctx.stroke();
+  ctx.setLineDash([]);
+}}
+
+function render(idx){{
+  const f=frames[idx-1];
+  document.getElementById("tLabel").textContent=
+    `t=${{f.t?.toFixed(3)??0}}  χ_max=${{f.max_bond_dim??1}}`;
+  drawBars("cvEntropy", f.bond_entropies||[], 0, maxEnt, "#58a6ff", "S (nats)");
+  drawBars("cvMag",     f.magnetization||[], -1, 1,      "#f0883e", "⟨Z_i⟩");
+  // Redraw heatmaps and cursor.
+  drawHeatmap("cvHeatEntropy", nBonds, "bond_entropies", 0, maxEnt, HOT);
+  drawHeatmap("cvHeatMag",    nSites, "magnetization",  -1, 1,      RWB);
+  drawCursor("cvHeatEntropy", idx-1);
+  drawCursor("cvHeatMag",     idx-1);
+}}
+render(1);
+slider.addEventListener("input",()=>render(+slider.value));
+
+let timer=null;
+document.getElementById("btnPlay").addEventListener("click",function(){{
+  if(timer){{clearInterval(timer);timer=null;this.textContent="▶ Play";return;}}
+  this.textContent="⏸ Pause";
+  let idx=+slider.value;
+  timer=setInterval(()=>{{
+    idx=idx>=N?1:idx+1; slider.value=idx; render(idx);
+    if(idx>=N){{clearInterval(timer);timer=null;document.getElementById("btnPlay").textContent="▶ Play";}}
+  }},100);
+}});
+</script>
+</body>
+</html>"""
+
+
 def _entanglement_frames(
     n_qubits: int,
     hamiltonian_terms: list[dict],
@@ -3359,7 +3693,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -3389,6 +3723,9 @@ def main() -> int:
   parser.add_argument("--samples-lindblad-t", type=int, default=80)
   parser.add_argument("--samples-wigner-t", type=int, default=50)
   parser.add_argument("--samples-entanglement-t", type=int, default=80)
+  parser.add_argument("--samples-mps-t", type=int, default=60)
+  parser.add_argument("--mps-sites", type=int, default=12)
+  parser.add_argument("--mps-max-bond", type=int, default=16)
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -3618,6 +3955,40 @@ def main() -> int:
     )
     path = out_dir / f"quantum_wigner_{scenario_key}.html"
     path.write_text(_wigner_page(wigner_data), encoding="utf-8")
+    generated.append(path)
+
+  # M19 — MPS/TEBD scenarios
+  # mps_ising: transverse-field Ising model H = -Σ Z_i Z_{i+1} - g Σ X_i
+  if args.scenario in {"mps_ising", "all"}:
+    n = args.mps_sites
+    ising_terms = (
+        [{"label": f"Z{i}Z{i+1}", "coefficient": -1.0} for i in range(n - 1)]
+        + [{"label": f"X{i}", "coefficient": -0.5} for i in range(n)]
+    )
+    mps_ising_data = _mps_frames(
+        n_sites=n,
+        hamiltonian_terms=ising_terms,
+        total_time=4.0, dt=0.05,
+        max_bond=args.mps_max_bond,
+        samples=args.samples_mps_t,
+    )
+    path = out_dir / "quantum_mps_ising.html"
+    path.write_text(_mps_page(mps_ising_data), encoding="utf-8")
+    generated.append(path)
+
+  # mps_xx: XX model H = Σ X_i X_{i+1} — immediately entangles |00…0⟩ (XX|00⟩=|11⟩≠0)
+  if args.scenario in {"mps_xx", "all"}:
+    n = args.mps_sites
+    xx_terms = [{"label": f"X{i}X{i+1}", "coefficient": 1.0} for i in range(n - 1)]
+    mps_xx_data = _mps_frames(
+        n_sites=n,
+        hamiltonian_terms=xx_terms,
+        total_time=3.0, dt=0.04,
+        max_bond=args.mps_max_bond,
+        samples=args.samples_mps_t,
+    )
+    path = out_dir / "quantum_mps_xx.html"
+    path.write_text(_mps_page(mps_xx_data), encoding="utf-8")
     generated.append(path)
 
   # M18 — Entanglement scenarios
