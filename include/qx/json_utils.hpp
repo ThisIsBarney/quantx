@@ -28,5 +28,9 @@ std::string backend_info_to_json(const BackendInfo& info);
 VqeOptions vqe_options_from_json(const std::string& json);
 // Serialize VQE result to JSON string.
 std::string vqe_result_to_json(const VqeResult& result);
+// Parse QPE options from JSON string.
+QpeOptions qpe_options_from_json(const std::string& json);
+// Serialize QPE result to JSON string.
+std::string qpe_result_to_json(const QpeResult& result);
 
 }  // namespace qx

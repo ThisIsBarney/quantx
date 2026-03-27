@@ -477,6 +477,44 @@ struct VqeOptions {
   std::uint64_t seed{42};
 };
 
+// Options for Quantum Phase Estimation.
+struct QpeOptions {
+  // Number of ancilla (precision) qubits; resolution = 1/2^n_ancilla.
+  std::uint32_t n_ancilla{4};
+  // Number of target qubits (must match the unitary).
+  std::uint32_t n_target{1};
+  // Unitary specification: "phase_gate" | "hamiltonian".
+  //   "phase_gate"   — single-qubit phase gate P(phase_angle): |1⟩ eigenvalue e^{i*phase_angle}
+  //   "hamiltonian"  — U = exp(-i*H*evolution_time) built from hamiltonian_terms
+  std::string unitary_type{"phase_gate"};
+  // For "phase_gate": angle in radians, eigenvalue e^{i*phase_angle} on |1⟩.
+  double phase_angle{0.0};
+  // For "hamiltonian": Pauli-string terms and evolution time.
+  std::vector<HamiltonianTerm> hamiltonian_terms{};
+  double evolution_time{1.0};
+  // Number of shot-based measurement samples.
+  std::uint32_t n_shots{4096};
+  // RNG seed.
+  std::uint64_t seed{42};
+};
+
+// Result of a Quantum Phase Estimation run.
+struct QpeResult {
+  bool ok{true};
+  std::uint32_t n_ancilla{0};
+  std::uint32_t n_target{0};
+  // Phase estimate in [0, 1): bin with highest count divided by 2^n_ancilla.
+  double estimated_phase{0.0};
+  // Known true phase (set by run_qpe when the ground truth is available).
+  double true_phase{-1.0};
+  // Per-bin measurement counts; length = 2^n_ancilla.
+  std::vector<std::uint64_t> measurement_counts{};
+  // Per-bin phase probabilities (exact, from statevector).
+  std::vector<double> phase_probs{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // Summary of a completed VQE/QAOA optimization run.
 struct VqeResult {
   bool ok{true};

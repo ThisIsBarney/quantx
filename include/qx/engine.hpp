@@ -28,5 +28,7 @@ CircuitCapabilities circuit_backend_capabilities();
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions& options);
 // Run variational eigensolver (VQE) or QAOA optimization.
 VqeResult run_vqe(const VqeOptions& opts);
+// Run Quantum Phase Estimation to extract eigenphases of a unitary.
+QpeResult run_qpe(const QpeOptions& opts);
 
 }  // namespace qx

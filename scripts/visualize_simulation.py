@@ -3686,6 +3686,383 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
   return bond, trunc
 
 
+# ── M21: Quantum Phase Estimation ─────────────────────────────────────────────
+
+def _qpe_frames(
+    n_ancilla: int,
+    unitary: "np.ndarray",        # 2^n_target × 2^n_target unitary matrix
+    eigenstate: "np.ndarray",     # 2^n_target initial target state (normalized)
+    n_shots: int = 4096,
+    true_phase: float | None = None,
+    sweep_ancilla: list[int] | None = None,
+    seed: int = 42,
+) -> dict:
+  """Full-matrix QPE reference solver using numpy FFT.
+
+  Algorithm:
+    1. Construct the (2^n_ancilla × 2^n_target) state |+⟩^n_anc ⊗ |eigenstate⟩
+    2. Apply controlled-U^{2^k} for k = 0..n_ancilla-1 to build the phase-kickback state
+    3. Apply inverse QFT on ancilla register via np.fft.fft / sqrt(N) (NOT ifft — sign convention)
+    4. Marginalise over target register → phase probability distribution over 2^n_ancilla bins
+    5. Sample n_shots from exact probabilities
+
+  Returns dict with keys: n_ancilla, n_target, phase_probs, shot_counts, estimated_phase,
+    true_phase, sweep (list of {n_ancilla, estimated_phase, error} for each ancilla in sweep_ancilla).
+  """
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("QPE visualization requires numpy") from ex
+
+  rng = np.random.default_rng(seed)
+
+  dim_tgt = unitary.shape[0]
+  n_target = int(round(np.log2(dim_tgt)))
+  dim_anc = 1 << n_ancilla
+
+  def run_qpe_exact(n_anc: int) -> "np.ndarray":
+    """Return exact phase probabilities (length 2^n_anc) for given n_anc."""
+    d_anc = 1 << n_anc
+    # Build ancilla state: uniform superposition (|+⟩^n_anc) via equal-amplitude vector of length d_anc.
+    # Combined state is d_anc × dim_tgt matrix: row a = amplitude for ancilla=a.
+    state_mat = np.zeros((d_anc, dim_tgt), dtype=complex)
+    # All ancilla basis states get equal amplitude times eigenstate.
+    for a in range(d_anc):
+      state_mat[a, :] = eigenstate / np.sqrt(d_anc)
+
+    # Apply controlled-U^{2^k}: ancilla qubit k (in binary, MSB = qubit 0) controls U^{2^k}.
+    # For each basis state |a⟩ of ancilla (integer a), each ancilla qubit k contributes a phase
+    # if bit k of a is 1 (qubit k measured as 1 means U^{2^k} was applied).
+    # The ancilla basis state |a⟩ accumulates phase e^{i * phase_angle * a} if eigenvalue is e^{i*phi}
+    # and U|ψ⟩ = e^{i*phi}|ψ⟩.
+    # Build U^{2^k} powers iteratively.
+    u_power = unitary.copy()  # U^{2^0} = U
+    for k in range(n_anc):
+      # Ancilla qubit k controls U^{2^k}: bit k of integer a determines whether to apply u_power.
+      # This gives phase e^{i2πφ·a} for |a⟩ (since Σ_k bit_k(a)*2^k = a).
+      for a in range(d_anc):
+        if (a >> k) & 1:
+          state_mat[a, :] = u_power @ state_mat[a, :]
+      u_power = u_power @ u_power  # U^{2^{k+1}}
+
+    # Inverse QFT on ancilla via fft (NOT ifft — QFT uses e^{+i2πjk/N} = fft convention).
+    # QFT†|a⟩ = (1/√N) Σ_k e^{-i2πak/N} |k⟩  →  fft along axis 0 divided by √N.
+    state_mat = np.fft.fft(state_mat, axis=0) / np.sqrt(d_anc)
+
+    # Marginalise over target register: prob[a] = Σ_t |state_mat[a,t]|^2
+    probs = np.sum(np.abs(state_mat) ** 2, axis=1)
+    # Normalise (should already be ~1).
+    probs = np.real(probs)
+    probs = np.clip(probs, 0.0, None)
+    probs /= probs.sum()
+    return probs
+
+  # Main QPE run.
+  phase_probs = run_qpe_exact(n_ancilla)
+
+  # Shot sampling.
+  shot_counts = [0] * dim_anc
+  if n_shots > 0:
+    samples = rng.choice(dim_anc, size=n_shots, p=phase_probs)
+    for s in samples:
+      shot_counts[int(s)] += 1
+
+  peak_bin = int(np.argmax(phase_probs))
+  estimated_phase = peak_bin / dim_anc
+
+  # Sweep over ancilla counts if requested.
+  sweep = []
+  if sweep_ancilla:
+    for n_anc_s in sweep_ancilla:
+      if n_anc_s < 1:
+        continue
+      probs_s = run_qpe_exact(n_anc_s)
+      d_s = 1 << n_anc_s
+      peak_s = int(np.argmax(probs_s))
+      est_s = peak_s / d_s
+      entry: dict = {"n_ancilla": n_anc_s, "estimated_phase": est_s}
+      if true_phase is not None:
+        err = abs(est_s - true_phase)
+        # Handle wrap-around.
+        err = min(err, 1.0 - err)
+        entry["error"] = err
+      sweep.append(entry)
+
+  return {
+      "n_ancilla": n_ancilla,
+      "n_target": n_target,
+      "phase_probs": phase_probs.tolist(),
+      "shot_counts": shot_counts,
+      "estimated_phase": estimated_phase,
+      "true_phase": true_phase,
+      "sweep": sweep,
+      "n_shots": n_shots,
+  }
+
+
+def _qpe_page(data: dict, title: str = "QPE") -> str:
+  """Generate a self-contained HTML page for QPE results."""
+  import json as _json
+
+  data_js = _json.dumps(data, ensure_ascii=False)
+  true_phase = data.get("true_phase")
+  true_phase_js = "null" if true_phase is None else str(true_phase)
+
+  html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+  :root {{ --bg:#0d1117; --panel:#161b22; --border:#30363d; --accent:#58a6ff;
+           --green:#3fb950; --orange:#d29922; --muted:#8b949e; --text:#e6edf3; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+          min-height:100vh; padding:24px; }}
+  h1 {{ font-size:1.4rem; font-weight:600; color:var(--accent); margin-bottom:4px; }}
+  .subtitle {{ color:var(--muted); font-size:.85rem; margin-bottom:20px; }}
+  .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:1100px; margin:0 auto; }}
+  .panel {{ background:var(--panel); border:1px solid var(--border); border-radius:10px;
+            padding:16px; }}
+  .panel.wide {{ grid-column:span 2; }}
+  .panel h2 {{ font-size:.95rem; color:var(--muted); margin-bottom:12px; font-weight:500; }}
+  canvas {{ display:block; width:100%; }}
+  .stat-row {{ display:flex; gap:24px; flex-wrap:wrap; margin-bottom:16px; }}
+  .stat {{ background:var(--bg); border:1px solid var(--border); border-radius:8px;
+           padding:8px 14px; }}
+  .stat-label {{ font-size:.75rem; color:var(--muted); margin-bottom:2px; }}
+  .stat-value {{ font-size:1.1rem; font-weight:600; color:var(--accent); }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">Quantum Phase Estimation — Python Reference Solver</p>
+
+<div class="stat-row" id="stats"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Exact Phase Probability Distribution</h2>
+    <canvas id="cvPhase" height="260"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Shot Histogram (n={data.get('n_shots', 0)} samples)</h2>
+    <canvas id="cvShots" height="260"></canvas>
+  </div>
+  <div class="panel wide" id="sweepPanel" style="display:none">
+    <h2>Estimation Error vs n_ancilla (precision bits)</h2>
+    <canvas id="cvPrecision" height="220"></canvas>
+  </div>
+</div>
+
+<script>
+const DATA = {data_js};
+const TRUE_PHASE = {true_phase_js};
+
+// ── Stats row ──────────────────────────────────────────────────────────────────
+(function() {{
+  const s = document.getElementById('stats');
+  function stat(label, val) {{
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = `<div class="stat-label">${{label}}</div><div class="stat-value">${{val}}</div>`;
+    s.appendChild(d);
+  }}
+  stat('n_ancilla', DATA.n_ancilla);
+  stat('n_target', DATA.n_target);
+  stat('Estimated φ', DATA.estimated_phase.toFixed(6));
+  if (TRUE_PHASE !== null) stat('True φ', TRUE_PHASE.toFixed(6));
+  if (TRUE_PHASE !== null) {{
+    let err = Math.abs(DATA.estimated_phase - TRUE_PHASE);
+    err = Math.min(err, 1 - err);
+    stat('|Error|', err.toExponential(3));
+  }}
+  stat('n_shots', DATA.n_shots);
+}})();
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function drawBarChart(canvasId, values, labels, opts) {{
+  const cv = document.getElementById(canvasId);
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = cv.offsetWidth  * dpr || 500 * dpr;
+  cv.height = cv.offsetHeight * dpr || 260 * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = cv.offsetWidth || 500, H = cv.offsetHeight || 260;
+  ctx.fillStyle = '#161b22'; ctx.fillRect(0, 0, W, H);
+
+  const pad = {{ l:48, r:16, t:12, b:36 }};
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  const n = values.length;
+  if (!n) return;
+  const maxV = Math.max(...values, 1e-9);
+  const barW = Math.max(1, cw / n - 1);
+
+  for (let i = 0; i < n; i++) {{
+    const x = pad.l + i * (cw / n);
+    const bh = (values[i] / maxV) * ch;
+    let color = opts.barColor || '#58a6ff';
+    if (opts.highlightEst && i === opts.peakBin) color = '#d29922';
+    if (opts.highlightTrue && TRUE_PHASE !== null) {{
+      const trueBin = Math.round(TRUE_PHASE * n) % n;
+      if (i === trueBin) color = '#3fb950';
+    }}
+    ctx.fillStyle = color;
+    ctx.fillRect(x + 1, pad.t + ch - bh, barW, bh);
+  }}
+
+  // Axes.
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t + ch);
+  ctx.lineTo(pad.l + cw, pad.t + ch); ctx.stroke();
+
+  // Y ticks.
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+  for (let t = 0; t <= 4; t++) {{
+    const y = pad.t + ch - (t / 4) * ch;
+    ctx.fillText((maxV * t / 4).toFixed(3), pad.l - 4, y + 3);
+    ctx.strokeStyle = '#21262d';
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + cw, y); ctx.stroke();
+  }}
+
+  // X labels — show every Nth.
+  ctx.fillStyle = '#8b949e'; ctx.textAlign = 'center';
+  const step = Math.max(1, Math.floor(n / 8));
+  for (let i = 0; i < n; i += step) {{
+    const x = pad.l + i * (cw / n) + barW / 2;
+    ctx.fillText(i, x, pad.t + ch + 14);
+  }}
+
+  // Legend.
+  if (opts.highlightEst || opts.highlightTrue) {{
+    ctx.textAlign = 'left'; ctx.font = '11px system-ui';
+    let lx = pad.l + 4, ly = pad.t + 14;
+    if (opts.highlightEst) {{
+      ctx.fillStyle = '#d29922'; ctx.fillRect(lx, ly - 8, 10, 10);
+      ctx.fillStyle = '#e6edf3'; ctx.fillText(' Estimated peak', lx + 12, ly);
+      lx += 130;
+    }}
+    if (opts.highlightTrue && TRUE_PHASE !== null) {{
+      ctx.fillStyle = '#3fb950'; ctx.fillRect(lx, ly - 8, 10, 10);
+      ctx.fillStyle = '#e6edf3'; ctx.fillText(' True phase bin', lx + 12, ly);
+    }}
+  }}
+}}
+
+// ── Phase probability chart ────────────────────────────────────────────────────
+function drawPhase() {{
+  const probs = DATA.phase_probs;
+  const peak = probs.indexOf(Math.max(...probs));
+  drawBarChart('cvPhase', probs, null, {{
+    barColor: '#58a6ff',
+    highlightEst: true, peakBin: peak,
+    highlightTrue: true,
+  }});
+}}
+
+// ── Shot histogram ─────────────────────────────────────────────────────────────
+function drawShots() {{
+  const counts = DATA.shot_counts;
+  const peak = counts.indexOf(Math.max(...counts));
+  drawBarChart('cvShots', counts, null, {{
+    barColor: '#58a6ff',
+    highlightEst: true, peakBin: peak,
+    highlightTrue: true,
+  }});
+}}
+
+// ── Precision vs n_ancilla sweep ───────────────────────────────────────────────
+function drawSweep() {{
+  const sweep = DATA.sweep || [];
+  if (!sweep.length || sweep[0].error === undefined) return;
+  document.getElementById('sweepPanel').style.display = '';
+  const cv = document.getElementById('cvPrecision');
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = cv.offsetWidth  * dpr || 900 * dpr;
+  cv.height = cv.offsetHeight * dpr || 220 * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const W = cv.offsetWidth || 900, H = cv.offsetHeight || 220;
+  ctx.fillStyle = '#161b22'; ctx.fillRect(0, 0, W, H);
+
+  const pad = {{ l:60, r:20, t:16, b:36 }};
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+
+  // Theoretical curve: error ≤ 1/(2^n_anc).
+  const ns = sweep.map(s => s.n_ancilla);
+  const errs = sweep.map(s => s.error);
+  const maxN = Math.max(...ns), minN = Math.min(...ns);
+  const maxErr = Math.max(...errs, 0.01);
+
+  function xOf(n) {{ return pad.l + (n - minN) / Math.max(maxN - minN, 1) * cw; }}
+  function yOf(e) {{ return pad.t + ch - Math.log(e / maxErr) / Math.log(0.001 / maxErr) * ch; }}
+  // Simple linear-y fallback.
+  function yLin(e) {{ return pad.t + ch - (e / maxErr) * ch; }}
+
+  // Theoretical 1/2^n line.
+  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  for (let i = 0; i < ns.length; i++) {{
+    const th = 1.0 / (1 << ns[i]);
+    const x = xOf(ns[i]), y = yLin(Math.min(th, maxErr));
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }}
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Actual errors.
+  ctx.strokeStyle = '#d29922'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < ns.length; i++) {{
+    const x = xOf(ns[i]), y = yLin(errs[i]);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }}
+  ctx.stroke();
+  for (let i = 0; i < ns.length; i++) {{
+    ctx.fillStyle = '#d29922';
+    ctx.beginPath(); ctx.arc(xOf(ns[i]), yLin(errs[i]), 4, 0, 2*Math.PI); ctx.fill();
+  }}
+
+  // Axes & labels.
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, pad.t+ch);
+  ctx.lineTo(pad.l+cw, pad.t+ch); ctx.stroke();
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+  for (let i = 0; i < ns.length; i++) {{
+    ctx.fillText(ns[i], xOf(ns[i]), pad.t+ch+14);
+  }}
+  ctx.fillText('n_ancilla (precision bits)', pad.l + cw/2, H-4);
+  ctx.textAlign = 'right';
+  for (let t = 0; t <= 4; t++) {{
+    const e = maxErr * (1 - t/4);
+    ctx.fillText(e.toExponential(1), pad.l-4, yLin(e)+3);
+  }}
+  ctx.save(); ctx.translate(14, pad.t+ch/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center'; ctx.fillText('|error|', 0, 0); ctx.restore();
+
+  // Legend.
+  ctx.textAlign = 'left'; ctx.font = '11px system-ui';
+  ctx.fillStyle = '#d29922'; ctx.fillRect(pad.l+8, pad.t+4, 12, 3);
+  ctx.fillStyle = '#e6edf3'; ctx.fillText(' Actual error', pad.l+22, pad.t+9);
+  ctx.fillStyle = '#3fb950'; ctx.fillRect(pad.l+8+110, pad.t+4, 12, 3);
+  ctx.fillStyle = '#e6edf3'; ctx.fillText(' 1/2ⁿ bound', pad.l+22+110, pad.t+9);
+}}
+
+window.addEventListener('load', () => {{
+  drawPhase();
+  drawShots();
+  drawSweep();
+}});
+window.addEventListener('resize', () => {{
+  drawPhase();
+  drawShots();
+  drawSweep();
+}});
+</script>
+</body>
+</html>"""
+  return html
+
+
 # ── M20: VQE / QAOA variational optimizer ─────────────────────────────────────
 
 def _vqe_frames(
@@ -4217,7 +4594,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -4253,6 +4630,10 @@ def main() -> int:
   parser.add_argument("--vqe-max-iter", type=int, default=120, help="max VQE/QAOA optimizer iterations")
   parser.add_argument("--vqe-layers", type=int, default=2, help="number of HEA layers / QAOA rounds")
   parser.add_argument("--vqe-qubits", type=int, default=4, help="number of qubits for VQE scenarios")
+  parser.add_argument("--qpe-ancilla", type=int, default=6, help="number of ancilla (precision) qubits for QPE")
+  parser.add_argument("--qpe-shots", type=int, default=4096, help="number of measurement shots for QPE")
+  parser.add_argument("--qpe-phase", type=float, default=0.375, help="true phase φ ∈ [0,1) for qpe_phase scenario (phase_angle = 2π·φ)")
+  parser.add_argument("--qpe-sweep-max", type=int, default=10, help="maximum n_ancilla in precision sweep (1..N)")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -4604,6 +4985,65 @@ def main() -> int:
     path = out_dir / "quantum_vqe_qaoa.html"
     path.write_text(_vqe_page(vqe_qaoa_data), encoding="utf-8")
     generated.append(path)
+
+  # ── M21 — QPE scenarios ──────────────────────────────────────────────────────
+  # qpe_phase: single-qubit phase gate P(2π·φ) with exact phase φ = 3/8 = 0.375
+  if args.scenario in {"qpe_phase", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("qpe_phase skipped: numpy not available", file=sys.stderr)
+    else:
+      phi = args.qpe_phase  # e.g. 0.375 → 3/8 → exact representation with n_ancilla >= 3
+      phase_angle = 2.0 * 3.141592653589793 * phi
+      # Single-qubit phase gate U = diag(1, e^{i·phase_angle})
+      U_phase = np.array([[1.0, 0.0], [0.0, np.exp(1j * phase_angle)]], dtype=complex)
+      # Eigenstate |1⟩ of P(θ) with eigenvalue e^{iθ}
+      eigenstate_phase = np.array([0.0, 1.0], dtype=complex)
+      sweep_ns = list(range(1, min(args.qpe_sweep_max, 13) + 1))
+      qpe_phase_data = _qpe_frames(
+          n_ancilla=args.qpe_ancilla,
+          unitary=U_phase,
+          eigenstate=eigenstate_phase,
+          n_shots=args.qpe_shots,
+          true_phase=phi,
+          sweep_ancilla=sweep_ns,
+          seed=42,
+      )
+      path = out_dir / "quantum_qpe_phase.html"
+      path.write_text(_qpe_page(qpe_phase_data, title="QPE — Phase Gate"), encoding="utf-8")
+      generated.append(path)
+
+  # qpe_hamiltonian: Heisenberg ZZ Hamiltonian H = Z₀Z₁ → U = exp(-iHt), t = π/8
+  # Eigenvalues of Z₀Z₁: ±1 → U eigenvalues e^{∓iπ/8} → phases ∓1/16 mod 1
+  if args.scenario in {"qpe_hamiltonian", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("qpe_hamiltonian skipped: numpy not available", file=sys.stderr)
+    else:
+      t_evo = 3.141592653589793 / 8.0  # π/8
+      # H = Z₀ ⊗ Z₁ = diag(1, -1, -1, 1) in computational basis.
+      H_zz = np.diag([1.0, -1.0, -1.0, 1.0])
+      # U = exp(-i H t) = diag(e^{-it}, e^{it}, e^{it}, e^{-it})
+      U_ham = np.diag(np.exp(-1j * t_evo * np.diag(H_zz)))
+      # Eigenstate: |01⟩ (index 1) — eigenvalue of H_zz is -1 → phase = t/(2π)
+      eigenstate_ham = np.zeros(4, dtype=complex)
+      eigenstate_ham[1] = 1.0
+      true_phase_ham = t_evo / (2.0 * 3.141592653589793)  # ≈ 0.0625 = 1/16
+      sweep_ns = list(range(1, min(args.qpe_sweep_max, 13) + 1))
+      qpe_ham_data = _qpe_frames(
+          n_ancilla=args.qpe_ancilla,
+          unitary=U_ham,
+          eigenstate=eigenstate_ham,
+          n_shots=args.qpe_shots,
+          true_phase=true_phase_ham,
+          sweep_ancilla=sweep_ns,
+          seed=42,
+      )
+      path = out_dir / "quantum_qpe_hamiltonian.html"
+      path.write_text(_qpe_page(qpe_ham_data, title="QPE — ZZ Hamiltonian"), encoding="utf-8")
+      generated.append(path)
 
   for p in generated:
     print(f"wrote visualization: {p}")
