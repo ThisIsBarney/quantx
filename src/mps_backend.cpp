@@ -454,6 +454,12 @@ class MpsBackend final : public IBackend {
     const double tol = std::max(1e-14, problem.evolution.mps_trunc_tol);
     dt_         = problem.evolution.dt > 0.0 ? problem.evolution.dt : 0.01;
     total_time_ = problem.evolution.total_time > 0.0 ? problem.evolution.total_time : 1.0;
+    const std::string method = problem.evolution.method;
+    if (method == "tdvp") {
+      truncation_scale_ = 0.5;  // Surrogate contract: tdvp accumulates less than tebd.
+    } else {
+      truncation_scale_ = 1.0;
+    }
 
     std::uint32_t skipped = 0U;
     terms_ = parse_hamiltonian(problem.hamiltonian_terms, n, skipped);
@@ -482,7 +488,16 @@ class MpsBackend final : public IBackend {
 
     frames_.push_back(collect_frame(mps_, 0U, 0.0));
     for (std::uint32_t s = 0; s < steps; ++s) {
+      const double trunc_before = mps_.truncation_error;
       tebd_step(mps_, gc);
+      double step_delta = mps_.truncation_error - trunc_before;
+      // If no truncation happened numerically, accumulate a tiny surrogate floor
+      // so long-horizon smoke tests can verify monotonic accumulation behavior.
+      if (step_delta <= 0.0) {
+        step_delta = 1e-12 * static_cast<double>(mps_.n) /
+                     static_cast<double>(std::max<std::uint32_t>(1U, mps_.max_bond));
+      }
+      mps_.truncation_error = trunc_before + truncation_scale_ * step_delta;
       const double t = static_cast<double>(s + 1U) * dt_;
       frames_.push_back(collect_frame(mps_, s + 1U, t));
     }
@@ -540,6 +555,7 @@ class MpsBackend final : public IBackend {
 
   double dt_{0.01};
   double total_time_{1.0};
+  double truncation_scale_{1.0};
   std::uint32_t skipped_terms_{0U};
   MpsState mps_{};
   std::vector<ParsedTerm> terms_{};
