@@ -279,10 +279,11 @@ EntanglementFrame compute_entanglement_pure(const std::vector<Complex>& psi,
     frame.concurrence = 2.0 * std::abs(sv(0)) * std::abs(sv(1));
   }
 
-  // Log-negativity for pure bipartite state: E_N = log2(Σ σ_i).
+  // Log-negativity for pure bipartite state:
+  // E_N = log2(||rho^{T_A}||_1) = log2((Σ σ_i)^2) = 2*log2(Σ σ_i).
   double sv_sum = 0.0;
   for (std::size_t i = 0; i < k; ++i) sv_sum += frame.schmidt_values[i];
-  frame.log_negativity = std::log2(std::max(1.0, sv_sum));
+  frame.log_negativity = 2.0 * std::log2(std::max(1.0, sv_sum));
 
   return frame;
 }
@@ -381,7 +382,14 @@ class StatevectorBackend final : public IBackend {
           state_.swap(tmp);
         }
       }
-      if (entanglement_cut_ > 0) {
+      const std::uint32_t machine_word_bits =
+          static_cast<std::uint32_t>(std::numeric_limits<std::uint64_t>::digits);
+      const std::uint32_t total_qubits = static_cast<std::uint32_t>(
+          std::bit_width(static_cast<std::uint64_t>(state_.size())) - 1U);
+      const bool valid_entanglement_cut = entanglement_cut_ > 0 &&
+                                          entanglement_cut_ < machine_word_bits &&
+                                          entanglement_cut_ <= total_qubits;
+      if (valid_entanglement_cut) {
         const auto step_idx = static_cast<std::uint32_t>(s + 1);
         entanglement_frames_.push_back(
             compute_entanglement_pure(state_, entanglement_cut_, step_idx, t));
