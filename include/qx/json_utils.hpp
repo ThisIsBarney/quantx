@@ -32,5 +32,9 @@ std::string vqe_result_to_json(const VqeResult& result);
 QpeOptions qpe_options_from_json(const std::string& json);
 // Serialize QPE result to JSON string.
 std::string qpe_result_to_json(const QpeResult& result);
+// Parse QEC options from JSON string.
+QecOptions qec_options_from_json(const std::string& json);
+// Serialize QEC result to JSON string.
+std::string qec_result_to_json(const QecResult& result);
 
 }  // namespace qx

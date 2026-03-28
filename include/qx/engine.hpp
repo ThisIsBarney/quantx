@@ -30,5 +30,7 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions& optio
 VqeResult run_vqe(const VqeOptions& opts);
 // Run Quantum Phase Estimation to extract eigenphases of a unitary.
 QpeResult run_qpe(const QpeOptions& opts);
+// Run Quantum Error Correction Monte Carlo simulation.
+QecResult run_qec(const QecOptions& opts);
 
 }  // namespace qx

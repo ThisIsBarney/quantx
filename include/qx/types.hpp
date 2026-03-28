@@ -498,6 +498,66 @@ struct QpeOptions {
   std::uint64_t seed{42};
 };
 
+// ── M22: Quantum Error Correction ────────────────────────────────────────────
+
+// One trial record from a QEC Monte Carlo run.
+struct QecFrame {
+  std::uint32_t trial{0};
+  // Description of errors injected, e.g. "X0 X2" or "Z1".  "I" = no error.
+  std::string errors_injected{};
+  // Syndrome measurement outcomes as a binary string, e.g. "10" or "00011001".
+  std::string syndrome{};
+  // Correction applied by the classical decoder, e.g. "X1" or "I" or "decoded".
+  std::string correction{};
+  // true if the logical qubit was recovered correctly after correction.
+  bool succeeded{false};
+};
+
+// One point on the logical-error-rate vs physical-error-rate threshold curve.
+struct QecThresholdPoint {
+  double p_physical{0.0};
+  double p_logical_mc{0.0};
+  double p_logical_theory{0.0};
+};
+
+// Options for a Quantum Error Correction simulation run.
+struct QecOptions {
+  // Code to simulate: "bit_flip_3" | "phase_flip_3" | "shor_9".
+  std::string code{"bit_flip_3"};
+  // Error type injected per qubit: "X" | "Z" | "depolarizing".
+  std::string error_type{"X"};
+  // Independent probability that each physical qubit suffers an error.
+  double physical_error_rate{0.05};
+  // Number of Monte Carlo trials.
+  std::uint32_t n_trials{2000};
+  // Maximum number of per-trial detail frames to record (first n frames).
+  std::uint32_t n_frames_max{64};
+  // Physical error rates to sweep for the threshold curve; empty = skip sweep.
+  std::vector<double> sweep_error_rates{};
+  // RNG seed.
+  std::uint64_t seed{42};
+};
+
+// Result of a Quantum Error Correction simulation run.
+struct QecResult {
+  bool ok{true};
+  std::string code{};
+  // Number of physical qubits used by the code.
+  std::uint32_t n_physical{0};
+  // Number of syndrome ancilla qubits.
+  std::uint32_t n_syndrome{0};
+  // Empirical logical error rate from n_trials Monte Carlo trials.
+  double logical_error_rate{0.0};
+  // Theoretical logical error rate for the given physical_error_rate.
+  double logical_error_rate_theory{0.0};
+  // Per-trial detail records (first n_frames_max trials).
+  std::vector<QecFrame> frames{};
+  // Threshold curve: one entry per sweep_error_rate value.
+  std::vector<QecThresholdPoint> threshold_curve{};
+  double elapsed_ms{0.0};
+  std::string message{};
+};
+
 // Result of a Quantum Phase Estimation run.
 struct QpeResult {
   bool ok{true};
