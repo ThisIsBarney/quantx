@@ -849,5 +849,64 @@ std::string vqe_result_to_json(const VqeResult& result) {
   return j.dump();
 }
 
+// ── M22: QEC JSON ────────────────────────────────────────────────────────────
+
+// Parse QEC options from JSON.
+QecOptions qec_options_from_json(const std::string& json_text) {
+  const json j = parse_json_or_throw(json_text);
+  QecOptions o;
+  o.code                = get_or<std::string>  (j, "code",                o.code);
+  o.error_type          = get_or<std::string>  (j, "error_type",          o.error_type);
+  o.physical_error_rate = get_or<double>       (j, "physical_error_rate", o.physical_error_rate);
+  o.n_trials            = get_or<std::uint32_t>(j, "n_trials",            o.n_trials);
+  o.n_frames_max        = get_or<std::uint32_t>(j, "n_frames_max",        o.n_frames_max);
+  o.seed                = get_or<std::uint64_t>(j, "seed",                o.seed);
+  auto sw_it = j.find("sweep_error_rates");
+  if (sw_it != j.end() && sw_it->is_array()) {
+    for (const auto& v : *sw_it) {
+      if (v.is_number()) o.sweep_error_rates.push_back(v.get<double>());
+    }
+  }
+  return o;
+}
+
+// Serialize QEC result to JSON.
+std::string qec_result_to_json(const QecResult& result) {
+  json j;
+  j["ok"]                         = result.ok;
+  j["code"]                        = result.code;
+  j["n_physical"]                  = result.n_physical;
+  j["n_syndrome"]                  = result.n_syndrome;
+  j["logical_error_rate"]          = result.logical_error_rate;
+  j["logical_error_rate_theory"]   = result.logical_error_rate_theory;
+  j["elapsed_ms"]                  = result.elapsed_ms;
+  j["message"]                     = result.message;
+  j["engine_version"]              = version_string();
+
+  json frames = json::array();
+  for (const auto& f : result.frames) {
+    json fj;
+    fj["trial"]           = f.trial;
+    fj["errors_injected"] = f.errors_injected;
+    fj["syndrome"]        = f.syndrome;
+    fj["correction"]      = f.correction;
+    fj["succeeded"]       = f.succeeded;
+    frames.push_back(fj);
+  }
+  j["frames"] = frames;
+
+  json tc = json::array();
+  for (const auto& pt : result.threshold_curve) {
+    json ptj;
+    ptj["p_physical"]       = pt.p_physical;
+    ptj["p_logical_mc"]     = pt.p_logical_mc;
+    ptj["p_logical_theory"] = pt.p_logical_theory;
+    tc.push_back(ptj);
+  }
+  j["threshold_curve"] = tc;
+
+  return j.dump();
+}
+
 }  // namespace qx
 

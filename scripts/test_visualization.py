@@ -931,6 +931,38 @@ def main() -> int:
     if "sweepPanel" not in qc:
       raise RuntimeError(f"{scenario_key}: html missing precision sweep panel (sweepPanel)")
 
+  # ── M22: QEC — Quantum Error Correction ──────────────────────────────────────
+  qec_dir = tmp / "qec"
+  qec_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key, html_name in (
+      ("qec_bit_flip",   "quantum_qec_bit_flip.html"),
+      ("qec_phase_flip", "quantum_qec_phase_flip.html"),
+      ("qec_shor",       "quantum_qec_shor.html"),
+  ):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--qec-error-rate", "0.05",
+         "--qec-trials", "200",
+         "--qec-no-sweep",
+         "--out-dir", str(qec_dir)],
+        html_name,
+    )
+    qec_html = qec_dir / html_name
+    if not qec_html.exists():
+      raise RuntimeError(f"qec html not generated: {qec_html}")
+    qc = qec_html.read_text(encoding="utf-8")
+    if "cvGrid" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing trial grid canvas (cvGrid)")
+    if "cvSyndrome" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing syndrome canvas (cvSyndrome)")
+    if "logical_error_rate" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing logical_error_rate data")
+    if "syndrome_histogram" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing syndrome_histogram data")
+    if "threshold_curve" not in qc:
+      raise RuntimeError(f"{scenario_key}: html missing threshold_curve data")
+
   print("visualization smoke passed")
   return 0
 

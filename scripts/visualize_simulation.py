@@ -3686,6 +3686,487 @@ def _mps_data(engine, samples: int) -> tuple[list[tuple[float, float]], list[tup
   return bond, trunc
 
 
+# ── M22: Quantum Error Correction ─────────────────────────────────────────────
+
+def _qec_frames(
+    code: str = "bit_flip_3",
+    physical_error_rate: float = 0.05,
+    error_type: str = "X",
+    n_trials: int = 2000,
+    n_detail_trials: int = 64,
+    sweep_error_rates: list[float] | None = None,
+    seed: int = 42,
+) -> dict:
+  """Monte Carlo QEC reference simulator.
+
+  Three codes supported:
+    bit_flip_3   — 3-qubit repetition code, corrects any single X error.
+                   Syndromes: Z₀Z₁ (s0), Z₁Z₂ (s1).
+    phase_flip_3 — 3-qubit phase-flip code, corrects any single Z error.
+                   Same syndrome table as bit_flip_3 but for Z errors.
+    shor_9       — 9-qubit Shor code, corrects any single-qubit Pauli error.
+                   Syndromes: 6 Z-type (bit-flip per group) + 2 X-type (phase across groups).
+
+  Theoretical logical error rates:
+    Repetition-3: p_log = 3p²(1−p) + p³
+    Shor-9 (approx composite): p_log ≈ theory_rep3(theory_rep3(p))
+
+  Returns dict with keys:
+    code, n_physical, n_syndrome, physical_error_rate, error_type, n_trials,
+    logical_error_rate, logical_error_rate_theory, frames, syndrome_histogram,
+    threshold_curve.
+  """
+  import random as _rnd
+
+  rng = _rnd.Random(seed)
+
+  CODE_PARAMS = {
+      "bit_flip_3":   {"n_physical": 3, "n_syndrome": 2},
+      "phase_flip_3": {"n_physical": 3, "n_syndrome": 2},
+      "shor_9":       {"n_physical": 9, "n_syndrome": 8},
+  }
+  if code not in CODE_PARAMS:
+    raise ValueError(f"Unknown QEC code: {code!r}. Choose bit_flip_3 | phase_flip_3 | shor_9")
+  n_physical = CODE_PARAMS[code]["n_physical"]
+  n_syndrome = CODE_PARAMS[code]["n_syndrome"]
+
+  # ── Theoretical formulas ────────────────────────────────────────────────────
+  def _theory_rep3(p: float) -> float:
+    return 3 * p * p * (1 - p) + p * p * p
+
+  def _theory(p: float) -> float:
+    if code == "shor_9":
+      # Effective per-qubit error rates for each Pauli component.
+      p_x = (2 * p / 3) if error_type == "depolarizing" else (p if error_type in ("X",) else 0.0)
+      p_z = (2 * p / 3) if error_type == "depolarizing" else (p if error_type in ("Z",) else 0.0)
+      # Bit-flip logical: at least one group fails its 3-qubit bit-flip code.
+      p_bf = 1.0 - (1.0 - _theory_rep3(p_x)) ** 3 if p_x > 0 else 0.0
+      # Phase-flip logical: outer 3-qubit code fails; group effective Z = odd-parity count.
+      if p_z > 0:
+        p_z_odd = 3 * p_z * (1 - p_z) ** 2 + p_z ** 3
+        p_pf = _theory_rep3(p_z_odd)
+      else:
+        p_pf = 0.0
+      return p_bf + p_pf - p_bf * p_pf
+    return _theory_rep3(p)
+
+  # ── Single-trial helpers ─────────────────────────────────────────────────────
+  def _lookup3(e0: bool, e1: bool, e2: bool) -> tuple[int, int, int]:
+    """Z0Z1 / Z1Z2 parity syndrome + correction qubit for repetition codes."""
+    s0 = e0 ^ e1
+    s1 = e1 ^ e2
+    c = {(False, False): -1, (True, False): 0, (True, True): 1, (False, True): 2}[(s0, s1)]
+    return int(s0), int(s1), c
+
+  def _trial_bit_flip(p: float) -> tuple[str, str, str, bool]:
+    e = [rng.random() < p for _ in range(3)]
+    s0, s1, c = _lookup3(e[0], e[1], e[2])
+    res = e[:]
+    if c >= 0:
+      res[c] = not res[c]
+    ok = sum(res) < 2
+    err = "".join(f"X{q}" for q in range(3) if e[q]) or "I"
+    cor = f"X{c}" if c >= 0 else "I"
+    return err, f"{s0}{s1}", cor, ok
+
+  def _trial_phase_flip(p: float) -> tuple[str, str, str, bool]:
+    e = [rng.random() < p for _ in range(3)]
+    s0, s1, c = _lookup3(e[0], e[1], e[2])
+    res = e[:]
+    if c >= 0:
+      res[c] = not res[c]
+    ok = sum(res) < 2
+    err = "".join(f"Z{q}" for q in range(3) if e[q]) or "I"
+    cor = f"Z{c}" if c >= 0 else "I"
+    return err, f"{s0}{s1}", cor, ok
+
+  def _trial_shor(p: float) -> tuple[str, str, str, bool]:
+    # Sample errors
+    eX = [False] * 9
+    eZ = [False] * 9
+    if error_type == "X":
+      eX = [rng.random() < p for _ in range(9)]
+    elif error_type == "Z":
+      eZ = [rng.random() < p for _ in range(9)]
+    else:  # depolarizing
+      for q in range(9):
+        r = rng.random()
+        if r < p / 3:
+          eX[q] = True
+        elif r < 2 * p / 3:
+          eZ[q] = True
+        elif r < p:
+          eX[q] = True
+          eZ[q] = True
+
+    # Bit-flip syndromes (Z-stabilizers, detect X per group)
+    bf_syn = []
+    for g in range(3):
+      b = 3 * g
+      bf_syn.append(eX[b] ^ eX[b + 1])
+      bf_syn.append(eX[b + 1] ^ eX[b + 2])
+
+    # Phase-flip syndromes (X-stabilizers, detect Z across groups)
+    gzp = [sum(int(eZ[3 * g + k]) for k in range(3)) % 2 for g in range(3)]
+    ps0 = gzp[0] ^ gzp[1]
+    ps1 = gzp[1] ^ gzp[2]
+    syndrome_str = "".join(map(str, bf_syn + [ps0, ps1]))
+
+    # Bit-flip correction per group
+    resX = eX[:]
+    for g in range(3):
+      b = 3 * g
+      _, _, c = _lookup3(eX[b], eX[b + 1], eX[b + 2])
+      if c >= 0:
+        resX[b + c] = not resX[b + c]
+
+    # Phase-flip correction (Z on first qubit of identified group)
+    resZ = eZ[:]
+    pf_lookup = {(False, False): -1, (True, False): 0, (True, True): 1, (False, True): 2}
+    cg = pf_lookup[(bool(ps0), bool(ps1))]
+    if cg >= 0:
+      resZ[3 * cg] = not resZ[3 * cg]
+
+    # Logical error check
+    bf_err = any(sum(int(resX[3 * g + k]) for k in range(3)) >= 2 for g in range(3))
+    pf_err = sum(sum(int(resZ[3 * g + k]) for k in range(3)) % 2 for g in range(3)) >= 2
+    ok = not bf_err and not pf_err
+
+    parts_x = [f"X{q}" for q in range(9) if eX[q]]
+    parts_z = [f"Z{q}" for q in range(9) if eZ[q]]
+    err = " ".join(parts_x + parts_z) or "I"
+    return err, syndrome_str, "decoded", ok
+
+  # ── Monte Carlo runner ───────────────────────────────────────────────────────
+  def _run_mc(p_phys: float, n: int, collect_detail: bool) -> tuple[float, list, dict]:
+    successes = 0
+    frames: list[dict] = []
+    syn_hist: dict[str, dict] = {}
+
+    for t in range(n):
+      if code == "bit_flip_3":
+        err_s, syn_s, cor_s, ok = _trial_bit_flip(p_phys)
+      elif code == "phase_flip_3":
+        err_s, syn_s, cor_s, ok = _trial_phase_flip(p_phys)
+      else:
+        err_s, syn_s, cor_s, ok = _trial_shor(p_phys)
+
+      if ok:
+        successes += 1
+      if collect_detail and t < n_detail_trials:
+        frames.append({"trial": t, "error": err_s, "syndrome": syn_s,
+                        "correction": cor_s, "succeeded": ok})
+      if syn_s not in syn_hist:
+        syn_hist[syn_s] = {"count": 0, "successes": 0}
+      syn_hist[syn_s]["count"] += 1
+      if ok:
+        syn_hist[syn_s]["successes"] += 1
+
+    p_log = 1.0 - successes / n if n > 0 else 0.0
+    return p_log, frames, syn_hist
+
+  p_log, frames, syn_hist = _run_mc(physical_error_rate, n_trials, collect_detail=True)
+
+  # ── Threshold sweep ─────────────────────────────────────────────────────────
+  threshold_curve: list[dict] = []
+  if sweep_error_rates:
+    sweep_n = max(500, n_trials // 4)
+    for p_sw in sweep_error_rates:
+      p_log_mc, _, _ = _run_mc(p_sw, sweep_n, collect_detail=False)
+      threshold_curve.append({
+          "p_physical": p_sw,
+          "p_logical_mc": p_log_mc,
+          "p_logical_theory": _theory(p_sw),
+      })
+
+  return {
+      "code": code,
+      "n_physical": n_physical,
+      "n_syndrome": n_syndrome,
+      "physical_error_rate": physical_error_rate,
+      "error_type": error_type,
+      "n_trials": n_trials,
+      "n_detail_trials": min(n_detail_trials, n_trials),
+      "logical_error_rate": p_log,
+      "logical_error_rate_theory": _theory(physical_error_rate),
+      "frames": frames,
+      "syndrome_histogram": syn_hist,
+      "threshold_curve": threshold_curve,
+  }
+
+
+def _qec_page(data: dict, title: str = "QEC") -> str:
+  """Generate a self-contained HTML page for QEC Monte Carlo results."""
+  import json as _json
+
+  data_js = _json.dumps(data, ensure_ascii=False)
+  code_label = {
+      "bit_flip_3":   "3-Qubit Bit-Flip Code",
+      "phase_flip_3": "3-Qubit Phase-Flip Code",
+      "shor_9":       "9-Qubit Shor Code",
+  }.get(data.get("code", ""), data.get("code", ""))
+
+  html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+  :root {{ --bg:#0d1117; --panel:#161b22; --border:#30363d; --accent:#58a6ff;
+           --green:#3fb950; --red:#f85149; --orange:#d29922; --muted:#8b949e;
+           --text:#e6edf3; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+          min-height:100vh; padding:24px; }}
+  h1 {{ font-size:1.4rem; font-weight:600; color:var(--accent); margin-bottom:4px; }}
+  .subtitle {{ color:var(--muted); font-size:.85rem; margin-bottom:20px; }}
+  .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:1140px; margin:0 auto; }}
+  .panel {{ background:var(--panel); border:1px solid var(--border); border-radius:10px;
+            padding:16px; }}
+  .panel.wide {{ grid-column:span 2; }}
+  .panel h2 {{ font-size:.95rem; color:var(--muted); margin-bottom:12px; font-weight:500; }}
+  canvas {{ display:block; width:100%; }}
+  .stat-row {{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:18px;
+               max-width:1140px; margin-left:auto; margin-right:auto; margin-bottom:18px; }}
+  .stat {{ background:var(--panel); border:1px solid var(--border); border-radius:8px;
+           padding:8px 14px; min-width:120px; }}
+  .stat-label {{ font-size:.75rem; color:var(--muted); margin-bottom:2px; }}
+  .stat-value {{ font-size:1.1rem; font-weight:600; color:var(--accent); }}
+  .stat-value.good {{ color:var(--green); }}
+  .stat-value.warn {{ color:var(--orange); }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">{code_label} — Monte Carlo reference simulation</p>
+
+<div class="stat-row" id="stats"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Trial Grid (first {min(data.get('n_detail_trials', 64), len(data.get('frames', [])))} trials)</h2>
+    <canvas id="cvGrid" height="200"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Syndrome Success Rate</h2>
+    <canvas id="cvSyndrome" height="200"></canvas>
+  </div>
+  <div class="panel wide" id="thresholdPanel" style="display:none">
+    <h2>Logical Error Rate vs Physical Error Rate (Threshold Curve)</h2>
+    <canvas id="cvThreshold" height="240"></canvas>
+  </div>
+</div>
+
+<script>
+const DATA = {data_js};
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+(function() {{
+  const s = document.getElementById('stats');
+  function stat(label, val, cls) {{
+    const d = document.createElement('div'); d.className = 'stat';
+    d.innerHTML = `<div class="stat-label">${{label}}</div>
+                   <div class="stat-value ${{cls||''}}">${{val}}</div>`;
+    s.appendChild(d);
+  }}
+  stat('Code', DATA.code.replace(/_/g,' '));
+  stat('n_physical', DATA.n_physical);
+  stat('n_syndrome', DATA.n_syndrome);
+  stat('p_physical', DATA.physical_error_rate.toFixed(3));
+  stat('Error type', DATA.error_type);
+  stat('n_trials', DATA.n_trials);
+  const ler = DATA.logical_error_rate;
+  const cls = ler < DATA.physical_error_rate ? 'good' : 'warn';
+  stat('p_logical (MC)', ler.toFixed(4), cls);
+  stat('p_logical (theory)', DATA.logical_error_rate_theory.toFixed(4));
+  const gain = DATA.physical_error_rate > 0
+    ? (DATA.physical_error_rate / Math.max(ler, 1e-9)).toFixed(1) + '×'
+    : '—';
+  stat('Error reduction', gain, ler < DATA.physical_error_rate ? 'good' : 'warn');
+}})();
+
+// ── Trial grid ─────────────────────────────────────────────────────────────────
+function drawGrid() {{
+  const cv = document.getElementById('cvGrid');
+  const dpr = window.devicePixelRatio||1;
+  cv.width  = (cv.offsetWidth||500)*dpr;
+  cv.height = (cv.offsetHeight||200)*dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr,dpr);
+  const W = cv.offsetWidth||500, H = cv.offsetHeight||200;
+  ctx.fillStyle='#161b22'; ctx.fillRect(0,0,W,H);
+
+  const frames = DATA.frames||[];
+  if (!frames.length) return;
+  const n = frames.length;
+  const cols = Math.ceil(Math.sqrt(n * W / H));
+  const rows = Math.ceil(n / cols);
+  const cellW = (W-4) / cols, cellH = (H-4) / rows;
+  const pad = 1;
+
+  for (let i=0; i<n; i++) {{
+    const f = frames[i];
+    const col = i % cols, row = Math.floor(i/cols);
+    const x = 2 + col*cellW, y = 2 + row*cellH;
+    const hasErr = f.error !== 'I';
+    const ok = f.succeeded;
+    ctx.fillStyle = ok ? (hasErr ? '#2ea04326' : '#3fb95033') : '#f8514966';
+    if (!ok) ctx.fillStyle = '#f85149cc';
+    else if (hasErr) ctx.fillStyle = '#3fb95088';
+    else ctx.fillStyle = '#30363d';
+    ctx.fillRect(x+pad, y+pad, cellW-2*pad, cellH-2*pad);
+  }}
+
+  // Legend
+  ctx.font = '10px system-ui'; ctx.textAlign='left';
+  const ly = H-6;
+  const legend = [['#3fb95088','Corrected'], ['#f85149cc','Logical error'], ['#30363d','No error']];
+  let lx = 4;
+  for (const [c, lab] of legend) {{
+    ctx.fillStyle=c; ctx.fillRect(lx, ly-8, 10, 10);
+    ctx.fillStyle='#8b949e'; ctx.fillText(' '+lab, lx+12, ly);
+    lx += ctx.measureText(' '+lab).width + 20;
+  }}
+}}
+
+// ── Syndrome success-rate bar chart ────────────────────────────────────────────
+function drawSyndrome() {{
+  const cv = document.getElementById('cvSyndrome');
+  const dpr = window.devicePixelRatio||1;
+  cv.width  = (cv.offsetWidth||500)*dpr;
+  cv.height = (cv.offsetHeight||200)*dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr,dpr);
+  const W = cv.offsetWidth||500, H = cv.offsetHeight||200;
+  ctx.fillStyle='#161b22'; ctx.fillRect(0,0,W,H);
+
+  const hist = DATA.syndrome_histogram||{{}};
+  const entries = Object.entries(hist).sort((a,b)=>b[1].count-a[1].count);
+  if (!entries.length) return;
+
+  const pad = {{l:40,r:10,t:12,b:36}};
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+  const n = entries.length;
+  const barW = Math.max(1, cw/n - 2);
+
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ch);
+  ctx.lineTo(pad.l+cw,pad.t+ch); ctx.stroke();
+
+  // Y gridlines at 25%, 50%, 75%, 100%
+  ctx.fillStyle='#8b949e'; ctx.font='9px system-ui'; ctx.textAlign='right';
+  for (let t=0; t<=4; t++) {{
+    const y = pad.t + ch - (t/4)*ch;
+    ctx.fillText((t*25)+'%', pad.l-3, y+3);
+    ctx.strokeStyle='#21262d'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cw,y); ctx.stroke();
+  }}
+
+  for (let i=0; i<n; i++) {{
+    const [syn, stats] = entries[i];
+    const rate = stats.count>0 ? stats.successes/stats.count : 0;
+    const x = pad.l + i*(cw/n);
+    const bh = rate*ch;
+    ctx.fillStyle = rate > 0.9 ? '#3fb950' : rate > 0.5 ? '#d29922' : '#f85149';
+    ctx.fillRect(x+1, pad.t+ch-bh, barW, bh);
+    // Label
+    ctx.fillStyle='#8b949e'; ctx.font='8px system-ui'; ctx.textAlign='center';
+    if (barW > 12) ctx.fillText(syn, x+barW/2+1, pad.t+ch+12);
+  }}
+  ctx.fillStyle='#8b949e'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  ctx.fillText('Syndrome pattern', pad.l+cw/2, H-2);
+}}
+
+// ── Threshold curve ────────────────────────────────────────────────────────────
+function drawThreshold() {{
+  const tc = DATA.threshold_curve||[];
+  if (!tc.length) return;
+  document.getElementById('thresholdPanel').style.display='';
+  const cv = document.getElementById('cvThreshold');
+  const dpr = window.devicePixelRatio||1;
+  cv.width  = (cv.offsetWidth||900)*dpr;
+  cv.height = (cv.offsetHeight||240)*dpr;
+  const ctx = cv.getContext('2d'); ctx.scale(dpr,dpr);
+  const W = cv.offsetWidth||900, H = cv.offsetHeight||240;
+  ctx.fillStyle='#161b22'; ctx.fillRect(0,0,W,H);
+
+  const pad = {{l:52,r:20,t:14,b:40}};
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+
+  const pMax = Math.max(...tc.map(p=>p.p_physical), 0.5);
+  function xOf(p) {{ return pad.l + (p/pMax)*cw; }}
+  function yOf(p) {{ return pad.t + ch - (p/pMax)*ch; }}
+
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ch);
+  ctx.lineTo(pad.l+cw,pad.t+ch); ctx.stroke();
+
+  // Grid + ticks
+  ctx.fillStyle='#8b949e'; ctx.font='10px system-ui';
+  for (let t=0; t<=4; t++) {{
+    const p = t/4*pMax;
+    const y = yOf(p), x = xOf(p);
+    ctx.textAlign='right'; ctx.fillText(p.toFixed(2), pad.l-4, y+3);
+    ctx.strokeStyle='#21262d'; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cw,y); ctx.stroke();
+    ctx.textAlign='center'; ctx.fillText(p.toFixed(2), x, pad.t+ch+14);
+    ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,pad.t+ch); ctx.stroke();
+  }}
+
+  // Diagonal p_log = p_phys (no improvement)
+  ctx.strokeStyle='#30363d66'; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(xOf(0),yOf(0)); ctx.lineTo(xOf(pMax),yOf(pMax)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Theory curve
+  ctx.strokeStyle='#58a6ff'; ctx.lineWidth=2;
+  ctx.beginPath();
+  for (let i=0; i<tc.length; i++) {{
+    const px = xOf(tc[i].p_physical), py = yOf(tc[i].p_logical_theory);
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+
+  // MC dots
+  ctx.fillStyle='#d29922';
+  for (const pt of tc) {{
+    ctx.beginPath(); ctx.arc(xOf(pt.p_physical), yOf(pt.p_logical_mc), 4, 0, 2*Math.PI); ctx.fill();
+  }}
+  // MC line
+  ctx.strokeStyle='#d29922'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for (let i=0; i<tc.length; i++) {{
+    const px = xOf(tc[i].p_physical), py = yOf(tc[i].p_logical_mc);
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+
+  // Labels
+  ctx.fillStyle='#8b949e'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  ctx.fillText('Physical error rate p', pad.l+cw/2, H-4);
+  ctx.save(); ctx.translate(13,pad.t+ch/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillText('Logical error rate', 0, 0); ctx.restore();
+
+  // Legend
+  ctx.textAlign='left'; ctx.font='11px system-ui';
+  ctx.strokeStyle='#58a6ff'; ctx.lineWidth=2; ctx.beginPath();
+  ctx.moveTo(pad.l+4, pad.t+10); ctx.lineTo(pad.l+22, pad.t+10); ctx.stroke();
+  ctx.fillStyle='#e6edf3'; ctx.fillText(' Theory', pad.l+24, pad.t+14);
+  ctx.fillStyle='#d29922'; ctx.beginPath(); ctx.arc(pad.l+4+100+9, pad.t+10, 4, 0, 2*Math.PI); ctx.fill();
+  ctx.fillStyle='#e6edf3'; ctx.fillText(' Monte Carlo', pad.l+4+100+15, pad.t+14);
+  ctx.strokeStyle='#30363d66'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(pad.l+4+230, pad.t+10); ctx.lineTo(pad.l+22+230, pad.t+10); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#e6edf3'; ctx.fillText(' No correction', pad.l+24+230, pad.t+14);
+}}
+
+window.addEventListener('load', () => {{ drawGrid(); drawSyndrome(); drawThreshold(); }});
+window.addEventListener('resize', () => {{ drawGrid(); drawSyndrome(); drawThreshold(); }});
+</script>
+</body>
+</html>"""
+  return html
+
+
 # ── M21: Quantum Phase Estimation ─────────────────────────────────────────────
 
 def _qpe_frames(
@@ -4594,7 +5075,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -4634,6 +5115,10 @@ def main() -> int:
   parser.add_argument("--qpe-shots", type=int, default=4096, help="number of measurement shots for QPE")
   parser.add_argument("--qpe-phase", type=float, default=0.375, help="true phase φ ∈ [0,1) for qpe_phase scenario (phase_angle = 2π·φ)")
   parser.add_argument("--qpe-sweep-max", type=int, default=10, help="maximum n_ancilla in precision sweep (1..N)")
+  parser.add_argument("--qec-error-rate", type=float, default=0.05, help="physical error rate per qubit for QEC scenarios")
+  parser.add_argument("--qec-trials", type=int, default=2000, help="number of Monte Carlo trials for QEC scenarios")
+  parser.add_argument("--qec-sweep", action="store_true", default=True, help="include threshold curve sweep in QEC output")
+  parser.add_argument("--qec-no-sweep", dest="qec_sweep", action="store_false", help="disable QEC threshold sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -5044,6 +5529,57 @@ def main() -> int:
       path = out_dir / "quantum_qpe_hamiltonian.html"
       path.write_text(_qpe_page(qpe_ham_data, title="QPE — ZZ Hamiltonian"), encoding="utf-8")
       generated.append(path)
+
+  # ── M22 — QEC scenarios ──────────────────────────────────────────────────────
+  # Build the threshold sweep points (log-spaced from 0.01 to 0.45)
+  _qec_sweep_pts: list[float] | None = None
+  if args.qec_sweep:
+    _qec_sweep_pts = [round(0.01 + 0.44 * i / 19, 4) for i in range(20)]
+
+  # qec_bit_flip: 3-qubit bit-flip repetition code with X errors
+  if args.scenario in {"qec_bit_flip", "all"}:
+    qec_bf_data = _qec_frames(
+        code="bit_flip_3",
+        physical_error_rate=args.qec_error_rate,
+        error_type="X",
+        n_trials=args.qec_trials,
+        n_detail_trials=64,
+        sweep_error_rates=_qec_sweep_pts,
+        seed=42,
+    )
+    path = out_dir / "quantum_qec_bit_flip.html"
+    path.write_text(_qec_page(qec_bf_data, title="QEC — 3-Qubit Bit-Flip Code"), encoding="utf-8")
+    generated.append(path)
+
+  # qec_phase_flip: 3-qubit phase-flip code with Z errors
+  if args.scenario in {"qec_phase_flip", "all"}:
+    qec_pf_data = _qec_frames(
+        code="phase_flip_3",
+        physical_error_rate=args.qec_error_rate,
+        error_type="Z",
+        n_trials=args.qec_trials,
+        n_detail_trials=64,
+        sweep_error_rates=_qec_sweep_pts,
+        seed=42,
+    )
+    path = out_dir / "quantum_qec_phase_flip.html"
+    path.write_text(_qec_page(qec_pf_data, title="QEC — 3-Qubit Phase-Flip Code"), encoding="utf-8")
+    generated.append(path)
+
+  # qec_shor: 9-qubit Shor code with depolarizing noise
+  if args.scenario in {"qec_shor", "all"}:
+    qec_shor_data = _qec_frames(
+        code="shor_9",
+        physical_error_rate=args.qec_error_rate,
+        error_type="depolarizing",
+        n_trials=args.qec_trials,
+        n_detail_trials=64,
+        sweep_error_rates=_qec_sweep_pts,
+        seed=42,
+    )
+    path = out_dir / "quantum_qec_shor.html"
+    path.write_text(_qec_page(qec_shor_data, title="QEC — 9-Qubit Shor Code"), encoding="utf-8")
+    generated.append(path)
 
   for p in generated:
     print(f"wrote visualization: {p}")
