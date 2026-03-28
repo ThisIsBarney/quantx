@@ -309,6 +309,21 @@ QecResult run_qec(const QecOptions& opts) {
     return result;
   }
 
+  // Validate code/noise compatibility to avoid silently reporting invalid
+  // logical-error rates for unsupported code/error-type combinations.
+  if (opts.code == "bit_flip_3" && opts.error_type == "Z") {
+    result.ok = false;
+    result.message = "unsupported QEC configuration: bit_flip_3 cannot decode pure Z noise; "
+                     "use error_type X or depolarizing, or switch to phase_flip_3 for Z noise";
+    return result;
+  }
+  if (opts.code == "phase_flip_3" && opts.error_type == "X") {
+    result.ok = false;
+    result.message = "unsupported QEC configuration: phase_flip_3 cannot decode pure X noise; "
+                     "use error_type Z or depolarizing, or switch to bit_flip_3 for X noise";
+    return result;
+  }
+
   std::mt19937_64 rng(opts.seed);
 
   // Main Monte Carlo run.
