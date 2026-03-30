@@ -4167,6 +4167,731 @@ window.addEventListener('resize', () => {{ drawGrid(); drawSyndrome(); drawThres
   return html
 
 
+# ── M23: Schwinger Model (1+1D QED) Lattice Quantum Field Theory ──────────────
+
+def _schwinger_frames(
+    n_sites: int = 8,
+    mass: float = 0.5,
+    coupling: float = 0.3,
+    background: float = 0.0,
+    scenario: str = "vacuum",
+    dt: float = 0.08,
+    n_steps: int = 60,
+    n_mass_sweep: int = 30,
+    seed: int = 42,
+) -> dict:
+  """Schwinger model (1+1D QED) via exact diagonalization.
+
+  Kogut-Susskind staggered Hamiltonian (gauge field integrated out, open BCs):
+
+    H = -½ Σ_n (σ+_n σ-_{n+1} + h.c.)        [hopping / kinetic]
+      + (m/2) Σ_n (-1)^n σz_n                 [staggered mass]
+      + (g²/2) Σ_{l=0}^{N-2} L_l²             [electric field energy]
+
+  where L_l = background + Σ_{k=0}^{l} (σz_k + (-1)^k)/2  via Gauss's law.
+
+  Scenarios:
+    "vacuum"    — ground state observables + mass sweep (chiral condensate)
+    "string"    — string tension: E(R) vs quark separation R
+    "dynamics"  — time evolution from a pair-production initial state under
+                  sudden quench of background electric field
+  """
+  try:
+    import numpy as np
+  except ImportError as ex:
+    raise RuntimeError("Schwinger model visualization requires numpy") from ex
+
+  rng = np.random.default_rng(seed)
+  N = n_sites
+  dim = 1 << N
+
+  # ── Gate primitives ──────────────────────────────────────────────────────
+  sz = np.array([[1, 0], [0, -1]], dtype=complex)
+  sp = np.array([[0, 1], [0, 0]], dtype=complex)
+  sm = np.array([[0, 0], [1, 0]], dtype=complex)
+  I2 = np.eye(2, dtype=complex)
+
+  def kron_op(op: "np.ndarray", site: int) -> "np.ndarray":
+    ops = [I2] * N
+    ops[site] = op
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  def kron_2site(op1: "np.ndarray", op2: "np.ndarray", s1: int, s2: int) -> "np.ndarray":
+    ops = [I2] * N
+    ops[s1] = op1
+    ops[s2] = op2
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  # ── Hamiltonian builder ───────────────────────────────────────────────────
+  def build_H(m: float, g2: float, alpha: float) -> "np.ndarray":
+    H = np.zeros((dim, dim), dtype=complex)
+    # Hopping: -½ Σ (σ+_n σ-_{n+1} + h.c.)
+    for n in range(N - 1):
+      H -= 0.5 * (kron_2site(sp, sm, n, n + 1) + kron_2site(sm, sp, n, n + 1))
+    # Staggered mass: (m/2) Σ (-1)^n σz_n
+    for n in range(N):
+      H += (m / 2.0) * ((-1) ** n) * kron_op(sz, n)
+    # Electric field energy: (g²/2) Σ_{l} L_l²
+    # L_l = alpha*I + Σ_{k≤l} (σz_k + (-1)^k) / 2
+    for l in range(N - 1):
+      # Constant part of L_l.
+      c_l = alpha + sum(0.5 * ((-1) ** k) for k in range(l + 1))
+      # Operator part of L_l.
+      L_op = c_l * np.eye(dim, dtype=complex)
+      for k in range(l + 1):
+        L_op += 0.5 * kron_op(sz, k)
+      H += (g2 / 2.0) * (L_op @ L_op)
+    return H
+
+  # ── Ground state via numpy eigh (exact for small N) ──────────────────────
+  def ground_state(H: "np.ndarray") -> "tuple[float, np.ndarray]":
+    # For dim ≤ 4096 numpy eigh is fast enough.
+    vals, vecs = np.linalg.eigh(H)
+    return float(np.real(vals[0])), vecs[:, 0]
+
+  # ── Observable extraction ─────────────────────────────────────────────────
+  def observables(psi: "np.ndarray", alpha: float) -> dict:
+    prob = np.abs(psi) ** 2
+    # <σz_n> per site.
+    sz_exp = np.zeros(N)
+    for n in range(N):
+      Sz_n = kron_op(sz, n)
+      sz_exp[n] = float(np.real(psi.conj() @ Sz_n @ psi))
+    # Charge density Q_n = (σz_n + (-1)^n) / 2.
+    charge = np.array([(sz_exp[n] + (-1) ** n) / 2.0 for n in range(N)])
+    # Electric field per link: <L_l> = alpha + Σ_{k≤l} <Q_k>.
+    elec = np.zeros(N - 1)
+    cum = 0.0
+    for l in range(N - 1):
+      cum += charge[l]
+      elec[l] = alpha + cum
+    # Chiral condensate: Σ = -(1/N) Σ (-1)^n <σz_n>.
+    chiral = -float(np.sum([(-1) ** n * sz_exp[n] for n in range(N)])) / N
+    particle_number = float(np.sum(np.maximum(charge, 0.0)))
+    return {
+        "charge_density": charge.tolist(),
+        "electric_field": elec.tolist(),
+        "chiral_condensate": chiral,
+        "particle_number": particle_number,
+    }
+
+  # ── Main scenario dispatch ────────────────────────────────────────────────
+  # In dynamics mode, prepare |psi0> in a true pre-quench vacuum (alpha=0)
+  # and then evolve under H(alpha_quench). Non-dynamics scenarios continue to
+  # use the user-provided background directly.
+  alpha0 = 0.0 if scenario == "dynamics" else background
+  H0 = build_H(mass, coupling, alpha0)
+  E0, psi0 = ground_state(H0)
+  obs0 = observables(psi0, alpha0)
+
+  # Mass sweep: chiral condensate and ground energy vs m ∈ [-2, 2].
+  mass_sweep = []
+  if n_mass_sweep > 0:
+    m_vals = np.linspace(-2.0, 2.0, n_mass_sweep)
+    for m_val in m_vals:
+      Hi = build_H(float(m_val), coupling, background)
+      Ei, psi_i = ground_state(Hi)
+      obs_i = observables(psi_i, background)
+      mass_sweep.append({
+          "mass": float(m_val),
+          "ground_energy": float(Ei),
+          "chiral_condensate": obs_i["chiral_condensate"],
+      })
+
+  # String tension: energy vs quark–antiquark separation R.
+  string_data = []
+  if scenario == "string":
+    # Create string state: insert a quark–antiquark pair by setting occupation
+    # pattern and measure energy relative to vacuum as a function of R.
+    # Physically: place a static charge +1 at site 0, -1 at site R.
+    # Achieved by applying σ+_0 σ-_R |vacuum⟩ and measuring <H> - E0.
+    # For the string scenario we vary R and compute E_string(R) = <psi_string|H|psi_string> - E0.
+    for R in range(1, N // 2 + 1):
+      # String state: apply σ+_0 σ-_R to vacuum.
+      op_string = kron_2site(sp, sm, 0, R) if R < N else kron_op(sp, 0)
+      psi_str = op_string @ psi0
+      norm = np.linalg.norm(psi_str)
+      if norm < 1e-10:
+        # Vacuum already has this structure — use σ-_0 σ+_R instead.
+        op_string = kron_2site(sm, sp, 0, R) if R < N else kron_op(sm, 0)
+        psi_str = op_string @ psi0
+        norm = np.linalg.norm(psi_str)
+      if norm < 1e-10:
+        continue
+      psi_str /= norm
+      E_str = float(np.real(psi_str.conj() @ H0 @ psi_str))
+      string_data.append({"separation": R, "string_energy": E_str - E0})
+
+  # Dynamics: time evolution from vacuum under sudden background quench.
+  frames = []
+  if scenario == "dynamics":
+    alpha_quench = background if abs(background) > 1e-9 else 0.5
+    H_quench = build_H(mass, coupling, alpha_quench)
+    # Time evolution via matrix exponential (exact for small N).
+    psi = psi0.copy()
+    U_step = None  # Lazy: compute once.
+    for step in range(n_steps + 1):
+      t = step * dt
+      obs = observables(psi, alpha_quench)
+      E = float(np.real(psi.conj() @ H_quench @ psi))
+      frames.append({
+          "time": round(t, 6),
+          "energy": E,
+          **obs,
+      })
+      if step < n_steps:
+        if U_step is None:
+          from scipy.linalg import expm  # type: ignore
+          U_step = expm(-1j * dt * H_quench)
+        psi = U_step @ psi
+
+  return {
+      "n_sites": N,
+      "mass": mass,
+      "coupling": coupling,
+      "background": background,
+      "scenario": scenario,
+      "ground_energy": E0,
+      "ground_chiral_condensate": obs0["chiral_condensate"],
+      "ground_charge_density": obs0["charge_density"],
+      "ground_electric_field": obs0["electric_field"],
+      "mass_sweep": mass_sweep,
+      "string_data": string_data,
+      "frames": frames,
+  }
+
+
+def _schwinger_fallback_dynamics(
+    n_sites: int,
+    mass: float,
+    coupling: float,
+    background_quench: float,
+    dt: float,
+    n_steps: int,
+) -> "list[dict]":
+  """Trotter-based fallback for dynamics when scipy is unavailable."""
+  try:
+    import numpy as np
+  except ImportError:
+    return []
+
+  N = n_sites
+  I2 = np.eye(2, dtype=complex)
+  sz = np.array([[1, 0], [0, -1]], dtype=complex)
+  sp = np.array([[0, 1], [0, 0]], dtype=complex)
+  sm = np.array([[0, 0], [1, 0]], dtype=complex)
+
+  def kron_op(op, site):
+    ops = [I2] * N
+    ops[site] = op
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  def kron_2site(op1, op2, s1, s2):
+    ops = [I2] * N
+    ops[s1] = op1
+    ops[s2] = op2
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  # Build Hamiltonian terms as a list for first-order Trotter.
+  # Hopping pairs.
+  hop_terms = []
+  for n in range(N - 1):
+    H_hop = -0.5 * (kron_2site(sp, sm, n, n + 1) + kron_2site(sm, sp, n, n + 1))
+    hop_terms.append(H_hop)
+  # Diagonal terms (mass + electric).
+  diag_terms = []
+  for n in range(N):
+    diag_terms.append((mass / 2.0) * ((-1) ** n) * kron_op(sz, n))
+  for l in range(N - 1):
+    c_l = background_quench + sum(0.5 * ((-1) ** k) for k in range(l + 1))
+    L_op = c_l * np.eye(1 << N, dtype=complex)
+    for k in range(l + 1):
+      L_op += 0.5 * kron_op(sz, k)
+    diag_terms.append((coupling / 2.0) * (L_op @ L_op))
+
+  # Combine all terms.
+  H_full = sum(hop_terms) + sum(diag_terms)
+  # Approximate Trotter: exp(-iHdt) ≈ exp(-iH_hop dt/2) exp(-iH_diag dt) exp(-iH_hop dt/2).
+  # For simplicity just use full matrix: eigendecompose.
+  vals, vecs = np.linalg.eigh(H_full)
+  # exp(-iHt) psi = vecs @ diag(exp(-i*vals*t)) @ vecs^† @ psi.
+  # Get ground state.
+  psi = vecs[:, 0].copy()
+  dim = 1 << N
+
+  frames = []
+  for step in range(n_steps + 1):
+    t = step * dt
+    coeffs = np.exp(-1j * vals * t)
+    psi_t = vecs @ (coeffs * (vecs.conj().T @ psi))
+    charge = np.array(
+        [(float(np.real(psi_t.conj() @ kron_op(sz, n) @ psi_t)) + (-1) ** n) / 2.0
+         for n in range(N)]
+    )
+    elec = np.zeros(N - 1)
+    cum = 0.0
+    for l in range(N - 1):
+      cum += charge[l]
+      elec[l] = background_quench + cum
+    chiral = -float(np.sum([(-1) ** n *
+        float(np.real(psi_t.conj() @ kron_op(sz, n) @ psi_t))
+        for n in range(N)])) / N
+    E = float(np.real(psi_t.conj() @ H_full @ psi_t))
+    frames.append({
+        "time": round(t, 6),
+        "energy": E,
+        "charge_density": charge.tolist(),
+        "electric_field": elec.tolist(),
+        "chiral_condensate": chiral,
+        "particle_number": float(np.sum(np.maximum(charge, 0.0))),
+    })
+  return frames
+
+
+def _schwinger_page(data: dict, title: str = "Schwinger Model") -> str:
+  """Generate a self-contained HTML page for Schwinger model results."""
+  import json as _json
+
+  data_js = _json.dumps(data, ensure_ascii=False)
+  scenario = data.get("scenario", "vacuum")
+
+  html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+  :root {{ --bg:#0d1117; --panel:#161b22; --border:#30363d; --accent:#58a6ff;
+           --green:#3fb950; --orange:#d29922; --red:#f85149; --purple:#bc8cff;
+           --muted:#8b949e; --text:#e6edf3; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+          min-height:100vh; padding:24px; }}
+  h1 {{ font-size:1.4rem; font-weight:600; color:var(--accent); margin-bottom:4px; }}
+  .subtitle {{ color:var(--muted); font-size:.85rem; margin-bottom:20px; }}
+  .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:1100px; margin:0 auto; }}
+  .panel {{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }}
+  .panel.wide {{ grid-column:span 2; }}
+  .panel h2 {{ font-size:.95rem; color:var(--muted); margin-bottom:12px; font-weight:500; }}
+  canvas {{ display:block; width:100%; }}
+  .stat-row {{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px; max-width:1100px; margin-left:auto; margin-right:auto; }}
+  .stat {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 14px; }}
+  .stat-label {{ font-size:.75rem; color:var(--muted); margin-bottom:2px; }}
+  .stat-value {{ font-size:1.05rem; font-weight:600; color:var(--accent); }}
+  .tag {{ display:inline-block; font-size:.75rem; padding:2px 8px; border-radius:4px;
+          background:#21262d; border:1px solid var(--border); color:var(--muted);
+          margin-right:6px; margin-bottom:12px; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">Kogut-Susskind staggered Hamiltonian · 1+1D QED · exact diagonalization</p>
+<div>
+  <span class="tag">N={data.get('n_sites',8)} sites</span>
+  <span class="tag">m={data.get('mass',0.5)}</span>
+  <span class="tag">g²={data.get('coupling',0.3)}</span>
+  <span class="tag">α={data.get('background',0.0)}</span>
+  <span class="tag">scenario={data.get('scenario','vacuum')}</span>
+</div>
+
+<div class="stat-row" id="stats"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Ground State Charge Density Q_n = ⟨(σz_n + (−1)ⁿ)/2⟩</h2>
+    <canvas id="cvCharge" height="220"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Ground State Electric Field ⟨L_l⟩ per Link</h2>
+    <canvas id="cvElec" height="220"></canvas>
+  </div>
+  <div class="panel wide" id="sweepPanel">
+    <h2>Chiral Condensate ⟨ψ̄ψ⟩ vs Bare Mass m  (order parameter)</h2>
+    <canvas id="cvSweep" height="220"></canvas>
+  </div>
+  <div class="panel wide" id="stringPanel" style="display:none">
+    <h2>String Energy E(R) − E_vac vs Quark Separation R (confinement)</h2>
+    <canvas id="cvString" height="220"></canvas>
+  </div>
+  <div class="panel wide" id="dynPanel" style="display:none">
+    <h2>Pair Production Dynamics: Particle Number and Chiral Condensate vs Time</h2>
+    <canvas id="cvDyn" height="240"></canvas>
+  </div>
+  <div class="panel wide" id="heatPanel" style="display:none">
+    <h2>Charge Density Heatmap: Q_n(t) vs Site n and Time t</h2>
+    <canvas id="cvHeat" height="240"></canvas>
+  </div>
+</div>
+
+<script>
+const DATA = {data_js};
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+(function() {{
+  const s = document.getElementById('stats');
+  function stat(label, val) {{
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = `<div class="stat-label">${{label}}</div><div class="stat-value">${{val}}</div>`;
+    s.appendChild(d);
+  }}
+  stat('Ground energy', DATA.ground_energy.toFixed(5));
+  stat('Chiral condensate', DATA.ground_chiral_condensate.toFixed(5));
+  const ne = DATA.ground_charge_density.filter(q=>q>0.01).length;
+  stat('Occupied sites', ne);
+  if (DATA.string_data && DATA.string_data.length) {{
+    const slope = DATA.string_data.length > 1
+      ? (DATA.string_data[DATA.string_data.length-1].string_energy - DATA.string_data[0].string_energy)
+        / (DATA.string_data[DATA.string_data.length-1].separation - DATA.string_data[0].separation)
+      : DATA.string_data[0].string_energy;
+    stat('String tension σ', slope.toFixed(4));
+  }}
+  if (DATA.frames && DATA.frames.length > 1) {{
+    const last = DATA.frames[DATA.frames.length-1];
+    stat('Final ⟨n_pairs⟩', last.particle_number.toFixed(3));
+  }}
+}})();
+
+// ── Drawing helpers ────────────────────────────────────────────────────────────
+function setupCanvas(id, h) {{
+  const cv = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = (cv.offsetWidth  || 500) * dpr;
+  cv.height = (cv.offsetHeight || h  ) * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#161b22'; ctx.fillRect(0,0,cv.offsetWidth||500, cv.offsetHeight||h);
+  return {{ctx, W:cv.offsetWidth||500, H:cv.offsetHeight||h}};
+}}
+
+function drawAxes(ctx, pad, W, H) {{
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, H-pad.b);
+  ctx.lineTo(W-pad.r, H-pad.b); ctx.stroke();
+}}
+
+function yTicks(ctx, pad, W, H, minV, maxV, nTick) {{
+  const ch = H - pad.t - pad.b;
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+  for (let i = 0; i <= nTick; i++) {{
+    const v = minV + (maxV - minV) * i / nTick;
+    const y = H - pad.b - (v - minV) / (maxV - minV + 1e-14) * ch;
+    ctx.fillText(v.toFixed(3), pad.l - 4, y + 3);
+    ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+  }}
+}}
+
+// ── Charge density bar chart ───────────────────────────────────────────────────
+function drawCharge() {{
+  const {{ctx, W, H}} = setupCanvas('cvCharge', 220);
+  const pad = {{l:52, r:10, t:12, b:28}};
+  const data = DATA.ground_charge_density;
+  const N = data.length;
+  const maxV = Math.max(...data.map(Math.abs), 0.05);
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  const zero_y = H - pad.b - (0 - (-maxV)) / (2*maxV) * ch;
+  drawAxes(ctx, pad, W, H);
+  // Zero line.
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, zero_y); ctx.lineTo(W-pad.r, zero_y); ctx.stroke();
+  const bw = Math.max(2, cw / N - 1);
+  for (let i = 0; i < N; i++) {{
+    const x = pad.l + i * (cw / N);
+    const bh = Math.abs(data[i]) / (2*maxV) * ch;
+    ctx.fillStyle = data[i] >= 0 ? '#3fb950' : '#f85149';
+    const y = data[i] >= 0 ? zero_y - bh : zero_y;
+    ctx.fillRect(x + 1, y, bw, bh);
+    // Site label.
+    ctx.fillStyle = '#8b949e'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(i, x + bw/2, H - pad.b + 12);
+  }}
+  // Y ticks.
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+  [-maxV, 0, maxV].forEach(v => {{
+    const y = H - pad.b - (v - (-maxV)) / (2*maxV) * ch;
+    ctx.fillText(v.toFixed(2), pad.l - 4, y + 3);
+  }});
+  // Legend.
+  ctx.fillStyle = '#3fb950'; ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+  ctx.fillText('particle (Q>0)', pad.l + 4, pad.t + 12);
+  ctx.fillStyle = '#f85149';
+  ctx.fillText('antiparticle (Q<0)', pad.l + 4, pad.t + 24);
+}}
+
+// ── Electric field per link ────────────────────────────────────────────────────
+function drawElec() {{
+  const {{ctx, W, H}} = setupCanvas('cvElec', 220);
+  const pad = {{l:52, r:10, t:12, b:28}};
+  const data = DATA.ground_electric_field;
+  const Nl = data.length;
+  const minV = Math.min(...data, -0.05), maxV = Math.max(...data, 0.05);
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  drawAxes(ctx, pad, W, H);
+  const bw = Math.max(2, cw / Nl - 2);
+  for (let i = 0; i < Nl; i++) {{
+    const x = pad.l + i * (cw / Nl);
+    const bh = (data[i] - minV) / (maxV - minV + 1e-14) * ch;
+    ctx.fillStyle = '#58a6ff';
+    ctx.fillRect(x + 1, H - pad.b - bh, bw, bh);
+    ctx.fillStyle = '#8b949e'; ctx.font = '9px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(i + '–' + (i+1), x + bw/2, H - pad.b + 12);
+  }}
+  yTicks(ctx, pad, W, H, minV, maxV, 4);
+}}
+
+// ── Chiral condensate vs mass sweep ───────────────────────────────────────────
+function drawSweep() {{
+  const sweep = DATA.mass_sweep || [];
+  if (!sweep.length) return;
+  const {{ctx, W, H}} = setupCanvas('cvSweep', 220);
+  const pad = {{l:56, r:16, t:16, b:32}};
+  const ms = sweep.map(s=>s.mass);
+  const cs = sweep.map(s=>s.chiral_condensate);
+  const minC = Math.min(...cs), maxC = Math.max(...cs);
+  const minM = Math.min(...ms), maxM = Math.max(...ms);
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  drawAxes(ctx, pad, W, H);
+  function xOf(m) {{ return pad.l + (m - minM) / (maxM - minM) * cw; }}
+  function yOf(c) {{ return H - pad.b - (c - minC) / (maxC - minC + 1e-14) * ch; }}
+  // Fill area under curve.
+  ctx.fillStyle = 'rgba(88,166,255,0.12)';
+  ctx.beginPath(); ctx.moveTo(xOf(ms[0]), H - pad.b);
+  for (let i = 0; i < ms.length; i++) ctx.lineTo(xOf(ms[i]), yOf(cs[i]));
+  ctx.lineTo(xOf(ms[ms.length-1]), H - pad.b); ctx.closePath(); ctx.fill();
+  // Line.
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < ms.length; i++) {{
+    if (i === 0) ctx.moveTo(xOf(ms[i]), yOf(cs[i]));
+    else ctx.lineTo(xOf(ms[i]), yOf(cs[i]));
+  }}
+  ctx.stroke();
+  // Current mass marker.
+  const mCur = DATA.mass;
+  if (mCur >= minM && mCur <= maxM) {{
+    ctx.strokeStyle = '#d29922'; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+    const x = xOf(mCur);
+    ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, H - pad.b); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#d29922'; ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+    ctx.fillText('m=' + mCur, x + 3, pad.t + 12);
+  }}
+  // Zero condensate line.
+  const y0 = yOf(0);
+  if (y0 >= pad.t && y0 <= H - pad.b) {{
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 0.5; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(pad.l, y0); ctx.lineTo(W-pad.r, y0); ctx.stroke();
+  }}
+  yTicks(ctx, pad, W, H, minC, maxC, 4);
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+  [minM, 0, maxM].forEach(v => {{
+    ctx.fillText(v.toFixed(1), xOf(v), H - pad.b + 14);
+  }});
+  ctx.fillText('bare mass m/J', pad.l + cw/2, H - 4);
+  ctx.save(); ctx.translate(14, pad.t + ch/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = 'center'; ctx.fillText('⟨ψ̄ψ⟩', 0, 0); ctx.restore();
+}}
+
+// ── String energy vs separation ────────────────────────────────────────────────
+function drawString() {{
+  const sdata = DATA.string_data || [];
+  if (!sdata.length) return;
+  document.getElementById('stringPanel').style.display = '';
+  const {{ctx, W, H}} = setupCanvas('cvString', 220);
+  const pad = {{l:56, r:16, t:16, b:32}};
+  const Rs = sdata.map(s=>s.separation);
+  const Es = sdata.map(s=>s.string_energy);
+  const minR = Math.min(...Rs), maxR = Math.max(...Rs);
+  const minE = 0, maxE = Math.max(...Es, 0.01);
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  function xOf(r) {{ return pad.l + (r - minR) / Math.max(maxR - minR, 1) * cw; }}
+  function yOf(e) {{ return H - pad.b - (e - minE) / (maxE - minE + 1e-14) * ch; }}
+  drawAxes(ctx, pad, W, H);
+  // Linear confinement reference: E = σ·R, σ = (g²/2).
+  const sigma = DATA.coupling / 2.0;
+  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  ctx.moveTo(xOf(minR), yOf(sigma * minR));
+  ctx.lineTo(xOf(maxR), yOf(sigma * maxR));
+  ctx.stroke(); ctx.setLineDash([]);
+  // Actual string energies.
+  ctx.strokeStyle = '#bc8cff'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < Rs.length; i++) {{
+    if (i === 0) ctx.moveTo(xOf(Rs[i]), yOf(Es[i]));
+    else ctx.lineTo(xOf(Rs[i]), yOf(Es[i]));
+  }}
+  ctx.stroke();
+  for (let i = 0; i < Rs.length; i++) {{
+    ctx.fillStyle = '#bc8cff';
+    ctx.beginPath(); ctx.arc(xOf(Rs[i]), yOf(Es[i]), 4, 0, 2*Math.PI); ctx.fill();
+  }}
+  yTicks(ctx, pad, W, H, minE, maxE, 4);
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+  Rs.forEach(r => ctx.fillText(r, xOf(r), H - pad.b + 14));
+  ctx.fillText('separation R (sites)', pad.l + cw/2, H - 4);
+  // Legend.
+  ctx.textAlign = 'left'; ctx.font = '10px system-ui';
+  ctx.fillStyle = '#3fb950'; ctx.fillText('σ·R (linear)', pad.l+8, pad.t+12);
+  ctx.fillStyle = '#bc8cff'; ctx.fillText('E_string(R)', pad.l+8, pad.t+24);
+}}
+
+// ── Dynamics: particle number + chiral condensate vs time ─────────────────────
+function drawDyn() {{
+  const frames = DATA.frames || [];
+  if (!frames.length) return;
+  document.getElementById('dynPanel').style.display = '';
+  document.getElementById('heatPanel').style.display = '';
+  const {{ctx, W, H}} = setupCanvas('cvDyn', 240);
+  const pad = {{l:56, r:60, t:16, b:32}};
+  const ts = frames.map(f=>f.time);
+  const ns = frames.map(f=>f.particle_number);
+  const cs_dyn = frames.map(f=>f.chiral_condensate);
+  const minT = Math.min(...ts), maxT = Math.max(...ts);
+  const maxN = Math.max(...ns, 0.01);
+  const minC = Math.min(...cs_dyn), maxC = Math.max(...cs_dyn);
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  function xOf(t) {{ return pad.l + (t - minT) / (maxT - minT + 1e-14) * cw; }}
+  function yOfN(n) {{ return H - pad.b - (n / maxN) * ch; }}
+  function yOfC(c) {{ return H - pad.b - (c - minC) / (maxC - minC + 1e-14) * ch; }}
+  drawAxes(ctx, pad, W, H);
+  // Grid lines.
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+  for (let t = 0; t <= 4; t++) {{
+    const y = pad.t + ch * t / 4;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+  }}
+  // Particle number.
+  ctx.strokeStyle = '#3fb950'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < ts.length; i++) {{
+    if (i === 0) ctx.moveTo(xOf(ts[i]), yOfN(ns[i]));
+    else ctx.lineTo(xOf(ts[i]), yOfN(ns[i]));
+  }}
+  ctx.stroke();
+  // Chiral condensate (right axis).
+  ctx.strokeStyle = '#d29922'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i = 0; i < ts.length; i++) {{
+    if (i === 0) ctx.moveTo(xOf(ts[i]), yOfC(cs_dyn[i]));
+    else ctx.lineTo(xOf(ts[i]), yOfC(cs_dyn[i]));
+  }}
+  ctx.stroke();
+  // Left y-axis labels (particle number).
+  ctx.fillStyle = '#3fb950'; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+  for (let t = 0; t <= 4; t++) {{
+    const n = maxN * t / 4;
+    ctx.fillText(n.toFixed(2), pad.l - 4, H - pad.b - n/maxN * ch + 3);
+  }}
+  // Right y-axis labels (chiral condensate).
+  ctx.fillStyle = '#d29922'; ctx.textAlign = 'left';
+  for (let t = 0; t <= 4; t++) {{
+    const c = minC + (maxC - minC) * t / 4;
+    ctx.fillText(c.toFixed(3), W - pad.r + 4, H - pad.b - (c-minC)/(maxC-minC+1e-14)*ch + 3);
+  }}
+  // x ticks.
+  ctx.fillStyle = '#8b949e'; ctx.textAlign = 'center'; ctx.font = '10px system-ui';
+  for (let t = 0; t <= 5; t++) {{
+    const tv = minT + (maxT - minT) * t / 5;
+    ctx.fillText(tv.toFixed(1), xOf(tv), H - pad.b + 14);
+  }}
+  ctx.fillText('time t (J·t/ℏ)', pad.l + cw/2, H - 4);
+  // Legend.
+  ctx.textAlign = 'left'; ctx.font = '11px system-ui';
+  ctx.fillStyle = '#3fb950'; ctx.fillText('particle number ⟨N⟩', pad.l + 8, pad.t + 14);
+  ctx.fillStyle = '#d29922'; ctx.fillText('chiral condensate ⟨ψ̄ψ⟩', pad.l + 8, pad.t + 28);
+}}
+
+// ── Charge density heatmap ─────────────────────────────────────────────────────
+function drawHeat() {{
+  const frames = DATA.frames || [];
+  if (!frames.length) return;
+  const {{ctx, W, H}} = setupCanvas('cvHeat', 240);
+  const pad = {{l:52, r:16, t:12, b:32}};
+  const Nframes = frames.length;
+  const Nsites = (frames[0].charge_density || []).length;
+  if (!Nsites) return;
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  const cellW = cw / Nframes, cellH = ch / Nsites;
+  // Colour scale: negative (red) → zero (dark) → positive (green).
+  const allQ = frames.flatMap(f => f.charge_density);
+  const qMax = Math.max(...allQ.map(Math.abs), 0.01);
+  function qColor(q) {{
+    const t = q / qMax;  // [-1, 1]
+    if (t >= 0) {{
+      const v = Math.round(t * 200);
+      return `rgb(0,${{63 + v}},0)`;
+    }} else {{
+      const v = Math.round(-t * 200);
+      return `rgb(${{63 + v}},0,0)`;
+    }}
+  }}
+  for (let fi = 0; fi < Nframes; fi++) {{
+    const charges = frames[fi].charge_density || [];
+    for (let si = 0; si < Nsites; si++) {{
+      const x = pad.l + fi * cellW;
+      const y = pad.t + (Nsites - 1 - si) * cellH;  // site 0 at bottom
+      ctx.fillStyle = qColor(charges[si] || 0);
+      ctx.fillRect(x, y, Math.ceil(cellW), Math.ceil(cellH));
+    }}
+  }}
+  // Axes.
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, H-pad.b);
+  ctx.lineTo(W-pad.r, H-pad.b); ctx.stroke();
+  // x labels.
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+  const tStep = Math.max(1, Math.floor(Nframes / 6));
+  for (let fi = 0; fi < Nframes; fi += tStep) {{
+    ctx.fillText(frames[fi].time.toFixed(1), pad.l + fi * cellW, H - pad.b + 14);
+  }}
+  ctx.fillText('time →', pad.l + cw/2, H - 4);
+  // y labels.
+  ctx.textAlign = 'right';
+  for (let si = 0; si < Nsites; si += 2) {{
+    const y = pad.t + (Nsites - 1 - si) * cellH + cellH/2;
+    ctx.fillText(si, pad.l - 4, y + 3);
+  }}
+  // Colour bar legend.
+  ctx.fillStyle = '#f85149'; ctx.fillRect(W-pad.r-40, pad.t, 12, 10);
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+  ctx.fillText('Q<0', W-pad.r-26, pad.t+9);
+  ctx.fillStyle = '#3fb950'; ctx.fillRect(W-pad.r-40, pad.t+14, 12, 10);
+  ctx.fillText('Q>0', W-pad.r-26, pad.t+23);
+}}
+
+window.addEventListener('load', () => {{
+  drawCharge();
+  drawElec();
+  drawSweep();
+  drawString();
+  drawDyn();
+  drawHeat();
+}});
+window.addEventListener('resize', () => {{
+  drawCharge();
+  drawElec();
+  drawSweep();
+  drawString();
+  drawDyn();
+  drawHeat();
+}});
+</script>
+</body>
+</html>"""
+  return html
+
+
 # ── M21: Quantum Phase Estimation ─────────────────────────────────────────────
 
 def _qpe_frames(
@@ -5075,7 +5800,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -5119,6 +5844,13 @@ def main() -> int:
   parser.add_argument("--qec-trials", type=int, default=2000, help="number of Monte Carlo trials for QEC scenarios")
   parser.add_argument("--qec-sweep", action="store_true", default=True, help="include threshold curve sweep in QEC output")
   parser.add_argument("--qec-no-sweep", dest="qec_sweep", action="store_false", help="disable QEC threshold sweep")
+  parser.add_argument("--schwinger-sites", type=int, default=8, help="number of lattice sites for Schwinger model (even, ≤14)")
+  parser.add_argument("--schwinger-mass", type=float, default=0.5, help="bare fermion mass m in units of J")
+  parser.add_argument("--schwinger-coupling", type=float, default=0.3, help="gauge coupling g² in units of J")
+  parser.add_argument("--schwinger-background", type=float, default=0.5, help="background electric field α for dynamics quench")
+  parser.add_argument("--schwinger-steps", type=int, default=60, help="number of time steps for dynamics scenario")
+  parser.add_argument("--schwinger-dt", type=float, default=0.08, help="time step dt for Schwinger dynamics")
+  parser.add_argument("--schwinger-mass-sweep", type=int, default=30, help="number of mass values in chiral condensate sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -5580,6 +6312,96 @@ def main() -> int:
     path = out_dir / "quantum_qec_shor.html"
     path.write_text(_qec_page(qec_shor_data, title="QEC — 9-Qubit Shor Code"), encoding="utf-8")
     generated.append(path)
+
+  # ── M23 — Schwinger model scenarios ─────────────────────────────────────────
+  # schwinger_vacuum: ground state observables + chiral condensate mass sweep
+  if args.scenario in {"schwinger_vacuum", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("schwinger_vacuum skipped: numpy not available", file=sys.stderr)
+    else:
+      vac_data = _schwinger_frames(
+          n_sites=args.schwinger_sites,
+          mass=args.schwinger_mass,
+          coupling=args.schwinger_coupling,
+          background=0.0,
+          scenario="vacuum",
+          n_mass_sweep=args.schwinger_mass_sweep,
+      )
+      path = out_dir / "quantum_schwinger_vacuum.html"
+      path.write_text(_schwinger_page(vac_data, title="Schwinger Model — Vacuum"), encoding="utf-8")
+      generated.append(path)
+
+  # schwinger_string: string tension E(R) vs quark–antiquark separation
+  if args.scenario in {"schwinger_string", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("schwinger_string skipped: numpy not available", file=sys.stderr)
+    else:
+      str_data = _schwinger_frames(
+          n_sites=args.schwinger_sites,
+          mass=args.schwinger_mass,
+          coupling=args.schwinger_coupling,
+          background=0.0,
+          scenario="string",
+          n_mass_sweep=args.schwinger_mass_sweep,
+      )
+      path = out_dir / "quantum_schwinger_string.html"
+      path.write_text(_schwinger_page(str_data, title="Schwinger Model — String Tension"), encoding="utf-8")
+      generated.append(path)
+
+  # schwinger_dynamics: pair production under background field quench
+  if args.scenario in {"schwinger_dynamics", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+      # Try scipy for exact expm; fall back to Trotter.
+      try:
+        import scipy.linalg as _scipy_linalg  # noqa: PLC0415
+        _has_scipy = True
+      except ImportError:
+        _has_scipy = False
+    except ImportError:
+      print("schwinger_dynamics skipped: numpy not available", file=sys.stderr)
+    else:
+      # Use smaller N for dynamics (exact matrix exp is O(dim³)).
+      n_dyn = min(args.schwinger_sites, 6)
+      if not _has_scipy:
+        # Fallback: eigendecompose once → fast time evolution.
+        dyn_frames = _schwinger_fallback_dynamics(
+            n_sites=n_dyn,
+            mass=args.schwinger_mass,
+            coupling=args.schwinger_coupling,
+            background_quench=args.schwinger_background,
+            dt=args.schwinger_dt,
+            n_steps=args.schwinger_steps,
+        )
+        dyn_data = _schwinger_frames(
+            n_sites=n_dyn,
+            mass=args.schwinger_mass,
+            coupling=args.schwinger_coupling,
+            background=0.0,
+            scenario="vacuum",
+            n_mass_sweep=args.schwinger_mass_sweep,
+        )
+        dyn_data["scenario"] = "dynamics"
+        dyn_data["frames"] = dyn_frames
+        dyn_data["background"] = args.schwinger_background
+      else:
+        dyn_data = _schwinger_frames(
+            n_sites=n_dyn,
+            mass=args.schwinger_mass,
+            coupling=args.schwinger_coupling,
+            background=args.schwinger_background,
+            scenario="dynamics",
+            dt=args.schwinger_dt,
+            n_steps=args.schwinger_steps,
+            n_mass_sweep=args.schwinger_mass_sweep,
+        )
+      path = out_dir / "quantum_schwinger_dynamics.html"
+      path.write_text(_schwinger_page(dyn_data, title="Schwinger Model — Pair Production Dynamics"), encoding="utf-8")
+      generated.append(path)
 
   for p in generated:
     print(f"wrote visualization: {p}")

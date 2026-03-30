@@ -47,6 +47,7 @@ int main(int argc, char** argv) {
     std::string vqe_path;
     std::string qpe_path;
     std::string qec_path;
+    std::string qfield_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -66,6 +67,7 @@ int main(int argc, char** argv) {
     app.add_option("--vqe", vqe_path, "VQE/QAOA options json path (run variational optimization)");
     app.add_option("--qpe", qpe_path, "QPE options json path (run Quantum Phase Estimation)");
     app.add_option("--qec", qec_path, "QEC options json path (run Quantum Error Correction Monte Carlo)");
+    app.add_option("--qfield", qfield_path, "QField options json path (run Schwinger model / lattice QFT simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -107,17 +109,18 @@ int main(int argc, char** argv) {
     }
 
     if (problem_path.empty() && circuit_path.empty() && vqe_path.empty() &&
-        qpe_path.empty() && qec_path.empty()) {
-      throw std::runtime_error("missing required --problem, --circuit, --vqe, --qpe, or --qec");
+        qpe_path.empty() && qec_path.empty() && qfield_path.empty()) {
+      throw std::runtime_error("missing required --problem, --circuit, --vqe, --qpe, --qec, or --qfield");
     }
     {
-      int modes = (!problem_path.empty() ? 1 : 0) +
+      int modes = (!problem_path.empty()  ? 1 : 0) +
                   (!circuit_path.empty()  ? 1 : 0) +
                   (!vqe_path.empty()      ? 1 : 0) +
                   (!qpe_path.empty()      ? 1 : 0) +
-                  (!qec_path.empty()      ? 1 : 0);
+                  (!qec_path.empty()      ? 1 : 0) +
+                  (!qfield_path.empty()   ? 1 : 0);
       if (modes > 1) {
-        throw std::runtime_error("use exactly one of --problem, --circuit, --vqe, --qpe, or --qec");
+        throw std::runtime_error("use exactly one of --problem, --circuit, --vqe, --qpe, --qec, or --qfield");
       }
     }
 
@@ -179,6 +182,15 @@ int main(int argc, char** argv) {
       const qx::QpeOptions qpe_opts = qx::qpe_options_from_json(qpe_json);
       qx::log::info("loaded qpe options file: " + qpe_path);
       output_json = qx::qpe_result_to_json(qx::run_qpe(qpe_opts));
+    } else if (!qfield_path.empty()) {
+      // QField (Schwinger model) mode.
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --qfield mode");
+      }
+      const std::string qfield_json = read_text_file(qfield_path);
+      const qx::QfieldOptions qfield_opts = qx::qfield_options_from_json(qfield_json);
+      qx::log::info("loaded qfield options file: " + qfield_path);
+      output_json = qx::qfield_result_to_json(qx::run_qfield(qfield_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

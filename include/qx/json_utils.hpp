@@ -36,5 +36,9 @@ std::string qpe_result_to_json(const QpeResult& result);
 QecOptions qec_options_from_json(const std::string& json);
 // Serialize QEC result to JSON string.
 std::string qec_result_to_json(const QecResult& result);
+// Parse QField (Schwinger model) options from JSON string.
+QfieldOptions qfield_options_from_json(const std::string& json);
+// Serialize QField result to JSON string.
+std::string qfield_result_to_json(const QfieldResult& result);
 
 }  // namespace qx
