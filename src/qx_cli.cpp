@@ -182,15 +182,6 @@ int main(int argc, char** argv) {
       const qx::QpeOptions qpe_opts = qx::qpe_options_from_json(qpe_json);
       qx::log::info("loaded qpe options file: " + qpe_path);
       output_json = qx::qpe_result_to_json(qx::run_qpe(qpe_opts));
-    } else {
-      // QEC mode.
-      if (explain || validate_only) {
-        throw std::runtime_error("--explain and --validate-only are not supported in --qec mode");
-      }
-      const std::string qec_json = read_text_file(qec_path);
-      const qx::QecOptions qec_opts = qx::qec_options_from_json(qec_json);
-      qx::log::info("loaded qec options file: " + qec_path);
-      output_json = qx::qec_result_to_json(qx::run_qec(qec_opts));
     } else if (!qfield_path.empty()) {
       // QField (Schwinger model) mode.
       if (explain || validate_only) {
@@ -200,6 +191,15 @@ int main(int argc, char** argv) {
       const qx::QfieldOptions qfield_opts = qx::qfield_options_from_json(qfield_json);
       qx::log::info("loaded qfield options file: " + qfield_path);
       output_json = qx::qfield_result_to_json(qx::run_qfield(qfield_opts));
+    } else {
+      // QEC mode.
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --qec mode");
+      }
+      const std::string qec_json = read_text_file(qec_path);
+      const qx::QecOptions qec_opts = qx::qec_options_from_json(qec_json);
+      qx::log::info("loaded qec options file: " + qec_path);
+      output_json = qx::qec_result_to_json(qx::run_qec(qec_opts));
     }
 
     if (out_path.empty()) {

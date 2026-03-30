@@ -4282,9 +4282,13 @@ def _schwinger_frames(
     }
 
   # ── Main scenario dispatch ────────────────────────────────────────────────
-  H0 = build_H(mass, coupling, background)
+  # In dynamics mode, prepare |psi0> in a true pre-quench vacuum (alpha=0)
+  # and then evolve under H(alpha_quench). Non-dynamics scenarios continue to
+  # use the user-provided background directly.
+  alpha0 = 0.0 if scenario == "dynamics" else background
+  H0 = build_H(mass, coupling, alpha0)
   E0, psi0 = ground_state(H0)
-  obs0 = observables(psi0, background)
+  obs0 = observables(psi0, alpha0)
 
   # Mass sweep: chiral condensate and ground energy vs m ∈ [-2, 2].
   mass_sweep = []
@@ -4327,7 +4331,7 @@ def _schwinger_frames(
   # Dynamics: time evolution from vacuum under sudden background quench.
   frames = []
   if scenario == "dynamics":
-    alpha_quench = background if abs(background) > 0.1 else 0.5
+    alpha_quench = background if abs(background) > 1e-9 else 0.5
     H_quench = build_H(mass, coupling, alpha_quench)
     # Time evolution via matrix exponential (exact for small N).
     psi = psi0.copy()
