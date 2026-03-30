@@ -6410,6 +6410,352 @@ window.addEventListener("load", () => {{
 </html>"""
 
 
+# ── M25: Unified Dashboard ────────────────────────────────────────────────────
+
+def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
+  """Single-page unified dashboard embedding all QuantX scenario visualizations.
+
+  Args:
+      pages: Mapping of scenario-key (str) → full HTML string for that scenario.
+
+  Returns:
+      Self-contained HTML string for the dashboard.
+  """
+  CATEGORY_DEF = [
+      ("🧮 量子基础", [
+          ("rabi",               "Rabi 振荡"),
+          ("entanglement_rabi",  "纠缠演化 (Rabi)"),
+          ("entanglement_decay", "纠缠衰减"),
+      ]),
+      ("🌊 空间波函数", [
+          ("spatial",        "1D 波包"),
+          ("spatial2d",      "2D 波包"),
+          ("spatial3d",      "3D 波包"),
+          ("driven_barrier", "驱动势垒"),
+          ("bloch",          "Bloch 振荡"),
+          ("gaussian_pulse", "高斯脉冲"),
+      ]),
+      ("⚛️ 相对论性", [
+          ("dirac2d", "2D Dirac 旋量"),
+      ]),
+      ("📊 相空间", [
+          ("wigner_free",    "Wigner 自由"),
+          ("wigner_barrier", "Wigner 势垒"),
+      ]),
+      ("🔗 开放量子系统", [
+          ("lindblad", "Lindblad 主方程"),
+      ]),
+      ("🕸️ 张量网络", [
+          ("mps",       "MPS 诊断"),
+          ("mps_ising", "MPS Ising"),
+          ("mps_xx",    "MPS XX"),
+      ]),
+      ("🔬 量子算法", [
+          ("vqe_ising",       "VQE (Ising)"),
+          ("vqe_qaoa",        "QAOA MaxCut"),
+          ("qpe_phase",       "QPE 相位门"),
+          ("qpe_hamiltonian", "QPE 哈密顿量"),
+          ("qec_bit_flip",    "QEC 比特翻转"),
+          ("qec_phase_flip",  "QEC 相位翻转"),
+          ("qec_shor",        "QEC Shor 码"),
+      ]),
+      ("🌌 量子场论", [
+          ("phi4_symmetric",     "φ⁴ 对称相"),
+          ("phi4_broken",        "φ⁴ 破缺相"),
+          ("phi4_sweep",         "φ⁴ 相变扫描"),
+          ("schwinger_vacuum",   "Schwinger 真空"),
+          ("schwinger_string",   "Schwinger 弦张力"),
+          ("schwinger_dynamics", "Schwinger 对产生"),
+      ]),
+  ]
+
+  CAT_ICONS = {
+      "🧮 量子基础":    "🧮",
+      "🌊 空间波函数":  "🌊",
+      "⚛️ 相对论性":    "⚛️",
+      "📊 相空间":      "📊",
+      "🔗 开放量子系统":"🔗",
+      "🕸️ 张量网络":    "🕸️",
+      "🔬 量子算法":    "🔬",
+      "🌌 量子场论":    "🌌",
+  }
+
+  # Build sidebar HTML and lookup maps.
+  nav_html = ""
+  key_to_label: dict = {}
+  key_to_cat: dict = {}
+  key_to_icon: dict = {}
+  first_key = None
+  available_keys: list = []
+
+  for cat_name, items in CATEGORY_DEF:
+    icon = CAT_ICONS.get(cat_name, "📊")
+    items_html = ""
+    for key, label in items:
+      if key not in pages:
+        continue
+      if first_key is None:
+        first_key = key
+      available_keys.append(key)
+      key_to_label[key] = label
+      key_to_cat[key] = cat_name
+      key_to_icon[key] = icon
+      items_html += (
+          f'<button class="nav-item" data-key="{key}" '
+          f'data-cat="{cat_name}" data-label="{label}" data-icon="{icon}">'
+          f'{label}</button>\n'
+      )
+    if items_html:
+      nav_html += (
+          f'<div class="nav-group">'
+          f'<div class="nav-cat">{cat_name}</div>'
+          f'{items_html}</div>\n'
+      )
+
+  def _safe_json_for_script(data: object) -> str:
+    # NOTE:
+    #   This JSON is inlined into an HTML <script> tag below. Raw "</script>"
+    #   inside scenario HTML would terminate the script element early during HTML
+    #   parsing, even if it appears inside a JavaScript string literal. Escaping
+    #   "<" prevents accidental closing tags while preserving JSON semantics.
+    return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+
+  total = len(available_keys)
+  pages_json  = _safe_json_for_script(pages)
+  labels_json = _safe_json_for_script(key_to_label)
+  cats_json   = _safe_json_for_script(key_to_cat)
+  icons_json  = _safe_json_for_script(key_to_icon)
+  first_json  = _safe_json_for_script(first_key or "")
+
+  return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>QuantX Dashboard</title>
+<style>
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{height:100%;overflow:hidden;background:#0d1117;color:#e6edf3;
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:14px}}
+.shell{{display:flex;height:100vh}}
+/* ── Sidebar ────────────────────────────────────── */
+.sidebar{{
+  width:220px;min-width:170px;flex-shrink:0;
+  background:#161b22;border-right:1px solid #30363d;
+  display:flex;flex-direction:column;overflow:hidden
+}}
+.sidebar-header{{
+  padding:13px 13px 9px;border-bottom:1px solid #30363d;flex-shrink:0
+}}
+.logo{{font-size:16px;font-weight:700;color:#58a6ff;letter-spacing:.4px;
+  display:flex;align-items:center;gap:6px}}
+.logo-badge{{
+  background:#21262d;border:1px solid #30363d;border-radius:9px;
+  padding:1px 7px;font-size:10px;color:#8b949e;font-weight:400
+}}
+.logo-sub{{font-size:10px;color:#6e7681;margin-top:2px;margin-bottom:9px}}
+.search{{
+  width:100%;padding:5px 9px;background:#21262d;border:1px solid #30363d;
+  border-radius:6px;color:#e6edf3;font-size:12px;outline:none;
+  transition:border-color .15s
+}}
+.search::placeholder{{color:#484f58}}
+.search:focus{{border-color:#58a6ff}}
+/* ── Nav scroll ──────────────────────────────────── */
+.nav-scroll{{flex:1;overflow-y:auto;padding:6px 0}}
+.nav-scroll::-webkit-scrollbar{{width:4px}}
+.nav-scroll::-webkit-scrollbar-thumb{{background:#30363d;border-radius:2px}}
+.nav-group{{margin-bottom:2px}}
+.nav-cat{{
+  padding:9px 13px 3px;font-size:10px;font-weight:600;
+  color:#6e7681;text-transform:uppercase;letter-spacing:.9px;
+  user-select:none
+}}
+.nav-item{{
+  display:block;width:100%;padding:5px 13px 5px 19px;
+  background:none;border:none;border-left:2px solid transparent;
+  color:#c9d1d9;font-size:12.5px;text-align:left;cursor:pointer;
+  transition:background .1s,color .1s;line-height:1.45
+}}
+.nav-item:hover{{background:#21262d;color:#e6edf3}}
+.nav-item.active{{
+  background:#1c2d3d;color:#58a6ff;
+  border-left-color:#58a6ff;font-weight:500
+}}
+.nav-item.hidden{{display:none!important}}
+.nav-group.all-hidden{{display:none}}
+/* ── Viewport ────────────────────────────────────── */
+.viewport{{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}}
+.vbar{{
+  height:40px;flex-shrink:0;background:#161b22;border-bottom:1px solid #30363d;
+  display:flex;align-items:center;gap:7px;padding:0 13px
+}}
+.vbar-icon{{font-size:15px;flex-shrink:0;line-height:1}}
+.vbar-title{{font-weight:600;font-size:13px;color:#e6edf3;flex-shrink:0}}
+.vbar-cat{{
+  font-size:10.5px;color:#8b949e;padding:1px 7px;
+  background:#21262d;border:1px solid #30363d;border-radius:9px;flex-shrink:0
+}}
+.vbar-sep{{flex:1}}
+.vbar-hint{{font-size:11px;color:#484f58}}
+.btn-newtab{{
+  background:#21262d;border:1px solid #30363d;border-radius:6px;
+  color:#8b949e;cursor:pointer;padding:3px 9px;font-size:11.5px;
+  transition:background .1s,color .1s;flex-shrink:0
+}}
+.btn-newtab:hover{{background:#2d333b;color:#e6edf3}}
+/* ── Main frame / empty state ────────────────────── */
+.empty{{
+  flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:12px;color:#484f58
+}}
+.empty-icon{{font-size:52px;opacity:.35}}
+.empty-msg{{font-size:13px}}
+.empty-hint{{font-size:11px;color:#30363d}}
+.main-frame{{
+  flex:1;border:none;width:100%;height:100%;background:#0d1117;display:block
+}}
+.main-frame.off{{display:none}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">QuantX <span class="logo-badge">{total}</span></div>
+      <div class="logo-sub">Visualization Dashboard</div>
+      <input class="search" id="search" type="text"
+             placeholder="搜索场景… (按 / 聚焦)" autocomplete="off"/>
+    </div>
+    <div class="nav-scroll" id="nav-scroll">
+{nav_html}
+    </div>
+  </nav>
+  <div class="viewport">
+    <div class="vbar">
+      <span class="vbar-icon" id="vbar-icon">⚛️</span>
+      <span class="vbar-title" id="vbar-title">QuantX Dashboard</span>
+      <span class="vbar-cat"  id="vbar-cat" style="display:none"></span>
+      <span class="vbar-sep"></span>
+      <span class="vbar-hint" id="vbar-hint">{total} 个场景 · ↑↓ 切换 · / 搜索</span>
+      <button class="btn-newtab" id="btn-newtab"
+              title="在新标签页中打开当前场景" style="display:none">⧉ 新标签页</button>
+    </div>
+    <div class="empty" id="empty">
+      <span class="empty-icon">⚛️</span>
+      <span class="empty-msg">从左侧选择一个场景开始可视化</span>
+      <span class="empty-hint">↑ ↓ 键盘导航 · / 快速搜索</span>
+    </div>
+    <iframe class="main-frame off" id="main-frame"
+            sandbox="allow-scripts"
+            title="场景可视化"></iframe>
+  </div>
+</div>
+<script>
+(function(){{
+"use strict";
+var PAGES  = {pages_json};
+var LABELS = {labels_json};
+var CATS   = {cats_json};
+var ICONS  = {icons_json};
+var current = null;
+
+var frame    = document.getElementById("main-frame");
+var empty    = document.getElementById("empty");
+var vbarIcon = document.getElementById("vbar-icon");
+var vbarTitle= document.getElementById("vbar-title");
+var vbarCat  = document.getElementById("vbar-cat");
+var vbarHint = document.getElementById("vbar-hint");
+var btnNew   = document.getElementById("btn-newtab");
+var search   = document.getElementById("search");
+
+function allItems() {{
+  return Array.from(document.querySelectorAll(".nav-item"));
+}}
+
+function switchTo(key) {{
+  if (!PAGES[key] || key === current) return;
+  current = key;
+  frame.srcdoc = PAGES[key];
+  frame.classList.remove("off");
+  empty.style.display = "none";
+  vbarIcon.textContent  = ICONS[key]  || "📊";
+  vbarTitle.textContent = LABELS[key] || key;
+  var cat = CATS[key] || "";
+  if (cat) {{ vbarCat.textContent = cat; vbarCat.style.display = ""; }}
+  else      {{ vbarCat.style.display = "none"; }}
+  btnNew.style.display = "";
+  vbarHint.style.display = "none";
+  allItems().forEach(function(b) {{
+    b.classList.toggle("active", b.dataset.key === key);
+  }});
+  var active = document.querySelector(".nav-item.active");
+  if (active) active.scrollIntoView({{block:"nearest",behavior:"smooth"}});
+}}
+
+// Open current page in a new browser tab via Blob URL.
+btnNew.addEventListener("click", function() {{
+  if (!current || !PAGES[current]) return;
+  var blob = new Blob([PAGES[current]], {{type:"text/html;charset=utf-8"}});
+  var url  = URL.createObjectURL(blob);
+  var tab  = window.open(url, "_blank");
+  if (!tab) alert("请允许弹出窗口以在新标签页中打开场景。");
+  setTimeout(function() {{ URL.revokeObjectURL(url); }}, 15000);
+}});
+
+// Sidebar click.
+document.querySelectorAll(".nav-item").forEach(function(btn) {{
+  btn.addEventListener("click", function() {{ switchTo(btn.dataset.key); }});
+}});
+
+// Keyboard navigation.
+document.addEventListener("keydown", function(e) {{
+  if (document.activeElement === search) {{
+    if (e.key === "Escape") {{ search.value = ""; filterNav(""); search.blur(); }}
+    return;
+  }}
+  if (e.key === "/" || e.key === "f") {{
+    e.preventDefault(); search.focus(); return;
+  }}
+  var visible = allItems().filter(function(b) {{
+    return !b.classList.contains("hidden");
+  }});
+  var idx = visible.findIndex(function(b) {{ return b.dataset.key === current; }});
+  if (e.key === "ArrowDown") {{
+    e.preventDefault();
+    if (idx < visible.length - 1) switchTo(visible[idx + 1].dataset.key);
+  }} else if (e.key === "ArrowUp") {{
+    e.preventDefault();
+    if (idx > 0) switchTo(visible[idx - 1].dataset.key);
+  }}
+}});
+
+// Search / filter sidebar items.
+function filterNav(q) {{
+  q = q.trim().toLowerCase();
+  document.querySelectorAll(".nav-group").forEach(function(grp) {{
+    var any = false;
+    grp.querySelectorAll(".nav-item").forEach(function(btn) {{
+      var match = !q ||
+        (btn.dataset.label || "").toLowerCase().includes(q) ||
+        (btn.dataset.key   || "").toLowerCase().includes(q) ||
+        (btn.dataset.cat   || "").toLowerCase().includes(q);
+      btn.classList.toggle("hidden", !match);
+      if (match) any = true;
+    }});
+    grp.classList.toggle("all-hidden", !any);
+  }});
+}}
+search.addEventListener("input", function() {{ filterNav(search.value); }});
+
+// Load the first available scenario on start.
+switchTo({first_json});
+}})();
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -6475,6 +6821,14 @@ def main() -> int:
   parser.add_argument("--phi4-d-local", type=int, default=10, help="local Fock space truncation (oscillator levels)")
   parser.add_argument("--phi4-sweep-points", type=int, default=25, help="number of m² points in phi4 phase transition sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
+  parser.add_argument(
+      "--dashboard", action="store_true", default=True,
+      help="(--scenario all) Generate quantum_dashboard.html aggregating all scenarios.",
+  )
+  parser.add_argument(
+      "--no-dashboard", dest="dashboard", action="store_false",
+      help="Skip dashboard generation even when --scenario all is used.",
+  )
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
   parser.add_argument("--samples-spatial-t", type=int, default=120)
@@ -7070,6 +7424,52 @@ def main() -> int:
       path = out_dir / "quantum_phi4_sweep.html"
       path.write_text(_phi4_page(swp_data, title="φ⁴ QFT — Phase Transition Sweep"), encoding="utf-8")
       generated.append(path)
+
+  # ── M25: Unified Dashboard ─────────────────────────────────────────────────
+  # When all scenarios were generated and --dashboard is active, build a single
+  # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
+  if args.scenario == "all" and args.dashboard:
+    # Map logical scenario keys → file stems used when writing individual pages.
+    _DASH_STEM_MAP = {
+        "rabi":               "rabi_population",
+        "mps":                "mps_diagnostics",
+        "spatial":            f"quantum_spatial_wavepacket_{args.spatial_potential}",
+        "spatial2d":          f"quantum_spatial2d_wavepacket_{args.spatial2d_potential}",
+        "spatial3d":          f"quantum_spatial3d_wavepacket_{args.spatial3d_potential}_{args.spatial3d_boundary}",
+        "driven_barrier":     "quantum_driven_barrier",
+        "bloch":              "quantum_bloch_oscillation",
+        "gaussian_pulse":     "quantum_gaussian_pulse",
+        "dirac2d":            f"quantum_dirac2d_{args.dirac2d_potential}",
+        "lindblad":           f"quantum_lindblad_{args.lindblad_scenario}",
+        "wigner_free":        "quantum_wigner_wigner_free",
+        "wigner_barrier":     "quantum_wigner_wigner_barrier",
+        "mps_ising":          "quantum_mps_ising",
+        "mps_xx":             "quantum_mps_xx",
+        "entanglement_rabi":  "quantum_entanglement_rabi",
+        "entanglement_decay": "quantum_entanglement_decay",
+        "vqe_ising":          "quantum_vqe_ising",
+        "vqe_qaoa":           "quantum_vqe_qaoa",
+        "qpe_phase":          "quantum_qpe_phase",
+        "qpe_hamiltonian":    "quantum_qpe_hamiltonian",
+        "qec_bit_flip":       "quantum_qec_bit_flip",
+        "qec_phase_flip":     "quantum_qec_phase_flip",
+        "qec_shor":           "quantum_qec_shor",
+        "schwinger_vacuum":   "quantum_schwinger_vacuum",
+        "schwinger_string":   "quantum_schwinger_string",
+        "schwinger_dynamics": "quantum_schwinger_dynamics",
+        "phi4_symmetric":     "quantum_phi4_symmetric",
+        "phi4_broken":        "quantum_phi4_broken",
+        "phi4_sweep":         "quantum_phi4_sweep",
+    }
+    dash_pages: dict = {}
+    for key, stem in _DASH_STEM_MAP.items():
+      candidate = out_dir / f"{stem}.html"
+      if candidate.exists():
+        dash_pages[key] = candidate.read_text(encoding="utf-8")
+    if dash_pages:
+      dash_path = out_dir / "quantum_dashboard.html"
+      dash_path.write_text(_dashboard_page(dash_pages), encoding="utf-8")
+      generated.append(dash_path)
 
   for p in generated:
     print(f"wrote visualization: {p}")
