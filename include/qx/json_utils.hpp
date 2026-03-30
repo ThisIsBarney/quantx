@@ -40,5 +40,9 @@ std::string qec_result_to_json(const QecResult& result);
 QfieldOptions qfield_options_from_json(const std::string& json);
 // Serialize QField result to JSON string.
 std::string qfield_result_to_json(const QfieldResult& result);
+// Parse φ⁴ QFT options from JSON string.
+Phi4Options phi4_options_from_json(const std::string& json);
+// Serialize φ⁴ QFT result to JSON string.
+std::string phi4_result_to_json(const Phi4Result& result);
 
 }  // namespace qx

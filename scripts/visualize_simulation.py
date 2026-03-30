@@ -4167,6 +4167,623 @@ window.addEventListener('resize', () => {{ drawGrid(); drawSyndrome(); drawThres
   return html
 
 
+# ── M24: φ⁴ Scalar Quantum Field Theory ───────────────────────────────────────
+
+def _phi4_frames(
+    n_sites: int = 4,
+    m2: float = 1.0,
+    lam: float = 1.0,
+    kappa: float = 1.0,
+    d_local: int = 10,
+    scenario: str = "symmetric",
+    n_sweep: int = 25,
+    m2_min: float = -3.0,
+    m2_max: float = 2.5,
+    epsilon: float = 0.05,
+    seed: int = 42,
+) -> dict:
+  """φ⁴ scalar QFT on a 1D lattice via truncated Fock space exact diagonalization.
+
+  Hamiltonian (natural units, lattice spacing a=1):
+
+    H = Σᵢ [½πᵢ² + ½m²φᵢ² + (λ/4)φᵢ⁴] − κ Σ⟨ij⟩ φᵢφⱼ
+
+  Local operators in truncated oscillator basis (d_local levels):
+    φᵢ = (âᵢ + â†ᵢ)/√2,   πᵢ = i(â†ᵢ − âᵢ)/√2
+
+  A small explicit symmetry-breaking field ε·Σφᵢ is added to select a vacuum
+  in the broken phase (m² < 0), making ⟨φ⟩ non-zero there.
+
+  Scenarios:
+    "symmetric"  — m² > 0 ground state + spectral gap
+    "broken"     — m² < 0 ground state showing SSB
+    "sweep"      — scan m² from m2_max → m2_min tracking order parameter + gap
+  """
+  try:
+    import numpy as np
+    from numpy.linalg import eigh
+  except ImportError as ex:
+    raise RuntimeError("phi4 visualization requires numpy") from ex
+
+  N = n_sites
+  d = d_local
+
+  # ── Local Fock-space operators ─────────────────────────────────────────────
+  # â: lowering, (â)_{n-1,n} = √n
+  a_loc = np.diag(np.sqrt(np.arange(1, d, dtype=float)), 1)   # d×d, upper triangular
+  adag  = a_loc.T
+  phi_loc  = (a_loc + adag) / np.sqrt(2.0)                   # position-like field
+  pi_loc   = 1j * (adag - a_loc) / np.sqrt(2.0)              # momentum-like field
+  pi2_loc  = np.real(-0.5 * (a_loc - adag) @ (a_loc - adag)) # ½π² per site
+  phi2_loc = phi_loc @ phi_loc
+  phi4_loc = phi2_loc @ phi2_loc
+  n_op_loc = np.diag(np.arange(d, dtype=float))               # number operator N̂
+
+  I_loc = np.eye(d, dtype=float)
+
+  # ── Tensor product helpers ─────────────────────────────────────────────────
+  def kron_single(op: "np.ndarray", site: int) -> "np.ndarray":
+    """I ⊗ ... ⊗ op (at site) ⊗ ... ⊗ I, total N sites."""
+    ops = [I_loc] * N
+    ops[site] = op
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  def kron_pair(op1: "np.ndarray", s1: int, op2: "np.ndarray", s2: int) -> "np.ndarray":
+    ops = [I_loc] * N
+    ops[s1] = op1
+    ops[s2] = op2
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  # ── Hamiltonian builder ────────────────────────────────────────────────────
+  def build_H(m2_val: float, eps: float = epsilon) -> "np.ndarray":
+    dim = d ** N
+    H = np.zeros((dim, dim), dtype=float)
+    for i in range(N):
+      H += kron_single(pi2_loc,          i)         # ½πᵢ² already scaled
+      H += (0.5 * m2_val) * kron_single(phi2_loc,  i)   # ½m²φᵢ²
+      H += (0.25 * lam)   * kron_single(phi4_loc,  i)   # λ/4 φᵢ⁴
+      H += eps             * kron_single(phi_loc,   i)   # explicit Z₂ breaking
+    for i in range(N - 1):
+      H -= kappa * kron_pair(phi_loc, i, phi_loc, i + 1)  # −κ φᵢφᵢ₊₁
+    return H
+
+  # ── Solve: get lowest 3 eigenpairs ────────────────────────────────────────
+  def solve(m2_val: float, eps: float = epsilon) -> "tuple":
+    H = build_H(m2_val, eps)
+    # eigh returns eigenvalues in ascending order.
+    vals, vecs = eigh(H)
+    return vals[:3], vecs[:, :3]   # (energies, states)
+
+  # ── Observables from a state vector ───────────────────────────────────────
+  def site_expect(psi: "np.ndarray", op_loc: "np.ndarray", site: int) -> float:
+    """⟨ψ|op_site|ψ⟩ using tensor structure (avoid full kron for speed)."""
+    d_n = d ** N
+    d_before = d ** site
+    d_after  = d ** (N - site - 1)
+    psi_r = psi.reshape(d_before, d, d_after)
+    # Contract op over the site index.
+    psi_op = np.einsum("ij,ajb->aib", op_loc, psi_r)
+    return float(np.real(np.dot(psi.ravel(), psi_op.ravel())))
+
+  def all_site_obs(psi: "np.ndarray") -> dict:
+    phi_exp  = [site_expect(psi, phi_loc,  i) for i in range(N)]
+    phi2_exp = [site_expect(psi, phi2_loc, i) for i in range(N)]
+    n_exp    = [site_expect(psi, n_op_loc, i) for i in range(N)]
+    op_val   = float(np.sqrt(max(0.0, sum(phi2_exp) / N)))
+    return {
+        "phi_expectation":  phi_exp,
+        "phi2_expectation": phi2_exp,
+        "occupation":       n_exp,
+        "order_parameter":  op_val,
+        "phi_mean":         float(np.mean(phi_exp)),
+    }
+
+  # ── Marginal field distribution p(φ₀) at site 0 ───────────────────────────
+  def field_distribution(psi: "np.ndarray", n_bins: int = 60) -> "tuple":
+    """Return (phi_vals, probs) for the marginal distribution at site 0."""
+    # psi has shape (d^N,). Reshape to (d, d^{N-1}).
+    d_rest = d ** (N - 1)
+    psi_r = psi.reshape(d, d_rest)  # index 0 = site 0 Fock level
+    # Marginal amplitudes in the φ basis: ψ_φ(φ₀) = Σ_{n₀} ψ_{n₀} φ_{n₀}(φ₀).
+    # Use a discrete grid for φ and evaluate in the harmonic oscillator basis.
+    phi_max = 4.0 * np.sqrt(float(d))
+    phi_vals = np.linspace(-phi_max, phi_max, n_bins)
+    # Harmonic oscillator wave functions ψ_n(φ) = H_n(φ) e^{-φ²/2} / normalization.
+    # We use the recurrence relation for Hermite polynomials.
+    # ψ_0(φ) = π^{-1/4} exp(-φ²/2)
+    # ψ_n(φ) = (a†)^n / √(n!) ψ_0
+    # Numerically stable via recurrence: ψ_n = (√2 φ ψ_{n-1} - √(n-1) ψ_{n-2}) / √n
+    psi_phi = np.zeros((d, n_bins), dtype=float)
+    psi_phi[0] = np.pi ** (-0.25) * np.exp(-0.5 * phi_vals ** 2)
+    if d > 1:
+      psi_phi[1] = np.sqrt(2.0) * phi_vals * psi_phi[0]
+    for n in range(2, d):
+      psi_phi[n] = (np.sqrt(2.0) * phi_vals * psi_phi[n-1] -
+                    np.sqrt(float(n-1)) * psi_phi[n-2]) / np.sqrt(float(n))
+    # Marginal density: ρ(φ₀) = Σ_{rest} |Σ_n0 ψ_{n₀,rest} ψ_{HO,n₀}(φ₀)|²
+    # = |Σ_n0 c_{n0} ψ_n(φ₀)|² where c_{n₀} = Σ_{rest} ψ_{n₀,rest}
+    # Reduce over rest sites: c_{n₀} = √(sum_{rest} |ψ_{n₀,rest}|²) × phase
+    # For probability: ρ(φ₀) = Σ_n₀ Σ_m₀ (ρ_{n₀m₀}) ψ_n(φ₀) ψ_m(φ₀)
+    # where ρ_{n₀m₀} = Σ_{rest} ψ*_{n₀,rest} ψ_{m₀,rest}  (reduced density matrix)
+    rho_local = psi_r @ psi_r.T   # (d, d) reduced density matrix (real for real psi)
+    prob = np.einsum("ij,ix,jx->x", rho_local, psi_phi, psi_phi)
+    prob = np.real(prob)
+    prob = np.clip(prob, 0.0, None)
+    # Normalise (approximate: discrete grid, may not integrate to 1 perfectly).
+    dv = phi_vals[1] - phi_vals[0]
+    prob /= max(prob.sum() * dv, 1e-12)
+    return phi_vals.tolist(), prob.tolist()
+
+  # ── Main computation ───────────────────────────────────────────────────────
+  vals, vecs = solve(m2)
+  E0, E1, E2 = float(vals[0]), float(vals[1]), float(vals[2])
+  psi0 = vecs[:, 0]
+  obs  = all_site_obs(psi0)
+  phi_vals, probs = field_distribution(psi0)
+
+  # ── Phase transition sweep ─────────────────────────────────────────────────
+  sweep = []
+  if scenario == "sweep" and n_sweep > 0:
+    for i in range(n_sweep):
+      m2_i = m2_max - (m2_max - m2_min) * i / max(1, n_sweep - 1)
+      v_i, vec_i = solve(m2_i)
+      psi_i = vec_i[:, 0]
+      obs_i = all_site_obs(psi_i)
+      sweep.append({
+          "m2":             m2_i,
+          "ground_energy":  float(v_i[0]),
+          "order_parameter": obs_i["order_parameter"],
+          "energy_gap":     float(v_i[1] - v_i[0]),
+          "phi_mean":       obs_i["phi_mean"],
+      })
+
+  # ── Classical potential for visualisation ─────────────────────────────────
+  phi_cl = np.linspace(-4.0, 4.0, 200)
+  V_cl   = (0.5 * m2 * phi_cl ** 2 + 0.25 * lam * phi_cl ** 4).tolist()
+  phi_cl = phi_cl.tolist()
+
+  return {
+      "n_sites":           N,
+      "d_local":           d,
+      "m2":                m2,
+      "lam":               lam,
+      "kappa":             kappa,
+      "scenario":          scenario,
+      "ground_energy":     E0,
+      "first_excited":     E1,
+      "second_excited":    E2,
+      "energy_gap":        E1 - E0,
+      "order_parameter":   obs["order_parameter"],
+      "phi_expectation":   obs["phi_expectation"],
+      "phi2_expectation":  obs["phi2_expectation"],
+      "occupation":        obs["occupation"],
+      "phi_mean":          obs["phi_mean"],
+      "field_phi_vals":    phi_vals,
+      "field_probs":       probs,
+      "classical_phi":     phi_cl,
+      "classical_V":       V_cl,
+      "sweep":             sweep,
+  }
+
+
+def _phi4_page(data: dict, title: str = "φ⁴ QFT") -> str:
+  """Generate a self-contained HTML page for the φ⁴ QFT results."""
+  import json as _json
+
+  data_js = _json.dumps(data, ensure_ascii=False)
+  m2_val  = data.get("m2", 1.0)
+  scenario = data.get("scenario", "symmetric")
+
+  html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+  :root {{ --bg:#0d1117; --panel:#161b22; --border:#30363d; --accent:#58a6ff;
+           --green:#3fb950; --orange:#d29922; --red:#f85149; --purple:#bc8cff;
+           --yellow:#e3b341; --muted:#8b949e; --text:#e6edf3; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+          min-height:100vh; padding:24px; }}
+  h1 {{ font-size:1.4rem; font-weight:600; color:var(--accent); margin-bottom:4px; }}
+  .subtitle {{ color:var(--muted); font-size:.85rem; margin-bottom:20px; }}
+  .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:1100px; margin:0 auto; }}
+  .panel {{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }}
+  .panel.wide {{ grid-column:span 2; }}
+  .panel h2 {{ font-size:.95rem; color:var(--muted); margin-bottom:12px; font-weight:500; }}
+  canvas {{ display:block; width:100%; }}
+  .stat-row {{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:20px; max-width:1100px;
+               margin-left:auto; margin-right:auto; }}
+  .stat {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 14px; }}
+  .stat-label {{ font-size:.75rem; color:var(--muted); margin-bottom:2px; }}
+  .stat-value {{ font-size:1.05rem; font-weight:600; color:var(--accent); }}
+  .tag {{ display:inline-block; font-size:.75rem; padding:2px 8px; border-radius:4px;
+          background:#21262d; border:1px solid var(--border); color:var(--muted);
+          margin-right:6px; margin-bottom:12px; }}
+  .phase-badge {{ display:inline-block; font-size:.8rem; padding:3px 10px; border-radius:12px;
+                  font-weight:600; margin-bottom:16px; }}
+  .phase-sym {{ background:rgba(88,166,255,.15); border:1px solid #58a6ff; color:#58a6ff; }}
+  .phase-brk {{ background:rgba(240,81,73,.15); border:1px solid #f85149; color:#f85149; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">φ⁴ scalar field theory on a 1D lattice · truncated Fock space · exact diagonalization</p>
+<div>
+  <span class="tag">N={data.get('n_sites',4)} sites</span>
+  <span class="tag">d={data.get('d_local',10)} levels</span>
+  <span class="tag">m²={data.get('m2',1.0)}</span>
+  <span class="tag">λ={data.get('lam',1.0)}</span>
+  <span class="tag">κ={data.get('kappa',1.0)}</span>
+</div>
+<div id="phaseBadge"></div>
+
+<div class="stat-row" id="stats"></div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Classical Potential V(φ) = ½m²φ² + ¼λφ⁴</h2>
+    <canvas id="cvPot" height="230"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Ground State Field Distribution p(φ₀)</h2>
+    <canvas id="cvDist" height="230"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Site Profile: ⟨φᵢ⟩ and √⟨φᵢ²⟩ per Lattice Site</h2>
+    <canvas id="cvSite" height="230"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Mean Occupation ⟨nᵢ⟩ per Site (quantum fluctuations)</h2>
+    <canvas id="cvOcc" height="230"></canvas>
+  </div>
+  <div class="panel wide" id="sweepPanel" style="display:none">
+    <h2>Phase Transition: Order Parameter √⟨φ²⟩ and Energy Gap Δ vs m²</h2>
+    <canvas id="cvSweep" height="240"></canvas>
+  </div>
+</div>
+
+<script>
+const DATA = {data_js};
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+(function() {{
+  const s = document.getElementById('stats');
+  function stat(label, val, color) {{
+    const d = document.createElement('div');
+    d.className = 'stat';
+    d.innerHTML = `<div class="stat-label">${{label}}</div>
+      <div class="stat-value" style="${{color ? 'color:'+color : ''}}">${{val}}</div>`;
+    s.appendChild(d);
+  }}
+  stat('Ground energy E₀', DATA.ground_energy.toFixed(5));
+  stat('First excited E₁', DATA.first_excited.toFixed(5));
+  stat('Energy gap Δ', DATA.energy_gap.toFixed(5),
+       DATA.energy_gap < 0.05 ? '#f85149' : '#3fb950');
+  stat('Order parameter √⟨φ²⟩', DATA.order_parameter.toFixed(5),
+       DATA.order_parameter > 0.3 ? '#f85149' : '#58a6ff');
+  stat('⟨φ⟩ (mean)', DATA.phi_mean.toFixed(5));
+
+  // Phase badge.
+  const badge = document.getElementById('phaseBadge');
+  const broken = DATA.order_parameter > 0.3 && DATA.m2 < 0;
+  badge.innerHTML = broken
+    ? '<span class="phase-badge phase-brk">⚠ Broken Phase — Z₂ symmetry spontaneously broken</span>'
+    : '<span class="phase-badge phase-sym">✓ Symmetric Phase — Z₂ preserved</span>';
+}})();
+
+// ── Canvas helpers ─────────────────────────────────────────────────────────────
+function setup(id, h) {{
+  const cv = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  cv.width  = (cv.offsetWidth  || 500) * dpr;
+  cv.height = (cv.offsetHeight || h  ) * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#161b22'; ctx.fillRect(0, 0, cv.offsetWidth||500, cv.offsetHeight||h);
+  return {{ctx, W: cv.offsetWidth||500, H: cv.offsetHeight||h}};
+}}
+
+function axes(ctx, pad, W, H) {{
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, H-pad.b);
+  ctx.lineTo(W-pad.r, H-pad.b); ctx.stroke();
+}}
+
+function grid(ctx, pad, W, H) {{
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {{
+    const y = pad.t + (H-pad.t-pad.b) * i / 4;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+  }}
+}}
+
+// ── Classical potential ────────────────────────────────────────────────────────
+function drawPot() {{
+  const {{ctx, W, H}} = setup('cvPot', 230);
+  const pad = {{l:52, r:12, t:16, b:28}};
+  const xs  = DATA.classical_phi;
+  const ys  = DATA.classical_V;
+  if (!xs || !xs.length) return;
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  // Clip to show interesting part of potential.
+  const ymax_vis = Math.min(Math.max(...ys), 8.0);
+  const ymin_vis = Math.min(...ys.filter(y=>y<=ymax_vis), 0);
+  function xOf(v) {{ return pad.l + (v - xs[0]) / (xs[xs.length-1]-xs[0]) * cw; }}
+  function yOf(v) {{ return H - pad.b - (Math.min(v,ymax_vis) - ymin_vis) / (ymax_vis - ymin_vis + 1e-9) * ch; }}
+
+  // Fill under curve.
+  ctx.fillStyle = 'rgba(88,166,255,0.07)';
+  ctx.beginPath();
+  ctx.moveTo(xOf(xs[0]), H - pad.b);
+  for (let i = 0; i < xs.length; i++) ctx.lineTo(xOf(xs[i]), yOf(ys[i]));
+  ctx.lineTo(xOf(xs[xs.length-1]), H - pad.b); ctx.closePath(); ctx.fill();
+
+  // Curve.
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+  let first = true;
+  for (let i = 0; i < xs.length; i++) {{
+    const y = ys[i];
+    if (y > ymax_vis + 0.5) {{ first = true; continue; }}
+    if (first) {{ ctx.moveTo(xOf(xs[i]), yOf(y)); first = false; }}
+    else ctx.lineTo(xOf(xs[i]), yOf(y));
+  }}
+  ctx.stroke();
+
+  // Zero line.
+  const y0 = yOf(0);
+  if (y0 >= pad.t && y0 <= H - pad.b) {{
+    ctx.strokeStyle = '#30363d'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(pad.l, y0); ctx.lineTo(W-pad.r, y0); ctx.stroke();
+  }}
+
+  // Minima markers.
+  const m2 = DATA.m2, lam = DATA.lam;
+  if (m2 < 0 && lam > 0) {{
+    const phi_min = Math.sqrt(-m2 / (2*lam));  // classical minimum ±φ* = ±√(-m²/2λ)
+    [-phi_min, phi_min].forEach(pm => {{
+      if (Math.abs(pm) <= Math.abs(xs[xs.length-1])) {{
+        const V_min = 0.5*m2*pm*pm + 0.25*lam*pm*pm*pm*pm;
+        ctx.fillStyle = '#f85149';
+        ctx.beginPath(); ctx.arc(xOf(pm), yOf(V_min), 5, 0, 2*Math.PI); ctx.fill();
+      }}
+    }});
+    ctx.fillStyle = '#f85149'; ctx.font = '10px system-ui'; ctx.textAlign = 'left';
+    ctx.fillText('±φ* = ±' + phi_min.toFixed(2), pad.l+4, pad.t+12);
+  }}
+
+  axes(ctx, pad, W, H);
+  // x axis labels.
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+  [-3,-2,-1,0,1,2,3].forEach(v => {{
+    if (v >= xs[0] && v <= xs[xs.length-1])
+      ctx.fillText(v, xOf(v), H-pad.b+14);
+  }});
+  ctx.fillText('φ', pad.l+cw/2, H-4);
+  // y labels.
+  ctx.textAlign = 'right';
+  [ymin_vis, (ymin_vis+ymax_vis)/2, ymax_vis].forEach(v => {{
+    ctx.fillText(v.toFixed(2), pad.l-4, yOf(v)+3);
+  }});
+}}
+
+// ── Field distribution p(φ₀) ──────────────────────────────────────────────────
+function drawDist() {{
+  const {{ctx, W, H}} = setup('cvDist', 230);
+  const pad = {{l:52, r:12, t:16, b:28}};
+  const xs = DATA.field_phi_vals;
+  const ps = DATA.field_probs;
+  if (!xs || !xs.length) return;
+  const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
+  const maxP = Math.max(...ps, 1e-9);
+  function xOf(v) {{ return pad.l + (v-xs[0])/(xs[xs.length-1]-xs[0])*cw; }}
+  function yOf(p) {{ return H - pad.b - (p/maxP)*ch; }}
+
+  // Fill.
+  ctx.fillStyle = 'rgba(188,140,255,0.15)';
+  ctx.beginPath(); ctx.moveTo(xOf(xs[0]), H-pad.b);
+  for (let i=0;i<xs.length;i++) ctx.lineTo(xOf(xs[i]), yOf(ps[i]));
+  ctx.lineTo(xOf(xs[xs.length-1]), H-pad.b); ctx.closePath(); ctx.fill();
+
+  // Line.
+  ctx.strokeStyle = '#bc8cff'; ctx.lineWidth = 2; ctx.beginPath();
+  for (let i=0;i<xs.length;i++) {{
+    if(i===0) ctx.moveTo(xOf(xs[i]),yOf(ps[i]));
+    else ctx.lineTo(xOf(xs[i]),yOf(ps[i]));
+  }}
+  ctx.stroke();
+
+  // Classical minima.
+  const m2=DATA.m2, lam=DATA.lam;
+  if (m2<0 && lam>0) {{
+    const pm=Math.sqrt(-m2/(2*lam));
+    [pm,-pm].forEach(v => {{
+      if (v>=xs[0]&&v<=xs[xs.length-1]) {{
+        ctx.strokeStyle='#f85149'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(xOf(v),pad.t); ctx.lineTo(xOf(v),H-pad.b); ctx.stroke();
+        ctx.setLineDash([]);
+      }}
+    }});
+  }}
+
+  axes(ctx, pad, W, H);
+  ctx.fillStyle='#8b949e'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  [-3,-2,-1,0,1,2,3].forEach(v => {{
+    if(v>=xs[0]&&v<=xs[xs.length-1]) ctx.fillText(v, xOf(v), H-pad.b+14);
+  }});
+  ctx.fillText('φ₀', pad.l+cw/2, H-4);
+  ctx.textAlign='right';
+  [0, maxP/2, maxP].forEach(v => ctx.fillText(v.toFixed(3), pad.l-4, yOf(v)+3));
+  ctx.fillStyle='#bc8cff'; ctx.textAlign='left';
+  ctx.fillText('p(φ₀) = ⟨φ₀|ρ_local|φ₀⟩', pad.l+4, pad.t+12);
+}}
+
+// ── Site profile ───────────────────────────────────────────────────────────────
+function drawSite() {{
+  const {{ctx, W, H}} = setup('cvSite', 230);
+  const pad = {{l:52, r:12, t:16, b:28}};
+  const phi  = DATA.phi_expectation  || [];
+  const phi2 = DATA.phi2_expectation || [];
+  const N = phi.length;
+  if (!N) return;
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+  const maxV = Math.max(...phi.map(Math.abs), ...phi2.map(Math.sqrt), 0.05);
+  function xOf(i) {{ return pad.l + (i+0.5)*(cw/N); }}
+  function yOf(v) {{ return H-pad.b-(v+maxV)/(2*maxV)*ch; }}
+
+  // Zero line.
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=0.8;
+  ctx.beginPath(); ctx.moveTo(pad.l,yOf(0)); ctx.lineTo(W-pad.r,yOf(0)); ctx.stroke();
+
+  axes(ctx, pad, W, H); grid(ctx, pad, W, H);
+
+  const bw = Math.max(4, cw/N*0.35);
+  for (let i=0;i<N;i++) {{
+    const x=xOf(i);
+    // √⟨φ²⟩ bar (background).
+    const sq=Math.sqrt(phi2[i]||0);
+    ctx.fillStyle='rgba(88,166,255,0.3)';
+    const bh_sq=sq/(2*maxV)*ch;
+    ctx.fillRect(x-bw*0.8, H-pad.b-bh_sq, bw*1.6, bh_sq);
+    // ⟨φ⟩ bar (foreground).
+    const v=phi[i]||0;
+    ctx.fillStyle=v>=0?'#3fb950':'#f85149';
+    const bh=Math.abs(v)/(2*maxV)*ch;
+    ctx.fillRect(x-bw/2, v>=0?H-pad.b-bh:H-pad.b, bw, bh);
+    // Label.
+    ctx.fillStyle='#8b949e'; ctx.font='9px system-ui'; ctx.textAlign='center';
+    ctx.fillText(i, x, H-pad.b+12);
+  }}
+  ctx.textAlign='right'; ctx.fillStyle='#8b949e'; ctx.font='10px system-ui';
+  [-maxV,0,maxV].forEach(v => ctx.fillText(v.toFixed(2), pad.l-4, yOf(v)+3));
+  ctx.textAlign='left';
+  ctx.fillStyle='rgba(88,166,255,0.6)'; ctx.fillRect(pad.l+4, pad.t+2, 10, 8);
+  ctx.fillStyle='#8b949e'; ctx.fillText(' √⟨φ²⟩', pad.l+16, pad.t+10);
+  ctx.fillStyle='#3fb950'; ctx.fillRect(pad.l+4, pad.t+14, 10, 8);
+  ctx.fillText(' ⟨φ⟩', pad.l+16, pad.t+22);
+}}
+
+// ── Occupation ─────────────────────────────────────────────────────────────────
+function drawOcc() {{
+  const {{ctx, W, H}} = setup('cvOcc', 230);
+  const pad = {{l:52, r:12, t:16, b:28}};
+  const occ = DATA.occupation || [];
+  const N = occ.length;
+  if (!N) return;
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+  const maxV = Math.max(...occ, 0.1);
+  function xOf(i) {{ return pad.l+(i+0.5)*(cw/N); }}
+  function yOf(v) {{ return H-pad.b-v/maxV*ch; }}
+  axes(ctx, pad, W, H); grid(ctx, pad, W, H);
+  const bw = Math.max(4, cw/N*0.5);
+  for (let i=0;i<N;i++) {{
+    const x=xOf(i);
+    const bh=(occ[i]||0)/maxV*ch;
+    ctx.fillStyle='#d29922';
+    ctx.fillRect(x-bw/2, H-pad.b-bh, bw, bh);
+    ctx.fillStyle='#8b949e'; ctx.font='9px system-ui'; ctx.textAlign='center';
+    ctx.fillText(i, x, H-pad.b+12);
+    ctx.fillStyle='#e6edf3'; ctx.font='9px system-ui';
+    ctx.fillText((occ[i]||0).toFixed(2), x, H-pad.b-bh-4);
+  }}
+  ctx.textAlign='right'; ctx.fillStyle='#8b949e'; ctx.font='10px system-ui';
+  [0,maxV/2,maxV].forEach(v=>ctx.fillText(v.toFixed(2),pad.l-4,yOf(v)+3));
+  ctx.fillStyle='#d29922'; ctx.textAlign='left'; ctx.font='10px system-ui';
+  ctx.fillText('⟨n̂ᵢ⟩ (quanta per site)', pad.l+4, pad.t+12);
+}}
+
+// ── Phase transition sweep ─────────────────────────────────────────────────────
+function drawSweep() {{
+  const sweep = DATA.sweep || [];
+  if (!sweep.length) return;
+  document.getElementById('sweepPanel').style.display='';
+  const {{ctx, W, H}} = setup('cvSweep', 240);
+  const pad = {{l:56, r:60, t:20, b:36}};
+  const m2s = sweep.map(s=>s.m2);
+  const ops  = sweep.map(s=>s.order_parameter);
+  const gaps = sweep.map(s=>s.energy_gap);
+  const minM=Math.min(...m2s), maxM=Math.max(...m2s);
+  const maxOP=Math.max(...ops, 0.01), maxGap=Math.max(...gaps, 0.01);
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  function xOf(m) {{ return pad.l+(m-minM)/(maxM-minM+1e-9)*cw; }}
+  function yOfOP(v) {{ return H-pad.b-v/maxOP*ch; }}
+  function yOfG(v)  {{ return H-pad.b-v/maxGap*ch; }}
+
+  axes(ctx, pad, W, H); grid(ctx, pad, W, H);
+
+  // Vertical line at m²=0.
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(xOf(0),pad.t); ctx.lineTo(xOf(0),H-pad.b); ctx.stroke();
+
+  // Order parameter (left axis, blue).
+  ctx.strokeStyle='#58a6ff'; ctx.lineWidth=2.5; ctx.beginPath();
+  for (let i=0;i<m2s.length;i++) {{
+    if(i===0) ctx.moveTo(xOf(m2s[i]),yOfOP(ops[i]));
+    else ctx.lineTo(xOf(m2s[i]),yOfOP(ops[i]));
+  }}
+  ctx.stroke();
+  // Dots.
+  ops.forEach((op,i) => {{
+    ctx.fillStyle='#58a6ff';
+    ctx.beginPath(); ctx.arc(xOf(m2s[i]),yOfOP(op),3,0,2*Math.PI); ctx.fill();
+  }});
+
+  // Energy gap (right axis, orange).
+  ctx.strokeStyle='#d29922'; ctx.lineWidth=2; ctx.beginPath();
+  for (let i=0;i<m2s.length;i++) {{
+    if(i===0) ctx.moveTo(xOf(m2s[i]),yOfG(gaps[i]));
+    else ctx.lineTo(xOf(m2s[i]),yOfG(gaps[i]));
+  }}
+  ctx.stroke();
+
+  // x axis labels.
+  ctx.fillStyle='#8b949e'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  [-3,-2,-1,0,1,2].forEach(v => {{
+    if(v>=minM&&v<=maxM) ctx.fillText(v.toFixed(0),xOf(v),H-pad.b+14);
+  }});
+  ctx.fillText('bare mass squared m²', pad.l+cw/2, H-4);
+
+  // Left y labels (order parameter).
+  ctx.fillStyle='#58a6ff'; ctx.textAlign='right';
+  [0,maxOP/2,maxOP].forEach(v=>ctx.fillText(v.toFixed(2),pad.l-4,yOfOP(v)+3));
+  ctx.save(); ctx.translate(14,pad.t+ch/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillText('√⟨φ²⟩ (order param)', 0, 0); ctx.restore();
+
+  // Right y labels (gap).
+  ctx.fillStyle='#d29922'; ctx.textAlign='left';
+  [0,maxGap/2,maxGap].forEach(v=>ctx.fillText(v.toFixed(2),W-pad.r+4,yOfG(v)+3));
+  ctx.save(); ctx.translate(W-12,pad.t+ch/2); ctx.rotate(Math.PI/2);
+  ctx.textAlign='center'; ctx.fillText('gap Δ=E₁−E₀', 0, 0); ctx.restore();
+
+  // Legend.
+  ctx.textAlign='left'; ctx.font='11px system-ui';
+  ctx.fillStyle='#58a6ff'; ctx.fillText('order param √⟨φ²⟩', pad.l+8, pad.t+14);
+  ctx.fillStyle='#d29922'; ctx.fillText('energy gap Δ', pad.l+8, pad.t+28);
+  ctx.fillStyle='#8b949e'; ctx.font='9px system-ui';
+  ctx.fillText('← symmetric', xOf(0)+4, pad.t+14);
+  ctx.textAlign='right'; ctx.fillText('broken →', xOf(0)-4, pad.t+14);
+}}
+
+window.addEventListener('load', () => {{
+  drawPot(); drawDist(); drawSite(); drawOcc(); drawSweep();
+}});
+window.addEventListener('resize', () => {{
+  drawPot(); drawDist(); drawSite(); drawOcc(); drawSweep();
+}});
+</script>
+</body>
+</html>"""
+  return html
+
+
 # ── M23: Schwinger Model (1+1D QED) Lattice Quantum Field Theory ──────────────
 
 def _schwinger_frames(
@@ -5800,7 +6417,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -5851,6 +6468,12 @@ def main() -> int:
   parser.add_argument("--schwinger-steps", type=int, default=60, help="number of time steps for dynamics scenario")
   parser.add_argument("--schwinger-dt", type=float, default=0.08, help="time step dt for Schwinger dynamics")
   parser.add_argument("--schwinger-mass-sweep", type=int, default=30, help="number of mass values in chiral condensate sweep")
+  parser.add_argument("--phi4-sites", type=int, default=4, help="number of lattice sites for phi4 (2-5)")
+  parser.add_argument("--phi4-m2", type=float, default=1.0, help="bare mass squared m² for phi4 (negative → broken phase)")
+  parser.add_argument("--phi4-lambda", type=float, default=1.0, help="quartic coupling λ in λ/4·φ⁴")
+  parser.add_argument("--phi4-kappa", type=float, default=1.0, help="nearest-neighbour hopping κ")
+  parser.add_argument("--phi4-d-local", type=int, default=10, help="local Fock space truncation (oscillator levels)")
+  parser.add_argument("--phi4-sweep-points", type=int, default=25, help="number of m² points in phi4 phase transition sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument("--samples-rabi", type=int, default=80)
   parser.add_argument("--samples-mps", type=int, default=60)
@@ -6401,6 +7024,51 @@ def main() -> int:
         )
       path = out_dir / "quantum_schwinger_dynamics.html"
       path.write_text(_schwinger_page(dyn_data, title="Schwinger Model — Pair Production Dynamics"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M24 — φ⁴ Scalar QFT scenarios ───────────────────────────────────────────
+  _phi4_common = dict(
+      n_sites=args.phi4_sites,
+      lam=args.phi4_lambda,
+      kappa=args.phi4_kappa,
+      d_local=args.phi4_d_local,
+      n_sweep=args.phi4_sweep_points,
+  )
+
+  # phi4_symmetric: m² > 0, single-well potential, Z₂ symmetric vacuum
+  if args.scenario in {"phi4_symmetric", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("phi4_symmetric skipped: numpy not available", file=sys.stderr)
+    else:
+      sym_data = _phi4_frames(m2=max(args.phi4_m2, 0.5), scenario="symmetric", **_phi4_common)
+      path = out_dir / "quantum_phi4_symmetric.html"
+      path.write_text(_phi4_page(sym_data, title="φ⁴ QFT — Symmetric Phase"), encoding="utf-8")
+      generated.append(path)
+
+  # phi4_broken: m² < 0, Mexican-hat potential, Z₂ spontaneously broken
+  if args.scenario in {"phi4_broken", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("phi4_broken skipped: numpy not available", file=sys.stderr)
+    else:
+      brk_data = _phi4_frames(m2=min(args.phi4_m2, -1.5), scenario="broken", **_phi4_common)
+      path = out_dir / "quantum_phi4_broken.html"
+      path.write_text(_phi4_page(brk_data, title="φ⁴ QFT — Broken Phase (SSB)"), encoding="utf-8")
+      generated.append(path)
+
+  # phi4_sweep: scan m² across the quantum phase transition, track order parameter + gap
+  if args.scenario in {"phi4_sweep", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("phi4_sweep skipped: numpy not available", file=sys.stderr)
+    else:
+      swp_data = _phi4_frames(m2=args.phi4_m2, scenario="sweep", **_phi4_common)
+      path = out_dir / "quantum_phi4_sweep.html"
+      path.write_text(_phi4_page(swp_data, title="φ⁴ QFT — Phase Transition Sweep"), encoding="utf-8")
       generated.append(path)
 
   for p in generated:

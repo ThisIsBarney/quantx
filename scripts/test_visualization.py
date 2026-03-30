@@ -999,6 +999,38 @@ def main() -> int:
     if scenario_key == "schwinger_dynamics" and "cvHeat" not in sc:
       raise RuntimeError(f"{scenario_key}: html missing dynamics heatmap canvas (cvHeat)")
 
+  # ── M24: φ⁴ Scalar QFT ───────────────────────────────────────────────────────
+  phi4_dir = tmp / "phi4"
+  phi4_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key, html_name, extra_args in (
+      ("phi4_symmetric", "quantum_phi4_symmetric.html", ["--phi4-m2", "1.5"]),
+      ("phi4_broken",    "quantum_phi4_broken.html",    ["--phi4-m2", "-2.0"]),
+      ("phi4_sweep",     "quantum_phi4_sweep.html",     ["--phi4-sweep-points", "6"]),
+  ):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--phi4-sites", "3",
+         "--phi4-lambda", "1.0",
+         "--phi4-d-local", "8",
+         "--out-dir", str(phi4_dir)] + extra_args,
+        html_name,
+    )
+    p4_html = phi4_dir / html_name
+    if not p4_html.exists():
+      raise RuntimeError(f"phi4 html not generated: {p4_html}")
+    p4c = p4_html.read_text(encoding="utf-8")
+    if "cvPot" not in p4c:
+      raise RuntimeError(f"{scenario_key}: html missing potential canvas (cvPot)")
+    if "cvDist" not in p4c:
+      raise RuntimeError(f"{scenario_key}: html missing distribution canvas (cvDist)")
+    if "ground_energy" not in p4c:
+      raise RuntimeError(f"{scenario_key}: html missing ground_energy data")
+    if "order_parameter" not in p4c:
+      raise RuntimeError(f"{scenario_key}: html missing order_parameter data")
+    if scenario_key == "phi4_sweep" and "sweepPanel" not in p4c:
+      raise RuntimeError(f"{scenario_key}: html missing sweep panel (sweepPanel)")
+
   print("visualization smoke passed")
   return 0
 
