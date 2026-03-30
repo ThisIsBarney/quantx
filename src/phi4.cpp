@@ -154,14 +154,19 @@ Mat build_phi4_hamiltonian(int N, int d, double m2, double lam, double kappa, do
     }
   };
 
-  // Helper: two-site operator at sites s, s+1.
+  // Helper: two-site operator at sites s1, s2.
+  // Precompute per-site strides (stride[i] = d^i).
   auto add_twosite = [&](const std::vector<double>& op1, int s1,
                          const std::vector<double>& op2, int s2, double coeff) {
-    // Slower but correct general implementation.
-    int str1 = 1, str2 = 1;
-    for (int i = 0; i < s1; ++i) str1 *= d;
-    for (int i = 0; i < s2; ++i) str2 *= d;
-    int blk1 = str1 * d, blk2 = str2 * d;
+    // Build strides: stride[i] = d^i.
+    std::vector<int> strides(N, 1);
+    for (int i = 1; i < N; ++i) strides[i] = strides[i - 1] * d;
+
+    // Iterate only over the N-2 "other" sites (not s1 or s2) to avoid the d²
+    // overcount that occurs when iterating all dim_full states and overwriting
+    // the digits at s1 and s2.
+    int dim_other = dim_full / (d * d);
+
     for (int r1 = 0; r1 < d; ++r1)
       for (int c1 = 0; c1 < d; ++c1) {
         double v1 = op1[static_cast<std::size_t>(r1) + static_cast<std::size_t>(c1) * d];
@@ -170,33 +175,18 @@ Mat build_phi4_hamiltonian(int N, int d, double m2, double lam, double kappa, do
           for (int c2 = 0; c2 < d; ++c2) {
             double v2 = op2[static_cast<std::size_t>(r2) + static_cast<std::size_t>(c2) * d];
             if (v2 == 0.0) continue;
-            // Iterate over remaining indices.
-            for (int rest = 0; rest < dim_full; ++rest) {
-              // Extract digits.
-              int tmp  = rest;
-              auto digit = [&](int s) { return (tmp / ([](...){ return 1; }())) % d; };
-              // Check that digit at s1 and s2 are in range (they always are).
-              // Instead, directly embed by constructing row and col.
-              // row_full: replace digit at s1→r1, s2→r2.
-              // col_full: replace digit at s1→c1, s2→c2.
-              // But we need to iterate over the "rest" indices (all except s1, s2).
-              // Use modular arithmetic.
-              int row_full = 0, col_full = 0, scale = 1;
-              int tmp2 = rest;
+            // Contribution from the two target sites.
+            int base_row = r1 * strides[s1] + r2 * strides[s2];
+            int base_col = c1 * strides[s1] + c2 * strides[s2];
+            // Enumerate all combinations of the remaining N-2 site indices.
+            for (int other = 0; other < dim_other; ++other) {
+              int row_full = base_row, col_full = base_col;
+              int tmp = other;
               for (int i = 0; i < N; ++i) {
-                int di = tmp2 % d;
-                tmp2 /= d;
-                if (i == s1) {
-                  row_full += r1 * scale;
-                  col_full += c1 * scale;
-                } else if (i == s2) {
-                  row_full += r2 * scale;
-                  col_full += c2 * scale;
-                } else {
-                  row_full += di * scale;
-                  col_full += di * scale;
-                }
-                scale *= d;
+                if (i == s1 || i == s2) continue;
+                int di = tmp % d; tmp /= d;
+                row_full += di * strides[i];
+                col_full += di * strides[i];
               }
               H[static_cast<std::size_t>(row_full) +
                 static_cast<std::size_t>(col_full) * dim_full] += coeff * v1 * v2;

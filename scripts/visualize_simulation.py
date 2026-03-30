@@ -4245,7 +4245,7 @@ def _phi4_frames(
     dim = d ** N
     H = np.zeros((dim, dim), dtype=float)
     for i in range(N):
-      H += kron_single(pi2_loc,          i)         # ½πᵢ² already scaled
+      H += 0.5 * kron_single(pi2_loc,      i)         # ½πᵢ²
       H += (0.5 * m2_val) * kron_single(phi2_loc,  i)   # ½m²φᵢ²
       H += (0.25 * lam)   * kron_single(phi4_loc,  i)   # λ/4 φᵢ⁴
       H += eps             * kron_single(phi_loc,   i)   # explicit Z₂ breaking
