@@ -575,6 +575,67 @@ struct QpeResult {
   std::string message;
 };
 
+// ── M24: φ⁴ Scalar Quantum Field Theory ───────────────────────────────────
+
+// One point in the parameter sweep (m² scan) for the φ⁴ phase transition.
+struct Phi4SweepPoint {
+  double m2{0.0};
+  double ground_energy{0.0};
+  // Order parameter: √(Σ⟨φᵢ²⟩/N) — grows from near-zero in symmetric phase.
+  double order_parameter{0.0};
+  // Energy gap Δ = E₁ - E₀ — closes at the quantum phase transition.
+  double energy_gap{0.0};
+};
+
+// Options for the φ⁴ QFT simulation.
+struct Phi4Options {
+  // Number of lattice sites.
+  std::uint32_t n_sites{4};
+  // Bare mass squared m² (negative → Mexican-hat potential → SSB).
+  double m2{1.0};
+  // Quartic coupling λ in λ/4 · φ⁴.
+  double lambda_coupling{1.0};
+  // Nearest-neighbour hopping κ (spatial kinetic term).
+  double kappa{1.0};
+  // Local truncated Fock space dimension (number of oscillator levels).
+  std::uint32_t d_local{8};
+  // Scenario: "symmetric", "broken", or "sweep"
+  std::string scenario{"symmetric"};
+  // Number of m² values in the sweep.
+  std::uint32_t n_sweep{20};
+  // Sweep range for m².
+  double m2_min{-3.0};
+  double m2_max{2.0};
+  // Tiny explicit symmetry-breaking field ε·Σφᵢ used to select a vacuum.
+  double epsilon{0.05};
+  std::uint64_t seed{42};
+};
+
+// Result of a φ⁴ QFT simulation.
+struct Phi4Result {
+  bool ok{true};
+  std::uint32_t n_sites{0};
+  std::uint32_t d_local{0};
+  double m2{0.0};
+  double lambda_coupling{0.0};
+  // Ground state energy E₀.
+  double ground_energy{0.0};
+  // Energy gap Δ = E₁ - E₀.
+  double energy_gap{0.0};
+  // Order parameter √(Σ⟨φᵢ²⟩/N).
+  double order_parameter{0.0};
+  // Per-site expectation values.
+  std::vector<double> phi_expectation{};   // ⟨φᵢ⟩
+  std::vector<double> phi2_expectation{};  // ⟨φᵢ²⟩
+  std::vector<double> occupation{};        // ⟨nᵢ⟩
+  // Discretised marginal probability distribution p(φ₀) at site 0.
+  std::vector<double> field_distribution{};
+  // m² sweep results.
+  std::vector<Phi4SweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M23: Lattice Schwinger model (1+1D QED) ────────────────────────────────
 
 // One time-step snapshot of the Schwinger model state.

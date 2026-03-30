@@ -968,5 +968,56 @@ std::string qfield_result_to_json(const QfieldResult& result) {
   return j.dump();
 }
 
+// ── M24: φ⁴ scalar QFT ───────────────────────────────────────────────────────
+
+Phi4Options phi4_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  Phi4Options opts;
+  if (j.contains("n_sites"))         opts.n_sites          = j["n_sites"].get<std::uint32_t>();
+  if (j.contains("m2"))              opts.m2               = j["m2"].get<double>();
+  if (j.contains("lambda_coupling")) opts.lambda_coupling  = j["lambda_coupling"].get<double>();
+  if (j.contains("kappa"))           opts.kappa            = j["kappa"].get<double>();
+  if (j.contains("d_local"))         opts.d_local          = j["d_local"].get<std::uint32_t>();
+  if (j.contains("scenario"))        opts.scenario         = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))         opts.n_sweep          = j["n_sweep"].get<std::uint32_t>();
+  if (j.contains("m2_min"))          opts.m2_min           = j["m2_min"].get<double>();
+  if (j.contains("m2_max"))          opts.m2_max           = j["m2_max"].get<double>();
+  if (j.contains("epsilon"))         opts.epsilon          = j["epsilon"].get<double>();
+  if (j.contains("seed"))            opts.seed             = j["seed"].get<std::uint64_t>();
+  return opts;
+}
+
+std::string phi4_result_to_json(const Phi4Result& result) {
+  json j;
+  j["ok"]               = result.ok;
+  j["n_sites"]          = result.n_sites;
+  j["d_local"]          = result.d_local;
+  j["m2"]               = result.m2;
+  j["lambda_coupling"]  = result.lambda_coupling;
+  j["ground_energy"]    = result.ground_energy;
+  j["energy_gap"]       = result.energy_gap;
+  j["order_parameter"]  = result.order_parameter;
+  j["phi_expectation"]  = result.phi_expectation;
+  j["phi2_expectation"] = result.phi2_expectation;
+  j["occupation"]       = result.occupation;
+  j["field_distribution"] = result.field_distribution;
+  j["elapsed_ms"]       = result.elapsed_ms;
+  j["message"]          = result.message;
+  j["engine_version"]   = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : result.sweep) {
+    json ptj;
+    ptj["m2"]              = pt.m2;
+    ptj["ground_energy"]   = pt.ground_energy;
+    ptj["order_parameter"] = pt.order_parameter;
+    ptj["energy_gap"]      = pt.energy_gap;
+    sw.push_back(ptj);
+  }
+  j["sweep"] = sw;
+
+  return j.dump();
+}
+
 }  // namespace qx
 

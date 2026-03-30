@@ -34,5 +34,7 @@ QpeResult run_qpe(const QpeOptions& opts);
 QecResult run_qec(const QecOptions& opts);
 // Run Schwinger model (1+1D QED) lattice simulation.
 QfieldResult run_qfield(const QfieldOptions& opts);
+// Run φ⁴ scalar quantum field theory simulation.
+Phi4Result run_phi4(const Phi4Options& opts);
 
 }  // namespace qx
