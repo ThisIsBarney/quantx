@@ -6512,12 +6512,20 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           f'{items_html}</div>\n'
       )
 
+  def _safe_json_for_script(data: object) -> str:
+    # NOTE:
+    #   This JSON is inlined into an HTML <script> tag below. Raw "</script>"
+    #   inside scenario HTML would terminate the script element early during HTML
+    #   parsing, even if it appears inside a JavaScript string literal. Escaping
+    #   "<" prevents accidental closing tags while preserving JSON semantics.
+    return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+
   total = len(available_keys)
-  pages_json  = json.dumps(pages,         ensure_ascii=False)
-  labels_json = json.dumps(key_to_label,  ensure_ascii=False)
-  cats_json   = json.dumps(key_to_cat,    ensure_ascii=False)
-  icons_json  = json.dumps(key_to_icon,   ensure_ascii=False)
-  first_json  = json.dumps(first_key or "", ensure_ascii=False)
+  pages_json  = _safe_json_for_script(pages)
+  labels_json = _safe_json_for_script(key_to_label)
+  cats_json   = _safe_json_for_script(key_to_cat)
+  icons_json  = _safe_json_for_script(key_to_icon)
+  first_json  = _safe_json_for_script(first_key or "")
 
   return f"""<!doctype html>
 <html lang="zh-CN">
