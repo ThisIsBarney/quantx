@@ -963,6 +963,42 @@ def main() -> int:
     if "threshold_curve" not in qc:
       raise RuntimeError(f"{scenario_key}: html missing threshold_curve data")
 
+  # ── M23: Schwinger model (1+1D QED) ──────────────────────────────────────────
+  schwinger_dir = tmp / "schwinger"
+  schwinger_dir.mkdir(parents=True, exist_ok=True)
+
+  for scenario_key, html_name in (
+      ("schwinger_vacuum",   "quantum_schwinger_vacuum.html"),
+      ("schwinger_string",   "quantum_schwinger_string.html"),
+      ("schwinger_dynamics", "quantum_schwinger_dynamics.html"),
+  ):
+    _run_expected_success_with_output(
+        [py, vis_script, "--scenario", scenario_key,
+         "--schwinger-sites", "6",
+         "--schwinger-mass", "0.5",
+         "--schwinger-coupling", "0.3",
+         "--schwinger-steps", "10",
+         "--schwinger-mass-sweep", "6",
+         "--out-dir", str(schwinger_dir)],
+        html_name,
+    )
+    sc_html = schwinger_dir / html_name
+    if not sc_html.exists():
+      raise RuntimeError(f"schwinger html not generated: {sc_html}")
+    sc = sc_html.read_text(encoding="utf-8")
+    if "cvCharge" not in sc:
+      raise RuntimeError(f"{scenario_key}: html missing charge density canvas (cvCharge)")
+    if "cvElec" not in sc:
+      raise RuntimeError(f"{scenario_key}: html missing electric field canvas (cvElec)")
+    if "ground_energy" not in sc:
+      raise RuntimeError(f"{scenario_key}: html missing ground_energy data")
+    if "chiral_condensate" not in sc:
+      raise RuntimeError(f"{scenario_key}: html missing chiral_condensate data")
+    if scenario_key == "schwinger_string" and "string_data" not in sc:
+      raise RuntimeError(f"{scenario_key}: html missing string tension data (string_data)")
+    if scenario_key == "schwinger_dynamics" and "cvHeat" not in sc:
+      raise RuntimeError(f"{scenario_key}: html missing dynamics heatmap canvas (cvHeat)")
+
   print("visualization smoke passed")
   return 0
 

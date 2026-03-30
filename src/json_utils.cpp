@@ -908,5 +908,65 @@ std::string qec_result_to_json(const QecResult& result) {
   return j.dump();
 }
 
+// ── M23: Schwinger model (1+1D QED) ──────────────────────────────────────────
+
+QfieldOptions qfield_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  QfieldOptions opts;
+  if (j.contains("n_sites"))      opts.n_sites     = j["n_sites"].get<std::uint32_t>();
+  if (j.contains("mass"))         opts.mass        = j["mass"].get<double>();
+  if (j.contains("coupling"))     opts.coupling    = j["coupling"].get<double>();
+  if (j.contains("background"))   opts.background  = j["background"].get<double>();
+  if (j.contains("scenario"))     opts.scenario    = j["scenario"].get<std::string>();
+  if (j.contains("dt"))           opts.dt          = j["dt"].get<double>();
+  if (j.contains("n_steps"))      opts.n_steps     = j["n_steps"].get<std::uint32_t>();
+  if (j.contains("n_mass_sweep")) opts.n_mass_sweep = j["n_mass_sweep"].get<std::uint32_t>();
+  if (j.contains("seed"))         opts.seed        = j["seed"].get<std::uint64_t>();
+  return opts;
+}
+
+std::string qfield_result_to_json(const QfieldResult& result) {
+  json j;
+  j["ok"]                = result.ok;
+  j["n_sites"]           = result.n_sites;
+  j["mass"]              = result.mass;
+  j["coupling"]          = result.coupling;
+  j["ground_energy"]     = result.ground_energy;
+  j["chiral_condensate"] = result.chiral_condensate;
+  j["elapsed_ms"]        = result.elapsed_ms;
+  j["message"]           = result.message;
+  j["engine_version"]    = version_string();
+
+  // Dynamics frames.
+  json frames = json::array();
+  for (const auto& f : result.frames) {
+    json fj;
+    fj["time"]              = f.time;
+    fj["charge_density"]    = f.charge_density;
+    fj["electric_field"]    = f.electric_field;
+    fj["chiral_condensate"] = f.chiral_condensate;
+    fj["energy"]            = f.energy;
+    fj["particle_number"]   = f.particle_number;
+    frames.push_back(fj);
+  }
+  j["frames"] = frames;
+
+  // Mass sweep.
+  json ms = json::array();
+  for (const auto& pt : result.mass_sweep) {
+    ms.push_back({pt[0], pt[1], pt[2]});
+  }
+  j["mass_sweep"] = ms;
+
+  // String energies.
+  json se = json::array();
+  for (const auto& pt : result.string_energies) {
+    se.push_back({pt[0], pt[1]});
+  }
+  j["string_energies"] = se;
+
+  return j.dump();
+}
+
 }  // namespace qx
 

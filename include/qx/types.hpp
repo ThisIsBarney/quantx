@@ -575,6 +575,65 @@ struct QpeResult {
   std::string message;
 };
 
+// ── M23: Lattice Schwinger model (1+1D QED) ────────────────────────────────
+
+// One time-step snapshot of the Schwinger model state.
+struct SchwingerFrame {
+  double time{0.0};
+  // Per-site charge density q_n = <(σz_n + (-1)^n)/2> (particle - antiparticle).
+  std::vector<double> charge_density{};
+  // Per-link electric field <L_l> (length n_sites-1).
+  std::vector<double> electric_field{};
+  // Chiral condensate Σ = -(1/N) Σ_n (-1)^n <σz_n>.
+  double chiral_condensate{0.0};
+  // Total energy <H>.
+  double energy{0.0};
+  // Total particle number (sum of positive charges).
+  double particle_number{0.0};
+};
+
+// Options for the Schwinger model simulation.
+struct QfieldOptions {
+  // Number of lattice sites (must be even; default 8).
+  std::uint32_t n_sites{8};
+  // Bare fermion mass in units of hopping J (can be negative).
+  double mass{0.5};
+  // Gauge coupling strength g² in units of J.
+  double coupling{0.3};
+  // Background electric field α (uniform, integer or half-integer).
+  double background{0.0};
+  // Scenario: "vacuum", "string", "dynamics"
+  std::string scenario{"vacuum"};
+  // Time step for Trotter evolution.
+  double dt{0.1};
+  // Number of time steps.
+  std::uint32_t n_steps{50};
+  // Number of mass values to sweep for ground state observables.
+  std::uint32_t n_mass_sweep{20};
+  // Random seed.
+  std::uint64_t seed{42};
+};
+
+// Result of a Schwinger model simulation run.
+struct QfieldResult {
+  bool ok{true};
+  std::uint32_t n_sites{0};
+  double mass{0.0};
+  double coupling{0.0};
+  // Ground state energy.
+  double ground_energy{0.0};
+  // Ground state chiral condensate.
+  double chiral_condensate{0.0};
+  // Time evolution frames (empty for vacuum scenario).
+  std::vector<SchwingerFrame> frames{};
+  // Mass sweep: list of {mass, ground_energy, chiral_condensate} triplets.
+  std::vector<std::array<double, 3>> mass_sweep{};
+  // String energy vs separation (for string scenario).
+  std::vector<std::array<double, 2>> string_energies{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // Summary of a completed VQE/QAOA optimization run.
 struct VqeResult {
   bool ok{true};

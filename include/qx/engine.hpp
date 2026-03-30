@@ -32,5 +32,7 @@ VqeResult run_vqe(const VqeOptions& opts);
 QpeResult run_qpe(const QpeOptions& opts);
 // Run Quantum Error Correction Monte Carlo simulation.
 QecResult run_qec(const QecOptions& opts);
+// Run Schwinger model (1+1D QED) lattice simulation.
+QfieldResult run_qfield(const QfieldOptions& opts);
 
 }  // namespace qx
