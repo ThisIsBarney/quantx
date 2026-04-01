@@ -145,8 +145,11 @@ static HCsr build_xxz_csr(int N, double J, double Jz, double h,
         auto it = state_map.find(s2);
         if (it != state_map.end()) {
           int idx2 = it->second;
-          coo.push_back({idx, idx2, J * 0.5});
-          coo.push_back({idx2, idx, J * 0.5});
+          if (idx < idx2) {
+            // Emit each pair once; partner visit will add the conjugate direction
+            coo.push_back({idx, idx2, J * 0.5});
+            coo.push_back({idx2, idx, J * 0.5});
+          }
         }
       }
     }

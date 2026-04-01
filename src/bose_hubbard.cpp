@@ -10,10 +10,10 @@
 #include "qx/types.hpp"
 
 #include <algorithm>
-#include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -116,37 +116,21 @@ static BHCsr coo_to_bh_csr(std::uint32_t dim, std::vector<CooEntry>& coo) {
 // For larger systems we could use a hash map, but Bose-Hubbard dims stay manageable.
 static BHCsr build_bose_hubbard_csr(
     const std::vector<std::vector<std::uint32_t>>& basis,
-    std::uint32_t N, double J, double U, double mu) {
+    std::uint32_t N, std::uint32_t n_max, double J, double U, double mu) {
 
     const auto dim = static_cast<std::uint32_t>(basis.size());
 
     // Build index map: encode state as mixed-radix integer for O(1) lookup.
-    // n_max+1 values per site.  We just do linear search; dim ≤ ~10k typically.
-    // For deterministic performance we build a sorted lookup.
-    // Actually let's build a dense map via flat index.
-    // The states were enumerated in a fixed order, so we map state→index by
-    // binary search on the sorted vector.
-
     std::vector<CooEntry> coo;
     coo.reserve(dim * (2 * N + 1));
 
-    auto find_idx = [&](const std::vector<std::uint32_t>& s) -> std::uint32_t {
-        auto it = std::lower_bound(
-            basis.begin(), basis.end(), s,
-            [](const std::vector<std::uint32_t>& a,
-               const std::vector<std::uint32_t>& b) { return a < b; });
-        return static_cast<std::uint32_t>(it - basis.begin());
-    };
-
-    // Sort basis for binary search (DFS order may not be sorted — sort it)
-    // Actually we need to keep track of original indices.  Let's build a sorted
-    // index array and use it for lookup.
+    // Sort basis for binary search (DFS order is not globally sorted by value,
+    // so we build a sorted index array for O(log dim) lookup).
     std::vector<std::uint32_t> sorted_idx(dim);
     std::iota(sorted_idx.begin(), sorted_idx.end(), 0);
     std::sort(sorted_idx.begin(), sorted_idx.end(), [&](std::uint32_t a, std::uint32_t b) {
         return basis[a] < basis[b];
     });
-    std::vector<std::uint32_t> idx_map(dim); // sorted_idx[k] -> original basis idx
     std::vector<const std::vector<std::uint32_t>*> sorted_basis(dim);
     for (std::uint32_t k = 0; k < dim; ++k)
         sorted_basis[k] = &basis[sorted_idx[k]];
@@ -176,18 +160,16 @@ static BHCsr build_bose_hubbard_csr(
         // Off-diagonal: -J (a†_i a_{i+1} + a_{i+1}† a_i) for i=0..N-2
         for (std::uint32_t i = 0; i < N - 1; ++i) {
             // a†_i a_{i+1}: destroy one boson at i+1, create one at i
-            if (s[i + 1] >= 1) {
+            if (s[i + 1] >= 1 && s[i] < n_max) {
                 std::vector<std::uint32_t> s2 = s;
                 s2[i]++;
                 s2[i + 1]--;
-                if (s2[i] <= /* n_max implicit: same total */ UINT32_MAX) {
-                    // matrix element: sqrt((n_{i+1}) * (n_i + 1))
-                    double mel = -J * std::sqrt(static_cast<double>(s[i + 1]) *
-                                                static_cast<double>(s[i] + 1));
-                    std::uint32_t bj = find_sorted(s2);
-                    coo.push_back({bi, bj, mel});
-                    coo.push_back({bj, bi, mel}); // Hermitian conjugate
-                }
+                // matrix element: -J * sqrt(n_{i+1} * (n_i + 1))
+                double mel = -J * std::sqrt(static_cast<double>(s[i + 1]) *
+                                            static_cast<double>(s[i] + 1));
+                std::uint32_t bj = find_sorted(s2);
+                coo.push_back({bi, bj, mel});
+                coo.push_back({bj, bi, mel}); // Hermitian conjugate
             }
         }
     }
@@ -522,7 +504,7 @@ static BHSingle compute_bh_single(std::uint32_t N, std::uint32_t M,
     if (basis.empty())
         throw std::runtime_error("bose_hubbard: no valid basis states (check n_max vs n_bosons)");
 
-    auto H = build_bose_hubbard_csr(basis, N, J, U, mu);
+    auto H = build_bose_hubbard_csr(basis, N, n_max, J, U, mu);
     auto lr = bh_lanczos(H);
 
     BHSingle res;
