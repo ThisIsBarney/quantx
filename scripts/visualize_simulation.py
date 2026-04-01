@@ -6872,6 +6872,8 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("floquet",            "Floquet 周期驱动"),
           ("heisenberg",         "XXZ Heisenberg 链"),
           ("bose_hubbard",       "Bose-Hubbard 超流/Mott"),
+          ("tfi",                "横场 Ising 量子相变"),
+          ("ssh",                "SSH 拓扑绝缘体"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -8359,6 +8361,420 @@ if (DATA.sweep && DATA.sweep.length > 0) {{
 </html>"""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# M29-G: Transverse-Field Ising  —  Python reference solver + page
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _tfi_frames(
+    n_sites: int = 10,
+    J: float = 1.0,
+    h: float = 0.5,
+    scenario: str = "sweep",
+    n_sweep: int = 30,
+    h_min: float = 0.0,
+    h_max: float = 2.0,
+) -> dict:
+    """NumPy exact-diag TFI reference.  Returns dict with sweep + single-point data."""
+    import numpy as np  # noqa: PLC0415
+
+    N = n_sites
+
+    def build_h(J_: float, h_: float) -> "np.ndarray":
+        dim = 1 << N
+        H = np.zeros((dim, dim), dtype=float)
+        for s in range(dim):
+            # -J Z_i Z_{i+1}
+            diag = 0.0
+            for i in range(N - 1):
+                zi = -1 if (s >> i) & 1 else 1
+                zj = -1 if (s >> (i + 1)) & 1 else 1
+                diag += -J_ * zi * zj
+            H[s, s] = diag
+            # -h X_i
+            for i in range(N):
+                s2 = s ^ (1 << i)
+                H[s, s2] -= h_
+        return H
+
+    def solve_point(h_: float):
+        H = build_h(J, h_)
+        evals, evecs = np.linalg.eigh(H)
+        psi0 = evecs[:, 0]
+        E0, E1 = evals[0], evals[1] if len(evals) > 1 else evals[0]
+        # Order parameter |<Z_0>|
+        dim = 1 << N
+        Z0 = np.array([-1 if s & 1 else 1 for s in range(dim)], dtype=float)
+        op = abs(float(psi0 @ (Z0 * psi0)))
+        # Spin-spin corr <Z_0 Z_r>
+        corr = []
+        for r in range(N):
+            Zr = np.array([-1 if (s >> r) & 1 else 1 for s in range(dim)], dtype=float)
+            corr.append(float(psi0 @ (Z0 * Zr * psi0)))
+        # Correlation length
+        xi = 0.0
+        xs, ys = [], []
+        for r in range(1, N // 2):
+            c = abs(corr[r])
+            if c > 1e-12:
+                xs.append(r)
+                ys.append(np.log(c))
+        if len(xs) >= 2:
+            slope, _ = np.polyfit(xs, ys, 1)
+            xi = -1.0 / slope if slope < -1e-12 else 0.0
+        return E0, E1 - E0, op, xi, corr
+
+    E0, gap, op, xi, spin_corr = solve_point(h)
+
+    sweep = []
+    for k in range(n_sweep):
+        hk = h_min + (h_max - h_min) * k / (n_sweep - 1)
+        e0k, gapk, opk, xik, _ = solve_point(hk)
+        sweep.append({"h": hk, "ground_energy": e0k, "energy_gap": gapk,
+                      "order_param": opk, "corr_len": xik})
+
+    return {
+        "n_sites": N, "J": J, "h": h,
+        "ground_energy": E0, "energy_gap": gap,
+        "order_param": op, "corr_len": xi,
+        "spin_corr": spin_corr,
+        "sweep": sweep,
+    }
+
+
+def _tfi_page(data: dict, title: str = "Transverse-Field Ising Model") -> str:
+    """4-panel TFI page: spin-spin corr, order param vs h, gap vs h, corr length vs h."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:220px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="grid">
+  <div class="panel"><canvas id="cCorr"></canvas><div class="label">Spin-spin correlator ⟨Z₀Zᵣ⟩</div></div>
+  <div class="panel"><canvas id="cOP"></canvas><div class="label">Order parameter |⟨Z₀⟩| vs h/J</div></div>
+  <div class="panel"><canvas id="cGap"></canvas><div class="label">Energy gap Δ vs h/J (closes at h=J)</div></div>
+  <div class="panel"><canvas id="cXi"></canvas><div class="label">Correlation length ξ vs h/J</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function lineChart(id, xs, ys, color, ylabel, xlabel) {{
+  var cv = document.getElementById(id);
+  if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin = Math.min.apply(null,xs), xmax = Math.max.apply(null,xs);
+  var ymin = Math.min.apply(null,ys), ymax = Math.max.apply(null,ys);
+  var xr = xmax-xmin||1, yr = ymax-ymin||1;
+  ctx.strokeStyle = "#21262d"; ctx.lineWidth = 1;
+  for (var gi=0; gi<5; gi++) {{
+    var gy = pad + (H-2*pad)*gi/4;
+    ctx.beginPath(); ctx.moveTo(pad,gy); ctx.lineTo(W-pad,gy); ctx.stroke();
+  }}
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+  for (var i=0; i<xs.length; i++) {{
+    var px = pad + (xs[i]-xmin)/xr*(W-2*pad);
+    var py = H-pad - (ys[i]-ymin)/yr*(H-2*pad);
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14);
+  ctx.fillText(xlabel,W-pad,H-4);
+  ctx.fillText(ymin.toFixed(3),2,H-pad);
+  ctx.fillText(ymax.toFixed(3),2,pad+4);
+}}
+
+function barChart(id, labels, vals, colorFn, ylabel) {{
+  var cv = document.getElementById(id);
+  if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var n = vals.length;
+  var ymax = Math.max.apply(null, vals.map(Math.abs));
+  if (ymax === 0) ymax = 1;
+  var bw = (W - 2*pad) / n;
+  for (var i=0; i<n; i++) {{
+    var v = vals[i];
+    var bh = Math.abs(v)/ymax*(H-2*pad);
+    var bx = pad + i*bw + bw*0.1;
+    var by = v >= 0 ? H-pad-bh : H-pad;
+    ctx.fillStyle = colorFn(i, v);
+    ctx.fillRect(bx, by, bw*0.8, bh);
+    if (n <= 16) {{
+      ctx.fillStyle="#8b949e"; ctx.font="9px monospace";
+      ctx.fillText(labels[i], bx, H-pad+12);
+    }}
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14);
+  // Zero line
+  ctx.strokeStyle="#444"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+}}
+
+// Panel 1: spin-spin correlator
+var rLabels = DATA.spin_corr.map(function(_,r){{ return "r="+r; }});
+barChart("cCorr", rLabels, DATA.spin_corr,
+  function(i,v) {{ return v >= 0 ? "#57ab5a" : "#e3b341"; }}, "⟨Z₀Zᵣ⟩");
+
+// Panels 2-4: sweeps
+if (DATA.sweep && DATA.sweep.length > 0) {{
+  var swH  = DATA.sweep.map(function(p) {{ return p.h / DATA.J; }});
+  var swOP = DATA.sweep.map(function(p) {{ return p.order_param; }});
+  var swGp = DATA.sweep.map(function(p) {{ return p.energy_gap; }});
+  var swXi = DATA.sweep.map(function(p) {{ return p.corr_len; }});
+  lineChart("cOP",  swH, swOP, "#57ab5a", "|⟨Z₀⟩|", "h/J");
+  lineChart("cGap", swH, swGp, "#e3b341", "Gap Δ",   "h/J");
+  lineChart("cXi",  swH, swXi, "#bc8cff", "ξ",       "h/J");
+}}
+</script>
+</body>
+</html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M29-H: SSH Model  —  Python reference solver + page
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _ssh_frames(
+    n_cells: int = 10,
+    t: float = 1.0,
+    delta: float = 0.5,
+    scenario: str = "sweep",
+    n_sweep: int = 30,
+    delta_min: float = -0.9,
+    delta_max: float = 0.9,
+) -> dict:
+    """NumPy SSH reference solver.  Returns spectrum + Zak phase + sweep."""
+    import numpy as np  # noqa: PLC0415
+
+    N = 2 * n_cells
+
+    def build_h(delta_: float) -> "np.ndarray":
+        t1 = t * (1.0 - delta_)
+        t2 = t * (1.0 + delta_)
+        H = np.zeros((N, N), dtype=float)
+        for i in range(N - 1):
+            tij = t1 if i % 2 == 0 else t2
+            H[i, i + 1] = -tij
+            H[i + 1, i] = -tij
+        return H
+
+    def zak_phase(delta_: float) -> float:
+        """Discrete Wilson loop in k-space for occupied band."""
+        nk = n_cells
+        t1 = t * (1.0 - delta_)
+        t2 = t * (1.0 + delta_)
+        W = 1.0 + 0.0j
+        u_prev = None
+        u_first = None
+        for m in range(nk):
+            k = 2.0 * np.pi * m / nk
+            dk = -t1 + (-t2) * np.exp(1j * k)
+            absdk = abs(dk)
+            if absdk < 1e-14:
+                u = np.array([1.0, 0.0], dtype=complex)
+            else:
+                # lower eigenvector: [d*, -|d|]/sqrt(2|d|)  (unnormalized d*/|d|, -1)
+                phase = dk / absdk
+                u = np.array([np.conj(phase), -1.0], dtype=complex)
+                u /= np.linalg.norm(u)
+            if u_prev is not None:
+                ov = np.dot(np.conj(u_prev), u)
+                if abs(ov) > 1e-14:
+                    W *= ov / abs(ov)
+            if m == 0:
+                u_first = u
+            u_prev = u
+        # Close the loop
+        if u_first is not None and u_prev is not None:
+            ov = np.dot(np.conj(u_prev), u_first)
+            if abs(ov) > 1e-14:
+                W *= ov / abs(ov)
+        zak = -np.angle(W)
+        return float(np.pi if abs(zak) > np.pi / 2 else 0.0)
+
+    def solve_point(delta_: float) -> dict:
+        H = build_h(delta_)
+        evals, evecs = np.linalg.eigh(H)
+        # Gap: min positive - max negative eigenvalue
+        neg = evals[evals < -1e-10]
+        pos = evals[evals > 1e-10]
+        gap = float(pos.min() - neg.max()) if len(neg) and len(pos) else 0.0
+        # Edge mode: eigenvalue closest to zero
+        thr = gap / 4.0 if gap > 0 else 0.1
+        mid_idx = np.where(np.abs(evals) < thr)[0]
+        ew = np.zeros(N)
+        if len(mid_idx):
+            best = mid_idx[np.argmin(np.abs(evals[mid_idx]))]
+            ew = evecs[:, best] ** 2
+        zp = zak_phase(delta_)
+        return {"energies": evals.tolist(), "gap": gap, "zak_phase": zp, "edge_weight": ew.tolist()}
+
+    sol = solve_point(delta)
+
+    sweep = []
+    for k in range(n_sweep):
+        dk = delta_min + (delta_max - delta_min) * k / (n_sweep - 1)
+        if abs(dk) >= 1.0:
+            continue
+        s = solve_point(dk)
+        ew_boundary = s["edge_weight"][0] + s["edge_weight"][1] if len(s["edge_weight"]) >= 2 else 0.0
+        sweep.append({"delta": dk, "gap": s["gap"], "zak_phase": s["zak_phase"],
+                      "edge_weight": ew_boundary})
+
+    return {
+        "n_cells": n_cells, "t": t, "delta": delta,
+        "energies": sol["energies"],
+        "gap": sol["gap"],
+        "zak_phase": sol["zak_phase"],
+        "edge_weight": sol["edge_weight"],
+        "sweep": sweep,
+    }
+
+
+def _ssh_page(data: dict, title: str = "SSH Topological Insulator") -> str:
+    """4-panel SSH page: spectrum, edge weight profile, gap vs δ, Zak phase vs δ."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    zak_label = "π (topological)" if abs(data.get("zak_phase", 0)) > 1.0 else "0 (trivial)"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:220px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+  .badge{{display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.75rem;font-weight:bold;}}
+  .topo{{background:#1c3a2c;color:#57ab5a;border:1px solid #57ab5a;}}
+  .trivial{{background:#2c1c1c;color:#e3b341;border:1px solid #e3b341;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  δ = {data.get('delta', 0):.3f} &nbsp;|&nbsp;
+  t = {data.get('t', 1):.2f} &nbsp;|&nbsp;
+  gap = {data.get('gap', 0):.4f} &nbsp;|&nbsp;
+  Zak phase = <span class="badge {'topo' if abs(data.get('zak_phase',0)) > 1.0 else 'trivial'}">{zak_label}</span>
+</div>
+<div class="grid">
+  <div class="panel"><canvas id="cSpec"></canvas><div class="label">Single-particle spectrum (all bands)</div></div>
+  <div class="panel"><canvas id="cEdge"></canvas><div class="label">Edge mode |ψ|² per site</div></div>
+  <div class="panel"><canvas id="cGap"></canvas><div class="label">Band gap vs δ</div></div>
+  <div class="panel"><canvas id="cZak"></canvas><div class="label">Zak phase vs δ (0 or π)</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function lineChart(id, xs, ys, color, ylabel, xlabel) {{
+  var cv = document.getElementById(id);
+  if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin = Math.min.apply(null,xs), xmax = Math.max.apply(null,xs);
+  var ymin = Math.min.apply(null,ys), ymax = Math.max.apply(null,ys);
+  var xr = xmax-xmin||1, yr = ymax-ymin||1;
+  ctx.strokeStyle = "#21262d"; ctx.lineWidth = 1;
+  for (var gi=0; gi<5; gi++) {{
+    var gy = pad + (H-2*pad)*gi/4;
+    ctx.beginPath(); ctx.moveTo(pad,gy); ctx.lineTo(W-pad,gy); ctx.stroke();
+  }}
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+  for (var i=0; i<xs.length; i++) {{
+    var px = pad + (xs[i]-xmin)/xr*(W-2*pad);
+    var py = H-pad - (ys[i]-ymin)/yr*(H-2*pad);
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14);
+  ctx.fillText(xlabel,W-pad,H-4);
+  ctx.fillText(ymin.toFixed(3),2,H-pad);
+  ctx.fillText(ymax.toFixed(3),2,pad+4);
+}}
+
+function barChart(id, labels, vals, colorFn, ylabel) {{
+  var cv = document.getElementById(id);
+  if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d");
+  var W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var n = vals.length;
+  var ymax = Math.max.apply(null, vals.map(Math.abs));
+  if (ymax === 0) ymax = 1;
+  var bw = (W - 2*pad) / n;
+  for (var i=0; i<n; i++) {{
+    var v = vals[i];
+    var bh = Math.abs(v)/ymax*(H-2*pad);
+    var bx = pad + i*bw + bw*0.1;
+    var by = H-pad-bh;
+    ctx.fillStyle = colorFn(i, v);
+    ctx.fillRect(bx, by, bw*0.8, bh);
+    if (n <= 24) {{
+      ctx.fillStyle="#8b949e"; ctx.font="9px monospace";
+      ctx.fillText(i, bx, H-pad+12);
+    }}
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace"; ctx.fillText(ylabel,4,14);
+}}
+
+// Panel 1: Spectrum as bar chart (index vs energy)
+var eIdx = DATA.energies.map(function(_,i){{ return ""+i; }});
+barChart("cSpec", eIdx, DATA.energies,
+  function(i,v) {{
+    var mid = DATA.energies.length/2;
+    if (Math.abs(v) < DATA.gap/4) return "#e3b341";  // mid-gap = gold
+    return v < 0 ? "#388bfd" : "#bc8cff";
+  }}, "E");
+
+// Panel 2: Edge mode |ψ|² per site
+var siteLabels = DATA.edge_weight.map(function(_,i){{ return ""+i; }});
+barChart("cEdge", siteLabels, DATA.edge_weight,
+  function(i,v) {{ return i < 2 || i >= DATA.edge_weight.length-2 ? "#57ab5a" : "#30363d"; }},
+  "|ψ|²");
+
+// Panels 3-4: Sweeps
+if (DATA.sweep && DATA.sweep.length > 0) {{
+  var swD  = DATA.sweep.map(function(p) {{ return p.delta; }});
+  var swGp = DATA.sweep.map(function(p) {{ return p.gap; }});
+  var swZp = DATA.sweep.map(function(p) {{ return p.zak_phase; }});
+  lineChart("cGap", swD, swGp, "#e3b341", "Gap Δ", "δ");
+  lineChart("cZak", swD, swZp, "#57ab5a", "θ_Zak", "δ");
+}}
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -8366,7 +8782,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -8456,6 +8872,18 @@ def main() -> int:
   parser.add_argument("--bose-hubbard-mu",      type=float, default=0.0, help="chemical potential mu")
   parser.add_argument("--bose-hubbard-sweep-points", type=int, default=20, help="number of J points in sweep")
   parser.add_argument("--bose-hubbard-J-max",   type=float, default=0.5, help="maximum J for Bose-Hubbard sweep")
+  parser.add_argument("--tfi-sites",        type=int,   default=10,   help="number of sites for TFI (2-18)")
+  parser.add_argument("--tfi-J",            type=float, default=1.0,  help="ZZ coupling J for TFI")
+  parser.add_argument("--tfi-h",            type=float, default=0.5,  help="transverse field h (QPT at h=J)")
+  parser.add_argument("--tfi-sweep-points", type=int,   default=30,   help="number of h values in TFI sweep")
+  parser.add_argument("--tfi-h-min",        type=float, default=0.0,  help="minimum h for TFI sweep")
+  parser.add_argument("--tfi-h-max",        type=float, default=2.0,  help="maximum h for TFI sweep")
+  parser.add_argument("--ssh-cells",        type=int,   default=10,   help="number of unit cells for SSH (2-200)")
+  parser.add_argument("--ssh-t",            type=float, default=1.0,  help="hopping scale t for SSH")
+  parser.add_argument("--ssh-delta",        type=float, default=0.5,  help="dimerization δ (trivial if δ<0, topo if δ>0)")
+  parser.add_argument("--ssh-sweep-points", type=int,   default=30,   help="number of δ values in SSH sweep")
+  parser.add_argument("--ssh-delta-min",    type=float, default=-0.9, help="minimum δ for SSH sweep")
+  parser.add_argument("--ssh-delta-max",    type=float, default=0.9,  help="maximum δ for SSH sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -9166,6 +9594,46 @@ def main() -> int:
       path.write_text(_bose_hubbard_page(bh_data, title="Bose-Hubbard Model — Mott/Superfluid"), encoding="utf-8")
       generated.append(path)
 
+  # ── M29-G: Transverse-Field Ising model ──────────────────────────────────
+  if args.scenario in {"tfi", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("tfi skipped: numpy not available", file=sys.stderr)
+    else:
+      tfi_data = _tfi_frames(
+          n_sites=args.tfi_sites,
+          J=args.tfi_J,
+          h=args.tfi_h,
+          scenario="sweep",
+          n_sweep=args.tfi_sweep_points,
+          h_min=args.tfi_h_min,
+          h_max=args.tfi_h_max,
+      )
+      path = out_dir / "quantum_tfi.html"
+      path.write_text(_tfi_page(tfi_data, title="Transverse-Field Ising — QPT at h=J"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M29-H: SSH model ──────────────────────────────────────────────────────
+  if args.scenario in {"ssh", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("ssh skipped: numpy not available", file=sys.stderr)
+    else:
+      ssh_data = _ssh_frames(
+          n_cells=args.ssh_cells,
+          t=args.ssh_t,
+          delta=args.ssh_delta,
+          scenario="sweep",
+          n_sweep=args.ssh_sweep_points,
+          delta_min=args.ssh_delta_min,
+          delta_max=args.ssh_delta_max,
+      )
+      path = out_dir / "quantum_ssh.html"
+      path.write_text(_ssh_page(ssh_data, title="SSH Model — Bulk-Boundary Correspondence"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -9206,6 +9674,8 @@ def main() -> int:
         "floquet":            "quantum_floquet",
         "heisenberg":         "quantum_heisenberg",
         "bose_hubbard":       "quantum_bose_hubbard",
+        "tfi":                "quantum_tfi",
+        "ssh":                "quantum_ssh",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

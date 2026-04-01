@@ -60,5 +60,13 @@ std::string heisenberg_result_to_json(const HeisenbergResult& result);
 BoseHubbardOptions bose_hubbard_options_from_json(const std::string& json);
 // Serialize Bose-Hubbard result to JSON string.
 std::string bose_hubbard_result_to_json(const BoseHubbardResult& result);
+// Parse Transverse-Field Ising options from JSON string.
+TFIOptions tfi_options_from_json(const std::string& json);
+// Serialize Transverse-Field Ising result to JSON string.
+std::string tfi_result_to_json(const TFIResult& result);
+// Parse SSH options from JSON string.
+SSHOptions ssh_options_from_json(const std::string& json);
+// Serialize SSH result to JSON string.
+std::string ssh_result_to_json(const SSHResult& result);
 
 }  // namespace qx
