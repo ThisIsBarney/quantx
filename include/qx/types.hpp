@@ -599,7 +599,7 @@ struct Phi4Options {
   double kappa{1.0};
   // Local truncated Fock space dimension (number of oscillator levels).
   std::uint32_t d_local{8};
-  // Scenario: "symmetric", "broken", or "sweep"
+  // Scenario: "symmetric", "broken", "sweep", or "dynamics"
   std::string scenario{"symmetric"};
   // Number of m² values in the sweep.
   std::uint32_t n_sweep{20};
@@ -609,6 +609,31 @@ struct Phi4Options {
   // Tiny explicit symmetry-breaking field ε·Σφᵢ used to select a vacuum.
   double epsilon{0.05};
   std::uint64_t seed{42};
+  // ── Dynamics (quantum quench) — used when scenario == "dynamics" ───────────
+  // m² for the pre-quench ground-state preparation.
+  double m2_initial{1.0};
+  // m² for the post-quench Hamiltonian that drives the time evolution.
+  double m2_final{-1.5};
+  // Time step size for Krylov propagation.
+  double dt{0.05};
+  // Number of time steps to record.
+  std::uint32_t n_steps{80};
+};
+
+// One time-step frame from a φ⁴ quantum-quench dynamics run.
+struct Phi4DynamicsFrame {
+  // Physical time t = step * dt.
+  double time{0.0};
+  // Per-site field expectation ⟨φᵢ(t)⟩ (length n_sites).
+  std::vector<double> phi_expect{};
+  // Per-site occupation ⟨nᵢ(t)⟩ (length n_sites).
+  std::vector<double> occupation{};
+  // Spatial-average order parameter √(Σ⟨φᵢ²⟩/N).
+  double order_param{0.0};
+  // Bipartite von Neumann entropy S = -Tr(ρ_A log ρ_A), cut at N/2.
+  double entropy{0.0};
+  // Instantaneous energy ⟨ψ(t)|H_f|ψ(t)⟩.
+  double energy{0.0};
 };
 
 // Result of a φ⁴ QFT simulation.
@@ -632,6 +657,8 @@ struct Phi4Result {
   std::vector<double> field_distribution{};
   // m² sweep results.
   std::vector<Phi4SweepPoint> sweep{};
+  // Real-time dynamics frames from quantum quench (empty unless scenario == "dynamics").
+  std::vector<Phi4DynamicsFrame> dynamics{};
   double elapsed_ms{0.0};
   std::string message;
 };

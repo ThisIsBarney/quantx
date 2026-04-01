@@ -4169,6 +4169,176 @@ window.addEventListener('resize', () => {{ drawGrid(); drawSyndrome(); drawThres
 
 # ── M24: φ⁴ Scalar Quantum Field Theory ───────────────────────────────────────
 
+def _phi4_dynamics_frames(
+    n_sites: int = 4,
+    d_local: int = 6,
+    lam: float = 1.0,
+    kappa: float = 1.0,
+    m2_initial: float = 1.0,
+    m2_final: float = -1.5,
+    n_steps: int = 80,
+    dt: float = 0.05,
+    epsilon: float = 0.0,
+) -> dict:
+  """Compute φ⁴ quantum quench dynamics via exact time evolution (NumPy/SciPy reference)."""
+  import numpy as np
+
+  d = d_local
+  N = n_sites
+
+  # Local operators (same as in _phi4_frames)
+  a_loc  = np.diag(np.sqrt(np.arange(1, d, dtype=float)), 1)
+  adag   = a_loc.T
+  phi_loc  = (a_loc + adag) / np.sqrt(2.0)
+  pi2_loc  = np.real(-0.5 * (a_loc - adag) @ (a_loc - adag))
+  phi2_loc = phi_loc @ phi_loc
+  phi4_loc = phi2_loc @ phi2_loc
+  n_op_loc = adag @ a_loc  # occupation number operator
+
+  def kron_single(op, site):
+    """Embed a d×d operator at `site` into the full d^N Hilbert space."""
+    ops = [np.eye(d)] * N
+    ops[site] = op
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  def kron_pair(op1, s1, op2, s2):
+    """Embed op1⊗op2 at sites s1,s2 into the full space."""
+    ops = [np.eye(d)] * N
+    ops[s1] = op1
+    ops[s2] = op2
+    result = ops[0]
+    for o in ops[1:]:
+      result = np.kron(result, o)
+    return result
+
+  def build_H(m2_val: float) -> "np.ndarray":
+    dim = d ** N
+    H = np.zeros((dim, dim), dtype=float)
+    for i in range(N):
+      H += 0.5 * kron_single(pi2_loc,  i)
+      H += (0.5 * m2_val) * kron_single(phi2_loc, i)
+      H += (0.25 * lam)   * kron_single(phi4_loc, i)
+      H += epsilon        * kron_single(phi_loc,  i)
+    for i in range(N - 1):
+      H -= kappa * kron_pair(phi_loc, i, phi_loc, i + 1)
+    return H
+
+  def site_expect(psi, op, site):
+    """Compute Re<psi|O_site|psi> without building the full kron."""
+    # Reshape psi as d^site × d × d^(N-site-1)
+    left  = d ** site
+    right = d ** (N - site - 1)
+    v = psi.reshape(left, d, right)
+    Ov = np.tensordot(op, v, axes=([1], [1])).transpose(1, 0, 2)
+    return float(np.real(np.vdot(psi, Ov.reshape(-1))))
+
+  H_init  = build_H(m2_initial)
+  H_final = build_H(m2_final)
+
+  # Ground state of pre-quench Hamiltonian
+  try:
+    import numpy.linalg as nla
+    vals_i, vecs_i = nla.eigh(H_init)
+    psi0 = vecs_i[:, 0].copy()
+  except Exception:
+    psi0 = np.ones(d**N, dtype=float) / np.sqrt(d**N)
+
+  # Post-quench gap for reference
+  try:
+    vals_f, _ = np.linalg.eigh(H_final)
+    delta_E_final = float(vals_f[1] - vals_f[0]) if len(vals_f) > 1 else 0.0
+    E0_initial = float(vals_i[0])
+  except Exception:
+    delta_E_final = 0.0
+    E0_initial = 0.0
+
+  # Time-evolution operator (try scipy, fall back to Taylor Krylov)
+  try:
+    from scipy.linalg import expm as _scipy_expm
+    U_step = _scipy_expm(-1j * dt * H_final)
+    def evolve(psi_cx):
+      return U_step @ psi_cx
+  except ImportError:
+    # Fallback: small-m Arnoldi Krylov (m=15)
+    def evolve(psi_cx):
+      m = min(15, len(psi_cx))
+      V = []
+      b = float(np.linalg.norm(psi_cx))
+      v = psi_cx / b
+      H_m = np.zeros((m, m), dtype=complex)
+      for j in range(m):
+        V.append(v)
+        w = H_final @ v
+        for i in range(j + 1):
+          H_m[i, j] = np.vdot(V[i], w)
+          w = w - H_m[i, j] * V[i]
+        nrm = float(np.linalg.norm(w))
+        if nrm < 1e-14:
+          m = j + 1
+          break
+        if j < m - 1:
+          H_m[j + 1, j] = nrm
+          v = w / nrm
+      Vm = np.column_stack(V[:m])
+      exp_Hm = np.array([[np.exp(-1j * dt * ev) for ev in np.linalg.eigvalsh(H_m[:m, :m])]])
+      evals, evecs = np.linalg.eigh(H_m[:m, :m])
+      exp_Hm_mat = evecs @ np.diag(np.exp(-1j * dt * evals)) @ evecs.conj().T
+      e1 = np.zeros(m, dtype=complex); e1[0] = b
+      phi_m = exp_Hm_mat @ e1
+      return Vm @ phi_m
+
+  def entropy_from_psi(psi_cx):
+    dim_A = d ** (N // 2)
+    dim_B = d ** (N - N // 2)
+    M = psi_cx.reshape(dim_A, dim_B)
+    sv = np.linalg.svd(M, compute_uv=False)
+    probs = sv ** 2
+    probs = probs[probs > 1e-14]
+    return float(-np.sum(probs * np.log(probs))) if len(probs) > 0 else 0.0
+
+  psi = psi0.astype(complex).copy()
+  frames = []
+  for step in range(n_steps + 1):
+    t = step * dt
+    phi_exp  = [site_expect(psi, phi_loc,  i) for i in range(N)]
+    n_exp    = [site_expect(psi, n_op_loc, i) for i in range(N)]
+    phi2_exp = [site_expect(psi, phi2_loc, i) for i in range(N)]
+    order    = float(np.sqrt(max(0.0, sum(phi2_exp) / N)))
+    S_ent    = entropy_from_psi(psi)
+    Hpsi     = H_final @ psi
+    energy   = float(np.real(np.vdot(psi, Hpsi)))
+    frames.append({
+        "time":        round(t, 6),
+        "phi_expect":  [round(float(np.real(x)), 8) for x in phi_exp],
+        "occupation":  [round(float(np.real(x)), 8) for x in n_exp],
+        "order_param": round(order, 8),
+        "entropy":     round(S_ent, 8),
+        "energy":      round(energy, 8),
+    })
+    if step < n_steps:
+      psi = evolve(psi)
+      nrm = float(np.linalg.norm(psi))
+      if nrm > 1e-14:
+        psi /= nrm
+
+  return {
+      "n_sites":       N,
+      "d_local":       d,
+      "m2_initial":    m2_initial,
+      "m2_final":      m2_final,
+      "lam":           lam,
+      "kappa":         kappa,
+      "dt":            dt,
+      "n_steps":       n_steps,
+      "E0_initial":    round(E0_initial, 8),
+      "delta_E_final": round(delta_E_final, 8),
+      "frames":        frames,
+  }
+
+
 def _phi4_frames(
     n_sites: int = 4,
     m2: float = 1.0,
@@ -4777,6 +4947,239 @@ window.addEventListener('load', () => {{
 }});
 window.addEventListener('resize', () => {{
   drawPot(); drawDist(); drawSite(); drawOcc(); drawSweep();
+}});
+</script>
+</body>
+</html>"""
+  return html
+
+
+def _phi4_dynamics_page(data: dict, title: str = "φ⁴ QFT — Quantum Quench Dynamics") -> str:
+  """Generate a self-contained HTML page for the φ⁴ quantum quench dynamics."""
+  import json as _json
+
+  data_js = _json.dumps(data, ensure_ascii=False)
+  N        = data.get("n_sites", 4)
+  d        = data.get("d_local", 6)
+  m2i      = data.get("m2_initial", 1.0)
+  m2f      = data.get("m2_final", -1.5)
+  n_steps  = data.get("n_steps", 80)
+  dt_val   = data.get("dt", 0.05)
+  frames   = data.get("frames", [])
+  final_op = frames[-1]["order_param"] if frames else 0.0
+  final_S  = frames[-1]["entropy"]     if frames else 0.0
+
+  html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+  :root {{ --bg:#0d1117; --panel:#161b22; --border:#30363d; --accent:#36cfc9;
+           --green:#3fb950; --orange:#d29922; --red:#f85149; --muted:#8b949e; --text:#e6edf3; }}
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif;
+          min-height:100vh; padding:24px; }}
+  h1 {{ font-size:1.4rem; font-weight:600; color:var(--accent); margin-bottom:4px; }}
+  .subtitle {{ color:var(--muted); font-size:.85rem; margin-bottom:16px; }}
+  .tags {{ margin-bottom:16px; }}
+  .tag {{ display:inline-block; font-size:.75rem; padding:2px 8px; border-radius:4px;
+          background:#21262d; border:1px solid var(--border); color:var(--muted);
+          margin-right:6px; margin-bottom:4px; }}
+  .stat-row {{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:20px; max-width:1100px;
+               margin-left:auto; margin-right:auto; }}
+  .stat {{ background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 14px; }}
+  .stat-label {{ font-size:.75rem; color:var(--muted); margin-bottom:2px; }}
+  .stat-value {{ font-size:1.05rem; font-weight:600; color:var(--accent); }}
+  .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; max-width:1100px; margin:0 auto; }}
+  .panel {{ background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }}
+  .panel h2 {{ font-size:.92rem; color:var(--muted); margin-bottom:10px; font-weight:500; }}
+  canvas {{ display:block; width:100%; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">φ⁴ scalar QFT — quantum quench dynamics · exact time evolution · truncated Fock space</p>
+<div class="tags">
+  <span class="tag">N={N} sites</span>
+  <span class="tag">d={d} levels</span>
+  <span class="tag">m²_initial={m2i}</span>
+  <span class="tag">m²_final={m2f}</span>
+  <span class="tag">n_steps={n_steps}</span>
+  <span class="tag">dt={dt_val}</span>
+</div>
+<div class="stat-row">
+  <div class="stat"><div class="stat-label">final order param √⟨φ²⟩</div>
+    <div class="stat-value">{final_op:.6f}</div></div>
+  <div class="stat"><div class="stat-label">final entanglement S</div>
+    <div class="stat-value">{final_S:.6f}</div></div>
+  <div class="stat"><div class="stat-label">quench direction</div>
+    <div class="stat-value">{"sym→broken" if m2f < 0 else "broken→sym"}</div></div>
+</div>
+<div class="grid">
+  <div class="panel"><h2>Order Parameter √⟨φ²⟩(t)</h2><canvas id="cvOrder" height="220"></canvas></div>
+  <div class="panel"><h2>Entanglement Entropy S(t)</h2><canvas id="cvEntropy" height="220"></canvas></div>
+  <div class="panel"><h2>⟨φᵢ(t)⟩ Heatmap (blue=−, white=0, red=+)</h2><canvas id="cvPhiHeat" height="220"></canvas></div>
+  <div class="panel"><h2>⟨nᵢ(t)⟩ Heatmap (white=0, orange=high)</h2><canvas id="cvOccHeat" height="220"></canvas></div>
+</div>
+<script>
+const DATA = {data_js};
+
+function setup(id, h) {{
+  const cv = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.parentElement.clientWidth - 32;
+  const H = h;
+  cv.width  = W * dpr;
+  cv.height = H * dpr;
+  cv.style.width  = W + 'px';
+  cv.style.height = H + 'px';
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return {{ctx, W, H}};
+}}
+
+function axes(ctx, pad, W, H) {{
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, H-pad.b);
+  ctx.lineTo(W-pad.r, H-pad.b);
+  ctx.stroke();
+}}
+
+function grid(ctx, pad, W, H, nv, nh) {{
+  ctx.strokeStyle='#21262d'; ctx.lineWidth=0.5;
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  for (let i=1; i<=(nh||4); i++) {{
+    const y=pad.t+i*ch/(nh||4);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+  }}
+  for (let i=1; i<=(nv||5); i++) {{
+    const x=pad.l+i*cw/(nv||5);
+    ctx.beginPath(); ctx.moveTo(x,pad.t); ctx.lineTo(x,H-pad.b); ctx.stroke();
+  }}
+}}
+
+function drawLineChart(id, h, ys, color, labelY, labelX) {{
+  const {{ctx, W, H}} = setup(id, h);
+  const pad = {{l:52, r:12, t:16, b:32}};
+  if (!ys.length) return;
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const n=ys.length;
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const rng=Math.max(maxY-minY, 1e-9);
+  const pad_y=rng*0.08;
+  const lo=minY-pad_y, hi=maxY+pad_y;
+  function xOf(i) {{ return pad.l+i/(n-1||1)*cw; }}
+  function yOf(v) {{ return H-pad.b-(v-lo)/(hi-lo)*ch; }}
+
+  axes(ctx, pad, W, H); grid(ctx, pad, W, H, 5, 4);
+
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  for (let i=0;i<n;i++) {{
+    if(i===0) ctx.moveTo(xOf(i),yOf(ys[i]));
+    else ctx.lineTo(xOf(i),yOf(ys[i]));
+  }}
+  ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle='#8b949e'; ctx.font='10px system-ui'; ctx.textAlign='center';
+  const frames=DATA.frames||[];
+  const tMax=frames.length?frames[frames.length-1].time:n*DATA.dt;
+  [0,0.25,0.5,0.75,1.0].forEach(f=>{{
+    const t=(tMax*f).toFixed(1);
+    ctx.fillText(t, pad.l+f*cw, H-pad.b+14);
+  }});
+  ctx.fillText(labelX||'time', pad.l+cw/2, H-2);
+  ctx.textAlign='right'; ctx.font='9px system-ui';
+  [lo,(lo+hi)/2,hi].forEach(v=>ctx.fillText(v.toFixed(3),pad.l-4,yOf(v)+3));
+  ctx.save(); ctx.translate(12,pad.t+ch/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign='center'; ctx.fillStyle=color; ctx.font='10px system-ui';
+  ctx.fillText(labelY||'', 0, 0); ctx.restore();
+}}
+
+function lerpColor(t, c0, c1) {{
+  // t in [0,1], c0/c1 as [r,g,b]
+  return [
+    Math.round(c0[0]+(c1[0]-c0[0])*t),
+    Math.round(c0[1]+(c1[1]-c0[1])*t),
+    Math.round(c0[2]+(c1[2]-c0[2])*t),
+  ];
+}}
+
+function drawHeatmap(id, h, getData, colorFn) {{
+  const {{ctx, W, H}} = setup(id, h);
+  const pad = {{l:36, r:12, t:16, b:28}};
+  const frames=DATA.frames||[];
+  const N=DATA.n_sites||4;
+  if (!frames.length) return;
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const nT=frames.length, nS=N;
+  const cellW=cw/nT, cellH=ch/nS;
+  for (let ti=0;ti<nT;ti++) {{
+    const row=getData(frames[ti]);
+    for (let si=0;si<nS;si++) {{
+      const v=row[si]||0;
+      ctx.fillStyle=colorFn(v);
+      ctx.fillRect(pad.l+ti*cellW, pad.t+si*cellH, Math.ceil(cellW)+1, Math.ceil(cellH)+1);
+    }}
+  }}
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b);
+  ctx.stroke();
+  // Labels
+  ctx.fillStyle='#8b949e'; ctx.font='9px system-ui'; ctx.textAlign='center';
+  const tMax=frames[frames.length-1].time;
+  [0,0.5,1.0].forEach(f=>{{
+    ctx.fillText((tMax*f).toFixed(1), pad.l+f*cw, H-pad.b+12);
+  }});
+  ctx.fillText('time', pad.l+cw/2, H-2);
+  ctx.textAlign='right';
+  for (let si=0;si<nS;si++) {{
+    ctx.fillText(si, pad.l-3, pad.t+(si+0.6)*cellH);
+  }}
+}}
+
+function phiColor(v) {{
+  // blue (#1e90ff) → white → red (#ff4500)
+  const mx=0.5;
+  const t=Math.min(Math.abs(v)/mx, 1.0);
+  if (v<0) {{
+    const c=lerpColor(t,[255,255,255],[30,144,255]);
+    return `rgb(${{c[0]}},${{c[1]}},${{c[2]}})`;
+  }} else {{
+    const c=lerpColor(t,[255,255,255],[255,69,0]);
+    return `rgb(${{c[0]}},${{c[1]}},${{c[2]}})`;
+  }}
+}}
+
+function occColor(v) {{
+  // white → orange (#ff8c00)
+  const mx=3.0;
+  const t=Math.min(Math.max(v,0)/mx, 1.0);
+  const c=lerpColor(t,[255,255,255],[255,140,0]);
+  return `rgb(${{c[0]}},${{c[1]}},${{c[2]}})`;
+}}
+
+window.addEventListener('load', () => {{
+  const frames=DATA.frames||[];
+  const orders  = frames.map(f=>f.order_param);
+  const entropies = frames.map(f=>f.entropy);
+  drawLineChart('cvOrder',  220, orders,   '#36cfc9', '√⟨φ²⟩', 'time');
+  drawLineChart('cvEntropy',220, entropies,'#3fb950', 'S_ent',  'time');
+  drawHeatmap('cvPhiHeat', 220, f=>f.phi_expect, phiColor);
+  drawHeatmap('cvOccHeat', 220, f=>f.occupation, occColor);
+}});
+window.addEventListener('resize', () => {{
+  const frames=DATA.frames||[];
+  const orders    = frames.map(f=>f.order_param);
+  const entropies = frames.map(f=>f.entropy);
+  drawLineChart('cvOrder',  220, orders,   '#36cfc9', '√⟨φ²⟩', 'time');
+  drawLineChart('cvEntropy',220, entropies,'#3fb950', 'S_ent',  'time');
+  drawHeatmap('cvPhiHeat', 220, f=>f.phi_expect, phiColor);
+  drawHeatmap('cvOccHeat', 220, f=>f.occupation, occColor);
 }});
 </script>
 </body>
@@ -6463,6 +6866,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("phi4_symmetric",     "φ⁴ 对称相"),
           ("phi4_broken",        "φ⁴ 破缺相"),
           ("phi4_sweep",         "φ⁴ 相变扫描"),
+          ("phi4_dynamics",      "φ⁴ 量子淬火动力学"),
           ("schwinger_vacuum",   "Schwinger 真空"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
@@ -6763,7 +7167,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -6820,6 +7224,10 @@ def main() -> int:
   parser.add_argument("--phi4-kappa", type=float, default=1.0, help="nearest-neighbour hopping κ")
   parser.add_argument("--phi4-d-local", type=int, default=10, help="local Fock space truncation (oscillator levels)")
   parser.add_argument("--phi4-sweep-points", type=int, default=25, help="number of m² points in phi4 phase transition sweep")
+  parser.add_argument("--phi4-dynamics-m2-initial", type=float, default=1.0, help="pre-quench mass squared for phi4_dynamics")
+  parser.add_argument("--phi4-dynamics-m2-final",   type=float, default=-1.5, help="post-quench mass squared for phi4_dynamics")
+  parser.add_argument("--phi4-dynamics-steps",      type=int,   default=80,  help="number of time steps for phi4_dynamics")
+  parser.add_argument("--phi4-dynamics-dt",         type=float, default=0.05, help="time step dt for phi4_dynamics")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -7425,6 +7833,26 @@ def main() -> int:
       path.write_text(_phi4_page(swp_data, title="φ⁴ QFT — Phase Transition Sweep"), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"phi4_dynamics", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("phi4_dynamics skipped: numpy not available", file=sys.stderr)
+    else:
+      dyn_data = _phi4_dynamics_frames(
+          n_sites=args.phi4_sites,
+          d_local=args.phi4_d_local,
+          lam=args.phi4_lambda,
+          kappa=args.phi4_kappa,
+          m2_initial=args.phi4_dynamics_m2_initial,
+          m2_final=args.phi4_dynamics_m2_final,
+          n_steps=args.phi4_dynamics_steps,
+          dt=args.phi4_dynamics_dt,
+      )
+      path = out_dir / "quantum_phi4_dynamics.html"
+      path.write_text(_phi4_dynamics_page(dyn_data, title="φ⁴ QFT — Quantum Quench Dynamics"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -7460,6 +7888,7 @@ def main() -> int:
         "phi4_symmetric":     "quantum_phi4_symmetric",
         "phi4_broken":        "quantum_phi4_broken",
         "phi4_sweep":         "quantum_phi4_sweep",
+        "phi4_dynamics":      "quantum_phi4_dynamics",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
