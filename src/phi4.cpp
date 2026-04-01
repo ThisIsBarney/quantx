@@ -522,21 +522,24 @@ static MatC dense_expm(const MatC& A, int m) {
       E[i] += fact * Ak[i];
   }
 
-  // Squaring phase: E = E^(2^s)... but s here is the linear scale, so square s times if s > 1
-  // Actually s = ceil(norm1) means we used A/s so we need E^s (repeated squaring is for 2^s).
-  // We use: exp(A) = exp(A/s)^s  by repeated multiplication.
-  // For s up to ~100 this is fine.
-  for (int sq = 1; sq < s; ++sq) {
-    MatC E2(static_cast<std::size_t>(m) * m, cx{0.0, 0.0});
-    for (int r = 0; r < m; ++r)
-      for (int c = 0; c < m; ++c) {
-        cx acc{0.0, 0.0};
-        for (int l = 0; l < m; ++l)
-          acc += E[static_cast<std::size_t>(r) + static_cast<std::size_t>(l) * m] *
-                 E[static_cast<std::size_t>(l) + static_cast<std::size_t>(c) * m];
-        E2[static_cast<std::size_t>(r) + static_cast<std::size_t>(c) * m] = acc;
-      }
-    E = E2;
+  // Squaring phase: exp(A) = exp(A/s)^s via s-1 matrix multiplications by exp(A/s).
+  // Save E_orig = exp(A/s) and accumulate E = E * E_orig repeatedly so that after
+  // sq iterations E = exp(A/s)^(sq+1).  Using E = E * E would give exp(A/s)^(2^(sq))
+  // which is wrong for non-power-of-two s.
+  if (s > 1) {
+    MatC E_orig = E;  // exp(A/s)
+    for (int sq = 1; sq < s; ++sq) {
+      MatC E2(static_cast<std::size_t>(m) * m, cx{0.0, 0.0});
+      for (int r = 0; r < m; ++r)
+        for (int c = 0; c < m; ++c) {
+          cx acc{0.0, 0.0};
+          for (int l = 0; l < m; ++l)
+            acc += E[static_cast<std::size_t>(r) + static_cast<std::size_t>(l) * m] *
+                   E_orig[static_cast<std::size_t>(l) + static_cast<std::size_t>(c) * m];
+          E2[static_cast<std::size_t>(r) + static_cast<std::size_t>(c) * m] = acc;
+        }
+      E = E2;
+    }
   }
   return E;
 }
@@ -698,6 +701,70 @@ householder_tridiag_real(std::vector<double>& A, int n) {
   return {diag, sub};
 }
 
+// Householder reduction of a complex Hermitian n×n matrix (column-major) to
+// real symmetric tridiagonal form.  Returns (alpha, beta) for tridiag_eig.
+// Reference: Golub & Van Loan, "Matrix Computations", 4th ed., §8.3.
+static std::pair<std::vector<double>, std::vector<double>>
+householder_tridiag_herm(std::vector<cx>& A, int n) {
+  for (int k = 0; k < n - 2; ++k) {
+    // Compute ||x|| where x = A[k+1:, k]
+    double sigma = 0.0;
+    for (int i = k + 1; i < n; ++i)
+      sigma += std::norm(A[static_cast<std::size_t>(i) + static_cast<std::size_t>(k) * n]);
+    double alpha_hh = std::sqrt(sigma);
+
+    cx x1 = A[static_cast<std::size_t>(k + 1) + static_cast<std::size_t>(k) * n];
+    // Choose sign to avoid cancellation: multiply by -phase(x1)
+    cx phase_x1 = (std::abs(x1) < 1e-300) ? cx{1.0, 0.0} : x1 / std::abs(x1);
+    alpha_hh = std::abs(alpha_hh);  // real positive
+
+    double r2 = sigma - std::abs(x1) * alpha_hh;  // 0.5 * ||v||²
+    if (r2 < 1e-30) continue;
+
+    // Build Householder vector v (stored in place at column k, rows k+1..n-1)
+    A[static_cast<std::size_t>(k + 1) + static_cast<std::size_t>(k) * n] -= phase_x1 * alpha_hh;
+
+    std::vector<cx> v(n - k - 1);
+    for (int i = 0; i < n - k - 1; ++i)
+      v[i] = A[static_cast<std::size_t>(k + 1 + i) + static_cast<std::size_t>(k) * n];
+
+    // q = A_sub * v  (A_sub is Hermitian)
+    std::vector<cx> q(n - k - 1, cx{0.0, 0.0});
+    for (int r = 0; r < n - k - 1; ++r)
+      for (int c = 0; c < n - k - 1; ++c)
+        q[r] += A[static_cast<std::size_t>(k + 1 + r) +
+                  static_cast<std::size_t>(k + 1 + c) * n] * v[c];
+
+    cx vHq{0.0, 0.0};
+    for (int i = 0; i < n - k - 1; ++i) vHq += std::conj(v[i]) * q[i];
+
+    // w = q/r2 - (Re(vHq) / (2*r2^2)) * v  — uses real part only since A Hermitian
+    std::vector<cx> w(n - k - 1);
+    for (int i = 0; i < n - k - 1; ++i)
+      w[i] = q[i] / r2 - (vHq.real() / (2.0 * r2 * r2)) * v[i];
+
+    // A_sub -= v*w† + w*v†  (keeps Hermitian structure)
+    for (int r = 0; r < n - k - 1; ++r)
+      for (int c = 0; c < n - k - 1; ++c) {
+        A[static_cast<std::size_t>(k + 1 + r) +
+          static_cast<std::size_t>(k + 1 + c) * n] -=
+            v[r] * std::conj(w[c]) + w[r] * std::conj(v[c]);
+      }
+
+    // Write tridiagonal off-diagonal (real by construction after the reflection)
+    cx off = phase_x1 * alpha_hh;
+    A[static_cast<std::size_t>(k + 1) + static_cast<std::size_t>(k) * n] = off;
+    A[static_cast<std::size_t>(k) + static_cast<std::size_t>(k + 1) * n] = std::conj(off);
+  }
+
+  std::vector<double> diag(n), sub(n - 1);
+  for (int i = 0; i < n; ++i)
+    diag[i] = A[static_cast<std::size_t>(i) + static_cast<std::size_t>(i) * n].real();
+  for (int i = 0; i < n - 1; ++i)
+    sub[i] = std::abs(A[static_cast<std::size_t>(i + 1) + static_cast<std::size_t>(i) * n]);
+  return {diag, sub};
+}
+
 static double entanglement_entropy(const std::vector<cx>& psi, int N, int d) {
   int dimA = 1, dimB = 1;
   for (int i = 0; i < N / 2; ++i)     dimA *= d;
@@ -705,29 +772,28 @@ static double entanglement_entropy(const std::vector<cx>& psi, int N, int d) {
 
   if (dimA > 400) return -1.0;
 
-  // Build M^T M  (dim_A × dim_A real, since psi can be complex)
+  // Build M†M  (dimA × dimA complex Hermitian)
   // M[a, b] = psi[a * dimB + b]
-  // (M†M)[a1, a2] = sum_b conj(M[a1,b]) * M[a2,b] = sum_b conj(psi[a1*dimB+b]) * psi[a2*dimB+b]
-  std::vector<double> MtM(static_cast<std::size_t>(dimA) * dimA, 0.0);
+  // (M†M)[a1, a2] = sum_b conj(psi[a1*dimB+b]) * psi[a2*dimB+b]
+  std::vector<cx> MtM(static_cast<std::size_t>(dimA) * dimA, cx{0.0, 0.0});
   for (int a1 = 0; a1 < dimA; ++a1)
     for (int a2 = a1; a2 < dimA; ++a2) {
-      double re = 0.0;
+      cx val{0.0, 0.0};
       for (int b = 0; b < dimB; ++b) {
         cx p1 = psi[static_cast<std::size_t>(a1) * dimB + b];
         cx p2 = psi[static_cast<std::size_t>(a2) * dimB + b];
-        // conj(p1) * p2
-        re += p1.real() * p2.real() + p1.imag() * p2.imag();
+        val += std::conj(p1) * p2;
       }
-      MtM[static_cast<std::size_t>(a1) + static_cast<std::size_t>(a2) * dimA] = re;
-      MtM[static_cast<std::size_t>(a2) + static_cast<std::size_t>(a1) * dimA] = re;
+      MtM[static_cast<std::size_t>(a1) + static_cast<std::size_t>(a2) * dimA] = val;
+      MtM[static_cast<std::size_t>(a2) + static_cast<std::size_t>(a1) * dimA] = std::conj(val);
     }
 
   if (dimA == 1) {
-    double p = MtM[0];
+    double p = MtM[0].real();
     return (p > 1e-14) ? -p * std::log(p) : 0.0;
   }
 
-  auto [diag, sub] = householder_tridiag_real(MtM, dimA);
+  auto [diag, sub] = householder_tridiag_herm(MtM, dimA);
   auto [evals, _evecs] = tridiag_eig(diag, sub);
 
   // Compute trace (norm²) for normalisation
