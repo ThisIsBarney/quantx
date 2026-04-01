@@ -18,8 +18,19 @@
 #include <utility>
 #include <vector>
 
+#ifndef M_PI
+#  define M_PI 3.141592653589793238462643383279502884
+#endif
+
 namespace qx {
 namespace {
+
+// Portable popcount (replaces __builtin_popcount which is unavailable on MSVC).
+static int popcount_bits(unsigned v) {
+  v = v - ((v >> 1) & 0x55555555u);
+  v = (v & 0x33333333u) + ((v >> 2) & 0x33333333u);
+  return static_cast<int>(((v + (v >> 4)) & 0x0f0f0f0fu) * 0x01010101u >> 24);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // A.  Basis enumeration
@@ -47,7 +58,7 @@ static int jw_sign(int state, int i, int j) {
   int lo = std::min(i, j), hi = std::max(i, j);
   if (hi - lo <= 1) return 1;  // nearest-neighbour: no intermediate sites
   int mask = ((1 << hi) - 1) ^ ((1 << (lo + 1)) - 1);
-  return (__builtin_popcount(static_cast<unsigned>(state & mask)) % 2 == 0) ? 1 : -1;
+  return (popcount_bits(static_cast<unsigned>(state & mask)) % 2 == 0) ? 1 : -1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,7 +135,7 @@ static HCsr build_hubbard_csr(int n_sites, double t_hop, double U,
       int idx = iu * n_dn + id;
 
       // Diagonal: U * double occupancy
-      int docc = __builtin_popcount(static_cast<unsigned>(us & ds));
+      int docc = popcount_bits(static_cast<unsigned>(us & ds));
       if (docc) coo.push_back({idx, idx, U * docc});
 
       // Hopping in spin-up sector: c†_{site+1} c_{site}
@@ -336,7 +347,7 @@ static HubbardObs compute_obs(int n_sites,
       int ds = dn_st[id];
       int idx = iu * n_dn + id;
       double p = psi[idx] * psi[idx];
-      docc += p * __builtin_popcount(static_cast<unsigned>(us & ds));
+      docc += p * popcount_bits(static_cast<unsigned>(us & ds));
       // spin correlations
       double sz0 = 0.5 * (((us >> 0) & 1) - ((ds >> 0) & 1));
       for (int r = 0; r < n_sites; ++r) {
@@ -452,6 +463,10 @@ HubbardResult run_hubbard(const HubbardOptions& opts) {
 
     int n_up = static_cast<int>(opts.n_up > 0 ? opts.n_up : opts.n_sites / 2);
     int n_dn = static_cast<int>(opts.n_dn > 0 ? opts.n_dn : opts.n_sites / 2);
+    if (n_up < 0 || n_up > N)
+      throw std::runtime_error("n_up must be in [0, n_sites]");
+    if (n_dn < 0 || n_dn > N)
+      throw std::runtime_error("n_dn must be in [0, n_sites]");
 
     auto up_st = enum_states(N, n_up);
     auto dn_st = enum_states(N, n_dn);

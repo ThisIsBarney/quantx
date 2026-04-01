@@ -449,6 +449,8 @@ FloquetResult run_floquet(const FloquetOptions& opts) {
     int N = static_cast<int>(opts.n_sites);
     if (N < 2 || N > 12)
       throw std::runtime_error("n_sites must be in [2, 12]");
+    if (opts.drive_omega <= 0.0)
+      throw std::runtime_error("drive_omega must be positive");
 
     int dim = 1 << N;
     double T     = 2.0 * PI / opts.drive_omega;

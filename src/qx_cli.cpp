@@ -115,8 +115,10 @@ int main(int argc, char** argv) {
     }
 
     if (problem_path.empty() && circuit_path.empty() && vqe_path.empty() &&
-        qpe_path.empty() && qec_path.empty() && qfield_path.empty() && phi4_path.empty()) {
-      throw std::runtime_error("missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, or --phi4");
+        qpe_path.empty() && qec_path.empty() && qfield_path.empty() &&
+        phi4_path.empty() && hubbard_path.empty() && floquet_path.empty()) {
+      throw std::runtime_error(
+          "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, or --floquet");
     }
     {
       int modes = (!problem_path.empty()  ? 1 : 0) +
@@ -125,9 +127,12 @@ int main(int argc, char** argv) {
                   (!qpe_path.empty()      ? 1 : 0) +
                   (!qec_path.empty()      ? 1 : 0) +
                   (!qfield_path.empty()   ? 1 : 0) +
-                  (!phi4_path.empty()     ? 1 : 0);
+                  (!phi4_path.empty()     ? 1 : 0) +
+                  (!hubbard_path.empty()  ? 1 : 0) +
+                  (!floquet_path.empty()  ? 1 : 0);
       if (modes > 1) {
-        throw std::runtime_error("use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, or --phi4");
+        throw std::runtime_error(
+            "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, or --floquet");
       }
     }
 
