@@ -172,16 +172,23 @@ Render from a pre-exported continuous frame JSON:
 python .\scripts\visualize_simulation.py --scenario spatial3d --continuous-export-json out/visualizations/quantum_spatial3d_wavepacket_barrier_periodic.json
 ```
 
-Generated files:
+Generated files (selection):
 
+- `out/visualizations/quantum_dashboard.html` — unified single-page dashboard (all 31 scenarios)
 - `out/visualizations/rabi_population.html`
 - `out/visualizations/mps_diagnostics.html`
 - `out/visualizations/quantum_spatial_wavepacket_barrier.html`
 - `out/visualizations/quantum_spatial3d_wavepacket_barrier_periodic.html`
+- `out/visualizations/quantum_phi4_dynamics.html`
+- `out/visualizations/quantum_schwinger_dynamics.html`
+- `out/visualizations/quantum_hubbard.html` — Hubbard Mott insulator (M27)
+- `out/visualizations/quantum_floquet.html` — Floquet kicked-Ising (M27)
 
 Each page includes animation controls (`Play`, `Pause`, timeline slider).
 `quantum_spatial_wavepacket_barrier.html` shows a 1D spatial wavepacket evolution (`|psi(x,t)|^2`) solved by finite difference + Crank-Nicolson, with phase color, potential profile, and sampled position cloud.
 `quantum_spatial3d_wavepacket_barrier_periodic.html` shows 3D evolution solved by split-step Fourier and can be explored in a true WebGL world view via the standalone player.
+`quantum_hubbard.html` shows spin correlations, momentum distribution, and Mott-transition sweep charts.
+`quantum_floquet.html` shows stroboscopic ⟨m_z⟩/entropy/energy dynamics, level-spacing histogram with Poisson/GUE reference lines, and ergodic/MBL phase badge.
 
 Generate a focused 3D page with selectable boundary condition:
 
@@ -535,6 +542,139 @@ Use `quantx.dll` in `build-vs/Debug`.
   }
 }
 ```
+
+## 3b) Lattice physics modes (CLI)
+
+### 1D Hubbard model (`--hubbard`)
+
+Ground state and Mott-insulator characterization for the 1D Hubbard chain:
+
+```powershell
+# Single-point ground state at U/t = 4
+.\build-vs\Debug\qx_cli.exe --hubbard .\examples\hubbard_ground_state.json
+
+# U/t sweep (Mott transition)
+.\build-vs\Debug\qx_cli.exe --hubbard .\examples\hubbard_sweep.json
+```
+
+Example `hubbard_ground_state.json`:
+
+```json
+{
+  "n_sites": 6,
+  "t_hop": 1.0,
+  "U": 4.0,
+  "scenario": "ground_state"
+}
+```
+
+Example `hubbard_sweep.json`:
+
+```json
+{
+  "n_sites": 6,
+  "t_hop": 1.0,
+  "U": 4.0,
+  "scenario": "sweep",
+  "n_sweep": 20,
+  "U_min": 0.0,
+  "U_max": 12.0
+}
+```
+
+Key result fields:
+
+- `ground_energy`: E₀
+- `energy_gap`: Δ = E₁ − E₀
+- `double_occupancy`: D = ⟨Σ n_{i↑}n_{i↓}⟩/N (→ 0 in Mott insulator)
+- `spin_structure_pi`: S(k=π) antiferromagnetic structure factor
+- `spin_corr`: ⟨S⁰ᶻSʳᶻ⟩ for r = 0…N−1
+- `momentum_dist`: n(k) for k = 0…N−1
+- `sweep`: array of `{ U, ground_energy, energy_gap, double_occupancy, spin_structure_pi }`
+
+Limits: `n_sites` ∈ [2, 14]; `n_up/n_dn` ∈ [0, n_sites] (default: half-filling).
+
+### Floquet kicked-Ising model (`--floquet`)
+
+Stroboscopic dynamics and quasi-energy spectrum for the periodically driven Ising chain:
+
+```powershell
+# Stroboscopic dynamics
+.\build-vs\Debug\qx_cli.exe --floquet .\examples\floquet_dynamics.json
+
+# Quasi-energy spectrum scan
+.\build-vs\Debug\qx_cli.exe --floquet .\examples\floquet_spectrum.json
+```
+
+Example `floquet_dynamics.json`:
+
+```json
+{
+  "n_sites": 8,
+  "J": 1.0,
+  "h_z": 0.809,
+  "drive_amp": 1.5,
+  "drive_omega": 4.5,
+  "n_periods": 40,
+  "scenario": "dynamics"
+}
+```
+
+Example `floquet_spectrum.json`:
+
+```json
+{
+  "n_sites": 6,
+  "J": 1.0,
+  "h_z": 0.809,
+  "drive_amp": 1.5,
+  "drive_omega": 4.5,
+  "scenario": "spectrum",
+  "n_scan": 20,
+  "scan_amp_max": 3.0
+}
+```
+
+Key result fields:
+
+- `frames`: stroboscopic snapshots `{ period, time, magnetization_z, energy, entropy }`
+- `quasi_energies`: sorted quasi-energies θ_j ∈ [−π/T, π/T)
+- `mean_gap_ratio`: level-spacing ratio r (Poisson ≈ 0.39 → MBL/integrable; GUE ≈ 0.60 → ergodic/chaotic)
+- `scan_amps` / `scan_qe`: amplitude scan arrays for spectrum scenario
+
+Limits: `n_sites` ∈ [2, 12]; `drive_omega` must be > 0; full diagonalization only when dim ≤ 4096 (N ≤ 12).
+
+### Visualization: Hubbard and Floquet pages
+
+```powershell
+# Hubbard page (4-panel: spin correlations, n(k), D vs U/t, S(π) vs U/t)
+python .\scripts\visualize_simulation.py --scenario hubbard --hubbard-sites 6 --hubbard-U 4.0
+
+# Floquet page (4-panel: ⟨m_z⟩, entropy, energy, level-spacing histogram)
+python .\scripts\visualize_simulation.py --scenario floquet --floquet-sites 8 --floquet-amp 1.5
+
+# Both included in --scenario all dashboard
+python .\scripts\visualize_simulation.py --scenario all
+```
+
+Additional Hubbard knobs:
+
+- `--hubbard-sites N` (2–12, default 6)
+- `--hubbard-t FLOAT` hopping amplitude (default 1.0)
+- `--hubbard-U FLOAT` on-site repulsion (default 4.0)
+- `--hubbard-n-up / --hubbard-n-dn` electron numbers (default: half-filling)
+- `--hubbard-sweep-points N` points in U/t sweep (default 20)
+- `--hubbard-U-max FLOAT` (default 12.0)
+
+Additional Floquet knobs:
+
+- `--floquet-sites N` (2–8, default 8)
+- `--floquet-J FLOAT` Ising coupling (default 1.0)
+- `--floquet-hz FLOAT` longitudinal field (default 0.809)
+- `--floquet-amp FLOAT` kick amplitude h_x (default 1.5)
+- `--floquet-omega FLOAT` drive frequency ω (default 4.5)
+- `--floquet-periods N` stroboscopic steps (default 40)
+- `--floquet-scenario dynamics|spectrum`
 
 ## 4) Problem JSON fields (core)
 

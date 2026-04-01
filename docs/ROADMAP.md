@@ -66,6 +66,34 @@ Release execution policy:
 - generate visualization artifacts with `.\scripts\run_visualization.ps1`
 - re-check `docs/DEPENDENCIES.md` before adding new third-party packages
 
+## Completed milestones (post-v1 physics track)
+
+### M20: Lindblad open quantum systems
+- Lindblad master equation solver; amplitude damping, dephasing, depolarizing, Rabi decay scenarios; von Neumann entropy and purity tracking.
+
+### M21: Wigner quasi-probability and quantum transport
+- Wigner function W(x,p) via spectral method; probability current density J; transmission/reflection coefficients; animated Wigner heatmaps.
+
+### M22: Bipartite entanglement analysis
+- Schmidt decomposition; von Neumann entropy S(ρ_A); mutual information; concurrence (2-qubit); logarithmic negativity; animated per-bond bond dimension charts.
+
+### M23: Schwinger model (1+1D QED)
+- Staggered-fermion lattice QED; chiral condensate; string tension; pair-creation dynamics; mass sweep.
+
+### M24: φ⁴ Scalar QFT
+- Truncated Fock basis; Z₂ symmetry breaking; phase-transition sweep; quantum quench dynamics.
+- CSR sparse Hamiltonian + full-reorthogonalization Lanczos eigensolver; Arnoldi-Krylov time propagator.
+
+### M25: Unified single-page dashboard
+- All 30 scenarios aggregated in one `quantum_dashboard.html`; dark sidebar; search/keyboard nav; iframe srcdoc switching.
+
+### M26: φ⁴ quantum quench dynamics + Lanczos
+- Real-time quench dynamics (order parameter, bipartite entropy, per-site observables); stroboscopic heatmaps.
+
+### M27: 1D Hubbard model + Floquet kicked-Ising
+- **Hubbard**: fixed-(N↑,N↓) Fock basis; Jordan-Wigner CSR; Lanczos; double occupancy D, spin structure factor S(π), momentum distribution n(k); U/t Mott-insulator sweep.
+- **Floquet**: stroboscopic Néel dynamics; exact diagonal H₀; single-qubit X kicks; Hessenberg QR quasi-energy spectrum; mean gap ratio r (Poisson/GUE); ergodic/MBL phase badge.
+
 ## Next milestones (post-v1, quantum-computing backend track)
 
 ## M6: Circuit IR and gate execution

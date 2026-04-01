@@ -62,6 +62,20 @@ If the probe fails, fix the toolchain path first; this probe only validates disc
 - `docs/USAGE.md` quick usage cookbook (CLI/Python/C ABI)
 - `docs/ML_LLM_INTEGRATION.md` P2 ML/LLM roadmap and guardrails
 
+## Simulation Modes
+
+| CLI flag | Model | Scenario |
+|---|---|---|
+| `--problem` | Generic Hamiltonian (statevector / MPS / continuous) | Rabi, Ising, wavepacket, … |
+| `--circuit` | Gate-model circuit | Bell, QFT, noisy gates |
+| `--vqe` | VQE / QAOA variational optimizer | Ising energy, MaxCut |
+| `--qpe` | Quantum Phase Estimation | Phase readout, Hamiltonian spectrum |
+| `--qec` | QEC Monte Carlo | Bit-flip, phase-flip, Shor code |
+| `--qfield` | Schwinger model (1+1D QED) | Vacuum, string tension, pair creation |
+| `--phi4` | φ⁴ scalar QFT | Symmetric/broken phase, phase-transition sweep, quantum quench |
+| `--hubbard` | 1D Hubbard model | Half-filling ground state, Mott-insulator U/t sweep |
+| `--floquet` | Floquet kicked-Ising | Stroboscopic dynamics, quasi-energy spectrum, ergodic/MBL phase |
+
 ## Notes
 
 - Statevector supports Trotter and Arnoldi-Krylov evolution (configurable `krylov_dim`) with one-body and two-body Pauli-string terms.
