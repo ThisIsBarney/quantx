@@ -1036,5 +1036,109 @@ std::string phi4_result_to_json(const Phi4Result& result) {
   return j.dump();
 }
 
+// ── M27-C: Hubbard model ─────────────────────────────────────────────────────
+
+HubbardOptions hubbard_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  HubbardOptions o;
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<std::uint32_t>();
+  if (j.contains("t_hop"))    o.t_hop    = j["t_hop"].get<double>();
+  if (j.contains("U"))        o.U        = j["U"].get<double>();
+  if (j.contains("n_up"))     o.n_up     = j["n_up"].get<std::uint32_t>();
+  if (j.contains("n_dn"))     o.n_dn     = j["n_dn"].get<std::uint32_t>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))  o.n_sweep  = j["n_sweep"].get<std::uint32_t>();
+  if (j.contains("U_min"))    o.U_min    = j["U_min"].get<double>();
+  if (j.contains("U_max"))    o.U_max    = j["U_max"].get<double>();
+  return o;
+}
+
+std::string hubbard_result_to_json(const HubbardResult& r) {
+  json j;
+  j["ok"]                 = r.ok;
+  j["n_sites"]            = r.n_sites;
+  j["n_up"]               = r.n_up;
+  j["n_dn"]               = r.n_dn;
+  j["t_hop"]              = r.t_hop;
+  j["U"]                  = r.U;
+  j["ground_energy"]      = r.ground_energy;
+  j["energy_gap"]         = r.energy_gap;
+  j["double_occupancy"]   = r.double_occupancy;
+  j["spin_structure_pi"]  = r.spin_structure_pi;
+  j["spin_corr"]          = r.spin_corr;
+  j["momentum_dist"]      = r.momentum_dist;
+  j["elapsed_ms"]         = r.elapsed_ms;
+  j["message"]            = r.message;
+  j["engine_version"]     = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json p;
+    p["U"]                 = pt.U;
+    p["ground_energy"]     = pt.ground_energy;
+    p["double_occupancy"]  = pt.double_occupancy;
+    p["spin_structure_pi"] = pt.spin_structure_pi;
+    p["energy_gap"]        = pt.energy_gap;
+    sw.push_back(p);
+  }
+  j["sweep"] = sw;
+  return j.dump();
+}
+
+// ── M27-D: Floquet model ──────────────────────────────────────────────────────
+
+FloquetOptions floquet_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  FloquetOptions o;
+  if (j.contains("n_sites"))     o.n_sites     = j["n_sites"].get<std::uint32_t>();
+  if (j.contains("J"))           o.J           = j["J"].get<double>();
+  if (j.contains("h_z"))         o.h_z         = j["h_z"].get<double>();
+  if (j.contains("drive_amp"))   o.drive_amp   = j["drive_amp"].get<double>();
+  if (j.contains("drive_omega")) o.drive_omega = j["drive_omega"].get<double>();
+  if (j.contains("n_periods"))   o.n_periods   = j["n_periods"].get<std::uint32_t>();
+  if (j.contains("scenario"))    o.scenario    = j["scenario"].get<std::string>();
+  if (j.contains("n_scan"))      o.n_scan      = j["n_scan"].get<std::uint32_t>();
+  if (j.contains("scan_amp_max")) o.scan_amp_max = j["scan_amp_max"].get<double>();
+  return o;
+}
+
+std::string floquet_result_to_json(const FloquetResult& r) {
+  json j;
+  j["ok"]             = r.ok;
+  j["n_sites"]        = r.n_sites;
+  j["J"]              = r.J;
+  j["h_z"]            = r.h_z;
+  j["drive_amp"]      = r.drive_amp;
+  j["drive_omega"]    = r.drive_omega;
+  j["quasi_energies"] = r.quasi_energies;
+  j["mean_gap_ratio"] = r.mean_gap_ratio;
+  j["elapsed_ms"]     = r.elapsed_ms;
+  j["message"]        = r.message;
+  j["engine_version"] = version_string();
+
+  json fr = json::array();
+  for (const auto& f : r.frames) {
+    json fj;
+    fj["period"]         = f.period;
+    fj["time"]           = f.time;
+    fj["magnetization_z"] = f.magnetization_z;
+    fj["energy"]         = f.energy;
+    fj["entropy"]        = f.entropy;
+    fr.push_back(fj);
+  }
+  j["frames"] = fr;
+
+  json sa = json::array();
+  json sq = json::array();
+  for (std::size_t i = 0; i < r.scan_amps.size(); ++i) {
+    sa.push_back(r.scan_amps[i]);
+    sq.push_back(r.scan_qe[i]);
+  }
+  j["scan_amps"] = sa;
+  j["scan_qe"]   = sq;
+
+  return j.dump();
+}
+
 }  // namespace qx
 

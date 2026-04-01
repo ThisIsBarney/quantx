@@ -6868,6 +6868,8 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("phi4_sweep",         "φ⁴ 相变扫描"),
           ("phi4_dynamics",      "φ⁴ 量子淬火动力学"),
           ("schwinger_vacuum",   "Schwinger 真空"),
+          ("hubbard",            "Hubbard Mott 绝缘体"),
+          ("floquet",            "Floquet 周期驱动"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -7160,6 +7162,654 @@ switchTo({first_json});
 </html>"""
 
 
+# ── M27-C: 1D Hubbard Model ───────────────────────────────────────────────────
+
+def _hubbard_frames(
+    n_sites: int = 6,
+    t_hop: float = 1.0,
+    U: float = 4.0,
+    n_up: int = 0,
+    n_dn: int = 0,
+    scenario: str = "sweep",
+    n_sweep: int = 20,
+    U_min: float = 0.0,
+    U_max: float = 12.0,
+) -> dict:
+  """Compute 1D Hubbard model via exact diagonalization (NumPy reference)."""
+  import numpy as np
+  from itertools import combinations
+
+  N = n_sites
+  if n_up == 0: n_up = N // 2
+  if n_dn == 0: n_dn = N // 2
+
+  def enum_states(n_bits, n_ones):
+    return [sum(1 << b for b in combo) for combo in combinations(range(n_bits), n_ones)]
+
+  def jw_sign(state, i, j):
+    lo, hi = min(i, j), max(i, j)
+    if hi - lo <= 1: return 1
+    bits_between = sum(1 for b in range(lo + 1, hi) if (state >> b) & 1)
+    return (-1) ** bits_between
+
+  def build_H(U_val):
+    up_st = enum_states(N, n_up)
+    dn_st = enum_states(N, n_dn)
+    up_map = {s: i for i, s in enumerate(up_st)}
+    dn_map = {s: i for i, s in enumerate(dn_st)}
+    dim = len(up_st) * len(dn_st)
+    H = np.zeros((dim, dim), dtype=float)
+    for iu, us in enumerate(up_st):
+      for id_, ds in enumerate(dn_st):
+        idx = iu * len(dn_st) + id_
+        # diagonal: U * double-occupancy
+        docc = bin(us & ds).count('1')
+        if docc: H[idx, idx] += U_val * docc
+        # spin-up hopping
+        for site in range(N - 1):
+          b0, b1 = 1 << site, 1 << (site + 1)
+          if (us & b0) and not (us & b1):
+            us2 = (us ^ b0) | b1
+            if us2 in up_map:
+              iu2 = up_map[us2]; idx2 = iu2 * len(dn_st) + id_
+              sg = jw_sign(us, site, site + 1)
+              H[idx2, idx] -= t_hop * sg
+              H[idx, idx2] -= t_hop * sg
+        # spin-down hopping
+        for site in range(N - 1):
+          b0, b1 = 1 << site, 1 << (site + 1)
+          if (ds & b0) and not (ds & b1):
+            ds2 = (ds ^ b0) | b1
+            if ds2 in dn_map:
+              id2 = dn_map[ds2]; idx2 = iu * len(dn_st) + id2
+              sg = jw_sign(ds, site, site + 1)
+              H[idx2, idx] -= t_hop * sg
+              H[idx, idx2] -= t_hop * sg
+    return H, up_st, dn_st, up_map, dn_map
+
+  def compute_obs(psi, up_st, dn_st, up_map, dn_map):
+    n_dn_loc = len(dn_st)
+    docc = 0.0
+    sz_corr = np.zeros(N)
+    rho = np.zeros((N, N), dtype=float)
+    for iu, us in enumerate(up_st):
+      for id_, ds in enumerate(dn_st):
+        idx = iu * n_dn_loc + id_
+        p = psi[idx] ** 2
+        docc += p * bin(us & ds).count('1')
+        sz0 = 0.5 * (((us >> 0) & 1) - ((ds >> 0) & 1))
+        for r in range(N):
+          szr = 0.5 * (((us >> r) & 1) - ((ds >> r) & 1))
+          sz_corr[r] += p * sz0 * szr
+        # one-body density matrix (diagonal part)
+        for s in range(N):
+          if (us >> s) & 1: rho[s, s] += p
+          if (ds >> s) & 1: rho[s, s] += p
+    # off-diagonal rho (spin-up)
+    for iu, us in enumerate(up_st):
+      for id_, ds in enumerate(dn_st):
+        idx = iu * n_dn_loc + id_
+        pv = psi[idx]
+        for s in range(N):
+          if not (us >> s) & 1: continue
+          for r in range(N):
+            if r == s or (us >> r) & 1: continue
+            us2 = (us & ~(1 << s)) | (1 << r)
+            if us2 in up_map:
+              idx2 = up_map[us2] * n_dn_loc + id_
+              sg = jw_sign(us, s, r)
+              rho[r, s] += psi[idx2] * pv * sg
+    # off-diagonal rho (spin-down)
+    for iu, us in enumerate(up_st):
+      for id_, ds in enumerate(dn_st):
+        idx = iu * n_dn_loc + id_
+        pv = psi[idx]
+        for s in range(N):
+          if not (ds >> s) & 1: continue
+          for r in range(N):
+            if r == s or (ds >> r) & 1: continue
+            ds2 = (ds & ~(1 << s)) | (1 << r)
+            if ds2 in dn_map:
+              idx2 = iu * n_dn_loc + dn_map[ds2]
+              sg = jw_sign(ds, s, r)
+              rho[r, s] += psi[idx2] * pv * sg
+    n_k = np.array([
+        sum(np.cos(2 * np.pi * m * (r - s) / N) * rho[r, s]
+            for r in range(N) for s in range(N)) / N
+        for m in range(N)
+    ])
+    s_pi = sum(((-1) ** r) * sz_corr[r] for r in range(N)) / N
+    return {
+        "double_occupancy": float(docc / N),
+        "spin_structure_pi": float(s_pi),
+        "spin_corr": sz_corr.tolist(),
+        "momentum_dist": n_k.tolist(),
+    }
+
+  def solve_one(U_val):
+    H, up_st, dn_st, up_map, dn_map = build_H(U_val)
+    evals, evecs = np.linalg.eigh(H)
+    psi0 = evecs[:, 0]
+    E0 = float(evals[0])
+    E1 = float(evals[1]) if len(evals) > 1 else E0
+    obs = compute_obs(psi0, up_st, dn_st, up_map, dn_map)
+    return E0, E1, obs
+
+  sweep_pts = []
+  if scenario == "sweep":
+    for i in range(n_sweep):
+      U_val = U_min + (U_max - U_min) * i / max(n_sweep - 1, 1)
+      E0, E1, obs = solve_one(U_val)
+      sweep_pts.append({
+          "U": float(U_val),
+          "ground_energy": E0,
+          "energy_gap": E1 - E0,
+          "double_occupancy": obs["double_occupancy"],
+          "spin_structure_pi": obs["spin_structure_pi"],
+      })
+
+  E0, E1, obs = solve_one(U)
+  return {
+      "n_sites": N,
+      "n_up": n_up,
+      "n_dn": n_dn,
+      "t_hop": t_hop,
+      "U": U,
+      "ground_energy": E0,
+      "energy_gap": E1 - E0,
+      "double_occupancy": obs["double_occupancy"],
+      "spin_structure_pi": obs["spin_structure_pi"],
+      "spin_corr": obs["spin_corr"],
+      "momentum_dist": obs["momentum_dist"],
+      "sweep": sweep_pts,
+      "scenario": scenario,
+  }
+
+
+def _hubbard_page(data: dict, title: str = "1D Hubbard Model") -> str:
+  """Generate self-contained HTML for the 1D Hubbard model."""
+  import json as json_mod
+  data_json = json_mod.dumps(data)
+  N = data.get("n_sites", 6)
+
+  return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h2{{font-size:1.2rem;font-weight:600;color:#58a6ff;margin-bottom:12px}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:960px;margin:0 auto}}
+.card{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+canvas{{display:block;width:100%;height:240px}}
+.info{{font-size:0.82rem;color:#8b949e;margin-top:8px}}
+.param{{display:flex;gap:24px;flex-wrap:wrap;font-size:0.85rem;color:#8b949e;margin-bottom:16px;max-width:960px;margin-left:auto;margin-right:auto}}
+.param span{{color:#58a6ff;font-weight:600}}
+</style>
+</head>
+<body>
+<h1 style="font-size:1.4rem;color:#58a6ff;margin-bottom:12px">{title}</h1>
+<div class="param">
+  <div>N = <span id="pN"></span> sites</div>
+  <div>N↑ = <span id="pNup"></span>, N↓ = <span id="pNdn"></span></div>
+  <div>t = <span id="pt"></span></div>
+  <div>U/t = <span id="pUt"></span></div>
+  <div>E₀ = <span id="pE0"></span></div>
+  <div>Δ = <span id="pGap"></span></div>
+  <div>D = <span id="pDocc"></span></div>
+  <div>S(π) = <span id="pSpi"></span></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>Spin Correlation ⟨S⁰ᶻ Sʳᶻ⟩</h2><canvas id="cSpinCorr"></canvas>
+    <div class="info">Antiferromagnetic: alternating sign pattern at large U/t</div></div>
+  <div class="card"><h2>Momentum Distribution n(k)</h2><canvas id="cMomDist"></canvas>
+    <div class="info">Fermi step discontinuity at k_F for non-interacting; smeared at large U</div></div>
+  <div class="card"><h2>Double Occupancy vs U/t</h2><canvas id="cDocc"></canvas>
+    <div class="info">D → 0 as U/t → ∞ (Mott insulator)</div></div>
+  <div class="card"><h2>S(π) Spin Structure Factor vs U/t</h2><canvas id="cSpi"></canvas>
+    <div class="info">Antiferromagnetic order grows with U/t</div></div>
+</div>
+<script>
+const DATA = {data_json};
+
+// Populate params
+document.getElementById("pN").textContent    = DATA.n_sites;
+document.getElementById("pNup").textContent  = DATA.n_up;
+document.getElementById("pNdn").textContent  = DATA.n_dn;
+document.getElementById("pt").textContent    = DATA.t_hop.toFixed(2);
+document.getElementById("pUt").textContent   = (DATA.U / DATA.t_hop).toFixed(2);
+document.getElementById("pE0").textContent   = DATA.ground_energy.toFixed(4);
+document.getElementById("pGap").textContent  = DATA.energy_gap.toFixed(4);
+document.getElementById("pDocc").textContent = DATA.double_occupancy.toFixed(4);
+document.getElementById("pSpi").textContent  = DATA.spin_structure_pi.toFixed(4);
+
+function barChart(canvasId, labels, values, colorFn, yLabel) {{
+  var cv = document.getElementById(canvasId);
+  var w = cv.offsetWidth || 400; var h = cv.offsetHeight || 240;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = 40;
+  var bw = Math.max(1, (w - 2*pad) / values.length - 2);
+  var vmax = Math.max(...values.map(Math.abs)) * 1.2 || 1;
+  var vmin = Math.min(0, ...values) * 1.2;
+  var range = vmax - vmin;
+  var zero_y = h - pad - (-vmin / range) * (h - 2*pad);
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad, zero_y); ctx.lineTo(w-pad, zero_y);
+  ctx.strokeStyle = "#444c56"; ctx.stroke();
+  for (var i = 0; i < values.length; i++) {{
+    var x = pad + i * ((w - 2*pad) / values.length) + 1;
+    var bh = Math.abs(values[i]) / range * (h - 2*pad);
+    var y = values[i] >= 0 ? zero_y - bh : zero_y;
+    ctx.fillStyle = colorFn(i, values[i]);
+    ctx.fillRect(x, y, bw, bh);
+    if (labels && labels[i] !== undefined) {{
+      ctx.fillStyle = "#8b949e"; ctx.font = "10px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(labels[i], x + bw/2, h - pad + 12);
+    }}
+  }}
+  if (yLabel) {{
+    ctx.fillStyle = "#8b949e"; ctx.font = "11px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(yLabel, 4, 14);
+  }}
+}}
+
+// Spin correlation
+var scLabels = DATA.spin_corr.map(function(_, i) {{ return "r=" + i; }});
+barChart("cSpinCorr", scLabels, DATA.spin_corr,
+  function(i, v) {{ return v >= 0 ? "#388bfd" : "#f47067"; }}, "⟨S⁰ᶻSʳᶻ⟩");
+
+// Momentum distribution
+var N = DATA.n_sites;
+var kLabels = DATA.momentum_dist.map(function(_, m) {{ return (m <= N/2) ? m : m-N; }});
+barChart("cMomDist", kLabels.map(function(k) {{ return "k=" + k; }}), DATA.momentum_dist,
+  function() {{ return "#57ab5a"; }}, "n(k)");
+
+// Sweep charts
+if (DATA.sweep && DATA.sweep.length > 0) {{
+  var sweepU   = DATA.sweep.map(function(p) {{ return p.U / DATA.t_hop; }});
+  var sweepD   = DATA.sweep.map(function(p) {{ return p.double_occupancy; }});
+  var sweepSpi = DATA.sweep.map(function(p) {{ return p.spin_structure_pi; }});
+
+  function lineChart(canvasId, xs, ys, color, yLabel) {{
+    var cv = document.getElementById(canvasId);
+    var w = cv.offsetWidth || 400; var h = cv.offsetHeight || 240;
+    cv.width = w; cv.height = h;
+    var ctx = cv.getContext("2d");
+    var pad = 44;
+    var xmin = Math.min(...xs), xmax = Math.max(...xs);
+    var ymin = Math.min(0, ...ys), ymax = Math.max(...ys) * 1.1 || 1;
+    var xr = xmax - xmin || 1; var yr = ymax - ymin || 1;
+    function px(x) {{ return pad + (x - xmin)/xr * (w - 2*pad); }}
+    function py(y) {{ return h - pad - (y - ymin)/yr * (h - 2*pad); }}
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+    // axes
+    ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, h-pad);
+    ctx.lineTo(w-pad, h-pad); ctx.stroke();
+    // grid
+    for (var yi = 0; yi <= 4; yi++) {{
+      var gy = py(ymin + yr * yi/4);
+      ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(w-pad, gy);
+      ctx.strokeStyle = "#21262d"; ctx.stroke();
+      ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "right";
+      ctx.fillText((ymin + yr * yi/4).toFixed(2), pad - 3, gy + 3);
+    }}
+    // line
+    ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+    for (var i = 0; i < xs.length; i++) {{
+      i === 0 ? ctx.moveTo(px(xs[i]), py(ys[i])) : ctx.lineTo(px(xs[i]), py(ys[i]));
+    }}
+    ctx.stroke();
+    // x ticks
+    for (var xi = 0; xi <= 4; xi++) {{
+      var gx = px(xmin + xr * xi/4);
+      ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+      ctx.fillText((xmin + xr * xi/4).toFixed(1), gx, h - pad + 12);
+    }}
+    ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(yLabel, 4, 14);
+    ctx.fillText("U/t", w/2, h - 4);
+  }}
+
+  lineChart("cDocc", sweepU, sweepD, "#e3b341", "Double Occupancy D");
+  lineChart("cSpi", sweepU, sweepSpi, "#f47067", "S(π)");
+}}
+</script>
+</body>
+</html>"""
+
+
+# ── M27-D: Floquet Kicked-Ising ───────────────────────────────────────────────
+
+def _floquet_frames(
+    n_sites: int = 8,
+    J: float = 1.0,
+    h_z: float = 0.809,
+    drive_amp: float = 1.5,
+    drive_omega: float = 4.5,
+    n_periods: int = 40,
+    scenario: str = "dynamics",
+    n_scan: int = 20,
+    scan_amp_max: float = 3.0,
+) -> dict:
+  """Compute Floquet kicked-Ising dynamics (NumPy reference)."""
+  import numpy as np
+
+  N = n_sites
+  dim = 2 ** N
+  PI = np.pi
+  T = 2.0 * PI / drive_omega
+  halfT = T / 2.0
+
+  # Build H₀ diagonal (Z basis)
+  h0_diag = np.zeros(dim)
+  for s in range(dim):
+    e = 0.0
+    for i in range(N - 1):
+      zi = 1 if (s >> i) & 1 else -1
+      zj = 1 if (s >> (i+1)) & 1 else -1
+      e -= J * zi * zj
+    for i in range(N):
+      zi = 1 if (s >> i) & 1 else -1
+      e -= h_z * zi
+    h0_diag[s] = e
+
+  def apply_exp_h0(psi, tau):
+    return psi * np.exp(-1j * tau * h0_diag)
+
+  def apply_kick(psi, hx):
+    c = np.cos(hx); ms = -1j * np.sin(hx)
+    out = psi.copy()
+    for i in range(N):
+      bit = 1 << i
+      # Pair each |s⟩ with |s ^ bit⟩
+      s_arr = np.arange(dim)
+      mask = (s_arr & bit) == 0
+      lo = s_arr[mask]; hi = lo | bit
+      a, b = out[lo].copy(), out[hi].copy()
+      out[lo] = c * a + ms * b
+      out[hi] = ms * a + c * b
+    return out
+
+  def apply_period(psi):
+    psi = apply_exp_h0(psi, halfT)
+    psi = apply_kick(psi, drive_amp)
+    psi = apply_exp_h0(psi, halfT)
+    return psi
+
+  def entropy(psi):
+    dimA = 2 ** (N // 2); dimB = 2 ** (N - N // 2)
+    M = psi.reshape(dimA, dimB)
+    sv = np.linalg.svd(M, compute_uv=False)
+    lam = sv ** 2
+    lam = lam[lam > 1e-14]
+    lam /= lam.sum()
+    return float(-np.sum(lam * np.log(lam)))
+
+  frames = []
+  # Néel state |↑↓↑↓…⟩
+  neel = sum(1 << i for i in range(0, N, 2))
+  psi = np.zeros(dim, dtype=complex); psi[neel] = 1.0
+
+  def record(period, t, psi_r):
+    sz_ops = np.array([1 if ((s >> i) & 1) else -1
+                       for i in range(N) for s in range(dim)]).reshape(N, dim)
+    prob = np.abs(psi_r) ** 2
+    mz = float(np.sum(prob[np.newaxis, :] * sz_ops) / (N * dim))
+    mz = float(np.dot(prob, sum(
+        np.array([1 if (s >> i) & 1 else -1 for s in range(dim)]) for i in range(N)
+    )) / N)
+    en = float(np.real(np.dot(np.conj(psi_r), h0_diag * psi_r)))
+    s = entropy(psi_r)
+    frames.append({"period": int(period), "time": float(t),
+                   "magnetization_z": float(mz), "energy": en, "entropy": s})
+
+  record(0, 0.0, psi)
+  for p in range(1, n_periods + 1):
+    psi = apply_period(psi)
+    record(p, p * T, psi)
+
+  # Quasi-energy spectrum
+  quasi_energies = []
+  mean_gap_ratio = 0.0
+  if dim <= 256:
+    U_mat = np.zeros((dim, dim), dtype=complex)
+    for col in range(dim):
+      e = np.zeros(dim, dtype=complex); e[col] = 1.0
+      e = apply_period(e)
+      U_mat[:, col] = e
+    evals = np.linalg.eigvals(U_mat)
+    qe = sorted(float(np.angle(ev)) / T for ev in evals)
+    quasi_energies = qe
+    if len(qe) >= 3:
+      diffs = np.diff(qe)
+      r_vals = [min(diffs[i], diffs[i+1]) / max(diffs[i], diffs[i+1])
+                for i in range(len(diffs)-1)
+                if diffs[i] > 1e-14 and diffs[i+1] > 1e-14]
+      mean_gap_ratio = float(np.mean(r_vals)) if r_vals else 0.0
+
+  # Amplitude scan
+  scan_amps = []
+  scan_qe = []
+  if scenario == "spectrum" and dim <= 64:
+    for si in range(n_scan):
+      amp = scan_amp_max * si / max(n_scan - 1, 1)
+      scan_amps.append(float(amp))
+      U_s = np.zeros((dim, dim), dtype=complex)
+      for col in range(dim):
+        e = np.zeros(dim, dtype=complex); e[col] = 1.0
+        e = apply_exp_h0(e, halfT)
+        e = apply_kick(e, amp)
+        e = apply_exp_h0(e, halfT)
+        U_s[:, col] = e
+      evs = np.linalg.eigvals(U_s)
+      scan_qe.append(sorted(float(np.angle(ev)) / T for ev in evs))
+
+  return {
+      "n_sites": N, "J": J, "h_z": h_z,
+      "drive_amp": drive_amp, "drive_omega": drive_omega,
+      "T": T, "frames": frames,
+      "quasi_energies": quasi_energies,
+      "mean_gap_ratio": mean_gap_ratio,
+      "scan_amps": scan_amps,
+      "scan_qe": scan_qe,
+  }
+
+
+def _floquet_page(data: dict, title: str = "Floquet 周期驱动") -> str:
+  """Generate self-contained HTML for the Floquet kicked-Ising simulation."""
+  import json as json_mod
+  data_json = json_mod.dumps(data)
+
+  return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h2{{font-size:1.1rem;font-weight:600;color:#58a6ff;margin-bottom:10px}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:980px;margin:0 auto}}
+.card{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+canvas{{display:block;width:100%;height:220px}}
+.info{{font-size:0.8rem;color:#8b949e;margin-top:6px}}
+.param{{display:flex;gap:20px;flex-wrap:wrap;font-size:0.84rem;color:#8b949e;margin-bottom:14px;max-width:980px;margin-left:auto;margin-right:auto}}
+.param span{{color:#58a6ff;font-weight:600}}
+.badge{{display:inline-block;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600}}
+.badge-green{{background:#033a16;color:#3fb950}}
+.badge-red{{background:#3d1a1a;color:#f47067}}
+</style>
+</head>
+<body>
+<h1 style="font-size:1.4rem;color:#58a6ff;margin-bottom:12px">{title}</h1>
+<div class="param">
+  <div>N = <span id="pN"></span> qubits</div>
+  <div>J = <span id="pJ"></span></div>
+  <div>h_z = <span id="pHz"></span></div>
+  <div>h_x (kick) = <span id="pHx"></span></div>
+  <div>ω = <span id="pOmega"></span></div>
+  <div>T = <span id="pT"></span></div>
+  <div>Gap ratio r = <span id="pGapR"></span></div>
+  <div id="phaseBadge"></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>Magnetization ⟨m_z(t)⟩</h2><canvas id="cMz"></canvas>
+    <div class="info">Stroboscopic snapshots at integer multiples of period T</div></div>
+  <div class="card"><h2>Bipartite Entanglement Entropy</h2><canvas id="cEnt"></canvas>
+    <div class="info">Logarithmic growth → thermalization; bounded → MBL / prethermal</div></div>
+  <div class="card"><h2>⟨H₀⟩ Energy Absorption</h2><canvas id="cEn"></canvas>
+    <div class="info">Heating to infinite temperature in ergodic phase</div></div>
+  <div class="card"><h2>Quasi-energy Spectrum (level spacing)</h2><canvas id="cQE"></canvas>
+    <div class="info">Poisson ≈ 0.39 (MBL/integrable); GUE ≈ 0.60 (ergodic/chaotic)</div></div>
+</div>
+<script>
+const DATA = {data_json};
+
+document.getElementById("pN").textContent     = DATA.n_sites;
+document.getElementById("pJ").textContent     = DATA.J.toFixed(2);
+document.getElementById("pHz").textContent    = DATA.h_z.toFixed(3);
+document.getElementById("pHx").textContent    = DATA.drive_amp.toFixed(3);
+document.getElementById("pOmega").textContent = DATA.drive_omega.toFixed(3);
+document.getElementById("pT").textContent     = (DATA.T || 0).toFixed(3);
+var gr = DATA.mean_gap_ratio || 0;
+document.getElementById("pGapR").textContent  = gr.toFixed(3);
+var badge = document.getElementById("phaseBadge");
+if (gr > 0) {{
+  if (gr > 0.52) {{
+    badge.innerHTML = '<span class="badge badge-red">Ergodic / Chaotic</span>';
+  }} else {{
+    badge.innerHTML = '<span class="badge badge-green">MBL / Prethermal</span>';
+  }}
+}}
+
+function lineChart(canvasId, xs, ys, color, xLabel, yLabel, ymin_hint) {{
+  var cv = document.getElementById(canvasId);
+  var w = cv.offsetWidth || 420; var h = cv.offsetHeight || 220;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = {{l:50, r:12, t:10, b:32}};
+  var xmin = Math.min(...xs), xmax = Math.max(...xs);
+  var ymin = ymin_hint !== undefined ? ymin_hint : Math.min(...ys);
+  var ymax = Math.max(...ys);
+  if (ymax === ymin) {{ ymax += 0.001; }}
+  var ypad = (ymax - ymin) * 0.08;
+  ymin -= ypad; ymax += ypad;
+  var xr = xmax - xmin || 1; var yr = ymax - ymin;
+  function px(x) {{ return pad.l + (x - xmin)/xr * (w - pad.l - pad.r); }}
+  function py(y) {{ return h - pad.b - (y - ymin)/yr * (h - pad.t - pad.b); }}
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#21262d"; ctx.lineWidth = 1;
+  for (var gi = 0; gi <= 4; gi++) {{
+    var gy = py(ymin + yr * gi / 4);
+    ctx.beginPath(); ctx.moveTo(pad.l, gy); ctx.lineTo(w - pad.r, gy); ctx.stroke();
+    ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "right";
+    ctx.fillText((ymin + yr * gi/4).toFixed(2), pad.l - 3, gy + 3);
+  }}
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, h - pad.b);
+  ctx.lineTo(w - pad.r, h - pad.b); ctx.stroke();
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+  for (var i = 0; i < xs.length; i++) {{
+    i === 0 ? ctx.moveTo(px(xs[i]), py(ys[i])) : ctx.lineTo(px(xs[i]), py(ys[i]));
+  }}
+  ctx.stroke();
+  // x ticks
+  for (var xi = 0; xi <= 5; xi++) {{
+    var gx = px(xmin + xr * xi / 5);
+    ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText((xmin + xr * xi/5).toFixed(1), gx, h - pad.b + 12);
+  }}
+  ctx.fillStyle = "#6e7681"; ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(xLabel, w/2, h - 2);
+  ctx.save(); ctx.translate(12, h/2); ctx.rotate(-Math.PI/2);
+  ctx.textAlign = "center"; ctx.fillText(yLabel, 0, 0); ctx.restore();
+}}
+
+var ts = DATA.frames.map(function(f) {{ return f.period; }});
+var mz = DATA.frames.map(function(f) {{ return f.magnetization_z; }});
+var en = DATA.frames.map(function(f) {{ return f.energy; }});
+var sv = DATA.frames.map(function(f) {{ return f.entropy; }});
+
+lineChart("cMz", ts, mz, "#58a6ff", "Period n", "⟨m_z⟩");
+lineChart("cEnt", ts, sv, "#3fb950", "Period n", "S(n)", 0);
+lineChart("cEn", ts, en, "#e3b341", "Period n", "⟨H₀⟩");
+
+// Quasi-energy spectrum: plot level spacings as histogram
+(function() {{
+  var qe = DATA.quasi_energies;
+  if (!qe || qe.length < 4) {{
+    var cv = document.getElementById("cQE");
+    cv.width = cv.offsetWidth || 420; cv.height = cv.offsetHeight || 220;
+    var ctx = cv.getContext("2d");
+    ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = "#8b949e"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("Spectrum: N too large for full diag", cv.width/2, cv.height/2);
+    return;
+  }}
+  // Compute level spacings
+  var sorted = qe.slice().sort(function(a,b) {{ return a-b; }});
+  var spacings = [];
+  for (var i = 0; i < sorted.length - 1; i++)
+    spacings.push(sorted[i+1] - sorted[i]);
+  var mean_s = spacings.reduce(function(a,b){{return a+b;}}, 0) / spacings.length;
+  if (mean_s < 1e-14) mean_s = 1;
+  var r_norm = spacings.map(function(s) {{ return s / mean_s; }});
+
+  // Histogram
+  var nbins = 20; var binmax = 3.0;
+  var bins = new Array(nbins).fill(0);
+  r_norm.forEach(function(s) {{
+    var bi = Math.min(nbins - 1, Math.floor(s / binmax * nbins));
+    bins[bi]++;
+  }});
+  var bmax = Math.max(...bins);
+
+  var cv = document.getElementById("cQE");
+  var w = cv.offsetWidth || 420; var h = cv.offsetHeight || 220;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = 40; var bw = (w - 2*pad) / nbins;
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  for (var i = 0; i < nbins; i++) {{
+    var bh = bins[i] / bmax * (h - 2*pad);
+    ctx.fillStyle = "#388bfd";
+    ctx.fillRect(pad + i*bw + 1, h - pad - bh, bw - 2, bh);
+  }}
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+  // Reference lines: Poisson 0.39, GUE 0.60
+  var r_poisson = 0.39, r_gue = 0.60;
+  function grx(r) {{ return pad + r / binmax * (w - 2*pad); }}
+  ctx.strokeStyle = "#3fb950"; ctx.lineWidth = 1.5; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(grx(r_poisson), pad); ctx.lineTo(grx(r_poisson), h-pad); ctx.stroke();
+  ctx.strokeStyle = "#f47067";
+  ctx.beginPath(); ctx.moveTo(grx(r_gue), pad); ctx.lineTo(grx(r_gue), h-pad); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#3fb950"; ctx.font = "9px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("P", grx(r_poisson), pad - 3);
+  ctx.fillStyle = "#f47067";
+  ctx.fillText("GUE", grx(r_gue), pad - 3);
+  ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+  for (var xi = 0; xi <= 3; xi++) {{
+    ctx.fillText((binmax * xi / 3).toFixed(1), pad + (w-2*pad)*xi/3, h-pad+12);
+  }}
+  ctx.fillText("r = gap ratio", w/2, h-2);
+}})();
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -7167,7 +7817,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -7228,6 +7878,20 @@ def main() -> int:
   parser.add_argument("--phi4-dynamics-m2-final",   type=float, default=-1.5, help="post-quench mass squared for phi4_dynamics")
   parser.add_argument("--phi4-dynamics-steps",      type=int,   default=80,  help="number of time steps for phi4_dynamics")
   parser.add_argument("--phi4-dynamics-dt",         type=float, default=0.05, help="time step dt for phi4_dynamics")
+  parser.add_argument("--hubbard-sites",   type=int,   default=6,    help="number of lattice sites for Hubbard (2-12)")
+  parser.add_argument("--hubbard-t",       type=float, default=1.0,  help="hopping amplitude t")
+  parser.add_argument("--hubbard-U",       type=float, default=4.0,  help="on-site Coulomb repulsion U")
+  parser.add_argument("--hubbard-n-up",    type=int,   default=0,    help="spin-up electrons (0 = half-filling)")
+  parser.add_argument("--hubbard-n-dn",    type=int,   default=0,    help="spin-down electrons (0 = half-filling)")
+  parser.add_argument("--hubbard-sweep-points", type=int, default=20, help="number of U/t points in sweep")
+  parser.add_argument("--hubbard-U-max",   type=float, default=12.0, help="maximum U for Hubbard sweep")
+  parser.add_argument("--floquet-sites",   type=int,   default=8,    help="number of qubits for Floquet kicked-Ising")
+  parser.add_argument("--floquet-J",       type=float, default=1.0,  help="Ising ZZ coupling J")
+  parser.add_argument("--floquet-hz",      type=float, default=0.809, help="longitudinal field h_z")
+  parser.add_argument("--floquet-amp",     type=float, default=1.5,  help="kick amplitude h_x")
+  parser.add_argument("--floquet-omega",   type=float, default=4.5,  help="drive frequency ω")
+  parser.add_argument("--floquet-periods", type=int,   default=40,   help="number of Floquet periods to simulate")
+  parser.add_argument("--floquet-scenario", choices=["dynamics", "spectrum"], default="dynamics")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -7853,6 +8517,47 @@ def main() -> int:
       path.write_text(_phi4_dynamics_page(dyn_data, title="φ⁴ QFT — Quantum Quench Dynamics"), encoding="utf-8")
       generated.append(path)
 
+  # ── M27-C: Hubbard Model ──────────────────────────────────────────────────
+  if args.scenario in {"hubbard", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("hubbard skipped: numpy not available", file=sys.stderr)
+    else:
+      hub_data = _hubbard_frames(
+          n_sites=args.hubbard_sites,
+          t_hop=args.hubbard_t,
+          U=args.hubbard_U,
+          n_up=args.hubbard_n_up,
+          n_dn=args.hubbard_n_dn,
+          scenario="sweep",
+          n_sweep=args.hubbard_sweep_points,
+          U_max=args.hubbard_U_max,
+      )
+      path = out_dir / "quantum_hubbard.html"
+      path.write_text(_hubbard_page(hub_data, title="1D Hubbard Model — Mott Insulator"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M27-D: Floquet Kicked-Ising ──────────────────────────────────────────
+  if args.scenario in {"floquet", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("floquet skipped: numpy not available", file=sys.stderr)
+    else:
+      flo_data = _floquet_frames(
+          n_sites=args.floquet_sites,
+          J=args.floquet_J,
+          h_z=args.floquet_hz,
+          drive_amp=args.floquet_amp,
+          drive_omega=args.floquet_omega,
+          n_periods=args.floquet_periods,
+          scenario=args.floquet_scenario,
+      )
+      path = out_dir / "quantum_floquet.html"
+      path.write_text(_floquet_page(flo_data, title="Floquet 周期驱动 — Kicked-Ising"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -7889,6 +8594,8 @@ def main() -> int:
         "phi4_broken":        "quantum_phi4_broken",
         "phi4_sweep":         "quantum_phi4_sweep",
         "phi4_dynamics":      "quantum_phi4_dynamics",
+        "hubbard":            "quantum_hubbard",
+        "floquet":            "quantum_floquet",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

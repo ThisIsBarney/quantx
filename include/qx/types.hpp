@@ -663,6 +663,93 @@ struct Phi4Result {
   std::string message;
 };
 
+// ── M27-C: 1D Hubbard Model ───────────────────────────────────────────────
+
+// One point in the U/t parameter sweep.
+struct HubbardSweepPoint {
+  double U{0.0};
+  double ground_energy{0.0};
+  double double_occupancy{0.0};    // D = ⟨Σ n_{i↑}n_{i↓}⟩/N
+  double spin_structure_pi{0.0};   // S(k=π) antiferromagnetic structure factor
+  double energy_gap{0.0};          // E₁ − E₀ within same particle-number sector
+};
+
+// Options for the 1D Hubbard model simulation.
+struct HubbardOptions {
+  std::uint32_t n_sites{6};
+  double t_hop{1.0};     // hopping amplitude t
+  double U{4.0};         // on-site Coulomb repulsion U
+  std::uint32_t n_up{0}; // spin-up electrons (0 = n_sites/2)
+  std::uint32_t n_dn{0}; // spin-down electrons (0 = n_sites/2)
+  // "ground_state" | "sweep"
+  std::string scenario{"ground_state"};
+  std::uint32_t n_sweep{20};
+  double U_min{0.0};
+  double U_max{12.0};
+};
+
+// Result of a Hubbard model simulation.
+struct HubbardResult {
+  bool ok{true};
+  std::uint32_t n_sites{0};
+  std::uint32_t n_up{0};
+  std::uint32_t n_dn{0};
+  double t_hop{0.0};
+  double U{0.0};
+  double ground_energy{0.0};
+  double energy_gap{0.0};
+  double double_occupancy{0.0};
+  double spin_structure_pi{0.0};
+  std::vector<double> spin_corr{};      // ⟨S^z_0 S^z_r⟩, r = 0..N−1
+  std::vector<double> momentum_dist{};  // n(k) = n↑(k)+n↓(k), k = 0..N−1
+  std::vector<HubbardSweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
+// ── M27-D: Floquet Periodic Driving ───────────────────────────────────────
+
+// One stroboscopic snapshot at t = n·T.
+struct FloquetFrame {
+  std::uint32_t period{0};
+  double time{0.0};
+  double magnetization_z{0.0};  // ⟨Σ Z_i⟩/N
+  double energy{0.0};           // ⟨H₀⟩
+  double entropy{0.0};          // bipartite von Neumann entropy at N/2 cut
+};
+
+// Options for the Floquet kicked-Ising simulation.
+struct FloquetOptions {
+  std::uint32_t n_sites{8};
+  double J{1.0};           // Ising ZZ coupling
+  double h_z{0.809};       // longitudinal field (breaks integrability when ≠ 0)
+  double drive_amp{1.5};   // kick amplitude h_x = A (effective X rotation per period)
+  double drive_omega{4.5}; // drive frequency ω; period T = 2π/ω
+  std::uint32_t n_periods{40};
+  // "dynamics" | "spectrum" | "heating"
+  std::string scenario{"dynamics"};
+  std::uint32_t n_scan{25};          // number of amplitude points in spectrum scan
+  double scan_amp_max{3.0};          // max h_x for spectrum scan
+};
+
+// Result of a Floquet simulation.
+struct FloquetResult {
+  bool ok{true};
+  std::uint32_t n_sites{0};
+  double J{0.0};
+  double h_z{0.0};
+  double drive_amp{0.0};
+  double drive_omega{0.0};
+  std::vector<FloquetFrame> frames{};  // stroboscopic dynamics
+  std::vector<double> quasi_energies{};  // sorted quasi-energies in [−π/T, π/T)
+  double mean_gap_ratio{0.0};            // level spacing gap ratio r (Poisson≈0.39, GUE≈0.60)
+  // Spectrum scan: drive_amp values and corresponding quasi-energy arrays
+  std::vector<double> scan_amps{};
+  std::vector<std::vector<double>> scan_qe{};  // [n_scan][dim]
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M23: Lattice Schwinger model (1+1D QED) ────────────────────────────────
 
 // One time-step snapshot of the Schwinger model state.

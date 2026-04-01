@@ -92,6 +92,8 @@ add_library(qx_core
   src/qec.cpp
   src/qfield.cpp
   src/phi4.cpp
+  src/hubbard.cpp
+  src/floquet.cpp
   src/json_utils.cpp
 )
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
