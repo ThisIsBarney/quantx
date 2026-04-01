@@ -6870,6 +6870,8 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("schwinger_vacuum",   "Schwinger 真空"),
           ("hubbard",            "Hubbard Mott 绝缘体"),
           ("floquet",            "Floquet 周期驱动"),
+          ("heisenberg",         "XXZ Heisenberg 链"),
+          ("bose_hubbard",       "Bose-Hubbard 超流/Mott"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -7810,6 +7812,553 @@ lineChart("cEn", ts, en, "#e3b341", "Period n", "⟨H₀⟩");
 </html>"""
 
 
+# ── M28-E: XXZ Heisenberg spin chain ─────────────────────────────────────────
+
+def _heisenberg_frames(
+    n_sites: int = 8,
+    J: float = 1.0,
+    Jz: float = 1.0,
+    h: float = 0.0,
+    scenario: str = "sweep",
+    n_sweep: int = 20,
+    Jz_min: float = -2.0,
+    Jz_max: float = 3.0,
+) -> dict:
+  """Compute 1D XXZ Heisenberg chain via exact diagonalization (NumPy reference)."""
+  import numpy as np
+  from itertools import combinations
+
+  N = n_sites
+  n_down = N // 2  # Sz = 0 sector
+
+  def spin_states(n_bits, nd):
+    return [sum(1 << b for b in combo) for combo in combinations(range(n_bits), nd)]
+
+  def build_H(Jz_val):
+    states = spin_states(N, n_down)
+    s_map = {s: i for i, s in enumerate(states)}
+    dim = len(states)
+    H = np.zeros((dim, dim), dtype=float)
+    for bi, s in enumerate(states):
+      # ZZ diagonal + longitudinal field
+      for i in range(N - 1):
+        sz_i = 0.5 if not ((s >> i) & 1) else -0.5
+        sz_j = 0.5 if not ((s >> (i+1)) & 1) else -0.5
+        H[bi, bi] += Jz_val / 4.0 * (2*sz_i) * (2*sz_j)  # Jz/4 * ZiZj
+      if h != 0.0:
+        for i in range(N):
+          sz_i = 0.5 if not ((s >> i) & 1) else -0.5
+          H[bi, bi] -= h / 2.0 * (2*sz_i)
+      # XX + YY (= S+S- + S-S+) off-diagonal
+      for i in range(N - 1):
+        # S+_i S-_{i+1}: site i up (0), site i+1 down (1)
+        i_up = not ((s >> i) & 1)
+        j_down = (s >> (i+1)) & 1
+        if i_up and j_down:
+          s2 = s | (1 << i)
+          s2 = s2 & ~(1 << (i+1))
+          if s2 in s_map:
+            H[bi, s_map[s2]] += J / 2.0
+            H[s_map[s2], bi] += J / 2.0
+    return H, states
+
+  def spin_corr(states, psi):
+    corr = np.zeros(N)
+    s_map = {s: i for i, s in enumerate(states)}
+    for bi, s in enumerate(states):
+      p = psi[bi] ** 2
+      sz0 = 0.5 if not (s & 1) else -0.5
+      for r in range(N):
+        # ZZ part
+        sz_r = 0.5 if not ((s >> r) & 1) else -0.5
+        corr[r] += p * sz0 * sz_r
+    # XX+YY contributions via off-diagonal
+    for bi, s in enumerate(states):
+      for r in range(1, N):
+        i_up = not (s & 1)
+        j_down = (s >> r) & 1
+        if i_up and j_down:
+          s2 = s | 1
+          s2 = s2 & ~(1 << r)
+          if s2 in s_map:
+            bj = s_map[s2]
+            corr[r] += 0.5 * psi[bi] * psi[bj]  # XX part
+    return corr
+
+  if scenario == "sweep":
+    sweep = []
+    for k in range(n_sweep):
+      Jz_k = Jz_min + (Jz_max - Jz_min) * k / max(n_sweep - 1, 1)
+      H, states = build_H(Jz_k)
+      evals, evecs = np.linalg.eigh(H)
+      E0, E1 = evals[0], evals[1] if len(evals) > 1 else evals[0]
+      psi = evecs[:, 0]
+      corr = spin_corr(states, psi)
+      spi = sum((-1)**r * corr[r] for r in range(N)) / N
+      Sz_total = sum(
+          (0.5 if not ((s >> i) & 1) else -0.5) * psi[bi]**2
+          for bi, s in enumerate(states)
+          for i in range(N)
+      )
+      sweep.append({
+          "Jz": Jz_k,
+          "ground_energy": float(E0),
+          "energy_gap": float(E1 - E0),
+          "structure_pi": float(spi),
+          "Sz_total": float(Sz_total),
+      })
+    # Single-point at requested Jz
+    H0, states0 = build_H(Jz)
+    evals0, evecs0 = np.linalg.eigh(H0)
+    psi0 = evecs0[:, 0]
+    corr0 = spin_corr(states0, psi0)
+    spi0 = sum((-1)**r * corr0[r] for r in range(N)) / N
+    return {
+        "n_sites": N, "J": J, "Jz": Jz, "h": h,
+        "ground_energy": float(evals0[0]),
+        "energy_gap": float(evals0[1] - evals0[0]) if len(evals0) > 1 else 0.0,
+        "structure_pi": float(spi0),
+        "spin_corr": corr0.tolist(),
+        "sweep": sweep,
+    }
+  else:  # ground_state
+    H0, states0 = build_H(Jz)
+    evals0, evecs0 = np.linalg.eigh(H0)
+    psi0 = evecs0[:, 0]
+    corr0 = spin_corr(states0, psi0)
+    spi0 = sum((-1)**r * corr0[r] for r in range(N)) / N
+    return {
+        "n_sites": N, "J": J, "Jz": Jz, "h": h,
+        "ground_energy": float(evals0[0]),
+        "energy_gap": float(evals0[1] - evals0[0]) if len(evals0) > 1 else 0.0,
+        "structure_pi": float(spi0),
+        "spin_corr": corr0.tolist(),
+        "sweep": [],
+    }
+
+
+def _heisenberg_page(data: dict, title: str = "XXZ Heisenberg Chain") -> str:
+  """Generate self-contained HTML for the 1D XXZ Heisenberg model."""
+  import json as json_mod
+  data_json = json_mod.dumps(data)
+  N = data.get("n_sites", 8)
+
+  return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h2{{font-size:1.2rem;font-weight:600;color:#58a6ff;margin-bottom:12px}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:960px;margin:0 auto}}
+.card{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+canvas{{display:block;width:100%;height:240px}}
+.info{{font-size:0.82rem;color:#8b949e;margin-top:8px}}
+.param{{display:flex;gap:24px;flex-wrap:wrap;font-size:0.85rem;color:#8b949e;margin-bottom:16px;max-width:960px;margin-left:auto;margin-right:auto}}
+.param span{{color:#58a6ff;font-weight:600}}
+</style>
+</head>
+<body>
+<h1 style="font-size:1.4rem;color:#58a6ff;margin-bottom:12px">{title}</h1>
+<div class="param">
+  <div>N = <span id="pN"></span> sites</div>
+  <div>J = <span id="pJ"></span></div>
+  <div>Jz = <span id="pJz"></span></div>
+  <div>E₀ = <span id="pE0"></span></div>
+  <div>Δ = <span id="pGap"></span></div>
+  <div>S(π) = <span id="pSpi"></span></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>Spin-Spin Correlation ⟨S₀·Sᵣ⟩</h2><canvas id="cSpinCorr"></canvas>
+    <div class="info">Antiferromagnetic: alternating for Jz &gt; 0; ferromagnetic for Jz &lt; 0</div></div>
+  <div class="card"><h2>S(π) Spin Structure Factor vs Jz</h2><canvas id="cSpi"></canvas>
+    <div class="info">Peaks in antiferromagnetic phase (Jz &gt; −J); vanishes in ferromagnetic phase</div></div>
+  <div class="card"><h2>Energy Gap Δ vs Jz</h2><canvas id="cGap"></canvas>
+    <div class="info">Gapless for |Jz| ≤ J (XXZ critical line); gapped outside</div></div>
+  <div class="card"><h2>Ground Energy E₀ vs Jz</h2><canvas id="cEnergy"></canvas>
+    <div class="info">Ground energy decreases with Jz in the antiferromagnetic regime</div></div>
+</div>
+<script>
+const DATA = {data_json};
+
+document.getElementById("pN").textContent   = DATA.n_sites;
+document.getElementById("pJ").textContent   = DATA.J.toFixed(3);
+document.getElementById("pJz").textContent  = DATA.Jz.toFixed(3);
+document.getElementById("pE0").textContent  = DATA.ground_energy.toFixed(4);
+document.getElementById("pGap").textContent = DATA.energy_gap.toFixed(4);
+document.getElementById("pSpi").textContent = DATA.structure_pi.toFixed(4);
+
+function barChart(canvasId, labels, values, colorFn, yLabel) {{
+  var cv = document.getElementById(canvasId);
+  var w = cv.offsetWidth || 400; var h = cv.offsetHeight || 240;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = 44;
+  var bw = Math.max(1, (w - 2*pad) / values.length - 2);
+  var vmax = Math.max(...values.map(Math.abs)) * 1.2 || 1;
+  var vmin = Math.min(0, ...values) * 1.2;
+  var range = Math.max(vmax - vmin, 1e-9);
+  var zero_y = h - pad - (-vmin / range) * (h - 2*pad);
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad, zero_y); ctx.lineTo(w-pad, zero_y);
+  ctx.strokeStyle = "#444c56"; ctx.stroke();
+  for (var i = 0; i < values.length; i++) {{
+    var x = pad + i * ((w - 2*pad) / values.length) + 1;
+    var bh = Math.abs(values[i]) / range * (h - 2*pad);
+    var y = values[i] >= 0 ? zero_y - bh : zero_y;
+    ctx.fillStyle = colorFn(i, values[i]);
+    ctx.fillRect(x, y, bw, bh);
+    if (labels && labels[i] !== undefined) {{
+      ctx.fillStyle = "#8b949e"; ctx.font = "10px monospace"; ctx.textAlign = "center";
+      ctx.fillText(labels[i], x + bw/2, h - pad + 12);
+    }}
+  }}
+  if (yLabel) {{
+    ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(yLabel, 4, 14);
+  }}
+}}
+
+function lineChart(canvasId, xs, ys, color, yLabel, xLabel) {{
+  var cv = document.getElementById(canvasId);
+  var w = cv.offsetWidth || 400; var h = cv.offsetHeight || 240;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = 44;
+  var xmin = Math.min(...xs), xmax = Math.max(...xs);
+  var ymin = Math.min(...ys), ymax = Math.max(...ys);
+  var xr = Math.max(xmax - xmin, 1e-9); var yr = Math.max(ymax - ymin, 1e-9) * 1.1;
+  ymin -= yr * 0.05; ymax = ymin + yr;
+  function px(x) {{ return pad + (x - xmin)/xr * (w - 2*pad); }}
+  function py(y) {{ return h - pad - (y - ymin)/yr * (h - 2*pad); }}
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+  for (var yi = 0; yi <= 4; yi++) {{
+    var gv = ymin + yr * yi/4;
+    var gy = py(gv);
+    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(w-pad, gy);
+    ctx.strokeStyle = "#21262d"; ctx.stroke();
+    ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "right";
+    ctx.fillText(gv.toFixed(2), pad - 3, gy + 3);
+  }}
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+  for (var i = 0; i < xs.length; i++) {{
+    i === 0 ? ctx.moveTo(px(xs[i]), py(ys[i])) : ctx.lineTo(px(xs[i]), py(ys[i]));
+  }}
+  ctx.stroke();
+  for (var xi = 0; xi <= 4; xi++) {{
+    var gx = px(xmin + xr * xi/4);
+    ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText((xmin + xr * xi/4).toFixed(1), gx, h - pad + 12);
+  }}
+  if (yLabel) {{ ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "left"; ctx.fillText(yLabel, 4, 14); }}
+  if (xLabel) {{ ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "center"; ctx.fillText(xLabel, w/2, h - 4); }}
+}}
+
+// Spin-spin correlation bar chart
+var scLabels = DATA.spin_corr.map(function(_, i) {{ return "r=" + i; }});
+barChart("cSpinCorr", scLabels, DATA.spin_corr,
+  function(i, v) {{ return v >= 0 ? "#388bfd" : "#f47067"; }}, "⟨S₀·Sᵣ⟩");
+
+// Sweep line charts
+if (DATA.sweep && DATA.sweep.length > 0) {{
+  var swJz  = DATA.sweep.map(function(p) {{ return p.Jz; }});
+  var swSpi = DATA.sweep.map(function(p) {{ return p.structure_pi; }});
+  var swGap = DATA.sweep.map(function(p) {{ return p.energy_gap; }});
+  var swE0  = DATA.sweep.map(function(p) {{ return p.ground_energy; }});
+  lineChart("cSpi",    swJz, swSpi, "#f47067", "S(π)",  "Jz/J");
+  lineChart("cGap",    swJz, swGap, "#e3b341", "Gap Δ", "Jz/J");
+  lineChart("cEnergy", swJz, swE0,  "#57ab5a", "E₀",    "Jz/J");
+}}
+</script>
+</body>
+</html>"""
+
+
+# ── M28-F: Bose-Hubbard model ─────────────────────────────────────────────────
+
+def _bose_hubbard_frames(
+    n_sites: int = 4,
+    n_bosons: int = 4,
+    n_max: int = 4,
+    J: float = 0.1,
+    U: float = 1.0,
+    mu: float = 0.0,
+    scenario: str = "sweep",
+    n_sweep: int = 20,
+    J_min: float = 0.0,
+    J_max: float = 0.5,
+) -> dict:
+  """Compute Bose-Hubbard model via exact diagonalization (NumPy reference)."""
+  import numpy as np
+
+  N = n_sites
+
+  def enum_states(n_sites_loc, n_bosons_loc, n_max_loc):
+    result = []
+    state = [0] * n_sites_loc
+    def dfs(site, remaining):
+      if site == n_sites_loc - 1:
+        if remaining <= n_max_loc:
+          state[site] = remaining
+          result.append(tuple(state))
+        return
+      lo = max(0, remaining - n_max_loc * (n_sites_loc - 1 - site))
+      hi = min(remaining, n_max_loc)
+      for n in range(lo, hi + 1):
+        state[site] = n
+        dfs(site + 1, remaining - n)
+    dfs(0, n_bosons_loc)
+    return sorted(result)
+
+  def build_H(J_val):
+    states = enum_states(N, n_bosons, n_max)
+    s_map = {s: i for i, s in enumerate(states)}
+    dim = len(states)
+    H = np.zeros((dim, dim), dtype=float)
+    for bi, s in enumerate(states):
+      diag = sum(U/2 * s[i]*(s[i]-1) - mu*s[i] for i in range(N))
+      H[bi, bi] = diag
+      for i in range(N - 1):
+        if s[i+1] >= 1:
+          s2 = list(s); s2[i] += 1; s2[i+1] -= 1
+          t = tuple(s2)
+          if t in s_map:
+            mel = -J_val * np.sqrt(float(s[i+1]) * float(s[i]+1))
+            bj = s_map[t]
+            H[bi, bj] += mel
+            H[bj, bi] += mel
+    return H, states
+
+  def compute_obs(states, psi):
+    occ = np.zeros(N)
+    double_occ = 0.0
+    num_dist = np.zeros(n_max + 1)
+    for bi, s in enumerate(states):
+      p = psi[bi] ** 2
+      for i in range(N):
+        occ[i] += p * s[i]
+        double_occ += p * s[i] * (s[i]-1)
+      if s[0] <= n_max:
+        num_dist[s[0]] += p
+    double_occ /= N
+    return occ, double_occ, num_dist
+
+  def superfluid_order(states, psi):
+    s_map = {s: i for i, s in enumerate(states)}
+    sf = 0.0
+    for site in range(N):
+      re_a = 0.0
+      for bi, s in enumerate(states):
+        if s[site] == 0: continue
+        s2 = list(s); mel = np.sqrt(float(s2[site])); s2[site] -= 1; t = tuple(s2)
+        if t in s_map:
+          re_a += psi[bi] * mel * psi[s_map[t]]
+      sf += abs(re_a)
+    return sf / N
+
+  if scenario == "sweep":
+    sweep = []
+    for k in range(n_sweep):
+      J_k = J_min + (J_max - J_min) * k / max(n_sweep - 1, 1)
+      H, states = build_H(J_k)
+      evals, evecs = np.linalg.eigh(H)
+      psi = evecs[:, 0]
+      _, docc, _ = compute_obs(states, psi)
+      sf = superfluid_order(states, psi)
+      E1 = evals[1] if len(evals) > 1 else evals[0]
+      sweep.append({
+          "J": float(J_k),
+          "ground_energy": float(evals[0]),
+          "energy_gap": float(E1 - evals[0]),
+          "superfluid_op": float(sf),
+          "double_occupancy": float(docc),
+      })
+    # Single-point at requested J
+    H0, states0 = build_H(J)
+    evals0, evecs0 = np.linalg.eigh(H0)
+    psi0 = evecs0[:, 0]
+    occ0, docc0, ndist0 = compute_obs(states0, psi0)
+    sf0 = superfluid_order(states0, psi0)
+    return {
+        "n_sites": N, "n_bosons": n_bosons, "n_max": n_max,
+        "J": J, "U": U, "mu": mu,
+        "ground_energy": float(evals0[0]),
+        "energy_gap": float(evals0[1] - evals0[0]) if len(evals0) > 1 else 0.0,
+        "superfluid_op": float(sf0),
+        "double_occupancy": float(docc0),
+        "occupation": occ0.tolist(),
+        "number_dist": ndist0.tolist(),
+        "sweep": sweep,
+    }
+  else:  # ground_state
+    H0, states0 = build_H(J)
+    evals0, evecs0 = np.linalg.eigh(H0)
+    psi0 = evecs0[:, 0]
+    occ0, docc0, ndist0 = compute_obs(states0, psi0)
+    sf0 = superfluid_order(states0, psi0)
+    return {
+        "n_sites": N, "n_bosons": n_bosons, "n_max": n_max,
+        "J": J, "U": U, "mu": mu,
+        "ground_energy": float(evals0[0]),
+        "energy_gap": float(evals0[1] - evals0[0]) if len(evals0) > 1 else 0.0,
+        "superfluid_op": float(sf0),
+        "double_occupancy": float(docc0),
+        "occupation": occ0.tolist(),
+        "number_dist": ndist0.tolist(),
+        "sweep": [],
+    }
+
+
+def _bose_hubbard_page(data: dict, title: str = "Bose-Hubbard Model") -> str:
+  """Generate self-contained HTML for the Bose-Hubbard model."""
+  import json as json_mod
+  data_json = json_mod.dumps(data)
+
+  return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#e6edf3;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h2{{font-size:1.2rem;font-weight:600;color:#58a6ff;margin-bottom:12px}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:960px;margin:0 auto}}
+.card{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+canvas{{display:block;width:100%;height:240px}}
+.info{{font-size:0.82rem;color:#8b949e;margin-top:8px}}
+.param{{display:flex;gap:24px;flex-wrap:wrap;font-size:0.85rem;color:#8b949e;margin-bottom:16px;max-width:960px;margin-left:auto;margin-right:auto}}
+.param span{{color:#58a6ff;font-weight:600}}
+</style>
+</head>
+<body>
+<h1 style="font-size:1.4rem;color:#58a6ff;margin-bottom:12px">{title}</h1>
+<div class="param">
+  <div>N = <span id="pN"></span> sites</div>
+  <div>M = <span id="pM"></span> bosons</div>
+  <div>n_max = <span id="pNmax"></span></div>
+  <div>J = <span id="pJ"></span></div>
+  <div>U = <span id="pU"></span></div>
+  <div>J/U = <span id="pJU"></span></div>
+  <div>E₀ = <span id="pE0"></span></div>
+  <div>Δ = <span id="pGap"></span></div>
+  <div>|⟨a⟩| = <span id="pSF"></span></div>
+  <div>D = <span id="pDocc"></span></div>
+</div>
+<div class="grid">
+  <div class="card"><h2>Site Occupation ⟨nᵢ⟩</h2><canvas id="cOcc"></canvas>
+    <div class="info">Uniform in superfluid phase; integer-locked in Mott phase</div></div>
+  <div class="card"><h2>Number Distribution P(n) at site 0</h2><canvas id="cNdist"></canvas>
+    <div class="info">Sharp Fock peak in Mott phase; broad distribution in superfluid phase</div></div>
+  <div class="card"><h2>Superfluid Order Parameter |⟨a⟩| vs J/U</h2><canvas id="cSF"></canvas>
+    <div class="info">|⟨a⟩| = 0 in Mott insulator; grows above critical J/U</div></div>
+  <div class="card"><h2>Energy Gap Δ vs J/U</h2><canvas id="cGap"></canvas>
+    <div class="info">Gap closes at Mott-superfluid transition</div></div>
+</div>
+<script>
+const DATA = {data_json};
+
+document.getElementById("pN").textContent    = DATA.n_sites;
+document.getElementById("pM").textContent    = DATA.n_bosons;
+document.getElementById("pNmax").textContent = DATA.n_max;
+document.getElementById("pJ").textContent    = DATA.J.toFixed(3);
+document.getElementById("pU").textContent    = DATA.U.toFixed(3);
+document.getElementById("pJU").textContent   = (DATA.U > 0 ? DATA.J / DATA.U : 0).toFixed(3);
+document.getElementById("pE0").textContent   = DATA.ground_energy.toFixed(4);
+document.getElementById("pGap").textContent  = DATA.energy_gap.toFixed(4);
+document.getElementById("pSF").textContent   = DATA.superfluid_op.toFixed(4);
+document.getElementById("pDocc").textContent = DATA.double_occupancy.toFixed(4);
+
+function barChart(canvasId, labels, values, colorFn, yLabel) {{
+  var cv = document.getElementById(canvasId);
+  var w = cv.offsetWidth || 400; var h = cv.offsetHeight || 240;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = 44;
+  var bw = Math.max(1, (w - 2*pad) / Math.max(values.length,1) - 2);
+  var vmax = Math.max(...values.map(Math.abs)) * 1.2 || 1;
+  var range = Math.max(vmax, 1e-9);
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+  for (var i = 0; i < values.length; i++) {{
+    var x = pad + i * ((w - 2*pad) / values.length) + 1;
+    var bh = values[i] / range * (h - 2*pad);
+    ctx.fillStyle = colorFn(i, values[i]);
+    ctx.fillRect(x, h - pad - bh, bw, bh);
+    if (labels && labels[i] !== undefined) {{
+      ctx.fillStyle = "#8b949e"; ctx.font = "10px monospace"; ctx.textAlign = "center";
+      ctx.fillText(labels[i], x + bw/2, h - pad + 12);
+    }}
+  }}
+  if (yLabel) {{
+    ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "left";
+    ctx.fillText(yLabel, 4, 14);
+  }}
+}}
+
+function lineChart(canvasId, xs, ys, color, yLabel, xLabel) {{
+  var cv = document.getElementById(canvasId);
+  var w = cv.offsetWidth || 400; var h = cv.offsetHeight || 240;
+  cv.width = w; cv.height = h;
+  var ctx = cv.getContext("2d");
+  var pad = 44;
+  var xmin = Math.min(...xs), xmax = Math.max(...xs);
+  var ymin = Math.min(0, ...ys), ymax = Math.max(...ys) * 1.1 || 1;
+  var xr = Math.max(xmax - xmin, 1e-9); var yr = Math.max(ymax - ymin, 1e-9);
+  function px(x) {{ return pad + (x - xmin)/xr * (w - 2*pad); }}
+  function py(y) {{ return h - pad - (y - ymin)/yr * (h - 2*pad); }}
+  ctx.fillStyle = "#1c2128"; ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "#30363d"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, h-pad); ctx.lineTo(w-pad, h-pad); ctx.stroke();
+  for (var yi = 0; yi <= 4; yi++) {{
+    var gv = ymin + yr * yi/4; var gy = py(gv);
+    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(w-pad, gy);
+    ctx.strokeStyle = "#21262d"; ctx.stroke();
+    ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "right";
+    ctx.fillText(gv.toFixed(3), pad - 3, gy + 3);
+  }}
+  ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 2;
+  for (var i = 0; i < xs.length; i++) {{
+    i === 0 ? ctx.moveTo(px(xs[i]), py(ys[i])) : ctx.lineTo(px(xs[i]), py(ys[i]));
+  }}
+  ctx.stroke();
+  for (var xi = 0; xi <= 4; xi++) {{
+    var gx = px(xmin + xr * xi/4);
+    ctx.fillStyle = "#8b949e"; ctx.font = "9px monospace"; ctx.textAlign = "center";
+    ctx.fillText((xmin + xr * xi/4).toFixed(3), gx, h - pad + 12);
+  }}
+  if (yLabel) {{ ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "left"; ctx.fillText(yLabel, 4, 14); }}
+  if (xLabel) {{ ctx.fillStyle = "#8b949e"; ctx.font = "10px sans-serif"; ctx.textAlign = "center"; ctx.fillText(xLabel, w/2, h - 4); }}
+}}
+
+// Site occupation
+var occLabels = DATA.occupation.map(function(_, i) {{ return "i=" + i; }});
+barChart("cOcc", occLabels, DATA.occupation, function() {{ return "#57ab5a"; }}, "⟨nᵢ⟩");
+
+// Number distribution
+var nLabels = DATA.number_dist.map(function(_, n) {{ return "n=" + n; }});
+barChart("cNdist", nLabels, DATA.number_dist, function(i, v) {{ return "#bc8cff"; }}, "P(n)");
+
+// Sweep charts
+if (DATA.sweep && DATA.sweep.length > 0) {{
+  var swJU = DATA.sweep.map(function(p) {{ return DATA.U > 0 ? p.J / DATA.U : p.J; }});
+  var swSF = DATA.sweep.map(function(p) {{ return p.superfluid_op; }});
+  var swGap = DATA.sweep.map(function(p) {{ return p.energy_gap; }});
+  lineChart("cSF",  swJU, swSF,  "#388bfd", "|⟨a⟩|",  "J/U");
+  lineChart("cGap", swJU, swGap, "#e3b341", "Gap Δ",   "J/U");
+}}
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -7817,7 +8366,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -7892,6 +8441,21 @@ def main() -> int:
   parser.add_argument("--floquet-omega",   type=float, default=4.5,  help="drive frequency ω")
   parser.add_argument("--floquet-periods", type=int,   default=40,   help="number of Floquet periods to simulate")
   parser.add_argument("--floquet-scenario", choices=["dynamics", "spectrum"], default="dynamics")
+  parser.add_argument("--heisenberg-sites",   type=int,   default=8,    help="number of sites for Heisenberg chain (2-12)")
+  parser.add_argument("--heisenberg-J",       type=float, default=1.0,  help="transverse exchange coupling J")
+  parser.add_argument("--heisenberg-Jz",      type=float, default=1.0,  help="longitudinal exchange Jz")
+  parser.add_argument("--heisenberg-h",       type=float, default=0.0,  help="uniform longitudinal field h")
+  parser.add_argument("--heisenberg-sweep-points", type=int, default=20, help="number of Jz points in sweep")
+  parser.add_argument("--heisenberg-Jz-min",  type=float, default=-2.0, help="minimum Jz for sweep")
+  parser.add_argument("--heisenberg-Jz-max",  type=float, default=3.0,  help="maximum Jz for sweep")
+  parser.add_argument("--bose-hubbard-sites",   type=int,   default=4,   help="number of sites for Bose-Hubbard (2-8)")
+  parser.add_argument("--bose-hubbard-bosons",  type=int,   default=4,   help="total boson number")
+  parser.add_argument("--bose-hubbard-nmax",    type=int,   default=4,   help="max occupation per site")
+  parser.add_argument("--bose-hubbard-J",       type=float, default=0.1, help="hopping amplitude J")
+  parser.add_argument("--bose-hubbard-U",       type=float, default=1.0, help="on-site interaction U")
+  parser.add_argument("--bose-hubbard-mu",      type=float, default=0.0, help="chemical potential mu")
+  parser.add_argument("--bose-hubbard-sweep-points", type=int, default=20, help="number of J points in sweep")
+  parser.add_argument("--bose-hubbard-J-max",   type=float, default=0.5, help="maximum J for Bose-Hubbard sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -8558,6 +9122,50 @@ def main() -> int:
       path.write_text(_floquet_page(flo_data, title="Floquet 周期驱动 — Kicked-Ising"), encoding="utf-8")
       generated.append(path)
 
+  # ── M28-E: XXZ Heisenberg chain ──────────────────────────────────────────
+  if args.scenario in {"heisenberg", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("heisenberg skipped: numpy not available", file=sys.stderr)
+    else:
+      heis_data = _heisenberg_frames(
+          n_sites=args.heisenberg_sites,
+          J=args.heisenberg_J,
+          Jz=args.heisenberg_Jz,
+          h=args.heisenberg_h,
+          scenario="sweep",
+          n_sweep=args.heisenberg_sweep_points,
+          Jz_min=args.heisenberg_Jz_min,
+          Jz_max=args.heisenberg_Jz_max,
+      )
+      path = out_dir / "quantum_heisenberg.html"
+      path.write_text(_heisenberg_page(heis_data, title="1D XXZ Heisenberg Chain"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M28-F: Bose-Hubbard model ─────────────────────────────────────────────
+  if args.scenario in {"bose_hubbard", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("bose_hubbard skipped: numpy not available", file=sys.stderr)
+    else:
+      bh_data = _bose_hubbard_frames(
+          n_sites=args.bose_hubbard_sites,
+          n_bosons=args.bose_hubbard_bosons,
+          n_max=args.bose_hubbard_nmax,
+          J=args.bose_hubbard_J,
+          U=args.bose_hubbard_U,
+          mu=args.bose_hubbard_mu,
+          scenario="sweep",
+          n_sweep=args.bose_hubbard_sweep_points,
+          J_min=0.0,
+          J_max=args.bose_hubbard_J_max,
+      )
+      path = out_dir / "quantum_bose_hubbard.html"
+      path.write_text(_bose_hubbard_page(bh_data, title="Bose-Hubbard Model — Mott/Superfluid"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -8596,6 +9204,8 @@ def main() -> int:
         "phi4_dynamics":      "quantum_phi4_dynamics",
         "hubbard":            "quantum_hubbard",
         "floquet":            "quantum_floquet",
+        "heisenberg":         "quantum_heisenberg",
+        "bose_hubbard":       "quantum_bose_hubbard",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

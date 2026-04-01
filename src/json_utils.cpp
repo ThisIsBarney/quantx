@@ -1140,5 +1140,118 @@ std::string floquet_result_to_json(const FloquetResult& r) {
   return j.dump();
 }
 
+// ── M28-E: Heisenberg chain ───────────────────────────────────────────────
+
+HeisenbergOptions heisenberg_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  HeisenbergOptions o;
+  if (j.contains("n_sites"))   o.n_sites   = j["n_sites"].get<std::uint32_t>();
+  if (j.contains("J"))         o.J         = j["J"].get<double>();
+  if (j.contains("Jz"))        o.Jz        = j["Jz"].get<double>();
+  if (j.contains("h"))         o.h         = j["h"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))   o.n_sweep   = j["n_sweep"].get<std::uint32_t>();
+  if (j.contains("Jz_min"))    o.Jz_min    = j["Jz_min"].get<double>();
+  if (j.contains("Jz_max"))    o.Jz_max    = j["Jz_max"].get<double>();
+  if (j.contains("h_initial")) o.h_initial = j["h_initial"].get<double>();
+  if (j.contains("dt"))        o.dt        = j["dt"].get<double>();
+  if (j.contains("n_steps"))   o.n_steps   = j["n_steps"].get<std::uint32_t>();
+  return o;
+}
+
+std::string heisenberg_result_to_json(const HeisenbergResult& r) {
+  json j;
+  j["ok"]             = r.ok;
+  j["n_sites"]        = r.n_sites;
+  j["J"]              = r.J;
+  j["Jz"]             = r.Jz;
+  j["h"]              = r.h;
+  j["ground_energy"]  = r.ground_energy;
+  j["energy_gap"]     = r.energy_gap;
+  j["structure_pi"]   = r.structure_pi;
+  j["spin_corr"]      = r.spin_corr;
+  j["Sz_site"]        = r.Sz_site;
+  j["elapsed_ms"]     = r.elapsed_ms;
+  j["message"]        = r.message;
+  j["engine_version"] = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["Jz"]            = pt.Jz;
+    pj["ground_energy"] = pt.ground_energy;
+    pj["energy_gap"]    = pt.energy_gap;
+    pj["Sz_total"]      = pt.Sz_total;
+    pj["structure_pi"]  = pt.structure_pi;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+
+  json fr = json::array();
+  for (const auto& f : r.frames) {
+    json fj;
+    fj["time"]     = f.time;
+    fj["Sz_total"] = f.Sz_total;
+    fj["energy"]   = f.energy;
+    fj["entropy"]  = f.entropy;
+    fj["Sz_site"]  = f.Sz_site;
+    fr.push_back(fj);
+  }
+  j["frames"] = fr;
+
+  return j.dump();
+}
+
+// ── M28-F: Bose-Hubbard model ─────────────────────────────────────────────
+
+BoseHubbardOptions bose_hubbard_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  BoseHubbardOptions o;
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<std::uint32_t>();
+  if (j.contains("n_bosons")) o.n_bosons = j["n_bosons"].get<std::uint32_t>();
+  if (j.contains("n_max"))    o.n_max    = j["n_max"].get<std::uint32_t>();
+  if (j.contains("J"))        o.J        = j["J"].get<double>();
+  if (j.contains("U"))        o.U        = j["U"].get<double>();
+  if (j.contains("mu"))       o.mu       = j["mu"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))  o.n_sweep  = j["n_sweep"].get<std::uint32_t>();
+  if (j.contains("J_min"))    o.J_min    = j["J_min"].get<double>();
+  if (j.contains("J_max"))    o.J_max    = j["J_max"].get<double>();
+  return o;
+}
+
+std::string bose_hubbard_result_to_json(const BoseHubbardResult& r) {
+  json j;
+  j["ok"]               = r.ok;
+  j["n_sites"]          = r.n_sites;
+  j["n_bosons"]         = r.n_bosons;
+  j["n_max"]            = r.n_max;
+  j["J"]                = r.J;
+  j["U"]                = r.U;
+  j["ground_energy"]    = r.ground_energy;
+  j["energy_gap"]       = r.energy_gap;
+  j["superfluid_op"]    = r.superfluid_op;
+  j["double_occupancy"] = r.double_occupancy;
+  j["occupation"]       = r.occupation;
+  j["number_dist"]      = r.number_dist;
+  j["elapsed_ms"]       = r.elapsed_ms;
+  j["message"]          = r.message;
+  j["engine_version"]   = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["J"]                = pt.J;
+    pj["ground_energy"]    = pt.ground_energy;
+    pj["energy_gap"]       = pt.energy_gap;
+    pj["superfluid_op"]    = pt.superfluid_op;
+    pj["double_occupancy"] = pt.double_occupancy;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+
+  return j.dump();
+}
+
 }  // namespace qx
 
