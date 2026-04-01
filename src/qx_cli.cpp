@@ -49,6 +49,8 @@ int main(int argc, char** argv) {
     std::string qec_path;
     std::string qfield_path;
     std::string phi4_path;
+    std::string hubbard_path;
+    std::string floquet_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -70,6 +72,8 @@ int main(int argc, char** argv) {
     app.add_option("--qec", qec_path, "QEC options json path (run Quantum Error Correction Monte Carlo)");
     app.add_option("--qfield", qfield_path, "QField options json path (run Schwinger model / lattice QFT simulation)");
     app.add_option("--phi4", phi4_path, "phi4 options json path (run phi^4 scalar QFT simulation)");
+    app.add_option("--hubbard", hubbard_path, "hubbard options json path (run 1D Hubbard model simulation)");
+    app.add_option("--floquet", floquet_path, "floquet options json path (run Floquet kicked-Ising simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -111,8 +115,10 @@ int main(int argc, char** argv) {
     }
 
     if (problem_path.empty() && circuit_path.empty() && vqe_path.empty() &&
-        qpe_path.empty() && qec_path.empty() && qfield_path.empty() && phi4_path.empty()) {
-      throw std::runtime_error("missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, or --phi4");
+        qpe_path.empty() && qec_path.empty() && qfield_path.empty() &&
+        phi4_path.empty() && hubbard_path.empty() && floquet_path.empty()) {
+      throw std::runtime_error(
+          "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, or --floquet");
     }
     {
       int modes = (!problem_path.empty()  ? 1 : 0) +
@@ -121,9 +127,12 @@ int main(int argc, char** argv) {
                   (!qpe_path.empty()      ? 1 : 0) +
                   (!qec_path.empty()      ? 1 : 0) +
                   (!qfield_path.empty()   ? 1 : 0) +
-                  (!phi4_path.empty()     ? 1 : 0);
+                  (!phi4_path.empty()     ? 1 : 0) +
+                  (!hubbard_path.empty()  ? 1 : 0) +
+                  (!floquet_path.empty()  ? 1 : 0);
       if (modes > 1) {
-        throw std::runtime_error("use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, or --phi4");
+        throw std::runtime_error(
+            "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, or --floquet");
       }
     }
 
@@ -203,6 +212,24 @@ int main(int argc, char** argv) {
       const qx::Phi4Options phi4_opts = qx::phi4_options_from_json(phi4_json);
       qx::log::info("loaded phi4 options file: " + phi4_path);
       output_json = qx::phi4_result_to_json(qx::run_phi4(phi4_opts));
+    } else if (!hubbard_path.empty()) {
+      // 1D Hubbard model mode.
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --hubbard mode");
+      }
+      const std::string hubbard_json = read_text_file(hubbard_path);
+      const qx::HubbardOptions hubbard_opts = qx::hubbard_options_from_json(hubbard_json);
+      qx::log::info("loaded hubbard options file: " + hubbard_path);
+      output_json = qx::hubbard_result_to_json(qx::run_hubbard(hubbard_opts));
+    } else if (!floquet_path.empty()) {
+      // Floquet kicked-Ising mode.
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --floquet mode");
+      }
+      const std::string floquet_json = read_text_file(floquet_path);
+      const qx::FloquetOptions floquet_opts = qx::floquet_options_from_json(floquet_json);
+      qx::log::info("loaded floquet options file: " + floquet_path);
+      output_json = qx::floquet_result_to_json(qx::run_floquet(floquet_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

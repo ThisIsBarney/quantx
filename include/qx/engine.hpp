@@ -36,5 +36,9 @@ QecResult run_qec(const QecOptions& opts);
 QfieldResult run_qfield(const QfieldOptions& opts);
 // Run φ⁴ scalar quantum field theory simulation.
 Phi4Result run_phi4(const Phi4Options& opts);
+// Run 1D Hubbard model (Mott insulator) simulation.
+HubbardResult run_hubbard(const HubbardOptions& opts);
+// Run Floquet kicked-Ising model simulation.
+FloquetResult run_floquet(const FloquetOptions& opts);
 
 }  // namespace qx

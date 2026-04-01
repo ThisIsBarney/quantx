@@ -44,5 +44,13 @@ std::string qfield_result_to_json(const QfieldResult& result);
 Phi4Options phi4_options_from_json(const std::string& json);
 // Serialize φ⁴ QFT result to JSON string.
 std::string phi4_result_to_json(const Phi4Result& result);
+// Parse Hubbard model options from JSON string.
+HubbardOptions hubbard_options_from_json(const std::string& json);
+// Serialize Hubbard model result to JSON string.
+std::string hubbard_result_to_json(const HubbardResult& result);
+// Parse Floquet options from JSON string.
+FloquetOptions floquet_options_from_json(const std::string& json);
+// Serialize Floquet result to JSON string.
+std::string floquet_result_to_json(const FloquetResult& result);
 
 }  // namespace qx
