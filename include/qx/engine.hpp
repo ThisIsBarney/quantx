@@ -40,5 +40,9 @@ Phi4Result run_phi4(const Phi4Options& opts);
 HubbardResult run_hubbard(const HubbardOptions& opts);
 // Run Floquet kicked-Ising model simulation.
 FloquetResult run_floquet(const FloquetOptions& opts);
+// Run 1D XXZ Heisenberg spin chain simulation.
+HeisenbergResult run_heisenberg(const HeisenbergOptions& opts);
+// Run Bose-Hubbard model simulation.
+BoseHubbardResult run_bose_hubbard(const BoseHubbardOptions& opts);
 
 }  // namespace qx

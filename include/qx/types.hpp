@@ -663,6 +663,106 @@ struct Phi4Result {
   std::string message;
 };
 
+// ── M28-E: XXZ Heisenberg Spin Chain ─────────────────────────────────────
+
+// One point in the Jz/J parameter sweep (anisotropy scan).
+struct HeisenbergSweepPoint {
+  double Jz{0.0};           // z-axis exchange (Jz = J → isotropic; Jz = 0 → XX; Jz → ∞ → Ising)
+  double ground_energy{0.0};
+  double energy_gap{0.0};   // spin gap (0 in gapless phase)
+  double Sz_total{0.0};     // total Sz of ground state
+  double structure_pi{0.0}; // spin structure factor S(π) = (1/N) Σ_r (-1)^r ⟨S₀·S_r⟩
+};
+
+// Options for the 1D XXZ Heisenberg chain.
+struct HeisenbergOptions {
+  std::uint32_t n_sites{8};
+  double J{1.0};     // transverse exchange (XX + YY part scaled by J/2)
+  double Jz{1.0};    // longitudinal exchange (ZZ part); Jz = J → isotropic Heisenberg
+  double h{0.0};     // uniform longitudinal field h Σ Z_i
+  // "ground_state" | "sweep" | "dynamics"
+  std::string scenario{"ground_state"};
+  std::uint32_t n_sweep{20};
+  double Jz_min{-2.0};
+  double Jz_max{3.0};
+  // Dynamics (quench from h≠0 to h=0):
+  double h_initial{2.0};
+  double dt{0.05};
+  std::uint32_t n_steps{60};
+};
+
+// One dynamics frame from a Heisenberg quench.
+struct HeisenbergFrame {
+  double time{0.0};
+  double Sz_total{0.0};        // ⟨Σ Z_i⟩/2
+  double energy{0.0};          // ⟨H_final⟩
+  double entropy{0.0};         // bipartite entropy at N/2
+  std::vector<double> Sz_site{}; // ⟨Z_i⟩/2 per site
+};
+
+// Result of a Heisenberg chain simulation.
+struct HeisenbergResult {
+  bool ok{true};
+  std::uint32_t n_sites{0};
+  double J{0.0};
+  double Jz{0.0};
+  double h{0.0};
+  double ground_energy{0.0};
+  double energy_gap{0.0};
+  double structure_pi{0.0};    // S(π) antiferromagnetic structure factor
+  std::vector<double> spin_corr{};  // ⟨S₀·S_r⟩ = ¼⟨X₀X_r + Y₀Y_r + Z₀Z_r⟩
+  std::vector<double> Sz_site{};    // ⟨Z_i⟩/2 per site in ground state
+  std::vector<HeisenbergSweepPoint> sweep{};
+  std::vector<HeisenbergFrame> frames{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
+// ── M28-F: Bose-Hubbard Model ─────────────────────────────────────────────
+
+// One point in the J/U parameter sweep.
+struct BoseHubbardSweepPoint {
+  double J{0.0};              // hopping
+  double superfluid_op{0.0}; // |⟨a_0⟩| superfluid order parameter
+  double ground_energy{0.0};
+  double energy_gap{0.0};
+  double double_occupancy{0.0}; // ⟨Σ n_i(n_i-1)⟩/N
+};
+
+// Options for the Bose-Hubbard model.
+struct BoseHubbardOptions {
+  std::uint32_t n_sites{4};
+  std::uint32_t n_bosons{4};     // total boson number (default = n_sites)
+  std::uint32_t n_max{4};        // max occupation per site
+  double J{0.1};                 // hopping amplitude
+  double U{1.0};                 // on-site interaction U/2 n(n-1)
+  double mu{0.0};                // chemical potential
+  // "ground_state" | "sweep"
+  std::string scenario{"ground_state"};
+  std::uint32_t n_sweep{20};
+  double J_min{0.0};
+  double J_max{0.5};
+};
+
+// Result of a Bose-Hubbard simulation.
+struct BoseHubbardResult {
+  bool ok{true};
+  std::uint32_t n_sites{0};
+  std::uint32_t n_bosons{0};
+  std::uint32_t n_max{0};
+  double J{0.0};
+  double U{0.0};
+  double ground_energy{0.0};
+  double energy_gap{0.0};
+  double superfluid_op{0.0};   // |⟨a_0⟩| averaged over sites
+  double double_occupancy{0.0};
+  std::vector<double> occupation{};   // ⟨n_i⟩ per site
+  std::vector<double> number_dist{};  // P(n) marginal at site 0
+  std::vector<BoseHubbardSweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M27-C: 1D Hubbard Model ───────────────────────────────────────────────
 
 // One point in the U/t parameter sweep.

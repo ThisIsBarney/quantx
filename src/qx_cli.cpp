@@ -51,6 +51,8 @@ int main(int argc, char** argv) {
     std::string phi4_path;
     std::string hubbard_path;
     std::string floquet_path;
+    std::string heisenberg_path;
+    std::string bose_hubbard_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -74,6 +76,8 @@ int main(int argc, char** argv) {
     app.add_option("--phi4", phi4_path, "phi4 options json path (run phi^4 scalar QFT simulation)");
     app.add_option("--hubbard", hubbard_path, "hubbard options json path (run 1D Hubbard model simulation)");
     app.add_option("--floquet", floquet_path, "floquet options json path (run Floquet kicked-Ising simulation)");
+    app.add_option("--heisenberg", heisenberg_path, "heisenberg options json path (run 1D XXZ Heisenberg spin chain simulation)");
+    app.add_option("--bose-hubbard", bose_hubbard_path, "bose-hubbard options json path (run Bose-Hubbard model simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -116,23 +120,26 @@ int main(int argc, char** argv) {
 
     if (problem_path.empty() && circuit_path.empty() && vqe_path.empty() &&
         qpe_path.empty() && qec_path.empty() && qfield_path.empty() &&
-        phi4_path.empty() && hubbard_path.empty() && floquet_path.empty()) {
+        phi4_path.empty() && hubbard_path.empty() && floquet_path.empty() &&
+        heisenberg_path.empty() && bose_hubbard_path.empty()) {
       throw std::runtime_error(
-          "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, or --floquet");
+          "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, --floquet, --heisenberg, or --bose-hubbard");
     }
     {
-      int modes = (!problem_path.empty()  ? 1 : 0) +
-                  (!circuit_path.empty()  ? 1 : 0) +
-                  (!vqe_path.empty()      ? 1 : 0) +
-                  (!qpe_path.empty()      ? 1 : 0) +
-                  (!qec_path.empty()      ? 1 : 0) +
-                  (!qfield_path.empty()   ? 1 : 0) +
-                  (!phi4_path.empty()     ? 1 : 0) +
-                  (!hubbard_path.empty()  ? 1 : 0) +
-                  (!floquet_path.empty()  ? 1 : 0);
+      int modes = (!problem_path.empty()     ? 1 : 0) +
+                  (!circuit_path.empty()     ? 1 : 0) +
+                  (!vqe_path.empty()         ? 1 : 0) +
+                  (!qpe_path.empty()         ? 1 : 0) +
+                  (!qec_path.empty()         ? 1 : 0) +
+                  (!qfield_path.empty()      ? 1 : 0) +
+                  (!phi4_path.empty()        ? 1 : 0) +
+                  (!hubbard_path.empty()     ? 1 : 0) +
+                  (!floquet_path.empty()     ? 1 : 0) +
+                  (!heisenberg_path.empty()  ? 1 : 0) +
+                  (!bose_hubbard_path.empty() ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
-            "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, or --floquet");
+            "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, --floquet, --heisenberg, or --bose-hubbard");
       }
     }
 
@@ -230,6 +237,22 @@ int main(int argc, char** argv) {
       const qx::FloquetOptions floquet_opts = qx::floquet_options_from_json(floquet_json);
       qx::log::info("loaded floquet options file: " + floquet_path);
       output_json = qx::floquet_result_to_json(qx::run_floquet(floquet_opts));
+    } else if (!heisenberg_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --heisenberg mode");
+      }
+      const std::string heisenberg_json = read_text_file(heisenberg_path);
+      const qx::HeisenbergOptions heisenberg_opts = qx::heisenberg_options_from_json(heisenberg_json);
+      qx::log::info("loaded heisenberg options file: " + heisenberg_path);
+      output_json = qx::heisenberg_result_to_json(qx::run_heisenberg(heisenberg_opts));
+    } else if (!bose_hubbard_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --bose-hubbard mode");
+      }
+      const std::string bose_hubbard_json = read_text_file(bose_hubbard_path);
+      const qx::BoseHubbardOptions bose_hubbard_opts = qx::bose_hubbard_options_from_json(bose_hubbard_json);
+      qx::log::info("loaded bose-hubbard options file: " + bose_hubbard_path);
+      output_json = qx::bose_hubbard_result_to_json(qx::run_bose_hubbard(bose_hubbard_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

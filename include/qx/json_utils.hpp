@@ -52,5 +52,13 @@ std::string hubbard_result_to_json(const HubbardResult& result);
 FloquetOptions floquet_options_from_json(const std::string& json);
 // Serialize Floquet result to JSON string.
 std::string floquet_result_to_json(const FloquetResult& result);
+// Parse Heisenberg chain options from JSON string.
+HeisenbergOptions heisenberg_options_from_json(const std::string& json);
+// Serialize Heisenberg result to JSON string.
+std::string heisenberg_result_to_json(const HeisenbergResult& result);
+// Parse Bose-Hubbard options from JSON string.
+BoseHubbardOptions bose_hubbard_options_from_json(const std::string& json);
+// Serialize Bose-Hubbard result to JSON string.
+std::string bose_hubbard_result_to_json(const BoseHubbardResult& result);
 
 }  // namespace qx
