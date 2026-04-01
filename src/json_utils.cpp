@@ -984,6 +984,10 @@ Phi4Options phi4_options_from_json(const std::string& json_text) {
   if (j.contains("m2_max"))          opts.m2_max           = j["m2_max"].get<double>();
   if (j.contains("epsilon"))         opts.epsilon          = j["epsilon"].get<double>();
   if (j.contains("seed"))            opts.seed             = j["seed"].get<std::uint64_t>();
+  if (j.contains("m2_initial"))      opts.m2_initial       = j["m2_initial"].get<double>();
+  if (j.contains("m2_final"))        opts.m2_final         = j["m2_final"].get<double>();
+  if (j.contains("dt"))              opts.dt               = j["dt"].get<double>();
+  if (j.contains("n_steps"))         opts.n_steps          = j["n_steps"].get<std::uint32_t>();
   return opts;
 }
 
@@ -1015,6 +1019,19 @@ std::string phi4_result_to_json(const Phi4Result& result) {
     sw.push_back(ptj);
   }
   j["sweep"] = sw;
+
+  json dyn = json::array();
+  for (const auto& f : result.dynamics) {
+    json fj;
+    fj["time"]        = f.time;
+    fj["phi_expect"]  = f.phi_expect;
+    fj["occupation"]  = f.occupation;
+    fj["order_param"] = f.order_param;
+    fj["entropy"]     = f.entropy;
+    fj["energy"]      = f.energy;
+    dyn.push_back(fj);
+  }
+  j["dynamics"] = dyn;
 
   return j.dump();
 }
