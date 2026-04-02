@@ -920,6 +920,47 @@ struct AndersonResult {
   std::string message;
 };
 
+// ── M32: Many-Body Localization (disordered XXZ chain) ────────────────────
+
+struct MBLSweepPoint {
+  double W{0.0};
+  double r_mean{0.0};       // mean level-spacing ratio <r>
+  double entropy_mean{0.0}; // mean half-chain entanglement entropy <S_EE>
+  double ipr_mean{0.0};     // mean IPR of middle-spectrum eigenstates
+};
+
+struct MBLOptions {
+  int    n_sites{10};        // chain length (N even, Sz=0 sector)
+  double J{1.0};             // Heisenberg coupling
+  double delta{1.0};         // XXZ anisotropy (1 = Heisenberg, 0 = XX)
+  double W{3.0};             // disorder strength at single point
+  std::string scenario{"single"};  // single | sweep
+  double W_min{0.5};
+  double W_max{8.0};
+  int    n_sweep{16};        // number of W values
+  int    n_samples{10};      // disorder realizations per W (sweep)
+  unsigned int seed{42};
+};
+
+struct MBLResult {
+  bool   ok{false};
+  int    n_sites{0};
+  double J{0.0}, delta{0.0}, W{0.0};
+  std::string scenario;
+  // single-realization data
+  std::vector<double> evals;       // sorted eigenvalues in Sz=0 sector
+  std::vector<double> entropies;   // S_EE per eigenstate (middle half of spectrum)
+  std::vector<double> iprs;        // IPR per eigenstate (middle half)
+  std::vector<double> r_vals;      // individual r_n values
+  double entropy_mean{0.0};
+  double r_mean{0.0};
+  double ipr_mean{0.0};
+  // sweep data
+  std::vector<MBLSweepPoint> sweep;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M31-K: 2D Chern Insulator (Qi-Wu-Zhang model) ────────────────────────
 //
 // H(k) = sin(kx)σx + sin(ky)σy + (m + cos(kx) + cos(ky))σz

@@ -6878,6 +6878,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("anderson",           "Anderson 局域化"),
           ("chern",              "2D Chern 绝缘体 (QWZ)"),
           ("hofstadter",         "Hofstadter 蝴蝶"),
+          ("mbl",                "MBL 多体局域化 (XXZ+disorder)"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -9617,6 +9618,321 @@ if(DATA.bands && DATA.bands.length > 0)
 </html>"""
 
 
+def _mbl_frames(
+    n_sites: int = 10,
+    J: float = 1.0,
+    delta: float = 1.0,
+    W: float = 3.0,
+    scenario: str = "single",
+    W_min: float = 0.5,
+    W_max: float = 8.0,
+    n_sweep: int = 16,
+    n_samples: int = 10,
+    seed: int = 42,
+) -> dict:
+    """NumPy MBL reference implementation: disordered XXZ Heisenberg chain."""
+    import numpy as np  # noqa: PLC0415
+
+    N = n_sites
+    rng = np.random.default_rng(seed)
+
+    def sz0_basis(n: int):
+        """Enumerate Sz=0 basis states (Gosper's hack)."""
+        n_down = n // 2
+        s = (1 << n_down) - 1
+        lim = 1 << n
+        states = []
+        while s < lim:
+            states.append(s)
+            c = s & (-s)
+            r = s + c
+            s = (((r ^ s) >> 2) // c) | r
+        return np.array(states, dtype=np.int32)
+
+    def build_ham(h_disorder):
+        """Build dense MBL Hamiltonian in Sz=0 sector."""
+        basis = sz0_basis(N)
+        dim = len(basis)
+        idx_map = {int(basis[i]): i for i in range(dim)}
+        H = np.zeros((dim, dim))
+        for i in range(dim):
+            s = int(basis[i])
+            diag = 0.0
+            for site in range(N - 1):
+                bi  = (s >> site    ) & 1
+                bi1 = (s >> (site+1)) & 1
+                diag += J * delta * (1 - 2*bi) * (1 - 2*bi1) * 0.25
+            for site in range(N):
+                bi = (s >> site) & 1
+                diag += h_disorder[site] * (1 - 2*bi) * 0.5
+            H[i, i] = diag
+            for site in range(N - 1):
+                bi  = (s >> site    ) & 1
+                bi1 = (s >> (site+1)) & 1
+                if bi == bi1:
+                    continue
+                mask = (1 << site) | (1 << (site + 1))
+                sp = s ^ mask
+                j = idx_map.get(sp, -1)
+                if j > i:
+                    H[i, j] = H[j, i] = J * 0.5
+        return H, basis
+
+    def entanglement_entropy(psi, basis_arr):
+        """Half-chain S_EE via reduced density matrix."""
+        NA = N // 2
+        dim_L = 1 << NA
+        dim_R = 1 << (N - NA)
+        C = np.zeros((dim_L, dim_R))
+        for idx, s in enumerate(basis_arr):
+            sL = int(s) & (dim_L - 1)
+            sR = int(s) >> NA
+            C[sL, sR] = psi[idx]
+        rho = C @ C.T
+        evals_rho = np.linalg.eigvalsh(rho)
+        evals_rho = evals_rho[evals_rho > 1e-15]
+        return float(-np.sum(evals_rho * np.log(evals_rho)))
+
+    def level_spacing_ratio(evals_sorted):
+        """Mean level-spacing ratio <r>."""
+        d = np.diff(evals_sorted)
+        d = d[d > 1e-15]
+        if len(d) < 2:
+            return 0.0
+        r = np.minimum(d[:-1], d[1:]) / np.maximum(d[:-1], d[1:])
+        return float(r.mean())
+
+    def level_spacing_ratios_all(evals_sorted):
+        """Individual r_n values."""
+        d = np.diff(evals_sorted)
+        mask = (d[:-1] > 1e-15) & (d[1:] > 1e-15)
+        d0, d1 = d[:-1][mask], d[1:][mask]
+        return (np.minimum(d0, d1) / np.maximum(d0, d1)).tolist()
+
+    def solve_single(h_disorder):
+        """Full diagonalization for one disorder realization."""
+        H, basis = build_ham(h_disorder)
+        dim = len(basis)
+        evals, evecs = np.linalg.eigh(H)
+        lo, hi = dim // 4, 3 * dim // 4
+        entropies = [entanglement_entropy(evecs[:, col], basis) for col in range(lo, hi)]
+        iprs = [(evecs[:, col] ** 4).sum() for col in range(lo, hi)]
+        r_vals = level_spacing_ratios_all(evals)
+        r_mean = level_spacing_ratio(evals)
+        ent_mean = float(np.mean(entropies)) if entropies else 0.0
+        ipr_mean = float(np.mean(iprs)) if iprs else 0.0
+        return {
+            "evals": evals.tolist(),
+            "entropies": entropies,
+            "iprs": iprs,
+            "r_vals": r_vals,
+            "r_mean": r_mean,
+            "entropy_mean": ent_mean,
+            "ipr_mean": ipr_mean,
+        }
+
+    # Single realization
+    h0 = rng.uniform(-W, W, N)
+    single = solve_single(h0)
+    phase_label = "Ergodic / ETH" if single["r_mean"] > 0.46 else "MBL / Localized"
+
+    sweep = []
+    if scenario == "sweep":
+        for k in range(n_sweep):
+            Wk = W_min + (W_max - W_min) * k / (n_sweep - 1)
+            sum_r, sum_S, sum_ipr = 0.0, 0.0, 0.0
+            for samp in range(n_samples):
+                h_s = np.random.default_rng(int(rng.integers(0, 2**31))).uniform(-Wk, Wk, N)
+                H_s, basis_s = build_ham(h_s)
+                dim = len(basis_s)
+                evals_s, evecs_s = np.linalg.eigh(H_s)
+                sum_r += level_spacing_ratio(evals_s)
+                lo, hi = dim // 4, 3 * dim // 4
+                step = max(1, (hi - lo) // 8)
+                samp_S, samp_ipr, cnt = 0.0, 0.0, 0
+                for col in range(lo, hi, step):
+                    samp_S   += entanglement_entropy(evecs_s[:, col], basis_s)
+                    samp_ipr += float((evecs_s[:, col] ** 4).sum())
+                    cnt += 1
+                if cnt > 0:
+                    sum_S   += samp_S   / cnt
+                    sum_ipr += samp_ipr / cnt
+            sweep.append({
+                "W": float(Wk),
+                "r_mean": float(sum_r / n_samples),
+                "entropy_mean": float(sum_S / n_samples),
+                "ipr_mean": float(sum_ipr / n_samples),
+            })
+
+    return {
+        "n_sites": N,
+        "J": J,
+        "delta": delta,
+        "W": W,
+        "scenario": scenario,
+        "evals": single["evals"],
+        "entropies": single["entropies"],
+        "iprs": single["iprs"],
+        "r_vals": single["r_vals"],
+        "r_mean": single["r_mean"],
+        "entropy_mean": single["entropy_mean"],
+        "ipr_mean": single["ipr_mean"],
+        "phase_label": phase_label,
+        "sweep": sweep,
+    }
+
+
+def _mbl_page(data: dict, title: str = "Many-Body Localization") -> str:
+    """4-panel MBL page: energy+IPR, r histogram, S_EE, sweep diagnostics."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    r_val = data.get("r_mean", 0.0)
+    phase = data.get("phase_label", "MBL / Localized")
+    ent   = data.get("entropy_mean", 0.0)
+    ipr   = data.get("ipr_mean", 0.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:220px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+  .badge{{display:inline-block;padding:2px 10px;border-radius:4px;font-size:0.75rem;
+          background:#1f3a5f;color:#79c0ff;border:1px solid #388bfd;margin:4px;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  N={data.get('n_sites',10)}, J={data.get('J',1):.2f}, &Delta;={data.get('delta',1):.2f},
+  W={data.get('W',3):.2f} &nbsp;|&nbsp;
+  <b>&langle;r&rangle;</b>={r_val:.3f} &nbsp;|&nbsp;
+  <b>&langle;S_EE&rangle;</b>={ent:.3f} &nbsp;|&nbsp;
+  <b>&langle;IPR&rangle;</b>={ipr:.4f}
+  &nbsp;&nbsp;<span class="badge">{phase}</span>
+</div>
+<div class="grid">
+  <div class="panel"><canvas id="cIPR"></canvas>
+    <div class="label">IPR per eigenstate (middle half) — high IPR = localized</div></div>
+  <div class="panel"><canvas id="cRhist"></canvas>
+    <div class="label">Level-spacing ratio r histogram (GOE=0.530, Poisson=0.386)</div></div>
+  <div class="panel"><canvas id="cEnt"></canvas>
+    <div class="label">Half-chain entanglement S_EE per eigenstate (middle half)</div></div>
+  <div class="panel"><canvas id="cSweep"></canvas>
+    <div class="label">&langle;r&rangle; vs disorder W — transition ergodic&rarr;MBL</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function lineChart(id, xs, ys, color, ylabel, xlabel, refs) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs);
+  var allY = ys.slice(); if(refs) refs.forEach(function(r){{allY.push(r.v);}});
+  var ymin=Math.min.apply(null,allY), ymax=Math.max.apply(null,allY);
+  var xr=xmax-xmin||1, yr=ymax-ymin||1;
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  if(refs) refs.forEach(function(r){{
+    var py=H-pad-(r.v-ymin)/yr*(H-2*pad);
+    ctx.strokeStyle=r.c; ctx.lineWidth=1; ctx.setLineDash([5,3]);
+    ctx.beginPath(); ctx.moveTo(pad,py); ctx.lineTo(W-pad,py); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=r.c; ctx.font="9px monospace"; ctx.fillText(r.label,W-pad-4,py-3);
+  }});
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  for(var i=0;i<xs.length;i++){{
+    var px=pad+(xs[i]-xmin)/xr*(W-2*pad), py=H-pad-(ys[i]-ymin)/yr*(H-2*pad);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14); ctx.fillText(xlabel,W-pad,H-4);
+}}
+
+function barChart(id, vals, colorFn, ylabel) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var n = vals.length, ymax = Math.max.apply(null, vals); if(ymax===0)ymax=1;
+  var bw = Math.max(1,(W-2*pad)/n);
+  for(var i=0;i<n;i++){{
+    var bh=vals[i]/ymax*(H-2*pad), bx=pad+i*bw, by=H-pad-bh;
+    ctx.fillStyle=colorFn(i,vals[i]); ctx.fillRect(bx,by,Math.max(1,bw-1),bh);
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace"; ctx.fillText(ylabel,4,14);
+}}
+
+function rHistogram(id, rvals) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var nbins = 20;
+  var counts = new Array(nbins).fill(0);
+  for(var i=0;i<rvals.length;i++){{
+    var b = Math.min(nbins-1, Math.floor(rvals[i]*nbins));
+    counts[b]++;
+  }}
+  var ymax = Math.max.apply(null, counts); if(ymax===0)ymax=1;
+  var bw = (W-2*pad)/nbins;
+  for(var b=0;b<nbins;b++){{
+    var bh=counts[b]/ymax*(H-2*pad), bx=pad+b*bw, by=H-pad-bh;
+    ctx.fillStyle="#57ab5a"; ctx.fillRect(bx,by,Math.max(1,bw-1),bh);
+  }}
+  // GOE and Poisson reference lines
+  var refs2=[{{v:0.530,c:"#388bfd",label:"GOE"}},{{v:0.386,c:"#e3b341",label:"Poisson"}}];
+  refs2.forEach(function(r){{
+    var rx=pad+r.v*(W-2*pad);
+    ctx.strokeStyle=r.c; ctx.lineWidth=1.5; ctx.setLineDash([5,3]);
+    ctx.beginPath(); ctx.moveTo(rx,pad); ctx.lineTo(rx,H-pad); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=r.c; ctx.font="9px monospace"; ctx.fillText(r.label,rx+2,pad+12);
+  }});
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText("count",4,14); ctx.fillText("r",W-pad,H-4);
+}}
+
+// Panel 1: IPR per eigenstate
+if(DATA.iprs && DATA.iprs.length>0){{
+  var dim=DATA.evals.length, ipr_th=1.0/(dim||1);
+  barChart("cIPR", DATA.iprs,
+    function(i,v){{return v > ipr_th*5 ? "#e3b341" : "#388bfd";}}, "IPR");
+}}
+
+// Panel 2: r histogram
+if(DATA.r_vals && DATA.r_vals.length>0)
+  rHistogram("cRhist", DATA.r_vals);
+
+// Panel 3: S_EE per eigenstate
+if(DATA.entropies && DATA.entropies.length>0){{
+  var xs3=[]; for(var i=0;i<DATA.entropies.length;i++) xs3.push(i);
+  lineChart("cEnt", xs3, DATA.entropies, "#bc8cff", "S_EE", "state idx", null);
+}}
+
+// Panel 4: <r> vs W sweep
+if(DATA.sweep && DATA.sweep.length>0){{
+  var swW=DATA.sweep.map(function(p){{return p.W;}});
+  var swR=DATA.sweep.map(function(p){{return p.r_mean;}});
+  lineChart("cSweep", swW, swR, "#57ab5a", "<r>", "W",
+    [{{v:0.386,c:"#e3b341",label:"Poisson"}},{{v:0.530,c:"#388bfd",label:"GOE"}}]);
+}}
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -9624,7 +9940,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -9754,6 +10070,16 @@ def main() -> int:
   parser.add_argument("--hofstadter-phi", type=float, default=0.25, help="flux for fixed-phi bands scenario")
   parser.add_argument("--hofstadter-nk",  type=int,   default=40,   help="k-points for bands scenario")
   parser.add_argument("--hofstadter-nky", type=int,   default=12,   help="ky samples per flux value")
+  parser.add_argument("--mbl-sites",    type=int,   default=10,   help="number of sites for MBL chain (even, 2-16)")
+  parser.add_argument("--mbl-J",        type=float, default=1.0,  help="Heisenberg coupling J")
+  parser.add_argument("--mbl-delta",    type=float, default=1.0,  help="XXZ anisotropy delta")
+  parser.add_argument("--mbl-W",        type=float, default=3.0,  help="disorder strength W (single)")
+  parser.add_argument("--mbl-scenario", choices=["single", "sweep"], default="single", help="single | sweep")
+  parser.add_argument("--mbl-W-min",    type=float, default=0.5,  help="minimum W for MBL sweep")
+  parser.add_argument("--mbl-W-max",    type=float, default=8.0,  help="maximum W for MBL sweep")
+  parser.add_argument("--mbl-sweep-points", type=int, default=16, help="number of W values in MBL sweep")
+  parser.add_argument("--mbl-samples",  type=int,   default=10,   help="disorder realizations per W (sweep)")
+  parser.add_argument("--mbl-seed",     type=int,   default=42,   help="random seed for MBL")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -10584,6 +10910,29 @@ def main() -> int:
       path.write_text(_hofstadter_page(hof_data, title="Hofstadter Butterfly — Fractal Landau Levels"), encoding="utf-8")
       generated.append(path)
 
+  # ── M32: Many-Body Localization ───────────────────────────────────────────
+  if args.scenario in {"mbl", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("mbl skipped: numpy not available", file=sys.stderr)
+    else:
+      mbl_data = _mbl_frames(
+          n_sites=args.mbl_sites,
+          J=args.mbl_J,
+          delta=args.mbl_delta,
+          W=args.mbl_W,
+          scenario=args.mbl_scenario,
+          W_min=args.mbl_W_min,
+          W_max=args.mbl_W_max,
+          n_sweep=args.mbl_sweep_points,
+          n_samples=args.mbl_samples,
+          seed=args.mbl_seed,
+      )
+      path = out_dir / "quantum_mbl.html"
+      path.write_text(_mbl_page(mbl_data, title="Many-Body Localization — Disordered XXZ Chain"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -10630,6 +10979,7 @@ def main() -> int:
         "anderson":           "quantum_anderson",
         "chern":              "quantum_chern",
         "hofstadter":         "quantum_hofstadter",
+        "mbl":                "quantum_mbl",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
