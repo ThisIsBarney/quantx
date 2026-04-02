@@ -473,8 +473,6 @@ MBLResult run_mbl(const MBLOptions& opts) {
         throw std::runtime_error("MBL: J must be positive");
     if (opts.W < 0.0)
         throw std::runtime_error("MBL: W must be non-negative");
-    if (opts.n_sweep < 2)
-        throw std::runtime_error("MBL: n_sweep must be >= 2");
     if (opts.n_samples < 1)
         throw std::runtime_error("MBL: n_samples must be >= 1");
 
@@ -490,6 +488,8 @@ MBLResult run_mbl(const MBLOptions& opts) {
                            res.evals, res.entropies, res.iprs, res.r_vals,
                            res.r_mean, res.entropy_mean, res.ipr_mean);
     } else if (opts.scenario == "sweep") {
+        if (opts.n_sweep < 2)
+            throw std::runtime_error("MBL: n_sweep must be >= 2 for sweep scenario");
         res.sweep.reserve(opts.n_sweep);
         for (int k = 0; k < opts.n_sweep; ++k) {
             double Wk = opts.W_min + (opts.W_max - opts.W_min) * k / (opts.n_sweep - 1);

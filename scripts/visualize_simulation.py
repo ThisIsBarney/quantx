@@ -9737,7 +9737,7 @@ def _mbl_frames(
     phase_label = "Ergodic / ETH" if single["r_mean"] > 0.46 else "MBL / Localized"
 
     sweep = []
-    if scenario == "sweep" or True:  # always compute sweep for HTML page
+    if scenario == "sweep":
         for k in range(n_sweep):
             Wk = W_min + (W_max - W_min) * k / (n_sweep - 1)
             sum_r, sum_S, sum_ipr = 0.0, 0.0, 0.0
