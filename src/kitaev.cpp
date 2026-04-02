@@ -235,20 +235,27 @@ struct KitaevObs {
     std::vector<double> majorana;  // |u_i + v_i|² per site, for lowest |E| mode
 };
 
-static KitaevObs compute_obs(int N, const BdGSol& sol) {
+static KitaevObs compute_obs(int N, const BdGSol& sol, double t, double delta) {
     KitaevObs obs;
     int dim = 2 * N;
 
-    // Gap: smallest positive quasi-energy (BdG spectrum is ±E symmetric)
-    double min_pos = 1e30;
-    for (double e : sol.evals) if (e > 1e-10) min_pos = std::min(min_pos, e);
-    obs.gap = (min_pos < 1e29) ? min_pos : 0.0;
+    // Threshold for near-zero modes: use bulk scale 0.3*min(|t|,|Δ|) so that
+    // a finite Majorana split ε << bulk gap does not become min_pos and push
+    // thr below ε (which would wrongly label topological states as trivial).
+    // Pattern mirrors the SSH bulk-gap fix from M29.
+    double thr = std::max(0.3 * std::min(std::abs(t), std::abs(delta)), 1e-8);
 
-    // Topological invariant: sign of parity = -1 if near-zero mode exists
-    double thr = std::max(0.3 * std::min(std::abs(sol.evals.front()), min_pos), 1e-8);
+    // Topological invariant: Q = -1 if near-zero (Majorana) modes exist
     int n_zero = 0;
     for (double e : sol.evals) if (std::abs(e) < thr) ++n_zero;
     obs.topo_inv = (n_zero > 0) ? -1.0 : 1.0;
+
+    // Gap: smallest positive quasi-energy ABOVE the near-zero threshold
+    // (bulk quasiparticle gap, not the Majorana split energy).
+    // This is the quantity that closes at the QPT |μ|=2t.
+    double bulk_gap = 1e30;
+    for (double e : sol.evals) if (e > thr) bulk_gap = std::min(bulk_gap, e);
+    obs.gap = (bulk_gap < 1e29) ? bulk_gap : 0.0;
 
     // Majorana weight: collect all near-zero mode indices
     // In the topological phase there are exactly 2 (one ±E pair at ~0).
@@ -327,7 +334,7 @@ KitaevResult run_kitaev(const KitaevOptions& opts) {
 
     if (opts.scenario == "spectrum" || opts.scenario == "sweep") {
         BdGSol sol = solve_bdg(N, opts.t, opts.delta, opts.mu);
-        KitaevObs obs = compute_obs(N, sol);
+        KitaevObs obs = compute_obs(N, sol, opts.t, opts.delta);
         res.energies       = sol.evals;
         res.gap            = obs.gap;
         res.topo_inv       = obs.topo_inv;
@@ -341,7 +348,7 @@ KitaevResult run_kitaev(const KitaevOptions& opts) {
         for (int k = 0; k < opts.n_sweep; ++k) {
             double muk = opts.mu_min + (opts.mu_max - opts.mu_min) * k / (opts.n_sweep - 1);
             BdGSol sol = solve_bdg(N, opts.t, opts.delta, muk);
-            KitaevObs obs = compute_obs(N, sol);
+            KitaevObs obs = compute_obs(N, sol, opts.t, opts.delta);
             KitaevSweepPoint pt;
             pt.mu = muk;
             pt.gap = obs.gap;

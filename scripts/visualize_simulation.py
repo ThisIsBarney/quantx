@@ -8821,11 +8821,12 @@ def _kitaev_frames(
     def solve_point(mu_: float) -> dict:
         H = build_bdg(mu_)
         evals, evecs = np.linalg.eigh(H)
-        # Gap: smallest positive quasi-energy
-        pos = evals[evals > 1e-10]
+        # Threshold: bulk scale, not derived from min eigenvalue (P1 fix)
+        thr = max(0.3 * min(abs(t), abs(delta)), 1e-8)
+        # Gap: smallest bulk quasi-energy (above threshold, not Majorana split)
+        pos = evals[evals > thr]
         gap = float(pos.min()) if len(pos) else 0.0
         # Topological invariant from near-zero modes
-        thr = max(0.3 * min(abs(t), abs(delta)), 1e-8)
         n_zero = int(np.sum(np.abs(evals) < thr))
         topo_inv = -1.0 if n_zero > 0 else 1.0
         # Majorana weight: collect ALL near-zero mode indices.
