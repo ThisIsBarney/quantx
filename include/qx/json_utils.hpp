@@ -84,5 +84,9 @@ std::string chern_result_to_json(const ChernResult& result);
 HofstadterOptions hofstadter_options_from_json(const std::string& json);
 // Serialize Hofstadter butterfly result to JSON string.
 std::string hofstadter_result_to_json(const HofstadterResult& result);
+// Parse Many-Body Localization options from JSON string.
+MBLOptions mbl_options_from_json(const std::string& json);
+// Serialize Many-Body Localization result to JSON string.
+std::string mbl_result_to_json(const MBLResult& result);
 
 }  // namespace qx

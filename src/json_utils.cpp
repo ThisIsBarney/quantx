@@ -1523,5 +1523,54 @@ std::string hofstadter_result_to_json(const HofstadterResult& r) {
   return j.dump();
 }
 
+// ── M32: MBL ─────────────────────────────────────────────────────────────────
+
+MBLOptions mbl_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  MBLOptions o;
+  if (j.contains("n_sites"))   o.n_sites   = j["n_sites"].get<int>();
+  if (j.contains("J"))         o.J         = j["J"].get<double>();
+  if (j.contains("delta"))     o.delta     = j["delta"].get<double>();
+  if (j.contains("W"))         o.W         = j["W"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  if (j.contains("W_min"))     o.W_min     = j["W_min"].get<double>();
+  if (j.contains("W_max"))     o.W_max     = j["W_max"].get<double>();
+  if (j.contains("n_sweep"))   o.n_sweep   = j["n_sweep"].get<int>();
+  if (j.contains("n_samples")) o.n_samples = j["n_samples"].get<int>();
+  if (j.contains("seed"))      o.seed      = j["seed"].get<unsigned int>();
+  return o;
+}
+
+std::string mbl_result_to_json(const MBLResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["n_sites"]      = r.n_sites;
+  j["J"]            = r.J;
+  j["delta"]        = r.delta;
+  j["W"]            = r.W;
+  j["scenario"]     = r.scenario;
+  j["evals"]        = r.evals;
+  j["entropies"]    = r.entropies;
+  j["iprs"]         = r.iprs;
+  j["r_vals"]       = r.r_vals;
+  j["entropy_mean"] = r.entropy_mean;
+  j["r_mean"]       = r.r_mean;
+  j["ipr_mean"]     = r.ipr_mean;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  json sweep_arr = json::array();
+  for (const auto& pt : r.sweep) {
+    json sp;
+    sp["W"]            = pt.W;
+    sp["r_mean"]       = pt.r_mean;
+    sp["entropy_mean"] = pt.entropy_mean;
+    sp["ipr_mean"]     = pt.ipr_mean;
+    sweep_arr.push_back(sp);
+  }
+  j["sweep"] = sweep_arr;
+  return j.dump();
+}
+
 }  // namespace qx
 

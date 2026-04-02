@@ -56,5 +56,7 @@ AndersonResult run_anderson(const AndersonOptions& opts);
 ChernResult run_chern(const ChernOptions& opts);
 // Run Hofstadter butterfly simulation.
 HofstadterResult run_hofstadter(const HofstadterOptions& opts);
+// Run Many-Body Localization (disordered XXZ chain) simulation.
+MBLResult run_mbl(const MBLOptions& opts);
 
 }  // namespace qx

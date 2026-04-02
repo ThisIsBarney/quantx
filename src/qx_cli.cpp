@@ -59,6 +59,7 @@ int main(int argc, char** argv) {
     std::string anderson_path;
     std::string chern_path;
     std::string hofstadter_path;
+    std::string mbl_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -90,6 +91,7 @@ int main(int argc, char** argv) {
     app.add_option("--anderson", anderson_path, "anderson options json path (run Anderson localization simulation)");
     app.add_option("--chern", chern_path, "chern options json path (run 2D Chern insulator / QWZ model simulation)");
     app.add_option("--hofstadter", hofstadter_path, "hofstadter options json path (run Hofstadter butterfly simulation)");
+    app.add_option("--mbl", mbl_path, "mbl options json path (run Many-Body Localization disordered XXZ chain simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -136,11 +138,11 @@ int main(int argc, char** argv) {
         heisenberg_path.empty() && bose_hubbard_path.empty() &&
         tfi_path.empty() && ssh_path.empty() &&
         kitaev_path.empty() && anderson_path.empty() &&
-        chern_path.empty() && hofstadter_path.empty()) {
+        chern_path.empty() && hofstadter_path.empty() && mbl_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
-          "--anderson, --chern, or --hofstadter");
+          "--anderson, --chern, --hofstadter, or --mbl");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -159,11 +161,13 @@ int main(int argc, char** argv) {
                   (!kitaev_path.empty()       ? 1 : 0) +
                   (!anderson_path.empty()     ? 1 : 0) +
                   (!chern_path.empty()        ? 1 : 0) +
-                  (!hofstadter_path.empty()   ? 1 : 0);
+                  (!hofstadter_path.empty()   ? 1 : 0) +
+                  (!mbl_path.empty()          ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
-            "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, or --anderson");
+            "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
+            "--anderson, --chern, --hofstadter, or --mbl");
       }
     }
 
@@ -325,6 +329,14 @@ int main(int argc, char** argv) {
       const qx::HofstadterOptions hof_opts = qx::hofstadter_options_from_json(hof_json);
       qx::log::info("loaded hofstadter options file: " + hofstadter_path);
       output_json = qx::hofstadter_result_to_json(qx::run_hofstadter(hof_opts));
+    } else if (!mbl_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --mbl mode");
+      }
+      const std::string mbl_json = read_text_file(mbl_path);
+      const qx::MBLOptions mbl_opts = qx::mbl_options_from_json(mbl_json);
+      qx::log::info("loaded mbl options file: " + mbl_path);
+      output_json = qx::mbl_result_to_json(qx::run_mbl(mbl_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {
