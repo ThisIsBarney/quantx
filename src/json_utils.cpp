@@ -1445,5 +1445,83 @@ std::string anderson_result_to_json(const AndersonResult& r) {
   return j.dump();
 }
 
+// ── M31-K: 2D Chern Insulator ─────────────────────────────────────────────
+
+ChernOptions chern_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  ChernOptions o;
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<int>();
+  if (j.contains("m"))        o.m        = j["m"].get<double>();
+  if (j.contains("t"))        o.t        = j["t"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  if (j.contains("n_k"))      o.n_k      = j["n_k"].get<int>();
+  if (j.contains("n_sweep"))  o.n_sweep  = j["n_sweep"].get<int>();
+  if (j.contains("m_min"))    o.m_min    = j["m_min"].get<double>();
+  if (j.contains("m_max"))    o.m_max    = j["m_max"].get<double>();
+  return o;
+}
+
+std::string chern_result_to_json(const ChernResult& r) {
+  json j;
+  j["ok"]          = r.ok;
+  j["n_sites"]     = r.n_sites;
+  j["m"]           = r.m;
+  j["t"]           = r.t;
+  j["scenario"]    = r.scenario;
+  j["chern"]       = r.chern;
+  j["gap"]         = r.gap;
+  j["elapsed_ms"]  = r.elapsed_ms;
+  j["message"]     = r.message;
+  j["engine_version"] = version_string();
+  j["lower_band"]  = r.lower_band;
+  j["upper_band"]  = r.upper_band;
+  j["berry_curv"]  = r.berry_curv;
+  j["kx_vals"]     = r.kx_vals;
+  json es = json::array();
+  for (const auto& sp : r.edge_spectrum) es.push_back(sp);
+  j["edge_spectrum"] = es;
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["m"]     = pt.m;
+    pj["gap"]   = pt.gap;
+    pj["chern"] = pt.chern;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+  return j.dump();
+}
+
+// ── M31-L: Hofstadter Butterfly ───────────────────────────────────────────
+
+HofstadterOptions hofstadter_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  HofstadterOptions o;
+  if (j.contains("t"))        o.t        = j["t"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  if (j.contains("phi"))      o.phi      = j["phi"].get<double>();
+  if (j.contains("q_max"))    o.q_max    = j["q_max"].get<int>();
+  if (j.contains("n_k"))      o.n_k      = j["n_k"].get<int>();
+  if (j.contains("n_ky"))     o.n_ky     = j["n_ky"].get<int>();
+  return o;
+}
+
+std::string hofstadter_result_to_json(const HofstadterResult& r) {
+  json j;
+  j["ok"]         = r.ok;
+  j["elapsed_ms"] = r.elapsed_ms;
+  j["message"]    = r.message;
+  j["engine_version"] = version_string();
+  j["phi_vals"]   = r.phi_vals;
+  j["evals"]      = r.evals;
+  j["phi_used"]   = r.phi_used;
+  j["n_bands"]    = r.n_bands;
+  j["kx_vals"]    = r.kx_vals;
+  json bd = json::array();
+  for (const auto& band_row : r.bands) bd.push_back(band_row);
+  j["bands"] = bd;
+  return j.dump();
+}
+
 }  // namespace qx
 
