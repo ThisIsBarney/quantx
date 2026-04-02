@@ -6874,6 +6874,8 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("bose_hubbard",       "Bose-Hubbard 超流/Mott"),
           ("tfi",                "横场 Ising 量子相变"),
           ("ssh",                "SSH 拓扑绝缘体"),
+          ("kitaev",             "Kitaev 链 Majorana 模式"),
+          ("anderson",           "Anderson 局域化"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -8779,6 +8781,390 @@ if (DATA.sweep && DATA.sweep.length > 0) {{
 </html>"""
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# M30-I: Kitaev Chain  —  Python reference solver + page
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _kitaev_frames(
+    n_sites: int = 20,
+    t: float = 1.0,
+    delta: float = 1.0,
+    mu: float = 0.0,
+    scenario: str = "sweep",
+    n_sweep: int = 40,
+    mu_min: float = -4.0,
+    mu_max: float = 4.0,
+) -> dict:
+    """NumPy BdG reference for Kitaev chain.  Topo phase: |μ| < 2t."""
+    import numpy as np  # noqa: PLC0415
+
+    N = n_sites
+
+    def build_bdg(mu_: float) -> "np.ndarray":
+        dim = 2 * N
+        H = np.zeros((dim, dim), dtype=float)
+        # On-site: -μ/2 in (c,c) block, +μ/2 in (c†,c†) block
+        for i in range(N):
+            H[i, i]         = -mu_ / 2.0
+            H[i + N, i + N] =  mu_ / 2.0
+        for i in range(N - 1):
+            # Hopping
+            H[i, i + 1] += -t / 2.0; H[i + 1, i] += -t / 2.0
+            H[i + N, i + 1 + N] += t / 2.0; H[i + 1 + N, i + N] += t / 2.0
+            # Pairing
+            H[i, i + 1 + N]     += +delta / 2.0
+            H[i + 1 + N, i]     += +delta / 2.0
+            H[i + 1, i + N]     += -delta / 2.0
+            H[i + N, i + 1]     += -delta / 2.0
+        return H
+
+    def solve_point(mu_: float) -> dict:
+        H = build_bdg(mu_)
+        evals, evecs = np.linalg.eigh(H)
+        # Threshold: bulk scale, not derived from min eigenvalue (P1 fix)
+        thr = max(0.3 * min(abs(t), abs(delta)), 1e-8)
+        # Gap: smallest bulk quasi-energy (above threshold, not Majorana split)
+        pos = evals[evals > thr]
+        gap = float(pos.min()) if len(pos) else 0.0
+        # Topological invariant from near-zero modes
+        n_zero = int(np.sum(np.abs(evals) < thr))
+        topo_inv = -1.0 if n_zero > 0 else 1.0
+        # Majorana weight: collect ALL near-zero mode indices.
+        # In the topological phase there are 2 (±E degenerate pair at ~0).
+        # A single eigenvector from a degenerate pair has arbitrary mixing
+        # and yields all-zero u+v.  Combine both modes into symmetric (+)
+        # and antisymmetric (-) Majorana operators and pick the one with
+        # higher left-boundary weight (site 0).
+        zero_inds = np.where(np.abs(evals) < thr)[0]
+        if len(zero_inds) >= 2:
+            idx1, idx2 = zero_inds[0], zero_inds[1]
+            u1, v1 = evecs[:N, idx1], evecs[N:, idx1]
+            u2, v2 = evecs[:N, idx2], evecs[N:, idx2]
+            majA = ((u1 + u2) + (v1 + v2)) ** 2
+            majB = ((u1 - u2) + (v1 - v2)) ** 2
+            nA, nB = majA.sum(), majB.sum()
+            if nA > 1e-14:
+                majA /= nA
+            if nB > 1e-14:
+                majB /= nB
+            # Pick the combination with higher weight on either boundary (site 0 or N-1)
+            bndA = max(majA[0], majA[N - 1])
+            bndB = max(majB[0], majB[N - 1])
+            majorana = majA if bndA >= bndB else majB
+        else:
+            zero_idx = int(np.argmin(np.abs(evals)))
+            evec = evecs[:, zero_idx]
+            u, v = evec[:N], evec[N:]
+            majorana = (u + v) ** 2
+            norm = majorana.sum()
+            if norm > 1e-14:
+                majorana /= norm
+        return {"gap": gap, "topo_inv": topo_inv, "majorana": majorana.tolist()}
+
+    sol0 = solve_point(mu)
+    H0 = build_bdg(mu)
+    evals0, _ = np.linalg.eigh(H0)
+
+    sweep = []
+    for k in range(n_sweep):
+        muk = mu_min + (mu_max - mu_min) * k / (n_sweep - 1)
+        s = solve_point(muk)
+        # Take the larger of the two boundary weights (left or right end)
+        maj = s["majorana"]
+        bdy_l = maj[0] + maj[1] if len(maj) >= 2 else 0.0
+        bdy_r = maj[-1] + maj[-2] if len(maj) >= 2 else 0.0
+        bdy = max(bdy_l, bdy_r)
+        sweep.append({"mu": muk, "gap": s["gap"], "topo_inv": s["topo_inv"],
+                      "majorana_weight": bdy})
+
+    return {
+        "n_sites": N, "t": t, "delta": delta, "mu": mu,
+        "energies": evals0.tolist(),
+        "gap": sol0["gap"],
+        "topo_inv": sol0["topo_inv"],
+        "majorana_weight": sol0["majorana"],
+        "sweep": sweep,
+    }
+
+
+def _kitaev_page(data: dict, title: str = "Kitaev Chain") -> str:
+    """4-panel Kitaev page: BdG spectrum, Majorana weight, gap vs μ, topo_inv vs μ."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    topo_label = "Topological (Q=-1)" if data.get("topo_inv", 1) < 0 else "Trivial (Q=+1)"
+    topo_cls   = "topo" if data.get("topo_inv", 1) < 0 else "trivial"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:220px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+  .badge{{display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.75rem;font-weight:bold;}}
+  .topo{{background:#1c3a2c;color:#57ab5a;border:1px solid #57ab5a;}}
+  .trivial{{background:#2c1c1c;color:#e3b341;border:1px solid #e3b341;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  μ = {data.get('mu', 0):.2f} &nbsp;|&nbsp; t = {data.get('t', 1):.2f} &nbsp;|&nbsp;
+  Δ = {data.get('delta', 1):.2f} &nbsp;|&nbsp;
+  Phase: <span class="badge {topo_cls}">{topo_label}</span>
+  &nbsp;(QPT at |μ| = 2t = {2*data.get('t',1):.2f})
+</div>
+<div class="grid">
+  <div class="panel"><canvas id="cSpec"></canvas><div class="label">BdG quasi-energy spectrum</div></div>
+  <div class="panel"><canvas id="cMaj"></canvas><div class="label">Majorana weight |u+v|² per site</div></div>
+  <div class="panel"><canvas id="cGap"></canvas><div class="label">Quasiparticle gap vs μ/t</div></div>
+  <div class="panel"><canvas id="cTopo"></canvas><div class="label">Topological invariant Q vs μ/t</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function lineChart(id, xs, ys, color, ylabel, xlabel) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs);
+  var ymin=Math.min.apply(null,ys), ymax=Math.max.apply(null,ys);
+  var xr=xmax-xmin||1, yr=ymax-ymin||1;
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  // QPT markers at μ=±2t
+  var twoT = 2 * DATA.t;
+  [[twoT,true],[-twoT,true]].forEach(function(m){{
+    var px=pad+(m[0]-xmin)/xr*(W-2*pad);
+    ctx.strokeStyle="#444"; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.moveTo(px,pad); ctx.lineTo(px,H-pad); ctx.stroke();
+    ctx.setLineDash([]);
+  }});
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  for(var i=0;i<xs.length;i++){{
+    var px=pad+(xs[i]-xmin)/xr*(W-2*pad), py=H-pad-(ys[i]-ymin)/yr*(H-2*pad);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14); ctx.fillText(xlabel,W-pad,H-4);
+  ctx.fillText(ymin.toFixed(3),2,H-pad); ctx.fillText(ymax.toFixed(3),2,pad+4);
+}}
+
+function barChart(id, vals, colorFn, ylabel) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var n = vals.length, ymax = Math.max.apply(null, vals.map(Math.abs)); if(ymax===0)ymax=1;
+  var bw = (W-2*pad)/n;
+  for(var i=0;i<n;i++){{
+    var v=vals[i], bh=Math.abs(v)/ymax*(H-2*pad), bx=pad+i*bw+bw*0.1, by=H-pad-bh;
+    ctx.fillStyle=colorFn(i,v); ctx.fillRect(bx,by,bw*0.8,bh);
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace"; ctx.fillText(ylabel,4,14);
+  ctx.strokeStyle="#444"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+}}
+
+// Panel 1: BdG spectrum (bar by eigenvalue index, colour by sign)
+barChart("cSpec", DATA.energies, function(i,v){{return v>0?"#bc8cff":"#388bfd";}}, "E");
+
+// Panel 2: Majorana weight
+barChart("cMaj", DATA.majorana_weight,
+  function(i,v){{return i<2||i>=DATA.majorana_weight.length-2?"#57ab5a":"#30363d";}},
+  "|u+v|²");
+
+// Panels 3-4: sweep
+if(DATA.sweep && DATA.sweep.length>0){{
+  var swM  = DATA.sweep.map(function(p){{return p.mu/DATA.t;}});
+  var swGp = DATA.sweep.map(function(p){{return p.gap;}});
+  var swQ  = DATA.sweep.map(function(p){{return p.topo_inv;}});
+  lineChart("cGap",  swM, swGp, "#e3b341", "Gap",  "μ/t");
+  lineChart("cTopo", swM, swQ,  "#57ab5a", "Q", "μ/t");
+}}
+</script>
+</body>
+</html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M30-J: Anderson Localization  —  Python reference solver + page
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _anderson_frames(
+    n_sites: int = 100,
+    t: float = 1.0,
+    W: float = 2.0,
+    n_samples: int = 50,
+    scenario: str = "sweep",
+    n_sweep: int = 20,
+    W_min: float = 0.1,
+    W_max: float = 8.0,
+    seed: int = 42,
+) -> dict:
+    """NumPy Anderson localization reference."""
+    import numpy as np  # noqa: PLC0415
+
+    N = n_sites
+    rng = np.random.default_rng(seed)
+
+    def build_h(W_: float, seed_: int) -> "np.ndarray":
+        r = np.random.default_rng(seed_)
+        eps = r.uniform(-W_ / 2.0, W_ / 2.0, N)
+        H = np.diag(eps) - t * (np.diag(np.ones(N - 1), 1) + np.diag(np.ones(N - 1), -1))
+        return H
+
+    def gap_ratio(evals: "np.ndarray") -> float:
+        d = np.diff(evals)
+        d = d[d > 1e-14]
+        if len(d) < 2:
+            return 0.0
+        r = np.minimum(d[:-1], d[1:]) / np.maximum(d[:-1], d[1:])
+        return float(r.mean())
+
+    def solve_sample(W_: float, seed_: int) -> dict:
+        H = build_h(W_, seed_)
+        evals, evecs = np.linalg.eigh(H)
+        ipr = (evecs ** 4).sum(axis=0)  # IPR per eigenstate
+        mean_ipr = float(ipr.mean())
+        mean_r = gap_ratio(evals)
+        return {"evals": evals.tolist(), "ipr": ipr.tolist(),
+                "mean_ipr": mean_ipr, "mean_r": mean_r}
+
+    # Single sample at (W, seed)
+    s0 = solve_sample(W, seed)
+    loc_len = min(float(1.0 / s0["mean_ipr"]) if s0["mean_ipr"] > 1e-14 else N, N)
+
+    sweep = []
+    for k in range(n_sweep):
+        Wk = W_min + (W_max - W_min) * k / (n_sweep - 1)
+        sum_ipr, sum_r = 0.0, 0.0
+        for samp in range(n_samples):
+            s = solve_sample(Wk, int(rng.integers(0, 2**31)))
+            sum_ipr += s["mean_ipr"]
+            sum_r   += s["mean_r"]
+        avg_ipr = sum_ipr / n_samples
+        avg_r   = sum_r / n_samples
+        xi = min(1.0 / avg_ipr if avg_ipr > 1e-14 else N, N)
+        sweep.append({"W": Wk, "mean_ipr": avg_ipr, "mean_r": avg_r, "loc_length": xi})
+
+    return {
+        "n_sites": N, "t": t, "W": W,
+        "energies": s0["evals"],
+        "ipr_spectrum": s0["ipr"],
+        "mean_ipr": s0["mean_ipr"],
+        "mean_r": s0["mean_r"],
+        "loc_length": loc_len,
+        "sweep": sweep,
+    }
+
+
+def _anderson_page(data: dict, title: str = "Anderson Localization") -> str:
+    """4-panel Anderson page: IPR spectrum, IPR vs W, ⟨r⟩ vs W, ξ vs W."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    r_val = data.get("mean_r", 0)
+    r_label = f"⟨r⟩ = {r_val:.3f} ({'localised ~Poisson' if r_val < 0.45 else 'ergodic ~GOE'})"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:220px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  N={data.get('n_sites',100)}, t={data.get('t',1):.2f}, W={data.get('W',2):.2f} &nbsp;|&nbsp;
+  ξ ≈ {data.get('loc_length',0):.1f} &nbsp;|&nbsp; {r_label}
+</div>
+<div class="grid">
+  <div class="panel"><canvas id="cIPRs"></canvas><div class="label">IPR per eigenstate (single sample)</div></div>
+  <div class="panel"><canvas id="cIPRw"></canvas><div class="label">⟨IPR⟩ vs disorder W/t</div></div>
+  <div class="panel"><canvas id="cR"></canvas><div class="label">Level-spacing ratio ⟨r⟩ vs W/t (Poisson≈0.39, GOE≈0.53)</div></div>
+  <div class="panel"><canvas id="cXi"></canvas><div class="label">Localization length ξ vs W/t</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function lineChart(id, xs, ys, color, ylabel, xlabel, refs) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs);
+  var allY = ys.slice(); if(refs) refs.forEach(function(r){{allY.push(r.v);}});
+  var ymin=Math.min.apply(null,allY), ymax=Math.max.apply(null,allY);
+  var xr=xmax-xmin||1, yr=ymax-ymin||1;
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  if(refs) refs.forEach(function(r){{
+    var py=H-pad-(r.v-ymin)/yr*(H-2*pad);
+    ctx.strokeStyle=r.c; ctx.lineWidth=1; ctx.setLineDash([5,3]);
+    ctx.beginPath(); ctx.moveTo(pad,py); ctx.lineTo(W-pad,py); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle=r.c; ctx.font="9px monospace"; ctx.fillText(r.label,W-pad-4,py-3);
+  }});
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  for(var i=0;i<xs.length;i++){{
+    var px=pad+(xs[i]-xmin)/xr*(W-2*pad), py=H-pad-(ys[i]-ymin)/yr*(H-2*pad);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14); ctx.fillText(xlabel,W-pad,H-4);
+}}
+
+function barChart(id, vals, colorFn, ylabel) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0,0,W,H);
+  var n = vals.length, ymax = Math.max.apply(null, vals); if(ymax===0)ymax=1;
+  var bw = Math.max(1,(W-2*pad)/n);
+  for(var i=0;i<n;i++){{
+    var bh=vals[i]/ymax*(H-2*pad), bx=pad+i*bw, by=H-pad-bh;
+    ctx.fillStyle=colorFn(i,vals[i]); ctx.fillRect(bx,by,Math.max(1,bw-1),bh);
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace"; ctx.fillText(ylabel,4,14);
+}}
+
+// Panel 1: IPR per state (scatter via bars)
+barChart("cIPRs", DATA.ipr_spectrum,
+  function(i,v){{return v > 1/DATA.n_sites * 5 ? "#e3b341" : "#388bfd";}}, "IPR");
+
+if(DATA.sweep && DATA.sweep.length>0){{
+  var swW  = DATA.sweep.map(function(p){{return p.W/DATA.t;}});
+  var swI  = DATA.sweep.map(function(p){{return p.mean_ipr;}});
+  var swR  = DATA.sweep.map(function(p){{return p.mean_r;}});
+  var swXi = DATA.sweep.map(function(p){{return p.loc_length;}});
+  lineChart("cIPRw", swW, swI, "#bc8cff", "⟨IPR⟩", "W/t", null);
+  lineChart("cR",  swW, swR, "#57ab5a", "⟨r⟩", "W/t",
+    [{{v:0.386,c:"#e3b341",label:"Poisson"}},{{v:0.530,c:"#388bfd",label:"GOE"}}]);
+  lineChart("cXi", swW, swXi, "#388bfd", "ξ", "W/t", null);
+}}
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -8786,7 +9172,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -8888,6 +9274,20 @@ def main() -> int:
   parser.add_argument("--ssh-sweep-points", type=int,   default=30,   help="number of δ values in SSH sweep")
   parser.add_argument("--ssh-delta-min",    type=float, default=-0.9, help="minimum δ for SSH sweep")
   parser.add_argument("--ssh-delta-max",    type=float, default=0.9,  help="maximum δ for SSH sweep")
+  parser.add_argument("--kitaev-sites",    type=int,   default=20,   help="number of sites for Kitaev chain (2-200)")
+  parser.add_argument("--kitaev-t",        type=float, default=1.0,  help="hopping t for Kitaev chain")
+  parser.add_argument("--kitaev-delta",    type=float, default=1.0,  help="pairing amplitude Δ")
+  parser.add_argument("--kitaev-mu",       type=float, default=0.0,  help="chemical potential μ (topo: |μ|<2t)")
+  parser.add_argument("--kitaev-sweep-points", type=int, default=40, help="number of μ values in Kitaev sweep")
+  parser.add_argument("--kitaev-mu-min",   type=float, default=-4.0, help="minimum μ for Kitaev sweep")
+  parser.add_argument("--kitaev-mu-max",   type=float, default=4.0,  help="maximum μ for Kitaev sweep")
+  parser.add_argument("--anderson-sites",   type=int,   default=100, help="number of sites for Anderson chain (4-2000)")
+  parser.add_argument("--anderson-t",       type=float, default=1.0, help="hopping t for Anderson chain")
+  parser.add_argument("--anderson-W",       type=float, default=2.0, help="disorder strength W")
+  parser.add_argument("--anderson-samples", type=int,   default=50,  help="disorder realisations to average")
+  parser.add_argument("--anderson-sweep-points", type=int, default=20, help="number of W values in Anderson sweep")
+  parser.add_argument("--anderson-W-min",   type=float, default=0.1, help="minimum W for Anderson sweep")
+  parser.add_argument("--anderson-W-max",   type=float, default=8.0, help="maximum W for Anderson sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -9638,6 +10038,48 @@ def main() -> int:
       path.write_text(_ssh_page(ssh_data, title="SSH Model — Bulk-Boundary Correspondence"), encoding="utf-8")
       generated.append(path)
 
+  # ── M30-I: Kitaev chain ───────────────────────────────────────────────────
+  if args.scenario in {"kitaev", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("kitaev skipped: numpy not available", file=sys.stderr)
+    else:
+      kitaev_data = _kitaev_frames(
+          n_sites=args.kitaev_sites,
+          t=args.kitaev_t,
+          delta=args.kitaev_delta,
+          mu=args.kitaev_mu,
+          scenario="sweep",
+          n_sweep=args.kitaev_sweep_points,
+          mu_min=args.kitaev_mu_min,
+          mu_max=args.kitaev_mu_max,
+      )
+      path = out_dir / "quantum_kitaev.html"
+      path.write_text(_kitaev_page(kitaev_data, title="Kitaev Chain — Majorana Zero Modes"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M30-J: Anderson localization ──────────────────────────────────────────
+  if args.scenario in {"anderson", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("anderson skipped: numpy not available", file=sys.stderr)
+    else:
+      anderson_data = _anderson_frames(
+          n_sites=args.anderson_sites,
+          t=args.anderson_t,
+          W=args.anderson_W,
+          n_samples=args.anderson_samples,
+          scenario="sweep",
+          n_sweep=args.anderson_sweep_points,
+          W_min=args.anderson_W_min,
+          W_max=args.anderson_W_max,
+      )
+      path = out_dir / "quantum_anderson.html"
+      path.write_text(_anderson_page(anderson_data, title="Anderson Localization — 1D Disorder"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -9680,6 +10122,8 @@ def main() -> int:
         "bose_hubbard":       "quantum_bose_hubbard",
         "tfi":                "quantum_tfi",
         "ssh":                "quantum_ssh",
+        "kitaev":             "quantum_kitaev",
+        "anderson":           "quantum_anderson",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

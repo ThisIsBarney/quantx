@@ -68,5 +68,13 @@ std::string tfi_result_to_json(const TFIResult& result);
 SSHOptions ssh_options_from_json(const std::string& json);
 // Serialize SSH result to JSON string.
 std::string ssh_result_to_json(const SSHResult& result);
+// Parse Kitaev chain options from JSON string.
+KitaevOptions kitaev_options_from_json(const std::string& json);
+// Serialize Kitaev chain result to JSON string.
+std::string kitaev_result_to_json(const KitaevResult& result);
+// Parse Anderson localization options from JSON string.
+AndersonOptions anderson_options_from_json(const std::string& json);
+// Serialize Anderson localization result to JSON string.
+std::string anderson_result_to_json(const AndersonResult& result);
 
 }  // namespace qx

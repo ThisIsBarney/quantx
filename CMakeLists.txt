@@ -98,6 +98,8 @@ add_library(qx_core
   src/bose_hubbard.cpp
   src/tfi.cpp
   src/ssh.cpp
+  src/kitaev.cpp
+  src/anderson.cpp
   src/json_utils.cpp
 )
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

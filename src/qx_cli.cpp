@@ -55,6 +55,8 @@ int main(int argc, char** argv) {
     std::string bose_hubbard_path;
     std::string tfi_path;
     std::string ssh_path;
+    std::string kitaev_path;
+    std::string anderson_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -82,6 +84,8 @@ int main(int argc, char** argv) {
     app.add_option("--bose-hubbard", bose_hubbard_path, "bose-hubbard options json path (run Bose-Hubbard model simulation)");
     app.add_option("--tfi", tfi_path, "tfi options json path (run transverse-field Ising model simulation)");
     app.add_option("--ssh", ssh_path, "ssh options json path (run SSH topological insulator simulation)");
+    app.add_option("--kitaev", kitaev_path, "kitaev options json path (run Kitaev chain p-wave superconductor simulation)");
+    app.add_option("--anderson", anderson_path, "anderson options json path (run Anderson localization simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -126,9 +130,11 @@ int main(int argc, char** argv) {
         qpe_path.empty() && qec_path.empty() && qfield_path.empty() &&
         phi4_path.empty() && hubbard_path.empty() && floquet_path.empty() &&
         heisenberg_path.empty() && bose_hubbard_path.empty() &&
-        tfi_path.empty() && ssh_path.empty()) {
+        tfi_path.empty() && ssh_path.empty() &&
+        kitaev_path.empty() && anderson_path.empty()) {
       throw std::runtime_error(
-          "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, or --ssh");
+          "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
+          "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, or --anderson");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -143,10 +149,13 @@ int main(int argc, char** argv) {
                   (!heisenberg_path.empty()   ? 1 : 0) +
                   (!bose_hubbard_path.empty() ? 1 : 0) +
                   (!tfi_path.empty()          ? 1 : 0) +
-                  (!ssh_path.empty()          ? 1 : 0);
+                  (!ssh_path.empty()          ? 1 : 0) +
+                  (!kitaev_path.empty()       ? 1 : 0) +
+                  (!anderson_path.empty()     ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
-            "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, --hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, or --ssh");
+            "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
+            "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, or --anderson");
       }
     }
 
@@ -276,6 +285,22 @@ int main(int argc, char** argv) {
       const qx::SSHOptions ssh_opts = qx::ssh_options_from_json(ssh_json);
       qx::log::info("loaded ssh options file: " + ssh_path);
       output_json = qx::ssh_result_to_json(qx::run_ssh(ssh_opts));
+    } else if (!kitaev_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --kitaev mode");
+      }
+      const std::string kitaev_json = read_text_file(kitaev_path);
+      const qx::KitaevOptions kitaev_opts = qx::kitaev_options_from_json(kitaev_json);
+      qx::log::info("loaded kitaev options file: " + kitaev_path);
+      output_json = qx::kitaev_result_to_json(qx::run_kitaev(kitaev_opts));
+    } else if (!anderson_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --anderson mode");
+      }
+      const std::string anderson_json = read_text_file(anderson_path);
+      const qx::AndersonOptions anderson_opts = qx::anderson_options_from_json(anderson_json);
+      qx::log::info("loaded anderson options file: " + anderson_path);
+      output_json = qx::anderson_result_to_json(qx::run_anderson(anderson_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {
