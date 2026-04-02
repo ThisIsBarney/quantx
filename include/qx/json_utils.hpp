@@ -76,5 +76,13 @@ std::string kitaev_result_to_json(const KitaevResult& result);
 AndersonOptions anderson_options_from_json(const std::string& json);
 // Serialize Anderson localization result to JSON string.
 std::string anderson_result_to_json(const AndersonResult& result);
+// Parse 2D Chern insulator options from JSON string.
+ChernOptions chern_options_from_json(const std::string& json);
+// Serialize 2D Chern insulator result to JSON string.
+std::string chern_result_to_json(const ChernResult& result);
+// Parse Hofstadter butterfly options from JSON string.
+HofstadterOptions hofstadter_options_from_json(const std::string& json);
+// Serialize Hofstadter butterfly result to JSON string.
+std::string hofstadter_result_to_json(const HofstadterResult& result);
 
 }  // namespace qx

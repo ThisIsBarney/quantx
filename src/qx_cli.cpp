@@ -57,6 +57,8 @@ int main(int argc, char** argv) {
     std::string ssh_path;
     std::string kitaev_path;
     std::string anderson_path;
+    std::string chern_path;
+    std::string hofstadter_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -86,6 +88,8 @@ int main(int argc, char** argv) {
     app.add_option("--ssh", ssh_path, "ssh options json path (run SSH topological insulator simulation)");
     app.add_option("--kitaev", kitaev_path, "kitaev options json path (run Kitaev chain p-wave superconductor simulation)");
     app.add_option("--anderson", anderson_path, "anderson options json path (run Anderson localization simulation)");
+    app.add_option("--chern", chern_path, "chern options json path (run 2D Chern insulator / QWZ model simulation)");
+    app.add_option("--hofstadter", hofstadter_path, "hofstadter options json path (run Hofstadter butterfly simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -131,10 +135,12 @@ int main(int argc, char** argv) {
         phi4_path.empty() && hubbard_path.empty() && floquet_path.empty() &&
         heisenberg_path.empty() && bose_hubbard_path.empty() &&
         tfi_path.empty() && ssh_path.empty() &&
-        kitaev_path.empty() && anderson_path.empty()) {
+        kitaev_path.empty() && anderson_path.empty() &&
+        chern_path.empty() && hofstadter_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
-          "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, or --anderson");
+          "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
+          "--anderson, --chern, or --hofstadter");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -151,7 +157,9 @@ int main(int argc, char** argv) {
                   (!tfi_path.empty()          ? 1 : 0) +
                   (!ssh_path.empty()          ? 1 : 0) +
                   (!kitaev_path.empty()       ? 1 : 0) +
-                  (!anderson_path.empty()     ? 1 : 0);
+                  (!anderson_path.empty()     ? 1 : 0) +
+                  (!chern_path.empty()        ? 1 : 0) +
+                  (!hofstadter_path.empty()   ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
@@ -301,6 +309,22 @@ int main(int argc, char** argv) {
       const qx::AndersonOptions anderson_opts = qx::anderson_options_from_json(anderson_json);
       qx::log::info("loaded anderson options file: " + anderson_path);
       output_json = qx::anderson_result_to_json(qx::run_anderson(anderson_opts));
+    } else if (!chern_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --chern mode");
+      }
+      const std::string chern_json = read_text_file(chern_path);
+      const qx::ChernOptions chern_opts = qx::chern_options_from_json(chern_json);
+      qx::log::info("loaded chern options file: " + chern_path);
+      output_json = qx::chern_result_to_json(qx::run_chern(chern_opts));
+    } else if (!hofstadter_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --hofstadter mode");
+      }
+      const std::string hof_json = read_text_file(hofstadter_path);
+      const qx::HofstadterOptions hof_opts = qx::hofstadter_options_from_json(hof_json);
+      qx::log::info("loaded hofstadter options file: " + hofstadter_path);
+      output_json = qx::hofstadter_result_to_json(qx::run_hofstadter(hof_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

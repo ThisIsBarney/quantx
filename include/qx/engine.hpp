@@ -52,5 +52,9 @@ SSHResult run_ssh(const SSHOptions& opts);
 KitaevResult run_kitaev(const KitaevOptions& opts);
 // Run Anderson localization simulation.
 AndersonResult run_anderson(const AndersonOptions& opts);
+// Run 2D Chern insulator (Qi-Wu-Zhang model) simulation.
+ChernResult run_chern(const ChernOptions& opts);
+// Run Hofstadter butterfly simulation.
+HofstadterResult run_hofstadter(const HofstadterOptions& opts);
 
 }  // namespace qx

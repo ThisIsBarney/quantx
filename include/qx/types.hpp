@@ -920,6 +920,82 @@ struct AndersonResult {
   std::string message;
 };
 
+// ── M31-K: 2D Chern Insulator (Qi-Wu-Zhang model) ────────────────────────
+//
+// H(k) = sin(kx)σx + sin(ky)σy + (m + cos(kx) + cos(ky))σz
+// Topological phases:  C = +1 for -2 < m < 0
+//                      C = -1 for -4 < m < -2
+//                      C =  0 for m > 0 or m < -4
+
+struct ChernSweepPoint {
+  double m{0.0};       // mass parameter
+  double gap{0.0};     // bulk band gap
+  double chern{0.0};   // Chern number C ∈ {-1, 0, +1} (near-integer after FHS)
+};
+
+struct ChernOptions {
+  int n_sites{20};     // Ny for strip-geometry (edge states)
+  double m{-1.0};      // mass parameter (QPT at m = 0, -2, -4)
+  double t{1.0};       // hopping amplitude (scales all off-diagonal terms)
+  std::string scenario{"bands"};  // bands | edge | sweep
+  int n_k{40};         // BZ k-grid: n_k × n_k for Chern, n_k kx points for edge
+  int n_sweep{30};
+  double m_min{-5.0};
+  double m_max{1.0};
+};
+
+struct ChernResult {
+  bool ok{false};
+  int n_sites{0};
+  double m{0.0};
+  double t{0.0};
+  std::string scenario;
+  // bands scenario: Berry curvature + band energies on n_k×n_k BZ grid (row-major kx→ky)
+  std::vector<double> lower_band{};   // E−(kx,ky) flattened [n_k*n_k]
+  std::vector<double> upper_band{};   // E+(kx,ky)
+  std::vector<double> berry_curv{};   // Ω(kx,ky) Berry curvature of lower band
+  double chern{0.0};                  // rounded Chern number
+  double gap{0.0};                    // minimum bulk band gap
+  // edge scenario: spectrum of a finite strip vs kx
+  std::vector<double> kx_vals{};               // kx / (2π) ∈ [0,1]
+  std::vector<std::vector<double>> edge_spectrum{};  // [n_k][2*n_sites] energies
+  // sweep: scan m from m_min to m_max
+  std::vector<ChernSweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
+// ── M31-L: Hofstadter Butterfly ───────────────────────────────────────────
+//
+// 2D square lattice in perpendicular magnetic field B, rational flux φ = p/q
+// per plaquette (Peierls substitution, Landau gauge).
+// Harper equation gives q bands for each rational flux.
+// Butterfly: allowed energies vs φ ∈ [0,1] → fractal spectrum.
+// TKNN band Chern numbers via FHS on 2D magnetic BZ.
+
+struct HofstadterOptions {
+  double t{1.0};
+  std::string scenario{"butterfly"};  // butterfly | bands
+  double phi{0.25};   // for bands scenario (e.g. 1/4, 1/3, …)
+  int q_max{24};      // max denominator scanned for butterfly
+  int n_k{40};        // kx points for bands scenario
+  int n_ky{10};       // ky samples per flux value (butterfly density)
+};
+
+struct HofstadterResult {
+  bool ok{false};
+  // butterfly: sparse (phi, energy) pairs
+  std::vector<double> phi_vals{};  // one entry per eigenvalue across all φ
+  std::vector<double> evals{};     // eigenvalue (same length as phi_vals)
+  // bands: kx-resolved spectrum for a fixed rational φ
+  double phi_used{0.0};            // actual φ used (nearest rational p/q)
+  int n_bands{0};                  // = q for the chosen flux
+  std::vector<double> kx_vals{};   // kx ∈ [0, 2π]
+  std::vector<std::vector<double>> bands{};  // bands[ik][band_index]
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M27-C: 1D Hubbard Model ───────────────────────────────────────────────
 
 // One point in the U/t parameter sweep.

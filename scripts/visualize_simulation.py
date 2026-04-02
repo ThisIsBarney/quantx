@@ -6876,6 +6876,8 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("ssh",                "SSH 拓扑绝缘体"),
           ("kitaev",             "Kitaev 链 Majorana 模式"),
           ("anderson",           "Anderson 局域化"),
+          ("chern",              "2D Chern 绝缘体 (QWZ)"),
+          ("hofstadter",         "Hofstadter 蝴蝶"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -9165,6 +9167,456 @@ if(DATA.sweep && DATA.sweep.length>0){{
 </html>"""
 
 
+def _chern_frames(
+    n_sites: int = 20,
+    m: float = -1.0,
+    t: float = 1.0,
+    n_k: int = 40,
+    n_sweep: int = 30,
+    m_min: float = -5.0,
+    m_max: float = 1.0,
+) -> dict:
+    """Compute 2D Chern insulator data: Berry curvature, edge states, Chern sweep."""
+    import numpy as np  # noqa: PLC0415
+
+    N = n_sites
+
+    def lower_evec(dz, dx, dy):
+        E = np.sqrt(dz**2 + dx**2 + dy**2)
+        if E < 1e-15:
+            return np.array([1.0 + 0j, 0.0 + 0j])
+        denom = E + dz
+        c = dx - 1j * dy
+        if abs(denom) > 1e-8 * E:
+            v0 = -c / denom
+            nrm = np.sqrt(abs(v0)**2 + 1.0)
+            return np.array([v0 / nrm, 1.0 / nrm])
+        else:
+            v1 = np.conj(c) / (E - dz)
+            nrm = np.sqrt(1.0 + abs(v1)**2)
+            return np.array([1.0 / nrm, v1 / nrm])
+
+    def chern_fhs(nk, mv):
+        """FHS Chern number on nk×nk BZ grid."""
+        ks = 2 * np.pi * np.arange(nk) / nk
+        # Pre-compute eigenvectors at (nk+1)×(nk+1) for plaquette corners
+        evecs = {}
+        for ix in range(nk + 1):
+            for iy in range(nk + 1):
+                kx, ky = 2*np.pi*(ix % nk)/nk, 2*np.pi*(iy % nk)/nk
+                evecs[(ix, iy)] = lower_evec(mv + np.cos(kx) + np.cos(ky),
+                                              np.sin(kx), np.sin(ky))
+        C, berry = 0.0, np.zeros(nk * nk)
+        for ix in range(nk):
+            for iy in range(nk):
+                u00, u10, u01, u11 = (evecs[(ix, iy)], evecs[(ix+1, iy)],
+                                       evecs[(ix, iy+1)], evecs[(ix+1, iy+1)])
+                def link(a, b):
+                    z = np.conj(a) @ b
+                    r = abs(z)
+                    return z / r if r > 1e-15 else 1.0 + 0j
+                U1_00 = link(u00, u10)
+                U2_10 = link(u10, u11)
+                U1_01 = link(u01, u11)
+                U2_00 = link(u00, u01)
+                F = np.log(U1_00 * U2_10 * np.conj(U1_01) * np.conj(U2_00))
+                omega = F.imag
+                berry[ix * nk + iy] = omega
+                C += omega
+        return C / (2 * np.pi), berry
+
+    def solve_strip(ny, mv, kx):
+        """Build 2ny×2ny real symmetric strip Hamiltonian at given kx and diagonalise."""
+        dim = 2 * ny
+        H = np.zeros((dim, dim))
+        c_, s_ = mv + np.cos(kx), np.sin(kx)
+        for j in range(ny):
+            b = j * 2
+            H[b, b] += c_;   H[b+1, b+1] += -c_
+            H[b, b+1] += s_; H[b+1, b] += s_
+        for j in range(ny - 1):
+            b, bp = j*2, (j+1)*2
+            H[b, bp] += 0.5;   H[b, bp+1] += -0.5
+            H[b+1, bp] += 0.5; H[b+1, bp+1] += -0.5
+            H[bp, b] += 0.5;   H[bp, b+1] += 0.5
+            H[bp+1, b] += -0.5; H[bp+1, b+1] += -0.5
+        return np.linalg.eigvalsh(H).tolist()
+
+    # -- bands scenario data
+    chern_val, berry = chern_fhs(n_k, m)
+    kgrid = 2 * np.pi * np.arange(n_k) / n_k
+    KX, KY = np.meshgrid(kgrid, kgrid, indexing='ij')
+    dz = m + np.cos(KX) + np.cos(KY)
+    dx, dy = np.sin(KX), np.sin(KY)
+    E = np.sqrt(dz**2 + dx**2 + dy**2)
+    lower_band = (-E).flatten().tolist()
+    upper_band = (+E).flatten().tolist()
+    gap = float(2 * E.min())
+
+    # -- edge scenario: strip spectrum vs kx
+    kx_vals = [i / (n_k - 1) for i in range(n_k)]    # fraction of 2π
+    edge_spectrum = [solve_strip(N, m, 2*np.pi*k) for k in kx_vals]
+
+    # -- sweep: Chern # and gap vs m
+    sweep = []
+    for k in range(n_sweep):
+        mk = m_min + (m_max - m_min) * k / (n_sweep - 1)
+        cv, _ = chern_fhs(n_k, mk)
+        kgM = np.meshgrid(kgrid, kgrid, indexing='ij')
+        dz_ = mk + np.cos(kgM[0]) + np.cos(kgM[1])
+        Ek = np.sqrt(dz_**2 + np.sin(kgM[0])**2 + np.sin(kgM[1])**2)
+        sweep.append({"m": mk, "gap": float(2 * Ek.min()), "chern": round(cv)})
+
+    return {
+        "n_sites": N, "m": m, "t": t,
+        "n_k": n_k, "lower_band": lower_band, "upper_band": upper_band,
+        "berry_curv": berry.tolist(), "chern": round(chern_val), "gap": gap,
+        "kx_vals": kx_vals, "edge_spectrum": edge_spectrum,
+        "sweep": sweep,
+    }
+
+
+def _chern_page(data: dict, title: str = "2D Chern Insulator") -> str:
+    """4-panel Chern page: Berry curvature heatmap, edge state spectrum, gap and C vs m."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    C = data.get("chern", 0)
+    topo_label = f"C = {C:+d} ({'Topological' if C != 0 else 'Trivial'})"
+    topo_cls   = "topo" if C != 0 else "trivial"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .badge{{display:inline-block;padding:2px 10px;border-radius:4px;font-size:0.8rem;}}
+  .topo{{background:#1b4332;color:#57ab5a;border:1px solid #57ab5a;}}
+  .trivial{{background:#3d1f0d;color:#e3b341;border:1px solid #e3b341;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:220px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  m={data.get('m',0):.2f}, t={data.get('t',1):.2f}, N_strip={data.get('n_sites',20)} &nbsp;|&nbsp;
+  gap={data.get('gap',0):.4f} &nbsp;|&nbsp;
+  Phase: <span class="badge {topo_cls}">{topo_label}</span>
+  &nbsp;(QPTs at m = 0, ±2)
+</div>
+<div class="grid">
+  <div class="panel"><canvas id="cBerry"></canvas><div class="label">Berry curvature Ω(kx,ky) [lower band]</div></div>
+  <div class="panel"><canvas id="cEdge"></canvas><div class="label">Strip spectrum E(kx) — chiral edge states</div></div>
+  <div class="panel"><canvas id="cGap"></canvas><div class="label">Band gap vs mass m</div></div>
+  <div class="panel"><canvas id="cChern"></canvas><div class="label">Chern number C vs mass m</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function heatmap(id, vals, nk) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  var vmin = Math.min.apply(null,vals), vmax = Math.max.apply(null,vals);
+  var vr = vmax - vmin || 1;
+  var cw = W/nk, ch = H/nk;
+  for (var ix=0;ix<nk;ix++) for (var iy=0;iy<nk;iy++) {{
+    var t = (vals[ix*nk+iy]-vmin)/vr;
+    // diverging colormap: blue (negative) → white → red (positive)
+    var r,g,b;
+    if (t < 0.5) {{ r=Math.round(2*t*255); g=Math.round(2*t*255); b=255; }}
+    else {{ r=255; g=Math.round(2*(1-t)*255); b=Math.round(2*(1-t)*255); }}
+    ctx.fillStyle="rgb("+r+","+g+","+b+")";
+    ctx.fillRect(ix*cw, H - (iy+1)*ch, cw+1, ch+1);
+  }}
+  ctx.fillStyle="#e6edf3"; ctx.font="9px monospace";
+  ctx.fillText("kx→", W-28, H-2); ctx.fillText("↑ky", 2, 12);
+}}
+
+function scatter(id, xs, ys, color) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 36;
+  ctx.fillStyle="#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs)||1;
+  var ymin=Math.min.apply(null,ys), ymax=Math.max.apply(null,ys)||1;
+  var xr=xmax-xmin||1, yr=ymax-ymin||1;
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  ctx.fillStyle=color;
+  for(var i=0;i<xs.length;i++) {{
+    var px=pad+(xs[i]-xmin)/xr*(W-2*pad), py=H-pad-(ys[i]-ymin)/yr*(H-2*pad);
+    ctx.fillRect(px-1, py-1, 2, 2);
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText("E",4,14); ctx.fillText("kx/2π",W-40,H-4);
+}}
+
+function lineChart(id, xs, ys, color, ylabel, xlabel, refs, xrefs) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 220;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle="#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=Math.min.apply(null,xs), xmax=Math.max.apply(null,xs);
+  var allY=ys.slice(); if(refs) refs.forEach(function(r){{allY.push(r.v);}});
+  var ymin=Math.min.apply(null,allY), ymax=Math.max.apply(null,allY);
+  var xr=xmax-xmin||1, yr=ymax-ymin||1;
+  function gpx(x){{return pad+(x-xmin)/xr*(W-2*pad);}}
+  function gpy(y){{return H-pad-(y-ymin)/yr*(H-2*pad);}}
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  if(xrefs) xrefs.forEach(function(r){{
+    var gx=gpx(r.v);
+    ctx.strokeStyle=r.c||"#e3b341"; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(gx,pad);ctx.lineTo(gx,H-pad);ctx.stroke(); ctx.setLineDash([]);
+    if(r.label){{ctx.fillStyle=r.c||"#e3b341"; ctx.font="9px monospace"; ctx.fillText(r.label,gx+2,pad+10);}}
+  }});
+  if(refs) refs.forEach(function(r){{
+    var py=gpy(r.v);
+    ctx.strokeStyle=r.c; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+    ctx.beginPath();ctx.moveTo(pad,py);ctx.lineTo(W-pad,py);ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=r.c; ctx.font="9px monospace"; ctx.fillText(r.label,W-pad-4,py-3);
+  }});
+  ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath();
+  for(var i=0;i<xs.length;i++){{
+    var px=gpx(xs[i]), py=gpy(ys[i]);
+    if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText(ylabel,4,14); ctx.fillText(xlabel,W-pad,H-4);
+}}
+
+// Panel 1: Berry curvature heatmap
+heatmap("cBerry", DATA.berry_curv, DATA.n_k);
+
+// Panel 2: edge spectrum (scatter kx vs E)
+if (DATA.edge_spectrum && DATA.edge_spectrum.length > 0) {{
+  var ex=[], ey=[];
+  DATA.edge_spectrum.forEach(function(sp,i){{
+    sp.forEach(function(e){{ ex.push(DATA.kx_vals[i]); ey.push(e); }});
+  }});
+  scatter("cEdge", ex, ey, "#388bfd");
+}}
+
+// Panels 3-4: sweep
+if (DATA.sweep && DATA.sweep.length > 0) {{
+  var swM  = DATA.sweep.map(function(p){{return p.m;}});
+  var swG  = DATA.sweep.map(function(p){{return p.gap;}});
+  var swC  = DATA.sweep.map(function(p){{return p.chern;}});
+  var qptX=[{{v:0,c:"#e3b341",label:"m=0"}},{{v:2,c:"#e3b341",label:"m=+2"}},{{v:-2,c:"#e3b341",label:"m=−2"}}];
+  lineChart("cGap",   swM, swG, "#bc8cff", "gap", "m", null, qptX);
+  lineChart("cChern", swM, swC, "#57ab5a", "C",   "m",
+    [{{v:0,c:"#30363d",label:"C=0"}},{{v:1,c:"#388bfd",label:"C=+1"}},{{v:-1,c:"#bc8cff",label:"C=−1"}}],
+    qptX);
+}}
+</script>
+</body>
+</html>"""
+
+
+def _hofstadter_frames(
+    t: float = 1.0,
+    q_max: int = 24,
+    phi: float = 0.25,
+    n_k: int = 40,
+    n_ky: int = 12,
+) -> dict:
+    """Compute Hofstadter butterfly data and fixed-flux band structure."""
+    import math  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+
+    def gcd(a, b):
+        return a if b == 0 else gcd(b, a % b)
+
+    def harper_evals(p, q, ky):
+        """q×q real symmetric Harper matrix at kx=0, return eigenvalues."""
+        phi_ = p / q
+        H = np.zeros((q, q))
+        for n in range(q):
+            H[n, n] = -2 * t * np.cos(2 * np.pi * phi_ * n - ky)
+        for n in range(q - 1):
+            H[n, n+1] = H[n+1, n] = -t
+        H[0, q-1] = H[q-1, 0] = -t
+        return np.linalg.eigvalsh(H).tolist()
+
+    # Butterfly: scan all rationals p/q with q <= q_max
+    phi_vals, evals = [], []
+    for q in range(1, q_max + 1):
+        for p in range(1, q):
+            if gcd(p, q) != 1:
+                continue
+            phi_ = p / q
+            for iky in range(n_ky):
+                ky = 2 * np.pi * iky / n_ky
+                for e in harper_evals(p, q, ky):
+                    phi_vals.append(phi_)
+                    evals.append(e)
+    # Add phi=0 trivial band
+    for iky in range(n_ky):
+        ky = 2 * np.pi * iky / n_ky
+        phi_vals.append(0.0)
+        evals.append(-2 * t * np.cos(ky))
+
+    # Fixed-flux bands: find nearest rational p/q to given phi
+    best_p, best_q, best_err = 1, 4, 1e30
+    for q in range(1, q_max + 1):
+        p = max(1, min(round(phi * q), q - 1))
+        if gcd(p, q) != 1:
+            continue
+        err = abs(p / q - phi)
+        if err < best_err:
+            best_err, best_p, best_q = err, p, q
+
+    phi_used = best_p / best_q
+    kx_max = 2 * np.pi / best_q
+    kx_vals = [kx_max * i / (n_k - 1) for i in range(n_k)]
+    bands_data = []
+    for kx in kx_vals:
+        phi_ = best_p / best_q
+        H = np.zeros((best_q, best_q))
+        for n in range(best_q):
+            H[n, n] = -2 * t * np.cos(2 * np.pi * phi_ * n)
+        for n in range(best_q - 1):
+            H[n, n+1] = H[n+1, n] = -t
+        # Corner with Peierls phase e^{i*q*kx}
+        phase_re = -t * np.cos(best_q * kx)
+        phase_im = -t * np.sin(best_q * kx)
+        # Real doubling for complex corner: [[A,-B],[B,A]]
+        if abs(phase_im) < 1e-12:
+            H[0, best_q-1] = H[best_q-1, 0] = phase_re
+            evals_k = np.linalg.eigvalsh(H).tolist()
+        else:
+            dim2 = 2 * best_q
+            HR = np.zeros((dim2, dim2))
+            HR[:best_q, :best_q] = H.copy()
+            HR[best_q:, best_q:] = H.copy()
+            # Fix corner entries
+            HR[0, best_q-1]          = phase_re
+            HR[best_q-1, 0]          = phase_re
+            HR[best_q, 2*best_q-1]   = phase_re
+            HR[2*best_q-1, best_q]   = phase_re
+            im_c = t * np.sin(best_q * kx)
+            HR[0, best_q + best_q-1]        = -im_c
+            HR[best_q-1, best_q + 0]        = -im_c
+            HR[best_q + 0, best_q-1]        = +im_c
+            HR[best_q + best_q-1, 0]        = +im_c
+            evals2 = np.linalg.eigvalsh(HR)
+            evals_k = [evals2[2*n] for n in range(best_q)]
+        bands_data.append(evals_k)
+
+    return {
+        "t": t, "q_max": q_max, "phi": phi, "phi_used": phi_used,
+        "n_bands": best_q,
+        "phi_vals": phi_vals, "evals": evals,
+        "kx_vals": [k / kx_max for k in kx_vals],   # normalised to [0,1]
+        "bands": bands_data,
+    }
+
+
+def _hofstadter_page(data: dict, title: str = "Hofstadter Butterfly") -> str:
+    """2-panel Hofstadter page: butterfly scatter and fixed-flux band structure."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    phi_used = data.get("phi_used", 0.25)
+    n_bands  = data.get("n_bands", 4)
+    # Express phi_used as fraction string
+    from fractions import Fraction  # noqa: PLC0415
+    frac = Fraction(phi_used).limit_denominator(60)
+    phi_str = f"{frac.numerator}/{frac.denominator}"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{width:100%;height:340px;display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  Hofstadter 1976 · t={data.get('t',1):.1f} · q_max={data.get('q_max',24)}
+  &nbsp;|&nbsp; Fixed flux φ = {phi_str} ({n_bands} bands shown right)
+</div>
+<div class="grid">
+  <div class="panel"><canvas id="cButterfly"></canvas>
+    <div class="label">Allowed energies E vs flux φ = p/q (fractal butterfly)</div></div>
+  <div class="panel"><canvas id="cBands"></canvas>
+    <div class="label">Band structure at φ = {phi_str} (magnetic BZ kx ∈ [0, 2π/q])</div></div>
+</div>
+<script>
+var DATA = {jdata};
+
+function scatter2(id, xs, ys, dotSize) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 340;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 36;
+  ctx.fillStyle="#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=0, xmax=1, ymin=Math.min.apply(null,ys), ymax=Math.max.apply(null,ys);
+  var xr=1, yr=ymax-ymin||1;
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  var imgData = ctx.getImageData(0,0,W,H);
+  var d = imgData.data;
+  for(var i=0;i<xs.length;i++){{
+    var px=Math.round(pad+(xs[i]-xmin)/xr*(W-2*pad));
+    var py=Math.round(H-pad-(ys[i]-ymin)/yr*(H-2*pad));
+    if(px>=0&&px<W&&py>=0&&py<H){{
+      var idx=4*(py*W+px); d[idx]=56;d[idx+1]=139;d[idx+2]=253;d[idx+3]=180;
+    }}
+  }}
+  ctx.putImageData(imgData,0,0);
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText("E",4,14); ctx.fillText("φ",W-pad,H-4);
+}}
+
+function multiline(id, kxs, bandsArr, nBands) {{
+  var cv = document.getElementById(id); if (!cv) return;
+  cv.width = cv.offsetWidth || 400; cv.height = 340;
+  var ctx = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 40;
+  ctx.fillStyle="#0d1117"; ctx.fillRect(0,0,W,H);
+  var xmin=kxs[0], xmax=kxs[kxs.length-1];
+  var allE=[]; bandsArr.forEach(function(row){{row.forEach(function(e){{allE.push(e);}});}});
+  var ymin=Math.min.apply(null,allE), ymax=Math.max.apply(null,allE);
+  var xr=xmax-xmin||1, yr=ymax-ymin||1;
+  ctx.strokeStyle="#21262d"; ctx.lineWidth=1;
+  for(var gi=0;gi<5;gi++){{var gy=pad+(H-2*pad)*gi/4;ctx.beginPath();ctx.moveTo(pad,gy);ctx.lineTo(W-pad,gy);ctx.stroke();}}
+  var palette=["#388bfd","#57ab5a","#bc8cff","#e3b341","#f47067","#79c0ff","#56d364","#d2a8ff"];
+  for(var b=0;b<nBands;b++){{
+    ctx.strokeStyle=palette[b%palette.length]; ctx.lineWidth=2; ctx.beginPath();
+    for(var i=0;i<kxs.length;i++){{
+      var px=pad+(kxs[i]-xmin)/xr*(W-2*pad);
+      var py=H-pad-(bandsArr[i][b]-ymin)/yr*(H-2*pad);
+      if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }}
+    ctx.stroke();
+  }}
+  ctx.fillStyle="#8b949e"; ctx.font="10px monospace";
+  ctx.fillText("E",4,14); ctx.fillText("kx/kmax",W-52,H-4);
+}}
+
+scatter2("cButterfly", DATA.phi_vals, DATA.evals, 1);
+if(DATA.bands && DATA.bands.length > 0)
+  multiline("cBands", DATA.kx_vals, DATA.bands, DATA.n_bands);
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -9172,7 +9624,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -9288,6 +9740,20 @@ def main() -> int:
   parser.add_argument("--anderson-sweep-points", type=int, default=20, help="number of W values in Anderson sweep")
   parser.add_argument("--anderson-W-min",   type=float, default=0.1, help="minimum W for Anderson sweep")
   parser.add_argument("--anderson-W-max",   type=float, default=8.0, help="maximum W for Anderson sweep")
+  # M31-K: 2D Chern insulator (QWZ model)
+  parser.add_argument("--chern-sites",    type=int,   default=20,   help="strip width Ny for edge states")
+  parser.add_argument("--chern-m",        type=float, default=-1.0, help="mass parameter (QPT at m=0,±2)")
+  parser.add_argument("--chern-t",        type=float, default=1.0,  help="hopping t")
+  parser.add_argument("--chern-nk",       type=int,   default=40,   help="BZ k-grid points (n_k × n_k)")
+  parser.add_argument("--chern-sweep-points", type=int, default=30, help="number of m values in sweep")
+  parser.add_argument("--chern-m-min",    type=float, default=-5.0, help="minimum m for Chern sweep")
+  parser.add_argument("--chern-m-max",    type=float, default=1.0,  help="maximum m for Chern sweep")
+  # M31-L: Hofstadter butterfly
+  parser.add_argument("--hofstadter-t",   type=float, default=1.0,  help="hopping amplitude")
+  parser.add_argument("--hofstadter-q-max", type=int, default=24,   help="max denominator for butterfly")
+  parser.add_argument("--hofstadter-phi", type=float, default=0.25, help="flux for fixed-phi bands scenario")
+  parser.add_argument("--hofstadter-nk",  type=int,   default=40,   help="k-points for bands scenario")
+  parser.add_argument("--hofstadter-nky", type=int,   default=12,   help="ky samples per flux value")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -10080,6 +10546,44 @@ def main() -> int:
       path.write_text(_anderson_page(anderson_data, title="Anderson Localization — 1D Disorder"), encoding="utf-8")
       generated.append(path)
 
+  # ── M31-K: 2D Chern Insulator ─────────────────────────────────────────────
+  if args.scenario in {"chern", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("chern skipped: numpy not available", file=sys.stderr)
+    else:
+      chern_data = _chern_frames(
+          n_sites=args.chern_sites,
+          m=args.chern_m,
+          t=args.chern_t,
+          n_k=args.chern_nk,
+          n_sweep=args.chern_sweep_points,
+          m_min=args.chern_m_min,
+          m_max=args.chern_m_max,
+      )
+      path = out_dir / "quantum_chern.html"
+      path.write_text(_chern_page(chern_data, title="2D Chern Insulator — Qi-Wu-Zhang Model"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M31-L: Hofstadter Butterfly ───────────────────────────────────────────
+  if args.scenario in {"hofstadter", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("hofstadter skipped: numpy not available", file=sys.stderr)
+    else:
+      hof_data = _hofstadter_frames(
+          t=args.hofstadter_t,
+          q_max=args.hofstadter_q_max,
+          phi=args.hofstadter_phi,
+          n_k=args.hofstadter_nk,
+          n_ky=args.hofstadter_nky,
+      )
+      path = out_dir / "quantum_hofstadter.html"
+      path.write_text(_hofstadter_page(hof_data, title="Hofstadter Butterfly — Fractal Landau Levels"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -10124,6 +10628,8 @@ def main() -> int:
         "ssh":                "quantum_ssh",
         "kitaev":             "quantum_kitaev",
         "anderson":           "quantum_anderson",
+        "chern":              "quantum_chern",
+        "hofstadter":         "quantum_hofstadter",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
