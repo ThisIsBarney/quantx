@@ -239,6 +239,18 @@ static void fixed_phi_bands(int p, int q, int Nk, double t,
     kx_vals.resize(Nk);
     bands.resize(Nk, std::vector<double>(q));
 
+    // phi=0 (p=0, q=1): no magnetic field — pure tight-binding cosine band
+    // E(kx, ky=0) = −2t·cos(kx) − 2t·cos(0) = −2t·(cos(kx)+1)
+    if (p == 0) {
+        double kx_max0 = 2.0 * M_PI;
+        for (int ik = 0; ik < Nk; ++ik) {
+            double kx = kx_max0 * ik / (Nk - 1);
+            kx_vals[ik] = kx;
+            bands[ik]   = {-2.0 * t * (std::cos(kx) + 1.0)};
+        }
+        return;
+    }
+
     double kx_max = 2.0 * M_PI / q;  // magnetic BZ in kx direction
     for (int ik = 0; ik < Nk; ++ik) {
         double kx = kx_max * ik / (Nk - 1);
@@ -263,13 +275,21 @@ static void fixed_phi_bands(int p, int q, int Nk, double t,
     }
 }
 
-// Nearest rational p/q to a given double phi, with q ≤ q_max
+// Nearest rational p/q to a given double phi, with q ≤ q_max.
+// Correctly handles phi=0 (returns {0,1}) and phi≥1 (periodic, maps to [0,1)).
 static std::pair<int,int> nearest_rational(double phi, int q_max) {
+    // Normalise to [0, 1) — phi=1 is physically identical to phi=0
+    phi = phi - std::floor(phi);
+    // Exact boundary: phi=0 → no Peierls phase, return 0/1 directly
+    if (phi < 1e-12) return {0, 1};
     int best_p = 1, best_q = 4;
     double best_err = 1e30;
     for (int q = 1; q <= q_max; ++q) {
         int p = static_cast<int>(std::round(phi * q));
-        p = std::max(1, std::min(p, q - 1));
+        // Allow full range [0, q]; map p=q → 0 (phi=1 ≡ phi=0)
+        p = std::max(0, std::min(p, q));
+        if (p == q) p = 0;
+        if (p == 0) { continue; }  // phi=0 already handled above
         if (gcd(p, q) != 1) continue;
         double err = std::abs(static_cast<double>(p) / q - phi);
         if (err < best_err) { best_err = err; best_p = p; best_q = q; }

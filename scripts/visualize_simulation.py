@@ -9196,16 +9196,15 @@ def _chern_frames(
             nrm = np.sqrt(1.0 + abs(v1)**2)
             return np.array([1.0 / nrm, v1 / nrm])
 
-    def chern_fhs(nk, mv):
+    def chern_fhs(nk, mv, tv=1.0):
         """FHS Chern number on nk×nk BZ grid."""
-        ks = 2 * np.pi * np.arange(nk) / nk
         # Pre-compute eigenvectors at (nk+1)×(nk+1) for plaquette corners
         evecs = {}
         for ix in range(nk + 1):
             for iy in range(nk + 1):
                 kx, ky = 2*np.pi*(ix % nk)/nk, 2*np.pi*(iy % nk)/nk
-                evecs[(ix, iy)] = lower_evec(mv + np.cos(kx) + np.cos(ky),
-                                              np.sin(kx), np.sin(ky))
+                evecs[(ix, iy)] = lower_evec(mv + tv * (np.cos(kx) + np.cos(ky)),
+                                              tv * np.sin(kx), tv * np.sin(ky))
         C, berry = 0.0, np.zeros(nk * nk)
         for ix in range(nk):
             for iy in range(nk):
@@ -9225,29 +9224,30 @@ def _chern_frames(
                 C += omega
         return C / (2 * np.pi), berry
 
-    def solve_strip(ny, mv, kx):
+    def solve_strip(ny, mv, kx, tv=1.0):
         """Build 2ny×2ny real symmetric strip Hamiltonian at given kx and diagonalise."""
         dim = 2 * ny
         H = np.zeros((dim, dim))
-        c_, s_ = mv + np.cos(kx), np.sin(kx)
+        c_, s_ = mv + tv * np.cos(kx), tv * np.sin(kx)
+        th = 0.5 * tv
         for j in range(ny):
             b = j * 2
             H[b, b] += c_;   H[b+1, b+1] += -c_
             H[b, b+1] += s_; H[b+1, b] += s_
         for j in range(ny - 1):
             b, bp = j*2, (j+1)*2
-            H[b, bp] += 0.5;   H[b, bp+1] += -0.5
-            H[b+1, bp] += 0.5; H[b+1, bp+1] += -0.5
-            H[bp, b] += 0.5;   H[bp, b+1] += 0.5
-            H[bp+1, b] += -0.5; H[bp+1, b+1] += -0.5
+            H[b, bp] += th;    H[b, bp+1] += -th
+            H[b+1, bp] += th;  H[b+1, bp+1] += -th
+            H[bp, b] += th;    H[bp, b+1] += th
+            H[bp+1, b] += -th; H[bp+1, b+1] += -th
         return np.linalg.eigvalsh(H).tolist()
 
     # -- bands scenario data
-    chern_val, berry = chern_fhs(n_k, m)
+    chern_val, berry = chern_fhs(n_k, m, t)
     kgrid = 2 * np.pi * np.arange(n_k) / n_k
     KX, KY = np.meshgrid(kgrid, kgrid, indexing='ij')
-    dz = m + np.cos(KX) + np.cos(KY)
-    dx, dy = np.sin(KX), np.sin(KY)
+    dz = m + t * (np.cos(KX) + np.cos(KY))
+    dx, dy = t * np.sin(KX), t * np.sin(KY)
     E = np.sqrt(dz**2 + dx**2 + dy**2)
     lower_band = (-E).flatten().tolist()
     upper_band = (+E).flatten().tolist()
@@ -9255,16 +9255,16 @@ def _chern_frames(
 
     # -- edge scenario: strip spectrum vs kx
     kx_vals = [i / (n_k - 1) for i in range(n_k)]    # fraction of 2π
-    edge_spectrum = [solve_strip(N, m, 2*np.pi*k) for k in kx_vals]
+    edge_spectrum = [solve_strip(N, m, 2*np.pi*k, t) for k in kx_vals]
 
     # -- sweep: Chern # and gap vs m
     sweep = []
     for k in range(n_sweep):
         mk = m_min + (m_max - m_min) * k / (n_sweep - 1)
-        cv, _ = chern_fhs(n_k, mk)
+        cv, _ = chern_fhs(n_k, mk, t)
         kgM = np.meshgrid(kgrid, kgrid, indexing='ij')
-        dz_ = mk + np.cos(kgM[0]) + np.cos(kgM[1])
-        Ek = np.sqrt(dz_**2 + np.sin(kgM[0])**2 + np.sin(kgM[1])**2)
+        dz_ = mk + t * (np.cos(kgM[0]) + np.cos(kgM[1]))
+        Ek = np.sqrt(dz_**2 + (t*np.sin(kgM[0]))**2 + (t*np.sin(kgM[1]))**2)
         sweep.append({"m": mk, "gap": float(2 * Ek.min()), "chern": round(cv)})
 
     return {

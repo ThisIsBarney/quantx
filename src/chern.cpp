@@ -30,6 +30,7 @@
 #include "qx/types.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -91,7 +92,7 @@ static cx dot2(const Vec2& a, const Vec2& b) {
 // B.  FHS Chern number + Berry curvature on n_k × n_k BZ mesh
 // ─────────────────────────────────────────────────────────────────────────────
 
-static void compute_berry(int Nk, double m,
+static void compute_berry(int Nk, double m, double t,
                           std::vector<double>& lower, std::vector<double>& upper,
                           std::vector<double>& berry, double& chern, double& gap) {
     int N2 = Nk * Nk;
@@ -111,8 +112,8 @@ static void compute_berry(int Nk, double m,
     for (int ix = 0; ix < Nk; ++ix) {
         for (int iy = 0; iy < Nk; ++iy) {
             double kx = kval(ix), ky = kval(iy);
-            double dz = m + std::cos(kx) + std::cos(ky);
-            double dx = std::sin(kx), dy = std::sin(ky);
+            double dz = m + t * (std::cos(kx) + std::cos(ky));
+            double dx = t * std::sin(kx), dy = t * std::sin(ky);
             double E  = band_energy(dz, dx, dy);
             lower[idx(ix, iy)] = -E;
             upper[idx(ix, iy)] = +E;
@@ -129,7 +130,8 @@ static void compute_berry(int Nk, double m,
         for (int iy = 0; iy < Nk; ++iy) {
             auto evec = [&](int jx, int jy) -> Vec2 {
                 double kx = kval(jx % Nk), ky = kval(jy % Nk);
-                return lower_evec(m + cos(kx) + cos(ky), sin(kx), sin(ky));
+                return lower_evec(m + t * (cos(kx) + cos(ky)),
+                                  t * sin(kx), t * sin(ky));
             };
             Vec2 u00 = evec(ix,   iy  );
             Vec2 u10 = evec(ix+1, iy  );
@@ -146,9 +148,9 @@ static void compute_berry(int Nk, double m,
             cx U2_00 = link(dot2(u00, u01));   // U_y at (ix, iy)
 
             cx F = std::log(U1_00 * U2_10 * std::conj(U1_01) * std::conj(U2_00));
-            double Ω = F.imag();
-            berry[idx(ix, iy)] = Ω;
-            chern += Ω;
+            double omega = F.imag();
+            berry[idx(ix, iy)] = omega;
+            chern += omega;
         }
     }
     chern /= (2.0 * M_PI);
@@ -174,12 +176,12 @@ static void compute_berry(int Nk, double m,
 
 using MatR = std::vector<double>;
 
-static MatR build_strip(int Ny, double m, double kx) {
+static MatR build_strip(int Ny, double m, double kx, double t) {
     int dim = 2 * Ny;
     MatR H(static_cast<std::size_t>(dim) * dim, 0.0);
 
-    // On-site block: (m + cos(kx)) σz + sin(kx) σx
-    double c = m + std::cos(kx), s = std::sin(kx);
+    // On-site block: (m + t*cos(kx)) σz + t*sin(kx) σx
+    double c = m + t * std::cos(kx), s = t * std::sin(kx);
     for (int j = 0; j < Ny; ++j) {
         int b = j * 2;
         H[b * dim + b]           +=  c;   // σz[0,0]
@@ -187,19 +189,20 @@ static MatR build_strip(int Ny, double m, double kx) {
         H[b * dim + b+1]         +=  s;   // σx[0,1]
         H[(b+1)*dim + b]         +=  s;   // σx[1,0]
     }
-    // y-hopping: t_y = [[½,−½],[½,−½]] at (j,j+1); t_y^T at (j+1,j)
+    // y-hopping: t * [[½,−½],[½,−½]] at (j,j+1); transpose at (j+1,j)
+    double th = 0.5 * t;
     for (int j = 0; j < Ny - 1; ++j) {
         int b = j * 2, bp = (j + 1) * 2;
         // t_y  at rows=b,b+1, cols=bp,bp+1
-        H[b    * dim + bp  ] += +0.5;
-        H[b    * dim + bp+1] += -0.5;
-        H[(b+1)*dim + bp  ] += +0.5;
-        H[(b+1)*dim + bp+1] += -0.5;
+        H[b    * dim + bp  ] += +th;
+        H[b    * dim + bp+1] += -th;
+        H[(b+1)*dim + bp  ] += +th;
+        H[(b+1)*dim + bp+1] += -th;
         // t_y^T at rows=bp,bp+1, cols=b,b+1
-        H[bp    * dim + b  ] += +0.5;
-        H[bp    * dim + b+1] += +0.5;
-        H[(bp+1)*dim + b   ] += -0.5;
-        H[(bp+1)*dim + b+1 ] += -0.5;
+        H[bp    * dim + b  ] += +th;
+        H[bp    * dim + b+1] += +th;
+        H[(bp+1)*dim + b   ] += -th;
+        H[(bp+1)*dim + b+1 ] += -th;
     }
     return H;
 }
@@ -286,7 +289,7 @@ static std::vector<double> tridiag_evals(std::vector<double> alpha,
 // D.  Strip spectrum over kx scan
 // ─────────────────────────────────────────────────────────────────────────────
 
-static void solve_strip_scan(int Ny, int Nk, double m,
+static void solve_strip_scan(int Ny, int Nk, double m, double t,
                               std::vector<double>& kx_vals,
                               std::vector<std::vector<double>>& spectra) {
     int dim = 2 * Ny;
@@ -295,7 +298,7 @@ static void solve_strip_scan(int Ny, int Nk, double m,
     for (int ik = 0; ik < Nk; ++ik) {
         double kx    = 2.0 * M_PI * ik / (Nk - 1);
         kx_vals[ik]  = kx / (2.0 * M_PI);    // store as fraction of 2π
-        MatR H       = build_strip(Ny, m, kx);
+        MatR H       = build_strip(Ny, m, kx, t);
         std::vector<double> alpha, beta;
         householder_tridiag(H, alpha, beta, dim);
         spectra[ik]  = tridiag_evals(alpha, beta);
@@ -325,7 +328,7 @@ ChernResult run_chern(const ChernOptions& opts) {
     res.scenario = opts.scenario;
 
     auto do_bands = [&](double m_val) {
-        compute_berry(opts.n_k, m_val,
+        compute_berry(opts.n_k, m_val, opts.t,
                       res.lower_band, res.upper_band, res.berry_curv,
                       res.chern, res.gap);
     };
@@ -335,10 +338,10 @@ ChernResult run_chern(const ChernOptions& opts) {
     }
 
     if (opts.scenario == "edge") {
-        solve_strip_scan(opts.n_sites, opts.n_k, opts.m,
+        solve_strip_scan(opts.n_sites, opts.n_k, opts.m, opts.t,
                          res.kx_vals, res.edge_spectrum);
         // Also compute Chern number for the badge
-        compute_berry(opts.n_k, opts.m,
+        compute_berry(opts.n_k, opts.m, opts.t,
                       res.lower_band, res.upper_band, res.berry_curv,
                       res.chern, res.gap);
     }
@@ -350,7 +353,7 @@ ChernResult run_chern(const ChernOptions& opts) {
         for (int k = 0; k < opts.n_sweep; ++k) {
             double mk = opts.m_min + (opts.m_max - opts.m_min) * k / (opts.n_sweep - 1);
             ChernResult tmp;
-            compute_berry(opts.n_k, mk,
+            compute_berry(opts.n_k, mk, opts.t,
                           tmp.lower_band, tmp.upper_band, tmp.berry_curv,
                           tmp.chern, tmp.gap);
             ChernSweepPoint pt;
