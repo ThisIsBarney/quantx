@@ -847,6 +847,79 @@ struct SSHResult {
   std::string message;
 };
 
+// ── M30-I: Kitaev Chain (p-wave topological superconductor) ──────────────
+
+// One point in the chemical-potential sweep.
+struct KitaevSweepPoint {
+  double mu{0.0};         // chemical potential (topo phase: |μ| < 2t)
+  double gap{0.0};        // quasiparticle gap
+  double topo_inv{0.0};   // topological invariant Q ∈ {-1, 0, +1} (sign of Pfaffian)
+  double majorana_weight{0.0}; // |ψ|² of near-zero mode on boundary sites
+};
+
+struct KitaevOptions {
+  int n_sites{20};
+  double t{1.0};      // hopping
+  double delta{1.0};  // p-wave pairing amplitude
+  double mu{0.0};     // chemical potential (QPT at |μ| = 2t)
+  std::string scenario{"spectrum"};  // spectrum | sweep
+  int n_sweep{40};
+  double mu_min{-4.0};
+  double mu_max{4.0};
+};
+
+struct KitaevResult {
+  bool ok{true};
+  int n_sites{0};
+  double t{0.0};
+  double delta{0.0};
+  double mu{0.0};
+  std::vector<double> energies{};   // all 2N BdG quasi-energies
+  double gap{0.0};
+  double topo_inv{0.0};             // Q ∈ {-1, 0, +1}
+  std::vector<double> majorana_weight{};  // |u+v|² per site of lowest mode
+  std::vector<KitaevSweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
+// ── M30-J: Anderson Localization ─────────────────────────────────────────
+
+// One disorder-averaged sample point.
+struct AndersonSweepPoint {
+  double W{0.0};          // disorder strength
+  double mean_ipr{0.0};   // mean inverse participation ratio
+  double mean_r{0.0};     // mean level-spacing ratio (Poisson ≈ 0.39, GOE ≈ 0.53)
+  double loc_length{0.0}; // localization length from IPR ~ 1/ξ (1D: ξ ~ (W/2t)^{-2})
+};
+
+struct AndersonOptions {
+  int n_sites{100};
+  double t{1.0};      // hopping amplitude
+  double W{2.0};      // disorder strength (uniform random in [-W/2, W/2])
+  int n_samples{200}; // disorder realizations to average
+  std::string scenario{"sweep"};  // single | sweep
+  int n_sweep{20};
+  double W_min{0.1};
+  double W_max{8.0};
+  unsigned int seed{42};
+};
+
+struct AndersonResult {
+  bool ok{true};
+  int n_sites{0};
+  double t{0.0};
+  double W{0.0};
+  double mean_ipr{0.0};
+  double mean_r{0.0};
+  double loc_length{0.0};
+  std::vector<double> ipr_spectrum{};  // IPR per eigenstate (one sample)
+  std::vector<double> energies{};      // eigenvalues (one sample)
+  std::vector<AndersonSweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M27-C: 1D Hubbard Model ───────────────────────────────────────────────
 
 // One point in the U/t parameter sweep.

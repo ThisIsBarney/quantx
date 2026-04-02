@@ -48,5 +48,9 @@ BoseHubbardResult run_bose_hubbard(const BoseHubbardOptions& opts);
 TFIResult run_tfi(const TFIOptions& opts);
 // Run SSH (Su-Schrieffer-Heeger) topological insulator simulation.
 SSHResult run_ssh(const SSHOptions& opts);
+// Run Kitaev chain (p-wave topological superconductor) simulation.
+KitaevResult run_kitaev(const KitaevOptions& opts);
+// Run Anderson localization simulation.
+AndersonResult run_anderson(const AndersonOptions& opts);
 
 }  // namespace qx

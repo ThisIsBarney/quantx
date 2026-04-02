@@ -1356,5 +1356,94 @@ std::string ssh_result_to_json(const SSHResult& r) {
   return j.dump();
 }
 
+// ── M30-I: Kitaev Chain ───────────────────────────────────────────────────────
+
+KitaevOptions kitaev_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  KitaevOptions o;
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<int>();
+  if (j.contains("t"))        o.t        = j["t"].get<double>();
+  if (j.contains("delta"))    o.delta    = j["delta"].get<double>();
+  if (j.contains("mu"))       o.mu       = j["mu"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))  o.n_sweep  = j["n_sweep"].get<int>();
+  if (j.contains("mu_min"))   o.mu_min   = j["mu_min"].get<double>();
+  if (j.contains("mu_max"))   o.mu_max   = j["mu_max"].get<double>();
+  return o;
+}
+
+std::string kitaev_result_to_json(const KitaevResult& r) {
+  json j;
+  j["ok"]              = r.ok;
+  j["n_sites"]         = r.n_sites;
+  j["t"]               = r.t;
+  j["delta"]           = r.delta;
+  j["mu"]              = r.mu;
+  j["energies"]        = r.energies;
+  j["gap"]             = r.gap;
+  j["topo_inv"]        = r.topo_inv;
+  j["majorana_weight"] = r.majorana_weight;
+  j["elapsed_ms"]      = r.elapsed_ms;
+  j["message"]         = r.message;
+  j["engine_version"]  = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["mu"]              = pt.mu;
+    pj["gap"]             = pt.gap;
+    pj["topo_inv"]        = pt.topo_inv;
+    pj["majorana_weight"] = pt.majorana_weight;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+  return j.dump();
+}
+
+// ── M30-J: Anderson Localization ─────────────────────────────────────────────
+
+AndersonOptions anderson_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  AndersonOptions o;
+  if (j.contains("n_sites"))   o.n_sites   = j["n_sites"].get<int>();
+  if (j.contains("t"))         o.t         = j["t"].get<double>();
+  if (j.contains("W"))         o.W         = j["W"].get<double>();
+  if (j.contains("n_samples")) o.n_samples = j["n_samples"].get<int>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))   o.n_sweep   = j["n_sweep"].get<int>();
+  if (j.contains("W_min"))     o.W_min     = j["W_min"].get<double>();
+  if (j.contains("W_max"))     o.W_max     = j["W_max"].get<double>();
+  if (j.contains("seed"))      o.seed      = j["seed"].get<unsigned int>();
+  return o;
+}
+
+std::string anderson_result_to_json(const AndersonResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["n_sites"]      = r.n_sites;
+  j["t"]            = r.t;
+  j["W"]            = r.W;
+  j["mean_ipr"]     = r.mean_ipr;
+  j["mean_r"]       = r.mean_r;
+  j["loc_length"]   = r.loc_length;
+  j["ipr_spectrum"] = r.ipr_spectrum;
+  j["energies"]     = r.energies;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["W"]          = pt.W;
+    pj["mean_ipr"]   = pt.mean_ipr;
+    pj["mean_r"]     = pt.mean_r;
+    pj["loc_length"] = pt.loc_length;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+  return j.dump();
+}
+
 }  // namespace qx
 
