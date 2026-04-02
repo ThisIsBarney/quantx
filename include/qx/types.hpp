@@ -763,6 +763,90 @@ struct BoseHubbardResult {
   std::string message;
 };
 
+// ── M29-G: Transverse-Field Ising Model ──────────────────────────────────
+
+// One point in the transverse-field sweep h/J.
+struct TFISweepPoint {
+  double h{0.0};
+  double ground_energy{0.0};
+  double energy_gap{0.0};
+  double order_param{0.0};    // |⟨Z_0⟩| (ferromagnetic order parameter)
+  double corr_len{0.0};       // exponential correlation length from ⟨Z_0 Z_r⟩
+};
+
+// One Kibble-Zurek dynamics frame.
+struct TFIFrame {
+  double time{0.0};
+  double h_now{0.0};
+  double order_param{0.0};
+  double energy{0.0};
+  double entropy{0.0};
+};
+
+struct TFIOptions {
+  int n_sites{10};  // must be ≤ 14 (dense exact-diag; 2^14×2^14 ≈ 2 GB)
+  double J{1.0};        // ZZ coupling
+  double h{0.5};        // transverse field (QPT at h = J)
+  std::string scenario{"ground_state"};  // ground_state | sweep | dynamics
+  int n_sweep{30};
+  double h_min{0.0};
+  double h_max{2.0};
+  // dynamics: linear ramp h_quench → h over n_steps steps of dt
+  double h_quench{2.0};
+  double dt{0.05};
+  int n_steps{60};
+};
+
+struct TFIResult {
+  bool ok{true};
+  int n_sites{0};
+  double J{0.0};
+  double h{0.0};
+  double ground_energy{0.0};
+  double energy_gap{0.0};
+  double order_param{0.0};
+  double corr_len{0.0};
+  std::vector<double> spin_corr{};     // ⟨Z_0 Z_r⟩, r = 0..N-1
+  std::vector<TFISweepPoint> sweep{};
+  std::vector<TFIFrame>      frames{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
+// ── M29-H: SSH Model (Su-Schrieffer-Heeger) ──────────────────────────────
+
+// One point in the dimerization parameter sweep.
+struct SSHSweepPoint {
+  double delta{0.0};      // dimerization: t1 = t(1-δ), t2 = t(1+δ)
+  double gap{0.0};
+  double zak_phase{0.0};  // 0 or π
+  double edge_weight{0.0};// weight of mid-gap modes on boundary sites
+};
+
+struct SSHOptions {
+  int n_cells{10};            // number of unit cells → 2*n_cells sites
+  double t{1.0};              // hopping scale
+  double delta{0.5};          // dimerization: t1=t(1-δ), t2=t(1+δ)
+  std::string scenario{"spectrum"};  // spectrum | sweep
+  int n_sweep{30};
+  double delta_min{-0.9};
+  double delta_max{0.9};
+};
+
+struct SSHResult {
+  bool ok{true};
+  int n_cells{0};
+  double t{0.0};
+  double delta{0.0};
+  std::vector<double> energies{};      // all 2*n_cells single-particle energies
+  double gap{0.0};
+  double zak_phase{0.0};              // Berry phase (0 or π)
+  std::vector<double> edge_weight{};  // |ψ|² per site for left edge mode
+  std::vector<SSHSweepPoint> sweep{};
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M27-C: 1D Hubbard Model ───────────────────────────────────────────────
 
 // One point in the U/t parameter sweep.

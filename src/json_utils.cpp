@@ -1253,5 +1253,108 @@ std::string bose_hubbard_result_to_json(const BoseHubbardResult& r) {
   return j.dump();
 }
 
+// ── M29-G: Transverse-Field Ising ────────────────────────────────────────────
+
+TFIOptions tfi_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  TFIOptions o;
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<int>();
+  if (j.contains("J"))        o.J        = j["J"].get<double>();
+  if (j.contains("h"))        o.h        = j["h"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))  o.n_sweep  = j["n_sweep"].get<int>();
+  if (j.contains("h_min"))    o.h_min    = j["h_min"].get<double>();
+  if (j.contains("h_max"))    o.h_max    = j["h_max"].get<double>();
+  if (j.contains("h_quench")) o.h_quench = j["h_quench"].get<double>();
+  if (j.contains("dt"))       o.dt       = j["dt"].get<double>();
+  if (j.contains("n_steps"))  o.n_steps  = j["n_steps"].get<int>();
+  return o;
+}
+
+std::string tfi_result_to_json(const TFIResult& r) {
+  json j;
+  j["ok"]            = r.ok;
+  j["n_sites"]       = r.n_sites;
+  j["J"]             = r.J;
+  j["h"]             = r.h;
+  j["ground_energy"] = r.ground_energy;
+  j["energy_gap"]    = r.energy_gap;
+  j["order_param"]   = r.order_param;
+  j["corr_len"]      = r.corr_len;
+  j["spin_corr"]     = r.spin_corr;
+  j["elapsed_ms"]    = r.elapsed_ms;
+  j["message"]       = r.message;
+  j["engine_version"] = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["h"]            = pt.h;
+    pj["ground_energy"]= pt.ground_energy;
+    pj["energy_gap"]   = pt.energy_gap;
+    pj["order_param"]  = pt.order_param;
+    pj["corr_len"]     = pt.corr_len;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+
+  json fr = json::array();
+  for (const auto& f : r.frames) {
+    json fj;
+    fj["time"]        = f.time;
+    fj["h_now"]       = f.h_now;
+    fj["order_param"] = f.order_param;
+    fj["energy"]      = f.energy;
+    fj["entropy"]     = f.entropy;
+    fr.push_back(fj);
+  }
+  j["frames"] = fr;
+
+  return j.dump();
+}
+
+// ── M29-H: SSH Model ─────────────────────────────────────────────────────────
+
+SSHOptions ssh_options_from_json(const std::string& json_text) {
+  auto j = json::parse(json_text);
+  SSHOptions o;
+  if (j.contains("n_cells"))   o.n_cells   = j["n_cells"].get<int>();
+  if (j.contains("t"))         o.t         = j["t"].get<double>();
+  if (j.contains("delta"))     o.delta     = j["delta"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  if (j.contains("n_sweep"))   o.n_sweep   = j["n_sweep"].get<int>();
+  if (j.contains("delta_min")) o.delta_min = j["delta_min"].get<double>();
+  if (j.contains("delta_max")) o.delta_max = j["delta_max"].get<double>();
+  return o;
+}
+
+std::string ssh_result_to_json(const SSHResult& r) {
+  json j;
+  j["ok"]          = r.ok;
+  j["n_cells"]     = r.n_cells;
+  j["t"]           = r.t;
+  j["delta"]       = r.delta;
+  j["energies"]    = r.energies;
+  j["gap"]         = r.gap;
+  j["zak_phase"]   = r.zak_phase;
+  j["edge_weight"] = r.edge_weight;
+  j["elapsed_ms"]  = r.elapsed_ms;
+  j["message"]     = r.message;
+  j["engine_version"] = version_string();
+
+  json sw = json::array();
+  for (const auto& pt : r.sweep) {
+    json pj;
+    pj["delta"]       = pt.delta;
+    pj["gap"]         = pt.gap;
+    pj["zak_phase"]   = pt.zak_phase;
+    pj["edge_weight"] = pt.edge_weight;
+    sw.push_back(pj);
+  }
+  j["sweep"] = sw;
+
+  return j.dump();
+}
+
 }  // namespace qx
 

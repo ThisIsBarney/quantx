@@ -44,5 +44,9 @@ FloquetResult run_floquet(const FloquetOptions& opts);
 HeisenbergResult run_heisenberg(const HeisenbergOptions& opts);
 // Run Bose-Hubbard model simulation.
 BoseHubbardResult run_bose_hubbard(const BoseHubbardOptions& opts);
+// Run Transverse-Field Ising model simulation.
+TFIResult run_tfi(const TFIOptions& opts);
+// Run SSH (Su-Schrieffer-Heeger) topological insulator simulation.
+SSHResult run_ssh(const SSHOptions& opts);
 
 }  // namespace qx
