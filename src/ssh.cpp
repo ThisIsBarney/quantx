@@ -65,10 +65,20 @@ static MatR build_ssh_matrix(int n_cells, double t, double delta) {
 //     (same algorithm as tfi.cpp — reproduced to keep files self-contained)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// householder_tridiag: T = V^T A V with V orthogonal (Householder reflectors).
+// If V_out != nullptr the accumulated V is stored so that eigenvectors of A can
+// be recovered as V * (eigenvectors of T).
 static void householder_tridiag(const MatR& A, std::vector<double>& alpha,
-                                  std::vector<double>& beta, int n) {
+                                  std::vector<double>& beta, int n,
+                                  MatR* V_out = nullptr) {
     alpha.resize(n); beta.resize(n - 1);
     MatR Q = A;
+
+    MatR V;
+    if (V_out) {
+        V.assign(static_cast<std::size_t>(n) * n, 0.0);
+        for (int i = 0; i < n; ++i) V[i * n + i] = 1.0;
+    }
 
     for (int k = 0; k < n - 2; ++k) {
         double norm2 = 0.0;
@@ -97,9 +107,21 @@ static void householder_tridiag(const MatR& A, std::vector<double>& alpha,
         for (int r = 0; r < n; ++r)
             for (int c = 0; c < n; ++c)
                 Q[r * n + c] -= v[r] * w[c] + w[r] * v[c];
+
+        // Accumulate right reflector: V ← V P  (VP)[row,col] = V[row,col] - 2/vnorm2*(V·v)[row]*v[col]
+        if (V_out) {
+            std::vector<double> Vv(n, 0.0);
+            for (int row = 0; row < n; ++row)
+                for (int j = k + 1; j < n; ++j)
+                    Vv[row] += V[row * n + j] * v[j];
+            for (int row = 0; row < n; ++row)
+                for (int c2 = k + 1; c2 < n; ++c2)
+                    V[row * n + c2] -= (2.0 / vnorm2) * Vv[row] * v[c2];
+        }
     }
     for (int i = 0; i < n; ++i) alpha[i] = Q[i * n + i];
     for (int i = 0; i < n - 1; ++i) beta[i] = Q[(i + 1) * n + i];
+    if (V_out) *V_out = V;
 }
 
 static std::vector<double> tridiag_eig_evecs(std::vector<double> alpha,
@@ -228,27 +250,42 @@ static SSHSol solve_ssh(int n_cells, double t, double delta) {
     int N = 2 * n_cells;
     MatR H = build_ssh_matrix(n_cells, t, delta);
     std::vector<double> alpha, beta;
-    householder_tridiag(H, alpha, beta, N);
-    MatR evecs;
-    auto evals = tridiag_eig_evecs(alpha, beta, evecs);
+    MatR V;
+    householder_tridiag(H, alpha, beta, N, &V);
+    MatR Q_tri;
+    auto evals = tridiag_eig_evecs(alpha, beta, Q_tri);
+    // Back-transform: eigenvectors of H = V * (eigenvectors of T)
+    MatR evecs(static_cast<std::size_t>(N) * N, 0.0);
+    for (int row = 0; row < N; ++row)
+        for (int col = 0; col < N; ++col)
+            for (int k = 0; k < N; ++k)
+                evecs[row * N + col] += V[row * N + k] * Q_tri[k * N + col];
 
     SSHSol sol;
     sol.energies = evals;
 
-    // Gap: minimum positive eigenvalue - maximum negative eigenvalue
+    // Bulk gap: edge states in the topological phase have |E| exponentially small
+    // (~(t2/t1)^{-n_cells}), while bulk bands start at |E| ~ min(t1, t2).
+    // Use a threshold of 0.3 * min(t1, t2) to exclude edge states and measure
+    // the physical band gap between valence and conduction bands.
+    double t1_abs = std::abs(t * (1.0 - delta));
+    double t2_abs = std::abs(t * (1.0 + delta));
+    double edge_thr = 0.3 * std::min(t1_abs, t2_abs);
+    if (edge_thr < 1e-10) edge_thr = 1e-10;  // fallback for near-zero hopping
     double emax_neg = -1e30, emin_pos = 1e30;
     for (double e : evals) {
-        if (e < -1e-10) emax_neg = std::max(emax_neg, e);
-        if (e >  1e-10) emin_pos = std::min(emin_pos, e);
+        if (e < -edge_thr) emax_neg = std::max(emax_neg, e);
+        if (e >  edge_thr) emin_pos = std::min(emin_pos, e);
     }
     sol.gap = (emin_pos > emax_neg) ? emin_pos - emax_neg : 0.0;
 
     // Zak phase from k-space Wilson loop (uses periodic BdG)
     sol.zak_phase = zak_phase_periodic(n_cells, t, delta);
 
-    // Edge weight: find mid-gap modes (|E| < gap/4), report |ψ|² per site
-    // for the mode closest to zero energy
-    double thr = sol.gap / 4.0;
+    // Edge weight: find mid-gap modes (|E| < edge_thr), report |ψ|² per site
+    // for the mode closest to zero energy. Use edge_thr (same as gap threshold)
+    // so that bulk-band states are excluded even when gap/4 would be too small.
+    double thr = edge_thr;
     int edge_idx = -1;
     double best = 1e30;
     for (int i = 0; i < N; ++i) {

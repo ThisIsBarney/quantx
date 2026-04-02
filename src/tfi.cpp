@@ -95,13 +95,24 @@ static MatR build_tfi_matrix(int N, double J, double h) {
 // C.  Householder tridiagonalization (real symmetric)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// householder_tridiag_real: reduces A to tridiagonal T = V^T A V where V is
+// orthogonal (product of Householder reflectors).  If V_out != nullptr the
+// accumulated reflector matrix V is returned so that eigenvectors of A can be
+// recovered as V * (eigenvectors of T).
 static void householder_tridiag_real(const MatR& A, std::vector<double>& alpha,
-                                      std::vector<double>& beta, int n) {
+                                      std::vector<double>& beta, int n,
+                                      MatR* V_out = nullptr) {
     alpha.resize(n); beta.resize(n - 1);
-    MatR Q = A; // copy; we will overwrite with tridiagonal form in-place via similarity
+    MatR Q = A; // working copy → tridiagonal in-place
+
+    // Initialize accumulator V = I
+    MatR V;
+    if (V_out) {
+        V.assign(static_cast<std::size_t>(n) * n, 0.0);
+        for (int i = 0; i < n; ++i) V[i * n + i] = 1.0;
+    }
 
     for (int k = 0; k < n - 2; ++k) {
-        // Form Householder vector for column k below diagonal
         double norm2 = 0.0;
         for (int i = k + 1; i < n; ++i) norm2 += Q[i * n + k] * Q[i * n + k];
         double norm = std::sqrt(norm2);
@@ -114,9 +125,7 @@ static void householder_tridiag_real(const MatR& A, std::vector<double>& alpha,
         for (int i = k + 1; i < n; ++i) vnorm2 += v[i] * v[i];
         if (vnorm2 < 1e-30) continue;
 
-        // P = I - 2 v v^T / (v^T v)
-        // Q ← P Q P  (similarity)
-        // Compute p = Q v / vnorm2
+        // Similarity transform Q ← P Q P  where P = I - 2 v v^T / vnorm2
         std::vector<double> p(n, 0.0);
         for (int r = 0; r < n; ++r)
             for (int c = k + 1; c < n; ++c)
@@ -131,10 +140,23 @@ static void householder_tridiag_real(const MatR& A, std::vector<double>& alpha,
         for (int r = 0; r < n; ++r)
             for (int c = 0; c < n; ++c)
                 Q[r * n + c] -= v[r] * w[c] + w[r] * v[c];
+
+        // Accumulate right reflector into V: V ← V P
+        // (VP)[row,col] = V[row,col] - 2/vnorm2 * (V·v)[row] * v[col]
+        if (V_out) {
+            std::vector<double> Vv(n, 0.0);
+            for (int row = 0; row < n; ++row)
+                for (int j = k + 1; j < n; ++j)
+                    Vv[row] += V[row * n + j] * v[j];
+            for (int row = 0; row < n; ++row)
+                for (int c2 = k + 1; c2 < n; ++c2)
+                    V[row * n + c2] -= (2.0 / vnorm2) * Vv[row] * v[c2];
+        }
     }
 
     for (int i = 0; i < n; ++i) alpha[i] = Q[i * n + i];
     for (int i = 0; i < n - 1; ++i) beta[i] = Q[(i + 1) * n + i];
+    if (V_out) *V_out = V;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,11 +241,21 @@ struct EigenDecomp {
 
 static EigenDecomp dense_eig(const MatR& H, int n, bool want_vecs = false) {
     std::vector<double> alpha, beta;
-    householder_tridiag_real(H, alpha, beta, n);
     EigenDecomp ed;
     if (want_vecs) {
-        ed.evals = tridiag_eig(alpha, beta, &ed.evecs);
+        MatR V;
+        householder_tridiag_real(H, alpha, beta, n, &V);
+        MatR Q_tri;
+        ed.evals = tridiag_eig(alpha, beta, &Q_tri);
+        // Back-transform: eigenvectors of H = V * (eigenvectors of T)
+        // ed.evecs[row, col] = Σ_k V[row,k] * Q_tri[k, col]
+        ed.evecs.assign(static_cast<std::size_t>(n) * n, 0.0);
+        for (int row = 0; row < n; ++row)
+            for (int col = 0; col < n; ++col)
+                for (int k = 0; k < n; ++k)
+                    ed.evecs[row * n + col] += V[row * n + k] * Q_tri[k * n + col];
     } else {
+        householder_tridiag_real(H, alpha, beta, n);
         ed.evals = tridiag_eig(alpha, beta);
     }
     return ed;
@@ -454,8 +486,8 @@ TFIResult run_tfi(const TFIOptions& opts) {
     res.n_sites = opts.n_sites;
     res.J = opts.J; res.h = opts.h;
 
-    if (opts.n_sites < 2 || opts.n_sites > 22)
-        throw std::runtime_error("TFI: n_sites must be in [2, 22]");
+    if (opts.n_sites < 2 || opts.n_sites > 14)
+        throw std::runtime_error("TFI: n_sites must be in [2, 14] (dense exact-diag; 2^14 x 2^14 matrix ≈ 2 GB)");
     if (opts.J <= 0.0)
         throw std::runtime_error("TFI: J must be positive");
     if (opts.h < 0.0)

@@ -8615,13 +8615,17 @@ def _ssh_frames(
     def solve_point(delta_: float) -> dict:
         H = build_h(delta_)
         evals, evecs = np.linalg.eigh(H)
-        # Gap: min positive - max negative eigenvalue
-        neg = evals[evals < -1e-10]
-        pos = evals[evals > 1e-10]
+        # Bulk gap: edge states in the topological phase have |E| exponentially
+        # small (~(t2/t1)^{-n_cells}), while bulk bands start at ~min(t1, t2).
+        # Use 0.3*min(t1, t2) to separate edge states from bulk.
+        t1_abs = abs(t * (1.0 - delta_))
+        t2_abs = abs(t * (1.0 + delta_))
+        edge_thr = max(0.3 * min(t1_abs, t2_abs), 1e-10)
+        neg = evals[evals < -edge_thr]
+        pos = evals[evals >  edge_thr]
         gap = float(pos.min() - neg.max()) if len(neg) and len(pos) else 0.0
-        # Edge mode: eigenvalue closest to zero
-        thr = gap / 4.0 if gap > 0 else 0.1
-        mid_idx = np.where(np.abs(evals) < thr)[0]
+        # Edge mode: any eigenvalue with |E| < edge_thr is an in-gap (edge) state
+        mid_idx = np.where(np.abs(evals) < edge_thr)[0]
         ew = np.zeros(N)
         if len(mid_idx):
             best = mid_idx[np.argmin(np.abs(evals[mid_idx]))]

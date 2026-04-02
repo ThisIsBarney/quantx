@@ -784,7 +784,7 @@ struct TFIFrame {
 };
 
 struct TFIOptions {
-  int n_sites{10};
+  int n_sites{10};  // must be ≤ 14 (dense exact-diag; 2^14×2^14 ≈ 2 GB)
   double J{1.0};        // ZZ coupling
   double h{0.5};        // transverse field (QPT at h = J)
   std::string scenario{"ground_state"};  // ground_state | sweep | dynamics
