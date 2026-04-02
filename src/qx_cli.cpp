@@ -60,6 +60,7 @@ int main(int argc, char** argv) {
     std::string chern_path;
     std::string hofstadter_path;
     std::string mbl_path;
+    std::string spectral_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -92,6 +93,7 @@ int main(int argc, char** argv) {
     app.add_option("--chern", chern_path, "chern options json path (run 2D Chern insulator / QWZ model simulation)");
     app.add_option("--hofstadter", hofstadter_path, "hofstadter options json path (run Hofstadter butterfly simulation)");
     app.add_option("--mbl", mbl_path, "mbl options json path (run Many-Body Localization disordered XXZ chain simulation)");
+    app.add_option("--spectral", spectral_path, "spectral options json path (run dynamical structure factor S(k,omega) simulation)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -138,11 +140,12 @@ int main(int argc, char** argv) {
         heisenberg_path.empty() && bose_hubbard_path.empty() &&
         tfi_path.empty() && ssh_path.empty() &&
         kitaev_path.empty() && anderson_path.empty() &&
-        chern_path.empty() && hofstadter_path.empty() && mbl_path.empty()) {
+        chern_path.empty() && hofstadter_path.empty() && mbl_path.empty() &&
+        spectral_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
-          "--anderson, --chern, --hofstadter, or --mbl");
+          "--anderson, --chern, --hofstadter, --mbl, or --spectral");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -162,12 +165,13 @@ int main(int argc, char** argv) {
                   (!anderson_path.empty()     ? 1 : 0) +
                   (!chern_path.empty()        ? 1 : 0) +
                   (!hofstadter_path.empty()   ? 1 : 0) +
-                  (!mbl_path.empty()          ? 1 : 0);
+                  (!mbl_path.empty()          ? 1 : 0) +
+                  (!spectral_path.empty()     ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
             "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
-            "--anderson, --chern, --hofstadter, or --mbl");
+            "--anderson, --chern, --hofstadter, --mbl, or --spectral");
       }
     }
 
@@ -337,6 +341,14 @@ int main(int argc, char** argv) {
       const qx::MBLOptions mbl_opts = qx::mbl_options_from_json(mbl_json);
       qx::log::info("loaded mbl options file: " + mbl_path);
       output_json = qx::mbl_result_to_json(qx::run_mbl(mbl_opts));
+    } else if (!spectral_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --spectral mode");
+      }
+      const std::string spectral_json = read_text_file(spectral_path);
+      const qx::SpectralOptions spectral_opts = qx::spectral_options_from_json(spectral_json);
+      qx::log::info("loaded spectral options file: " + spectral_path);
+      output_json = qx::spectral_result_to_json(qx::run_spectral(spectral_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

@@ -58,5 +58,7 @@ ChernResult run_chern(const ChernOptions& opts);
 HofstadterResult run_hofstadter(const HofstadterOptions& opts);
 // Run Many-Body Localization (disordered XXZ chain) simulation.
 MBLResult run_mbl(const MBLOptions& opts);
+// Run spectral function / dynamical structure factor simulation.
+SpectralResult run_spectral(const SpectralOptions& opts);
 
 }  // namespace qx

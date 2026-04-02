@@ -6879,6 +6879,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("chern",              "2D Chern 绝缘体 (QWZ)"),
           ("hofstadter",         "Hofstadter 蝴蝶"),
           ("mbl",                "MBL 多体局域化 (XXZ+disorder)"),
+          ("spectral",           "Spectral S(k,ω) 动力学结构因子"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -9933,6 +9934,320 @@ if(DATA.sweep && DATA.sweep.length>0){{
 </html>"""
 
 
+def _spectral_frames(
+    n_sites: int = 12,
+    J: float = 1.0,
+    delta: float = 1.0,
+    h: float = 0.0,
+    scenario: str = "both",
+    n_k: int = 20,
+    n_omega: int = 200,
+    omega_min: float = -4.0,
+    omega_max: float = 4.0,
+    eta: float = 0.15,
+    tau_max: float = 4.0,
+    n_tau: int = 60,
+) -> dict:
+    """NumPy reference: dynamical structure factor S(k,omega) and imaginary-time convergence."""
+    import numpy as np  # noqa: PLC0415
+
+    N = n_sites
+    if N < 2 or N % 2 != 0:
+        raise ValueError("n_sites must be even and >= 2")
+
+    # ── Sz=0 basis (Gosper's hack) ───────────────────────────────────────────
+    def sz0_basis(n: int):
+        n_down = n // 2
+        s = (1 << n_down) - 1
+        lim = 1 << n
+        states = []
+        while s < lim:
+            states.append(s)
+            c = s & (-s)
+            r = s + c
+            s = (((r ^ s) >> 2) // c) | r
+        return np.array(states, dtype=np.int64)
+
+    basis = sz0_basis(N)
+    dim = len(basis)
+    idx_map: dict = {int(s): i for i, s in enumerate(basis)}
+
+    # ── Build XXZ Hamiltonian ────────────────────────────────────────────────
+    H = np.zeros((dim, dim), dtype=np.float64)
+    for s_idx, s in enumerate(basis):
+        diag = 0.0
+        for j in range(N - 1):
+            bj  = (s >> j)      & 1
+            bj1 = (s >> (j + 1)) & 1
+            sz_j   = 0.5 - bj
+            sz_j1  = 0.5 - bj1
+            diag  += J * delta * sz_j * sz_j1
+            if bj != bj1:
+                t_state = s ^ (1 << j) ^ (1 << (j + 1))
+                t_idx = idx_map.get(int(t_state))
+                if t_idx is not None:
+                    H[s_idx, t_idx] += 0.5 * J
+        # External field
+        for j in range(N):
+            bj = (s >> j) & 1
+            diag += h * (0.5 - bj)
+        H[s_idx, s_idx] += diag
+
+    # ── Diagonalize ─────────────────────────────────────────────────────────
+    evals, evecs = np.linalg.eigh(H)
+    E0 = evals[0]
+    psi0 = evecs[:, 0]   # ground state in Sz=0 basis
+
+    # ── S(k,omega) — dynamical structure factor ──────────────────────────────
+    k_vals = [2.0 * np.pi * ik / N for ik in range(N)]
+    omega_vals = list(np.linspace(omega_min, omega_max, n_omega))
+    inv_sqrtN = 1.0 / np.sqrt(N)
+    lorentz_pi = eta / np.pi
+
+    spectral_flat: list[float] = []
+
+    for k in k_vals[:n_k]:
+        # Build S^z_k |GS> in the Sz=0 subspace
+        skz_gs_re = np.zeros(dim)
+        skz_gs_im = np.zeros(dim)
+        for s_idx, s in enumerate(basis):
+            for j in range(N):
+                sz_j = 0.5 - ((s >> j) & 1)
+                phase_k = k * j
+                ck = np.cos(phase_k) * sz_j * inv_sqrtN
+                sk = np.sin(phase_k) * sz_j * inv_sqrtN
+                skz_gs_re[s_idx] += ck * psi0[s_idx]
+                skz_gs_im[s_idx] += sk * psi0[s_idx]
+
+        # Project onto eigenstates: amp_n = <n|S^z_k|GS>
+        # = evecs[:, n]^T . (skz_gs_re + i*skz_gs_im)
+        amps_re = evecs.T @ skz_gs_re   # shape (dim,)
+        amps_im = evecs.T @ skz_gs_im   # shape (dim,)
+        weights = amps_re**2 + amps_im**2  # |<n|S^z_k|GS>|^2
+
+        # Accumulate Lorentzian-broadened S(k, omega)
+        dE = evals - E0  # excitation energies
+        row: list[float] = []
+        for w in omega_vals:
+            val = float(np.sum(weights * lorentz_pi / ((w - dE)**2 + eta**2)))
+            row.append(val)
+        spectral_flat.extend(row)
+
+    # ── Imaginary-time evolution ─────────────────────────────────────────────
+    # c_n = <n|GS> = delta_{n,0} in exact GS case, but we use the full spectrum
+    # For a given initial state |psi_init> = |GS>: c_n^2 = delta_{n0}
+    # But for a random product state or to show convergence, use equal superposition.
+    # Use the GS overlap: c_n^2 = |<n|GS>|^2 = 1 for n=0, 0 else — that's trivial.
+    # Instead use a simple initial state: |s_init> = first basis state.
+    c_sq = evecs[0, :]**2  # |<n|s_0>|^2 for the first basis state
+    tau_vals_np = np.linspace(0, tau_max, n_tau)
+    energy_tau: list[float] = []
+    fidelity_tau: list[float] = []
+    for tau in tau_vals_np:
+        weights_tau = c_sq * np.exp(-2.0 * tau * (evals - E0))
+        Z = float(np.sum(weights_tau))
+        if Z < 1e-300:
+            energy_tau.append(float(E0))
+            fidelity_tau.append(1.0)
+        else:
+            E_tau = float(np.sum(evals * weights_tau) / Z)
+            F_tau = float(weights_tau[0] / Z)
+            energy_tau.append(E_tau)
+            fidelity_tau.append(F_tau)
+
+    return {
+        "ok": True,
+        "n_sites": N,
+        "J": J,
+        "delta": delta,
+        "h": h,
+        "scenario": scenario,
+        "E_ground": float(E0),
+        "k_vals": k_vals[:n_k],
+        "omega_vals": omega_vals,
+        "spectral": spectral_flat,
+        "n_k": min(n_k, N),
+        "n_omega": n_omega,
+        "tau_vals": [float(t) for t in tau_vals_np],
+        "energy_tau": energy_tau,
+        "fidelity_tau": fidelity_tau,
+        "source": "python-reference",
+    }
+
+
+def _spectral_page(data: dict, title: str = "Spectral Functions — S(k,ω) & Imaginary Time") -> str:
+    """2-panel HTML page: S(k,ω) heatmap with DCP dispersion + imaginary-time convergence."""
+    import json as _json  # noqa: PLC0415
+
+    jdata = _json.dumps(data)
+    E0    = data.get("E_ground", 0.0)
+    N     = data.get("n_sites", 12)
+    n_k   = data.get("n_k", 20)
+    n_om  = data.get("n_omega", 200)
+    J_val = data.get("J", 1.0)
+    d_val = data.get("delta", 1.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  canvas{{display:block;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  N={N}, J={J_val:.2f}, &Delta;={d_val:.2f} &nbsp;|&nbsp;
+  E<sub>0</sub>={E0:.4f} &nbsp;|&nbsp;
+  n<sub>k</sub>={n_k}, n<sub>&omega;</sub>={n_om}
+</div>
+<div class="grid">
+  <div class="panel">
+    <canvas id="cSpectral" width="480" height="360"></canvas>
+    <div class="label">S(k,&omega;) — dynamical structure factor (des&nbsp;Cloizeaux&ndash;Pearson dispersion dashed)</div>
+  </div>
+  <div class="panel">
+    <canvas id="cImagTime" width="480" height="360"></canvas>
+    <div class="label">Imaginary-time convergence &lang;E&rang;(&tau;)&nbsp;&rarr;&nbsp;E<sub>0</sub></div>
+  </div>
+</div>
+<script>
+var DATA = {jdata};
+
+// ── Viridis-like colormap ────────────────────────────────────────────────────
+function viridisCmap(t) {{
+  t = Math.max(0, Math.min(1, t));
+  var r = Math.round(255*(0.267 + t*(0.004 + t*(1.623 + t*(-2.233 + t*(1.342))))));
+  var g = Math.round(255*(0.005 + t*(0.361 + t*(0.850 + t*(-0.971 + t*(0.412))))));
+  var b = Math.round(255*(0.329 + t*(1.098 + t*(-1.468 + t*(1.151 + t*(-0.502))))));
+  return [Math.max(0,Math.min(255,r)), Math.max(0,Math.min(255,g)), Math.max(0,Math.min(255,b))];
+}}
+
+// ── Panel 1: S(k,omega) heatmap ──────────────────────────────────────────────
+(function() {{
+  var cv = document.getElementById("cSpectral"); if (!cv) return;
+  var nk = DATA.n_k, nom = DATA.n_omega;
+  var spec = DATA.spectral;
+  var smax = 0;
+  for (var i = 0; i < spec.length; i++) if (spec[i] > smax) smax = spec[i];
+  if (smax === 0) smax = 1;
+
+  var W = cv.width, H = cv.height;
+  var pad = 40;
+  var ctx = cv.getContext("2d");
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, W, H);
+
+  var pw = Math.max(1, (W - 2*pad) / nom);
+  var ph = Math.max(1, (H - 2*pad) / nk);
+
+  for (var ki = 0; ki < nk; ki++) {{
+    for (var wi = 0; wi < nom; wi++) {{
+      var val = spec[ki * nom + wi] / smax;
+      var rgb = viridisCmap(Math.pow(val, 0.5));
+      ctx.fillStyle = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
+      var px = pad + wi * pw;
+      var py = H - pad - (ki + 1) * ph;
+      ctx.fillRect(px, py, pw + 0.5, ph + 0.5);
+    }}
+  }}
+
+  // DCP dispersion overlay: omega_DCP(k) = (pi/2) * |sin(k)|  (for J=1, delta=1)
+  var J = DATA.J || 1.0;
+  var omMin = DATA.omega_vals[0], omMax = DATA.omega_vals[nom - 1];
+  var omRange = omMax - omMin || 1;
+  var kArr = DATA.k_vals;
+  ctx.strokeStyle = "rgba(255,200,50,0.85)"; ctx.lineWidth = 1.5;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  for (var ki2 = 0; ki2 < kArr.length; ki2++) {{
+    var dcp = J * Math.PI * 0.5 * Math.abs(Math.sin(kArr[ki2]));
+    var px2 = pad + (dcp - omMin) / omRange * (W - 2*pad);
+    var py2 = H - pad - (ki2 + 0.5) * ph;
+    if (ki2 === 0) ctx.moveTo(px2, py2); else ctx.lineTo(px2, py2);
+  }}
+  ctx.stroke();
+  // Lower boundary: omega = J*pi/2*|sin(k)| (same for XXZ at delta=1)
+  ctx.setLineDash([]);
+
+  // Axes labels
+  ctx.fillStyle = "#8b949e"; ctx.font = "10px monospace";
+  ctx.fillText("k", 4, pad - 4);
+  ctx.fillText("\u03c9", W - pad + 2, H - pad + 12);
+  ctx.fillText(omMin.toFixed(1), pad, H - pad + 12);
+  ctx.fillText(omMax.toFixed(1), W - pad - 18, H - pad + 12);
+  ctx.fillText("0", pad - 10, H - pad);
+  ctx.fillText("2\u03c0", pad - 22, pad + 8);
+}})();
+
+// ── Panel 2: imaginary-time convergence ──────────────────────────────────────
+(function() {{
+  var cv = document.getElementById("cImagTime"); if (!cv) return;
+  var tau = DATA.tau_vals, Etau = DATA.energy_tau, F = DATA.fidelity_tau;
+  if (!tau || tau.length === 0) return;
+  var W = cv.width, H = cv.height, pad = 44;
+  var ctx = cv.getContext("2d");
+  ctx.fillStyle = "#0d1117"; ctx.fillRect(0, 0, W, H);
+
+  // Draw <E>(tau)
+  var emin = Math.min.apply(null, Etau), emax = Math.max.apply(null, Etau);
+  var de = emax - emin || 1;
+  var tmax = tau[tau.length - 1] || 1;
+
+  ctx.strokeStyle = "#21262d"; ctx.lineWidth = 1;
+  for (var gi = 0; gi < 5; gi++) {{
+    var gy = pad + (H - 2*pad) * gi / 4;
+    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(W - pad, gy); ctx.stroke();
+  }}
+
+  // E0 reference line
+  var E0 = DATA.E_ground;
+  var e0py = H - pad - (E0 - emin) / de * (H - 2*pad);
+  ctx.strokeStyle = "#e3b341"; ctx.lineWidth = 1; ctx.setLineDash([5, 3]);
+  ctx.beginPath(); ctx.moveTo(pad, e0py); ctx.lineTo(W - pad, e0py); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#e3b341"; ctx.font = "9px monospace"; ctx.fillText("E\u2080", W - pad - 14, e0py - 3);
+
+  // <E>(tau) curve
+  ctx.strokeStyle = "#58a6ff"; ctx.lineWidth = 2; ctx.beginPath();
+  for (var i = 0; i < tau.length; i++) {{
+    var px = pad + tau[i] / tmax * (W - 2*pad);
+    var py = H - pad - (Etau[i] - emin) / de * (H - 2*pad);
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }}
+  ctx.stroke();
+
+  // Fidelity on right axis (green)
+  var fmax = Math.max.apply(null, F) || 1;
+  ctx.strokeStyle = "#57ab5a"; ctx.lineWidth = 1.5; ctx.beginPath();
+  for (var i2 = 0; i2 < tau.length; i2++) {{
+    var px2 = pad + tau[i2] / tmax * (W - 2*pad);
+    var py2 = H - pad - F[i2] / fmax * (H - 2*pad);
+    if (i2 === 0) ctx.moveTo(px2, py2); else ctx.lineTo(px2, py2);
+  }}
+  ctx.stroke();
+
+  ctx.fillStyle = "#8b949e"; ctx.font = "10px monospace";
+  ctx.fillText("\u27e8E\u27e9(\u03c4)", 4, 14);
+  ctx.fillStyle = "#57ab5a";
+  ctx.fillText("fidelity", 4, 26);
+  ctx.fillStyle = "#8b949e";
+  ctx.fillText("\u03c4", W - pad + 2, H - pad + 12);
+  ctx.fillText("0", pad - 10, H - pad + 12);
+  ctx.fillText(tmax.toFixed(1), W - pad - 16, H - pad + 12);
+}})();
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -9940,7 +10255,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -10080,6 +10395,18 @@ def main() -> int:
   parser.add_argument("--mbl-sweep-points", type=int, default=16, help="number of W values in MBL sweep")
   parser.add_argument("--mbl-samples",  type=int,   default=10,   help="disorder realizations per W (sweep)")
   parser.add_argument("--mbl-seed",     type=int,   default=42,   help="random seed for MBL")
+  parser.add_argument("--spectral-sites",   type=int,   default=12,   help="number of sites for spectral XXZ chain (even, 2-16)")
+  parser.add_argument("--spectral-J",       type=float, default=1.0,  help="Heisenberg coupling J for spectral")
+  parser.add_argument("--spectral-delta",   type=float, default=1.0,  help="XXZ anisotropy delta for spectral")
+  parser.add_argument("--spectral-h",       type=float, default=0.0,  help="external field h for spectral")
+  parser.add_argument("--spectral-scenario", choices=["spectral", "imagtime", "both"], default="both", help="spectral | imagtime | both")
+  parser.add_argument("--spectral-nk",      type=int,   default=20,   help="number of k points in S(k,omega)")
+  parser.add_argument("--spectral-nomega",  type=int,   default=200,  help="number of omega points in S(k,omega)")
+  parser.add_argument("--spectral-omega-min", type=float, default=-4.0, help="minimum omega")
+  parser.add_argument("--spectral-omega-max", type=float, default=4.0,  help="maximum omega")
+  parser.add_argument("--spectral-eta",     type=float, default=0.15, help="Lorentzian broadening eta")
+  parser.add_argument("--spectral-tau-max", type=float, default=4.0,  help="maximum imaginary time tau")
+  parser.add_argument("--spectral-ntau",    type=int,   default=60,   help="number of tau points")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -10933,6 +11260,31 @@ def main() -> int:
       path.write_text(_mbl_page(mbl_data, title="Many-Body Localization — Disordered XXZ Chain"), encoding="utf-8")
       generated.append(path)
 
+  # ── M33: Spectral Functions ───────────────────────────────────────────────
+  if args.scenario in {"spectral", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415
+    except ImportError:
+      print("spectral skipped: numpy not available", file=sys.stderr)
+    else:
+      spectral_data = _spectral_frames(
+          n_sites=args.spectral_sites,
+          J=args.spectral_J,
+          delta=args.spectral_delta,
+          h=args.spectral_h,
+          scenario=args.spectral_scenario,
+          n_k=args.spectral_nk,
+          n_omega=args.spectral_nomega,
+          omega_min=args.spectral_omega_min,
+          omega_max=args.spectral_omega_max,
+          eta=args.spectral_eta,
+          tau_max=args.spectral_tau_max,
+          n_tau=args.spectral_ntau,
+      )
+      path = out_dir / "quantum_spectral.html"
+      path.write_text(_spectral_page(spectral_data, title="Spectral Functions — S(k,\u03c9) & Imaginary Time"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -10980,6 +11332,7 @@ def main() -> int:
         "chern":              "quantum_chern",
         "hofstadter":         "quantum_hofstadter",
         "mbl":                "quantum_mbl",
+        "spectral":           "quantum_spectral",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
