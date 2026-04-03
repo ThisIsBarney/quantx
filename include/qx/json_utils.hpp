@@ -92,5 +92,9 @@ std::string mbl_result_to_json(const MBLResult& result);
 SpectralOptions spectral_options_from_json(const std::string& json);
 // Serialize spectral function result to JSON string.
 std::string spectral_result_to_json(const SpectralResult& result);
+// Parse 10-fold way topological classification options from JSON string.
+TenfoldOptions tenfold_options_from_json(const std::string& json);
+// Serialize 10-fold way topological classification result to JSON string.
+std::string tenfold_result_to_json(const TenfoldResult& result);
 
 }  // namespace qx

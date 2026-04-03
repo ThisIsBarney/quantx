@@ -920,6 +920,58 @@ struct AndersonResult {
   std::string message;
 };
 
+// ── M34: 10-Fold Way Topological Classification (Altland-Zirnbauer) ─────────
+//
+// Classifies free-fermion Hamiltonians by T (time-reversal), C (particle-hole),
+// and S = T*C (chiral) symmetries, yielding Z, Z2, 2Z, or trivial invariants.
+// Numerically computes invariants for SSH (BDI d=1), QWZ (A d=2), Kitaev (D d=1).
+
+struct TenfoldOptions {
+  std::string az_class{"A"};      // symmetry class: A|AI|AII|AIII|BDI|CII|D|DIII|C|CI
+  int         dimension{2};       // spatial dimension: 1, 2, or 3
+  std::string model{"qwz"};       // model: ssh | qwz | kitaev
+  std::string scenario{"classify"}; // classify | invariant | phase_diagram
+  // SSH parameters (class BDI/AIII, d=1)
+  double t1{1.0};                 // intra-cell hopping
+  double t2{0.5};                 // inter-cell hopping
+  // QWZ parameters (class A, d=2)
+  double m{1.0};                  // mass / band inversion parameter
+  double t{1.0};                  // hopping amplitude
+  // Kitaev parameters (class D, d=1)
+  double t_hop{1.0};              // nearest-neighbour hopping
+  double mu{0.0};                 // chemical potential
+  // Numerical
+  int n_k{100};                   // k-grid points for invariant computation
+  // Phase diagram sweep
+  double param_min{-3.0};
+  double param_max{3.0};
+  int    n_sweep{60};
+  std::string sweep_param{"m"};   // which parameter to sweep: m | t1 | t2 | mu
+};
+
+struct TenfoldResult {
+  bool ok{false};
+  std::string az_class;
+  int         dimension{2};
+  std::string invariant_type;       // "Z", "Z2", "2Z", "0"
+  std::string scenario;
+  std::string model;
+  double      invariant_value{0.0}; // winding (Z/2Z) or Chern (Z)
+  int         invariant_z2{0};      // 0 or 1 for Z2 classes
+  std::string phase_label;          // "Topological (W=1)" | "Trivial (W=0)" etc.
+  // Band data (SSH: dispersion for visualisation)
+  std::vector<double> k_bands;      // k grid for SSH bands
+  std::vector<double> e_plus;       // upper band E+(k)
+  std::vector<double> e_minus;      // lower band E-(k)
+  // Phase diagram
+  std::vector<double>      sweep_vals;
+  std::vector<double>      sweep_invariant;  // invariant value per sweep point
+  std::vector<int>         sweep_z2;         // Z2 value per sweep point
+  std::vector<std::string> sweep_phase;      // phase label per sweep point
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M33: Spectral Functions & Imaginary-Time Evolution ───────────────────
 //
 // Dynamical structure factor S(k,omega) = sum_n |<n|S^z_k|0>|^2 delta(omega-(E_n-E_0))

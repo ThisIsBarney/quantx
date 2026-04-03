@@ -60,5 +60,7 @@ HofstadterResult run_hofstadter(const HofstadterOptions& opts);
 MBLResult run_mbl(const MBLOptions& opts);
 // Run spectral function / dynamical structure factor simulation.
 SpectralResult run_spectral(const SpectralOptions& opts);
+// Run 10-fold way topological classification (Altland-Zirnbauer).
+TenfoldResult run_tenfold(const TenfoldOptions& opts);
 
 }  // namespace qx
