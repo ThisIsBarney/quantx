@@ -920,6 +920,46 @@ struct AndersonResult {
   std::string message;
 };
 
+// ── M33: Spectral Functions & Imaginary-Time Evolution ───────────────────
+//
+// Dynamical structure factor S(k,omega) = sum_n |<n|S^z_k|0>|^2 delta(omega-(E_n-E_0))
+// with Lorentzian broadening eta.  Imaginary-time projection e^{-tau H}|psi> -> |GS>.
+
+struct SpectralOptions {
+  int    n_sites{12};        // chain length (N, Sz=0 sector; N even)
+  double J{1.0};             // Heisenberg exchange coupling
+  double delta{1.0};         // XXZ anisotropy (1=Heisenberg, 0=XX, <0=ferromagnet)
+  double h{0.0};             // uniform longitudinal field
+  std::string scenario{"spectral"};  // spectral | imagtime | both
+  // Spectral function parameters
+  int    n_k{20};            // k-space sample points in [0, 2pi]
+  int    n_omega{200};       // omega grid points
+  double omega_min{-4.0};
+  double omega_max{4.0};
+  double eta{0.15};          // Lorentzian broadening half-width
+  // Imaginary-time parameters
+  double tau_max{4.0};
+  int    n_tau{60};
+};
+
+struct SpectralResult {
+  bool   ok{false};
+  int    n_sites{0};
+  double J{0.0}, delta{0.0}, h{0.0};
+  std::string scenario;
+  double E_ground{0.0};              // ground-state energy per site
+  // Spectral function  S(k, omega): n_k x n_omega row-major (k outer, omega inner)
+  std::vector<double> k_vals;        // k in [0, 2*pi], length n_k
+  std::vector<double> omega_vals;    // omega grid, length n_omega
+  std::vector<double> spectral;      // S(k,omega), flattened n_k*n_omega
+  // Imaginary-time evolution
+  std::vector<double> tau_vals;      // tau grid
+  std::vector<double> energy_tau;    // <E>(tau) converging to E_0
+  std::vector<double> fidelity_tau;  // |<GS|psi(tau)>|^2 converging to 1
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M32: Many-Body Localization (disordered XXZ chain) ────────────────────
 
 struct MBLSweepPoint {

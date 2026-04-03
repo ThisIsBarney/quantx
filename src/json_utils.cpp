@@ -1572,5 +1572,44 @@ std::string mbl_result_to_json(const MBLResult& r) {
   return j.dump();
 }
 
+SpectralOptions spectral_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  SpectralOptions o;
+  if (j.contains("n_sites"))   o.n_sites   = j["n_sites"].get<int>();
+  if (j.contains("J"))         o.J         = j["J"].get<double>();
+  if (j.contains("delta"))     o.delta     = j["delta"].get<double>();
+  if (j.contains("h"))         o.h         = j["h"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  if (j.contains("n_k"))       o.n_k       = j["n_k"].get<int>();
+  if (j.contains("n_omega"))   o.n_omega   = j["n_omega"].get<int>();
+  if (j.contains("omega_min")) o.omega_min = j["omega_min"].get<double>();
+  if (j.contains("omega_max")) o.omega_max = j["omega_max"].get<double>();
+  if (j.contains("eta"))       o.eta       = j["eta"].get<double>();
+  if (j.contains("tau_max"))   o.tau_max   = j["tau_max"].get<double>();
+  if (j.contains("n_tau"))     o.n_tau     = j["n_tau"].get<int>();
+  return o;
+}
+
+std::string spectral_result_to_json(const SpectralResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["n_sites"]      = r.n_sites;
+  j["J"]            = r.J;
+  j["delta"]        = r.delta;
+  j["h"]            = r.h;
+  j["scenario"]     = r.scenario;
+  j["E_ground"]     = r.E_ground;
+  j["k_vals"]       = r.k_vals;
+  j["omega_vals"]   = r.omega_vals;
+  j["spectral"]     = r.spectral;
+  j["tau_vals"]     = r.tau_vals;
+  j["energy_tau"]   = r.energy_tau;
+  j["fidelity_tau"] = r.fidelity_tau;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
 

@@ -88,5 +88,9 @@ std::string hofstadter_result_to_json(const HofstadterResult& result);
 MBLOptions mbl_options_from_json(const std::string& json);
 // Serialize Many-Body Localization result to JSON string.
 std::string mbl_result_to_json(const MBLResult& result);
+// Parse spectral function options from JSON string.
+SpectralOptions spectral_options_from_json(const std::string& json);
+// Serialize spectral function result to JSON string.
+std::string spectral_result_to_json(const SpectralResult& result);
 
 }  // namespace qx
