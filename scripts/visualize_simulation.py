@@ -6880,6 +6880,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("hofstadter",         "Hofstadter 蝴蝶"),
           ("mbl",                "MBL 多体局域化 (XXZ+disorder)"),
           ("spectral",           "Spectral S(k,ω) 动力学结构因子"),
+          ("tenfold",            "10-Fold Way AZ 拓扑分类"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -10262,6 +10263,350 @@ function viridisCmap(t) {{
 </html>"""
 
 
+def _tenfold_frames(
+    az_class: str = "BDI",
+    dimension: int = 1,
+    model: str = "ssh",
+    scenario: str = "phase_diagram",
+    t1: float = 1.0,
+    t2: float = 0.5,
+    m: float = 1.0,
+    t: float = 1.0,
+    t_hop: float = 1.0,
+    mu: float = 0.0,
+    n_k: int = 100,
+    sweep_param: str = "t2",
+    param_min: float = -2.0,
+    param_max: float = 2.0,
+    n_sweep: int = 80,
+) -> dict:
+    """NumPy reference: AZ classification table + topological invariants."""
+    import numpy as np  # noqa: PLC0415
+
+    # ── AZ periodic table (static) ──────────────────────────────────────────
+    AZ_TABLE = [
+        # (class, dim, inv_type, T2, C2, S)
+        ("A",    1, "0",  0,  0, 0), ("A",    2, "Z",  0,  0, 0), ("A",    3, "0",  0,  0, 0),
+        ("AI",   1, "0", +1,  0, 0), ("AI",   2, "0", +1,  0, 0), ("AI",   3, "0", +1,  0, 0),
+        ("AII",  1, "0", -1,  0, 0), ("AII",  2, "Z2",-1,  0, 0), ("AII",  3, "Z2",-1,  0, 0),
+        ("AIII", 1, "Z",  0,  0, 1), ("AIII", 2, "0",  0,  0, 1), ("AIII", 3, "Z",  0,  0, 1),
+        ("BDI",  1, "Z", +1, +1, 1), ("BDI",  2, "0", +1, +1, 1), ("BDI",  3, "0", +1, +1, 1),
+        ("CII",  1, "2Z",-1, -1, 1), ("CII",  2, "0", -1, -1, 1), ("CII",  3, "Z", -1, -1, 1),
+        ("D",    1, "Z2", 0, +1, 0), ("D",    2, "Z",  0, +1, 0), ("D",    3, "0",  0, +1, 0),
+        ("DIII", 1, "Z2",-1, +1, 1), ("DIII", 2, "Z2",-1, +1, 1), ("DIII", 3, "Z", -1, +1, 1),
+        ("C",    1, "0",  0, -1, 0), ("C",    2, "Z",  0, -1, 0), ("C",    3, "0",  0, -1, 0),
+        ("CI",   1, "0", +1, -1, 1), ("CI",   2, "0", +1, -1, 1), ("CI",   3, "Z", +1, -1, 1),
+    ]
+    inv_lookup: dict = {(r[0], r[1]): r[2] for r in AZ_TABLE}
+
+    def ssh_winding(t1_: float, t2_: float, nk: int) -> int:
+        # Accumulate phase increments arg(conj(d0)*d1); each step is O(2pi/nk).
+        # The product-of-unit-links formula (conj(d0)/r0)*(d1/r1) telescopes
+        # to 1 for any periodic d(k) and gives W=0 always -- do not use it.
+        total_phase = 0.0
+        for m_ in range(nk):
+            k0 = 2 * np.pi * m_ / nk
+            k1 = 2 * np.pi * (m_ + 1) / nk
+            d0 = complex(t1_ + t2_ * np.cos(k0), t2_ * np.sin(k0))
+            d1 = complex(t1_ + t2_ * np.cos(k1), t2_ * np.sin(k1))
+            r0, r1 = abs(d0), abs(d1)
+            if r0 < 1e-13 or r1 < 1e-13:
+                return 0
+            total_phase += np.angle(d0.conjugate() * d1)
+        return int(round(total_phase / (2 * np.pi)))
+
+    def qwz_chern(m_: float, t_: float, nk: int) -> int:
+        dk = 2 * np.pi / nk
+        chern = 0.0
+        for ix in range(nk):
+            for iy in range(nk):
+                kx = -np.pi + ix * dk
+                ky = -np.pi + iy * dk
+                def evec(kx_, ky_):
+                    dx = t_ * np.sin(kx_)
+                    dy = t_ * np.sin(ky_)
+                    dz = m_ + t_ * (np.cos(kx_) + np.cos(ky_))
+                    r = np.sqrt(dx**2 + dy**2 + dz**2)
+                    if r < 1e-15:
+                        return np.array([1.0+0j, 0.0+0j])
+                    n2 = np.sqrt(2 * r * (r + dz))
+                    if n2 < 1e-15:
+                        # South pole (dz=-r, dx=dy=0): lower eigenvector of -r*sz is [1,0]
+                        return np.array([1.0+0j, 0.0+0j])
+                    return np.array([(dx + 1j*dy)/n2, -(r+dz)/n2])
+                u00 = evec(kx,    ky)
+                u10 = evec(kx+dk, ky)
+                u11 = evec(kx+dk, ky+dk)
+                u01 = evec(kx,    ky+dk)
+                F = (np.vdot(u00, u10) * np.vdot(u10, u11) *
+                     np.vdot(u11, u01) * np.vdot(u01, u00))
+                r = abs(F)
+                if r > 1e-15:
+                    F /= r
+                chern += np.angle(F)
+        return int(round(chern / (2 * np.pi)))
+
+    def kitaev_z2(t_: float, mu_: float) -> int:
+        pf0  = -(mu_ + 2 * t_)
+        pfpi = -(mu_ - 2 * t_)
+        if abs(pf0) < 1e-14 or abs(pfpi) < 1e-14:
+            return 0
+        Q = (1.0 if pf0 > 0 else -1.0) * (1.0 if pfpi > 0 else -1.0)
+        return 1 if Q < 0 else 0
+
+    def compute_invariant(model_: str, t1_: float, t2_: float,
+                           m_: float, t_: float, t_hop_: float, mu_: float,
+                           nk: int) -> tuple[float, int]:
+        if model_ == "ssh":
+            w = ssh_winding(t1_, t2_, nk)
+            return float(w), 0
+        elif model_ == "qwz":
+            c = qwz_chern(m_, t_, nk)
+            return float(c), 0
+        elif model_ == "kitaev":
+            q = kitaev_z2(t_hop_, mu_)
+            return float(q), q
+        return 0.0, 0
+
+    inv_type = inv_lookup.get((az_class, dimension), "?")
+
+    # Single-point invariant
+    inv_val, inv_z2 = compute_invariant(model, t1, t2, m, t, t_hop, mu, n_k)
+
+    # SSH band dispersion
+    k_arr = np.linspace(0, 2 * np.pi, n_k)
+    e_plus_arr  = [float(np.sqrt((t1 + t2*np.cos(k))**2 + (t2*np.sin(k))**2)) for k in k_arr]
+    e_minus_arr = [-v for v in e_plus_arr]
+
+    # Phase diagram sweep
+    sweep_vals: list[float] = []
+    sweep_inv: list[float] = []
+    sweep_z2_list: list[int] = []
+
+    if scenario == "phase_diagram":
+        for k_idx in range(n_sweep):
+            p = param_min + (param_max - param_min) * k_idx / max(n_sweep - 1, 1)
+            sweep_vals.append(p)
+            t1_ = t1; t2_ = t2; m_ = m; t_ = t; th_ = t_hop; mu_ = mu
+            if   sweep_param == "t1": t1_ = p
+            elif sweep_param == "t2": t2_ = p
+            elif sweep_param == "m":  m_  = p
+            elif sweep_param == "mu": mu_ = p
+            sv, sz = compute_invariant(model, t1_, t2_, m_, t_, th_, mu_, n_k)
+            sweep_inv.append(sv)
+            sweep_z2_list.append(sz)
+
+    # Build AZ table as 10x3 grid for the visualiser
+    az_classes = ["A","AI","AII","AIII","BDI","CII","D","DIII","C","CI"]
+    table_data = []
+    for cls in az_classes:
+        row = []
+        for d in [1, 2, 3]:
+            row.append(inv_lookup.get((cls, d), "?"))
+        table_data.append({"class": cls, "d1": row[0], "d2": row[1], "d3": row[2]})
+
+    return {
+        "ok": True,
+        "az_class": az_class,
+        "dimension": dimension,
+        "model": model,
+        "scenario": scenario,
+        "invariant_type": inv_type,
+        "invariant_value": inv_val,
+        "invariant_z2": inv_z2,
+        "t1": t1, "t2": t2, "m": m, "t": t, "t_hop": t_hop, "mu": mu,
+        "k_bands": [float(k) for k in k_arr],
+        "e_plus": e_plus_arr,
+        "e_minus": e_minus_arr,
+        "sweep_vals": sweep_vals,
+        "sweep_invariant": sweep_inv,
+        "sweep_z2": sweep_z2_list,
+        "sweep_param": sweep_param,
+        "table_data": table_data,
+    }
+
+
+def _tenfold_page(data: dict, title: str = "10-Fold Way — Topological Classification") -> str:
+    """3-panel HTML: AZ table, band dispersion, phase diagram."""
+    import json as _json  # noqa: PLC0415
+
+    jdata     = _json.dumps(data)
+    cls       = data.get("az_class", "BDI")
+    dim       = data.get("dimension", 1)
+    inv_type  = data.get("invariant_type", "?")
+    inv_val   = data.get("invariant_value", 0.0)
+    model     = data.get("model", "ssh")
+    sweep_p   = data.get("sweep_param", "t2")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  body{{margin:0;background:#0d1117;color:#e6edf3;font-family:monospace;}}
+  h1{{text-align:center;padding:16px;font-size:1.1rem;color:#388bfd;}}
+  .subtitle{{text-align:center;font-size:0.8rem;color:#8b949e;margin-bottom:8px;}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px;}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;}}
+  .panel-wide{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;
+               grid-column:1/-1;}}
+  canvas{{display:block;width:100%;}}
+  .label{{font-size:0.7rem;color:#8b949e;text-align:center;margin-top:4px;}}
+  table{{border-collapse:collapse;width:100%;font-size:0.75rem;}}
+  th,td{{border:1px solid #30363d;padding:4px 8px;text-align:center;}}
+  th{{background:#161b22;color:#8b949e;}}
+  td.Z{{color:#58a6ff;}} td.Z2{{color:#e3b341;}} td.twoZ{{color:#bc8cff;}}
+  td.triv{{color:#484f58;}}
+  td.active{{border:2px solid #57ab5a !important;background:#1c2e1c;color:#57ab5a;font-weight:bold;}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="subtitle">
+  Class <b>{cls}</b>, d={dim} &nbsp;|&nbsp;
+  Invariant: <b>{inv_type}</b> &nbsp;|&nbsp;
+  Model: <b>{model}</b> &nbsp;|&nbsp;
+  Value: <b>{inv_val:.0f}</b>
+</div>
+<div class="grid">
+  <div class="panel">
+    <div id="azTable"></div>
+    <div class="label">Altland-Zirnbauer periodic table — highlighted cell = selected (class, dim)</div>
+  </div>
+  <div class="panel">
+    <canvas id="cBands" height="260"></canvas>
+    <div class="label">Band dispersion E\u00b1(k) for {model} model (gap = topologically relevant)</div>
+  </div>
+  <div class="panel-wide">
+    <canvas id="cPhase" height="200"></canvas>
+    <div class="label">Topological invariant vs {sweep_p} — integer steps mark phase transitions</div>
+  </div>
+</div>
+<script>
+var DATA = {jdata};
+
+// ── Panel 1: AZ Table ────────────────────────────────────────────────────────
+(function() {{
+  var rows = DATA.table_data;
+  var selCls = DATA.az_class, selDim = DATA.dimension;
+  var html = '<table><tr><th>Class</th><th>d=1</th><th>d=2</th><th>d=3</th></tr>';
+  rows.forEach(function(r) {{
+    html += '<tr>';
+    html += '<td style="color:#e6edf3;font-weight:bold">' + r.class + '</td>';
+    [['d1',1],['d2',2],['d3',3]].forEach(function(dc) {{
+      var v = r[dc[0]], d = dc[1];
+      var cls2 = v==='Z' ? 'Z' : v==='Z2' ? 'Z2' : v==='2Z' ? 'twoZ' : 'triv';
+      var active = (r.class===selCls && d===selDim) ? ' active' : '';
+      var disp = v==='0' ? '\u2014' : v;
+      html += '<td class="' + cls2 + active + '">' + disp + '</td>';
+    }});
+    html += '</tr>';
+  }});
+  html += '</table>';
+  document.getElementById('azTable').innerHTML = html;
+}})();
+
+// ── Panel 2: Band dispersion ─────────────────────────────────────────────────
+(function() {{
+  var cv = document.getElementById('cBands'); if (!cv) return;
+  cv.width = cv.offsetWidth || 460; cv.height = 260;
+  var ctx = cv.getContext('2d'), W = cv.width, H = cv.height, pad = 36;
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0,0,W,H);
+  var ks = DATA.k_bands, ep = DATA.e_plus, em = DATA.e_minus;
+  if (!ks || ks.length === 0) return;
+  var kmax = ks[ks.length-1] || 1;
+  var emax = Math.max.apply(null, ep), emin = Math.min.apply(null, em);
+  var er = emax - emin || 1;
+  // Grid
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+  for (var gi=0; gi<5; gi++) {{
+    var gy = pad + (H-2*pad)*gi/4;
+    ctx.beginPath(); ctx.moveTo(pad, gy); ctx.lineTo(W-pad, gy); ctx.stroke();
+  }}
+  // E=0 line
+  var z0 = H - pad - (0-emin)/er*(H-2*pad);
+  ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(pad,z0); ctx.lineTo(W-pad,z0); ctx.stroke();
+  ctx.setLineDash([]);
+  // Upper band
+  ctx.strokeStyle = '#58a6ff'; ctx.lineWidth = 2; ctx.beginPath();
+  for (var i=0; i<ks.length; i++) {{
+    var px = pad + ks[i]/kmax*(W-2*pad);
+    var py = H - pad - (ep[i]-emin)/er*(H-2*pad);
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }}
+  ctx.stroke();
+  // Lower band
+  ctx.strokeStyle = '#f47067'; ctx.lineWidth = 2; ctx.beginPath();
+  for (var i2=0; i2<ks.length; i2++) {{
+    var px2 = pad + ks[i2]/kmax*(W-2*pad);
+    var py2 = H - pad - (em[i2]-emin)/er*(H-2*pad);
+    if (i2===0) ctx.moveTo(px2,py2); else ctx.lineTo(px2,py2);
+  }}
+  ctx.stroke();
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
+  ctx.fillText('E', 4, 14); ctx.fillText('k', W-pad+2, H-pad+12);
+  ctx.fillText('0', pad-20, z0+4);
+}})();
+
+// ── Panel 3: Phase diagram ───────────────────────────────────────────────────
+(function() {{
+  var cv = document.getElementById('cPhase'); if (!cv) return;
+  cv.width = cv.offsetWidth || 920; cv.height = 200;
+  var ctx = cv.getContext('2d'), W = cv.width, H = cv.height, pad = 44;
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0,0,W,H);
+  var sv = DATA.sweep_vals, si = DATA.sweep_invariant;
+  if (!sv || sv.length === 0) return;
+  var smin = sv[0], smax = sv[sv.length-1], sr = smax-smin||1;
+  var imin = Math.min.apply(null,si)-0.5, imax = Math.max.apply(null,si)+0.5;
+  var ir = imax-imin||1;
+  // Grid
+  ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+  for (var gi=0; gi<5; gi++) {{
+    var gy = pad + (H-2*pad)*gi/4;
+    ctx.beginPath(); ctx.moveTo(pad,gy); ctx.lineTo(W-pad,gy); ctx.stroke();
+  }}
+  // W=0 reference
+  var z0 = H - pad - (0-imin)/ir*(H-2*pad);
+  ctx.strokeStyle = '#484f58'; ctx.setLineDash([4,3]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,z0); ctx.lineTo(W-pad,z0); ctx.stroke();
+  ctx.setLineDash([]);
+  // Step-function invariant
+  ctx.strokeStyle = '#57ab5a'; ctx.lineWidth = 2.5; ctx.beginPath();
+  for (var i=0; i<sv.length; i++) {{
+    var px = pad + (sv[i]-smin)/sr*(W-2*pad);
+    var py = H - pad - (si[i]-imin)/ir*(H-2*pad);
+    if (i===0) ctx.moveTo(px,py);
+    else {{
+      // Step: horizontal then vertical
+      var ppx = pad + (sv[i-1]-smin)/sr*(W-2*pad);
+      ctx.lineTo((ppx+px)/2, H-pad-(si[i-1]-imin)/ir*(H-2*pad));
+      ctx.lineTo((ppx+px)/2, py);
+      ctx.lineTo(px,py);
+    }}
+  }}
+  ctx.stroke();
+  // Transition markers
+  for (var i2=1; i2<sv.length; i2++) {{
+    if (Math.round(si[i2]) !== Math.round(si[i2-1])) {{
+      var mx = pad + ((sv[i2]+sv[i2-1])/2-smin)/sr*(W-2*pad);
+      ctx.strokeStyle = '#e3b341'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(mx,pad); ctx.lineTo(mx,H-pad); ctx.stroke();
+      ctx.setLineDash([]);
+    }}
+  }}
+  ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
+  ctx.fillText('W', 4, 14);
+  ctx.fillText(DATA.sweep_param, W-pad+2, H-pad+12);
+  ctx.fillText(smin.toFixed(1), pad, H-pad+12);
+  ctx.fillText(smax.toFixed(1), W-pad-18, H-pad+12);
+}})();
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -10269,7 +10614,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -10421,6 +10766,21 @@ def main() -> int:
   parser.add_argument("--spectral-eta",     type=float, default=0.15, help="Lorentzian broadening eta")
   parser.add_argument("--spectral-tau-max", type=float, default=4.0,  help="maximum imaginary time tau")
   parser.add_argument("--spectral-ntau",    type=int,   default=60,   help="number of tau points")
+  parser.add_argument("--tenfold-class",      default="BDI",  help="AZ symmetry class (A|AI|AII|AIII|BDI|CII|D|DIII|C|CI)")
+  parser.add_argument("--tenfold-dim",        type=int,   default=1,    help="spatial dimension 1|2|3")
+  parser.add_argument("--tenfold-model",      default="ssh",  help="model: ssh | qwz | kitaev")
+  parser.add_argument("--tenfold-scenario",   choices=["classify", "invariant", "phase_diagram"], default="phase_diagram", help="classify | invariant | phase_diagram")
+  parser.add_argument("--tenfold-t1",         type=float, default=1.0,  help="SSH intra-cell hopping t1")
+  parser.add_argument("--tenfold-t2",         type=float, default=0.5,  help="SSH inter-cell hopping t2")
+  parser.add_argument("--tenfold-m",          type=float, default=1.0,  help="QWZ mass parameter m")
+  parser.add_argument("--tenfold-t",          type=float, default=1.0,  help="QWZ hopping t")
+  parser.add_argument("--tenfold-t-hop",      type=float, default=1.0,  help="Kitaev hopping t_hop")
+  parser.add_argument("--tenfold-mu",         type=float, default=0.0,  help="Kitaev chemical potential mu")
+  parser.add_argument("--tenfold-nk",         type=int,   default=100,  help="k-grid points for invariant")
+  parser.add_argument("--tenfold-sweep-param", default="t2", help="parameter to sweep: t1|t2|m|mu")
+  parser.add_argument("--tenfold-param-min",  type=float, default=-2.0, help="sweep parameter minimum")
+  parser.add_argument("--tenfold-param-max",  type=float, default=2.0,  help="sweep parameter maximum")
+  parser.add_argument("--tenfold-n-sweep",    type=int,   default=80,   help="number of sweep points")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -11299,6 +11659,29 @@ def main() -> int:
       path.write_text(_spectral_page(spectral_data, title="Spectral Functions — S(k,\u03c9) & Imaginary Time"), encoding="utf-8")
       generated.append(path)
 
+  # ── M34: 10-Fold Way Topological Classification ──────────────────────────
+  if args.scenario in {"tenfold", "all"}:
+    tenfold_data = _tenfold_frames(
+        az_class=args.tenfold_class,
+        dimension=args.tenfold_dim,
+        model=args.tenfold_model,
+        scenario=args.tenfold_scenario,
+        t1=args.tenfold_t1,
+        t2=args.tenfold_t2,
+        m=args.tenfold_m,
+        t=args.tenfold_t,
+        t_hop=args.tenfold_t_hop,
+        mu=args.tenfold_mu,
+        n_k=args.tenfold_nk,
+        sweep_param=args.tenfold_sweep_param,
+        param_min=args.tenfold_param_min,
+        param_max=args.tenfold_param_max,
+        n_sweep=args.tenfold_n_sweep,
+    )
+    path = out_dir / "quantum_tenfold.html"
+    path.write_text(_tenfold_page(tenfold_data, title="10-Fold Way — Altland-Zirnbauer Topological Classification"), encoding="utf-8")
+    generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -11347,6 +11730,7 @@ def main() -> int:
         "hofstadter":         "quantum_hofstadter",
         "mbl":                "quantum_mbl",
         "spectral":           "quantum_spectral",
+        "tenfold":            "quantum_tenfold",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

@@ -1572,6 +1572,51 @@ std::string mbl_result_to_json(const MBLResult& r) {
   return j.dump();
 }
 
+TenfoldOptions tenfold_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  TenfoldOptions o;
+  if (j.contains("az_class"))    o.az_class    = j["az_class"].get<std::string>();
+  if (j.contains("dimension"))   o.dimension   = j["dimension"].get<int>();
+  if (j.contains("model"))       o.model       = j["model"].get<std::string>();
+  if (j.contains("scenario"))    o.scenario    = j["scenario"].get<std::string>();
+  if (j.contains("t1"))          o.t1          = j["t1"].get<double>();
+  if (j.contains("t2"))          o.t2          = j["t2"].get<double>();
+  if (j.contains("m"))           o.m           = j["m"].get<double>();
+  if (j.contains("t"))           o.t           = j["t"].get<double>();
+  if (j.contains("t_hop"))       o.t_hop       = j["t_hop"].get<double>();
+  if (j.contains("mu"))          o.mu          = j["mu"].get<double>();
+  if (j.contains("n_k"))         o.n_k         = j["n_k"].get<int>();
+  if (j.contains("param_min"))   o.param_min   = j["param_min"].get<double>();
+  if (j.contains("param_max"))   o.param_max   = j["param_max"].get<double>();
+  if (j.contains("n_sweep"))     o.n_sweep     = j["n_sweep"].get<int>();
+  if (j.contains("sweep_param")) o.sweep_param = j["sweep_param"].get<std::string>();
+  return o;
+}
+
+std::string tenfold_result_to_json(const TenfoldResult& r) {
+  json j;
+  j["ok"]              = r.ok;
+  j["az_class"]        = r.az_class;
+  j["dimension"]       = r.dimension;
+  j["invariant_type"]  = r.invariant_type;
+  j["scenario"]        = r.scenario;
+  j["model"]           = r.model;
+  j["invariant_value"] = r.invariant_value;
+  j["invariant_z2"]    = r.invariant_z2;
+  j["phase_label"]     = r.phase_label;
+  j["k_bands"]         = r.k_bands;
+  j["e_plus"]          = r.e_plus;
+  j["e_minus"]         = r.e_minus;
+  j["sweep_vals"]      = r.sweep_vals;
+  j["sweep_invariant"] = r.sweep_invariant;
+  j["sweep_z2"]        = r.sweep_z2;
+  j["sweep_phase"]     = r.sweep_phase;
+  j["elapsed_ms"]      = r.elapsed_ms;
+  j["message"]         = r.message;
+  j["engine_version"]  = version_string();
+  return j.dump();
+}
+
 SpectralOptions spectral_options_from_json(const std::string& json_str) {
   auto j = json::parse(json_str);
   SpectralOptions o;
