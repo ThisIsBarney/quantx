@@ -413,6 +413,11 @@ SpectralResult run_spectral(const SpectralOptions& opts) {
         throw std::runtime_error("Spectral: n_sites must be even and in [2, 16]");
     if (opts.J == 0.0)
         throw std::runtime_error("Spectral: J must be non-zero");
+    if (opts.h != 0.0)
+        throw std::runtime_error(
+            "Spectral: h != 0 has no effect in the Sz=0 sector — the uniform "
+            "Zeeman term h*sum_i Sz_i vanishes identically on all Sz=0 basis "
+            "states.  Set h = 0.0 (default) or implement a multi-sector solver.");
     if (opts.n_k < 2)
         throw std::runtime_error("Spectral: n_k must be >= 2");
     if (opts.n_omega < 2)

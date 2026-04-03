@@ -9954,6 +9954,16 @@ def _spectral_frames(
     N = n_sites
     if N < 2 or N % 2 != 0:
         raise ValueError("n_sites must be even and >= 2")
+    # h has no effect in the Sz=0 sector (sum_i Sz_i = 0 identically).
+    if h != 0.0:
+        raise ValueError(
+            "h != 0 has no effect in the Sz=0 sector — the Zeeman term "
+            "h*sum_i Sz_i vanishes identically on all Sz=0 basis states. "
+            "Set h=0.0 (default)."
+        )
+
+    do_spectral = scenario in {"spectral", "both"}
+    do_imagtime = scenario in {"imagtime", "both"}
 
     # ── Sz=0 basis (Gosper's hack) ───────────────────────────────────────────
     def sz0_basis(n: int):
@@ -9972,7 +9982,7 @@ def _spectral_frames(
     dim = len(basis)
     idx_map: dict = {int(s): i for i, s in enumerate(basis)}
 
-    # ── Build XXZ Hamiltonian ────────────────────────────────────────────────
+    # ── Build XXZ Hamiltonian (h=0 enforced above) ───────────────────────────
     H = np.zeros((dim, dim), dtype=np.float64)
     for s_idx, s in enumerate(basis):
         diag = 0.0
@@ -9987,73 +9997,77 @@ def _spectral_frames(
                 t_idx = idx_map.get(int(t_state))
                 if t_idx is not None:
                     H[s_idx, t_idx] += 0.5 * J
-        # External field
-        for j in range(N):
-            bj = (s >> j) & 1
-            diag += h * (0.5 - bj)
         H[s_idx, s_idx] += diag
 
-    # ── Diagonalize ─────────────────────────────────────────────────────────
-    evals, evecs = np.linalg.eigh(H)
+    # ── Diagonalize — eigenvectors only if needed ────────────────────────────
+    if do_spectral:
+        evals, evecs = np.linalg.eigh(H)
+        psi0 = evecs[:, 0]   # ground state
+    else:
+        evals = np.linalg.eigvalsh(H)
+        evecs = None
+        psi0 = None
     E0 = evals[0]
-    psi0 = evecs[:, 0]   # ground state in Sz=0 basis
 
     # ── S(k,omega) — dynamical structure factor ──────────────────────────────
     k_vals = [2.0 * np.pi * ik / N for ik in range(N)]
     omega_vals = list(np.linspace(omega_min, omega_max, n_omega))
-    inv_sqrtN = 1.0 / np.sqrt(N)
-    lorentz_pi = eta / np.pi
-
     spectral_flat: list[float] = []
 
-    for k in k_vals[:n_k]:
-        # Build S^z_k |GS> in the Sz=0 subspace
-        skz_gs_re = np.zeros(dim)
-        skz_gs_im = np.zeros(dim)
-        for s_idx, s in enumerate(basis):
-            for j in range(N):
-                sz_j = 0.5 - ((s >> j) & 1)
-                phase_k = k * j
-                ck = np.cos(phase_k) * sz_j * inv_sqrtN
-                sk = np.sin(phase_k) * sz_j * inv_sqrtN
-                skz_gs_re[s_idx] += ck * psi0[s_idx]
-                skz_gs_im[s_idx] += sk * psi0[s_idx]
+    if do_spectral:
+        inv_sqrtN = 1.0 / np.sqrt(N)
+        lorentz_pi = eta / np.pi
+        dE = evals - E0
 
-        # Project onto eigenstates: amp_n = <n|S^z_k|GS>
-        # = evecs[:, n]^T . (skz_gs_re + i*skz_gs_im)
-        amps_re = evecs.T @ skz_gs_re   # shape (dim,)
-        amps_im = evecs.T @ skz_gs_im   # shape (dim,)
-        weights = amps_re**2 + amps_im**2  # |<n|S^z_k|GS>|^2
+        for k in k_vals[:n_k]:
+            # Build S^z_k |GS> in the Sz=0 subspace
+            skz_gs_re = np.zeros(dim)
+            skz_gs_im = np.zeros(dim)
+            for s_idx, s in enumerate(basis):
+                for j in range(N):
+                    sz_j = 0.5 - ((s >> j) & 1)
+                    phase_k = k * j
+                    ck = np.cos(phase_k) * sz_j * inv_sqrtN
+                    sk = np.sin(phase_k) * sz_j * inv_sqrtN
+                    skz_gs_re[s_idx] += ck * psi0[s_idx]
+                    skz_gs_im[s_idx] += sk * psi0[s_idx]
 
-        # Accumulate Lorentzian-broadened S(k, omega)
-        dE = evals - E0  # excitation energies
-        row: list[float] = []
-        for w in omega_vals:
-            val = float(np.sum(weights * lorentz_pi / ((w - dE)**2 + eta**2)))
-            row.append(val)
-        spectral_flat.extend(row)
+            # Project onto eigenstates: amp_n = <n|S^z_k|GS>
+            amps_re = evecs.T @ skz_gs_re   # shape (dim,)
+            amps_im = evecs.T @ skz_gs_im
+            weights = amps_re**2 + amps_im**2  # |<n|S^z_k|GS>|^2
+
+            row: list[float] = []
+            for w in omega_vals:
+                val = float(np.sum(weights * lorentz_pi / ((w - dE)**2 + eta**2)))
+                row.append(val)
+            spectral_flat.extend(row)
 
     # ── Imaginary-time evolution ─────────────────────────────────────────────
-    # c_n = <n|GS> = delta_{n,0} in exact GS case, but we use the full spectrum
-    # For a given initial state |psi_init> = |GS>: c_n^2 = delta_{n0}
-    # But for a random product state or to show convergence, use equal superposition.
-    # Use the GS overlap: c_n^2 = |<n|GS>|^2 = 1 for n=0, 0 else — that's trivial.
-    # Instead use a simple initial state: |s_init> = first basis state.
-    c_sq = evecs[0, :]**2  # |<n|s_0>|^2 for the first basis state
     tau_vals_np = np.linspace(0, tau_max, n_tau)
     energy_tau: list[float] = []
     fidelity_tau: list[float] = []
-    for tau in tau_vals_np:
-        weights_tau = c_sq * np.exp(-2.0 * tau * (evals - E0))
-        Z = float(np.sum(weights_tau))
-        if Z < 1e-300:
-            energy_tau.append(float(E0))
-            fidelity_tau.append(1.0)
+
+    if do_imagtime:
+        # Use first basis state as initial state to show non-trivial convergence.
+        # c_n^2 = |<n|s_0>|^2 — overlaps with all eigenstates.
+        if evecs is not None:
+            c_sq = evecs[0, :]**2
         else:
-            E_tau = float(np.sum(evals * weights_tau) / Z)
-            F_tau = float(weights_tau[0] / Z)
-            energy_tau.append(E_tau)
-            fidelity_tau.append(F_tau)
+            # eigenvectors not computed yet; compute them now just for imagtime
+            _, evecs_it = np.linalg.eigh(H)
+            c_sq = evecs_it[0, :]**2
+        for tau in tau_vals_np:
+            weights_tau = c_sq * np.exp(-2.0 * tau * (evals - E0))
+            Z = float(np.sum(weights_tau))
+            if Z < 1e-300:
+                energy_tau.append(float(E0))
+                fidelity_tau.append(1.0)
+            else:
+                E_tau = float(np.sum(evals * weights_tau) / Z)
+                F_tau = float(weights_tau[0] / Z)
+                energy_tau.append(E_tau)
+                fidelity_tau.append(F_tau)
 
     return {
         "ok": True,
