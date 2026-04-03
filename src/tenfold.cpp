@@ -126,12 +126,15 @@ static bool valid_az_class(const std::string& cls) {
 //   d_x(k) = t1 + t2*cos(k),   d_y(k) = t2*sin(k)
 //
 //   W = (1/2pi) * argument accumulated by d(k) = d_x + i*d_y as k: 0 -> 2pi
-//   Computed via Wilson-loop product  W_loop = product_k  d*(k)/|d(k)| * d(k+dk)/|d(k+dk)|
-//   W = round( Im log W_loop / (-pi) )  (sign matches CW vs CCW convention)
+//   Discrete: W = round( (1/2pi) * sum_m arg(conj(d(k_m)) * d(k_{m+1})) )
+//   Each arg term is the phase increment ~2pi*W/n_k; summing avoids branch cuts.
+//
+//   NOTE: The product-of-unit-links formula  prod conj(d0)/r0 * d1/r1 telescopes
+//   to 1 for any periodic d(k) and must NOT be used here.
 // ─────────────────────────────────────────────────────────────────────────────
 
 static int ssh_winding(double t1, double t2, int n_k) {
-    cx W_loop{1.0, 0.0};
+    double total_phase = 0.0;
     for (int m = 0; m < n_k; ++m) {
         double k0 = 2.0 * M_PI * m       / n_k;
         double k1 = 2.0 * M_PI * (m + 1) / n_k;
@@ -139,11 +142,10 @@ static int ssh_winding(double t1, double t2, int n_k) {
         cx d1{t1 + t2 * std::cos(k1), t2 * std::sin(k1)};
         double r0 = std::abs(d0), r1 = std::abs(d1);
         if (r0 < 1e-13 || r1 < 1e-13) return 0;  // gap closes -> ill-defined
-        W_loop *= (std::conj(d0) / r0) * (d1 / r1);
+        // Phase increment Im log(d1/d0) = arg(conj(d0)*d1); each step is O(2pi/n_k)
+        total_phase += std::arg(std::conj(d0) * d1);
     }
-    // Normalise accumulated phase to unit circle before taking arg
-    double phase = std::arg(W_loop);
-    return static_cast<int>(std::round(phase / (-M_PI)));
+    return static_cast<int>(std::round(total_phase / (2.0 * M_PI)));
 }
 
 // Build SSH band dispersion E±(k) for visualisation.
@@ -181,8 +183,10 @@ static std::array<cx,2> qwz_evec(double kx, double ky, double m, double t) {
     double r  = std::sqrt(dx*dx + dy*dy + dz*dz);
     if (r < 1e-15) return {cx{1.0,0.0}, cx{0.0,0.0}};
     // Lower eigenvalue: E = -r;  state from (H+r*I)|v>=0
+    // Gauge: v = [(dx+i*dy)/N, -(r+dz)/N], N = sqrt(2r(r+dz))
+    // Singular at south pole (dz=-r): there dx=dy=0, lower eigenvector is [1,0].
     double norm = std::sqrt(2.0 * r * (r + dz));
-    if (norm < 1e-15) return {cx{0.0,0.0}, cx{1.0,0.0}};
+    if (norm < 1e-15) return {cx{1.0,0.0}, cx{0.0,0.0}};
     return {cx{(dx + cx{0.0,1.0}*dy) / norm},
             cx{-(r + dz) / norm}};
 }

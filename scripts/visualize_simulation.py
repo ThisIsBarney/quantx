@@ -10300,7 +10300,10 @@ def _tenfold_frames(
     inv_lookup: dict = {(r[0], r[1]): r[2] for r in AZ_TABLE}
 
     def ssh_winding(t1_: float, t2_: float, nk: int) -> int:
-        W = complex(1, 0)
+        # Accumulate phase increments arg(conj(d0)*d1); each step is O(2pi/nk).
+        # The product-of-unit-links formula (conj(d0)/r0)*(d1/r1) telescopes
+        # to 1 for any periodic d(k) and gives W=0 always -- do not use it.
+        total_phase = 0.0
         for m_ in range(nk):
             k0 = 2 * np.pi * m_ / nk
             k1 = 2 * np.pi * (m_ + 1) / nk
@@ -10309,9 +10312,8 @@ def _tenfold_frames(
             r0, r1 = abs(d0), abs(d1)
             if r0 < 1e-13 or r1 < 1e-13:
                 return 0
-            W *= (d0.conjugate() / r0) * (d1 / r1)
-        phase = np.angle(W)
-        return int(round(phase / (-np.pi)))
+            total_phase += np.angle(d0.conjugate() * d1)
+        return int(round(total_phase / (2 * np.pi)))
 
     def qwz_chern(m_: float, t_: float, nk: int) -> int:
         dk = 2 * np.pi / nk
@@ -10329,7 +10331,8 @@ def _tenfold_frames(
                         return np.array([1.0+0j, 0.0+0j])
                     n2 = np.sqrt(2 * r * (r + dz))
                     if n2 < 1e-15:
-                        return np.array([0.0+0j, 1.0+0j])
+                        # South pole (dz=-r, dx=dy=0): lower eigenvector of -r*sz is [1,0]
+                        return np.array([1.0+0j, 0.0+0j])
                     return np.array([(dx + 1j*dy)/n2, -(r+dz)/n2])
                 u00 = evec(kx,    ky)
                 u10 = evec(kx+dk, ky)
