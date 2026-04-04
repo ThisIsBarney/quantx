@@ -10660,13 +10660,31 @@ def _second_chern_frames(
             basis.append(np.zeros(4, dtype=complex))
         return np.column_stack(basis)  # 4×2
 
-    def link_det(Q0, Q1):
+    def link_mat(Q0, Q1):
+        """2×2 link matrix Q0†Q1, normalized so |det|=1."""
         M = Q0.conj().T @ Q1  # 2×2
-        return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+        d = M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+        r = abs(d)
+        if r > 1e-14:
+            M = M / np.sqrt(r)
+        return M
+
+    def mat2_log(F):
+        """Matrix log of an approximately unitary 2×2 matrix.
+        Decomposes F = e^(iφ/2) W (W ∈ SU(2)), log(W) = (α/sinα)(W - cosα I)."""
+        det = F[0, 0] * F[1, 1] - F[0, 1] * F[1, 0]
+        phi = np.angle(det)
+        W = F * np.exp(-0.5j * phi)
+        cos_a = np.clip(0.5 * (W[0, 0] + W[1, 1]).real, -1.0, 1.0)
+        alpha = np.arccos(cos_a)
+        c = alpha / np.sin(alpha) if abs(np.sin(alpha)) > 1e-10 else 1.0
+        logW = c * (W - cos_a * np.eye(2, dtype=complex))
+        logW[0, 0] += 0.5j * phi
+        logW[1, 1] += 0.5j * phi
+        return logW
 
     def compute_c2(m_val, t_val, nk):
         N1 = nk + 1
-        # Build grid
         ks = 2 * np.pi * np.arange(nk) / nk
         grid = {}
         for i1 in range(N1):
@@ -10675,7 +10693,7 @@ def _second_chern_frames(
                     for i4 in range(N1):
                         k = (ks[i1 % nk], ks[i2 % nk], ks[i3 % nk], ks[i4 % nk])
                         grid[(i1, i2, i3, i4)] = lower_basis(m_val, t_val, k)
-        # Precompute link dets (4 directions)
+        # Precompute 2×2 link matrices (4 directions)
         U = {}
         steps = [(1,0,0,0),(0,1,0,0),(0,0,1,0),(0,0,0,1)]
         for i1 in range(nk):
@@ -10686,33 +10704,30 @@ def _second_chern_frames(
                         Q0 = grid[p]
                         for mu, s in enumerate(steps):
                             pn = (p[0]+s[0], p[1]+s[1], p[2]+s[2], p[3]+s[3])
-                            U[(mu,) + p] = link_det(Q0, grid[pn])
-        # Plaquette fluxes and C₂
-        def plaq(mu, nu, p):
+                            U[(mu,) + p] = link_mat(Q0, grid[pn])
+        # Non-Abelian plaquette and field strength
+        def plaq_mat(mu, nu, p):
             i1, i2, i3, i4 = p
-            sm = steps[mu]
-            sn = steps[nu]
-            pm  = ((i1+sm[0])%nk, (i2+sm[1])%nk, (i3+sm[2])%nk, (i4+sm[3])%nk)
-            pn  = ((i1+sn[0])%nk, (i2+sn[1])%nk, (i3+sn[2])%nk, (i4+sn[3])%nk)
-            val = U[(mu,)+p] * U[(nu,)+pm] * np.conj(U[(mu,)+pn]) * np.conj(U[(nu,)+p])
-            r = abs(val)
-            if r < 1e-14:
-                return 0.0
-            return np.angle(val / r)
+            sm, sn = steps[mu], steps[nu]
+            pm = ((i1+sm[0])%nk, (i2+sm[1])%nk, (i3+sm[2])%nk, (i4+sm[3])%nk)
+            pn = ((i1+sn[0])%nk, (i2+sn[1])%nk, (i3+sn[2])%nk, (i4+sn[3])%nk)
+            return U[(mu,)+p] @ U[(nu,)+pm] @ U[(mu,)+pn].conj().T @ U[(nu,)+p].conj().T
+        # C₂ = (1/8π²) Σ Re Tr(f₁₂f₃₄ - f₁₃f₂₄ + f₁₄f₂₃)
         c2_sum = 0.0
         for i1 in range(nk):
             for i2 in range(nk):
                 for i3 in range(nk):
                     for i4 in range(nk):
                         p = (i1, i2, i3, i4)
-                        f12 = plaq(0, 1, p)
-                        f34 = plaq(2, 3, p)
-                        f13 = plaq(0, 2, p)
-                        f24 = plaq(1, 3, p)
-                        f14 = plaq(0, 3, p)
-                        f23 = plaq(1, 2, p)
-                        c2_sum += f12*f34 - f13*f24 + f14*f23
-        return int(round(c2_sum / (4 * np.pi**2)))
+                        f12 = mat2_log(plaq_mat(0, 1, p))
+                        f34 = mat2_log(plaq_mat(2, 3, p))
+                        f13 = mat2_log(plaq_mat(0, 2, p))
+                        f24 = mat2_log(plaq_mat(1, 3, p))
+                        f14 = mat2_log(plaq_mat(0, 3, p))
+                        f23 = mat2_log(plaq_mat(1, 2, p))
+                        c2_sum += (np.trace(f12 @ f34) - np.trace(f13 @ f24)
+                                   + np.trace(f14 @ f23)).real
+        return int(round(c2_sum / (8 * np.pi**2)))
 
     def phase_label(c2):
         if c2 == 0:
@@ -10720,6 +10735,10 @@ def _second_chern_frames(
         return f"4D QHE (C₂={c2:+d})"
 
     # ── sweep ──────────────────────────────────────────────────────────────
+    if sweep_param not in ("m", "t"):
+        raise ValueError(
+            f"_second_chern_frames: unsupported sweep_param {sweep_param!r} — use 'm' or 't'"
+        )
     sweep_vals = np.linspace(param_min, param_max, n_sweep).tolist()
     sweep_c2 = []
     sweep_phase = []

@@ -19,13 +19,14 @@
 //   2 < |m| < 4:    |C₂| = 1
 //   0 < |m| < 2:    |C₂| = 3
 //
-// Second Chern number via Abelian lattice gauge field:
-//   U_μ(k) = det( Q(k)† Q(k+e_μ) )            [scalar link]
-//   f_μν(k) = Im log( U_μ(k) U_ν(k+eμ) conj(U_μ(k+eν)) conj(U_ν(k)) )
-//   C₂ = round( (1/4π²) Σ_k (f₁₂f₃₄ - f₁₃f₂₄ + f₁₄f₂₃) )
+// Second Chern number via non-Abelian 4D FHS (rank-2 subspace):
+//   U_μ(k) = Q(k)† Q(k+e_μ) / sqrt(|det|)     [2×2 link matrix, |det|=1]
+//   F_μν(k) = U_μ U_ν(k+eμ) U_μ(k+eν)† U_ν†  [2×2 plaquette]
+//   f_μν(k) = log( F_μν(k) )                   [2×2 matrix log]
+//   C₂ = round( (1/8π²) Σ_k Re Tr(f₁₂f₃₄ - f₁₃f₂₄ + f₁₄f₂₃) )
 //
-// This Abelian approximation is exact for the Zhang-Hu model due to the
-// U(1)×SU(2) structure of the occupied bands.
+// The 2×2 trace captures both the U(1) determinant bundle and the SU(2)
+// Berry curvature, correctly reproducing C₂ for any rank-2 subspace.
 
 #include "qx/engine.hpp"
 #include "qx/types.hpp"
@@ -117,20 +118,65 @@ static void lower_basis(const cx H[16], double r, cx Q[8]) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// C.  Scalar link determinant
-//     U_μ(k) = det( Q(k)† Q(k+eμ) )  — normalised to unit circle
+// C.  Non-Abelian 2×2 link matrices and matrix logarithm
+//
+// Full FHS for a rank-2 occupied subspace:
+//   U_μ(k) = Q(k)† Q(k+eμ) / sqrt(|det(Q†Q')|)   [2×2, |det|=1]
+//   F_μν   = U_μ(k) U_ν(k+eμ) U_μ(k+eν)† U_ν(k)† [2×2 plaquette]
+//   f_μν   = log(F_μν)                              [matrix logarithm]
+//   C₂     = round( (1/8π²) Σ_k Tr(f₁₂f₃₄ - f₁₃f₂₄ + f₁₄f₂₃) )
+//
+// The factor 8π² (not 4π²) comes from the 2×2 matrix trace picking up
+// both the U(1) determinant bundle and the SU(2) Berry curvature.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// 2×2 overlap matrix M = Q0† Q1, return det M
-static cx link_det(const cx Q0[8], const cx Q1[8]) {
-    // M[i][j] = sum_row conj(Q0[row*2+i]) * Q1[row*2+j]
-    cx M[4] = {};
-    for (int row = 0; row < 4; ++row) {
+using M2 = std::array<cx, 4>;  // row-major 2×2: [a,b,c,d] = [[a,b],[c,d]]
+
+static M2 m2mul(const M2& A, const M2& B) {
+    return { A[0]*B[0]+A[1]*B[2], A[0]*B[1]+A[1]*B[3],
+             A[2]*B[0]+A[3]*B[2], A[2]*B[1]+A[3]*B[3] };
+}
+static M2 m2dag(const M2& A) {
+    return { std::conj(A[0]), std::conj(A[2]),
+             std::conj(A[1]), std::conj(A[3]) };
+}
+static cx m2tr(const M2& A) { return A[0] + A[3]; }
+
+// 2×2 matrix logarithm for an approximately unitary matrix F.
+// Decomposes F = e^(iφ/2) W with W ∈ SU(2), computes log W analytically.
+static M2 mat2_log(const M2& F) {
+    cx det = F[0]*F[3] - F[1]*F[2];
+    double phi = std::arg(det);
+    // W = F * e^(-iφ/2)
+    cx ei = std::exp(cx{0.0, -0.5 * phi});
+    M2 W = { F[0]*ei, F[1]*ei, F[2]*ei, F[3]*ei };
+    // Tr(W) = 2cos(α)
+    double cos_a = std::clamp(0.5 * (W[0] + W[3]).real(), -1.0, 1.0);
+    double alpha  = std::acos(cos_a);
+    double c = (std::abs(std::sin(alpha)) > 1e-10)
+               ? alpha / std::sin(alpha) : 1.0;
+    // log(W) = c * (W - cos(α) I),  log(F) = log(W) + (iφ/2) I
+    cx iph = cx{0.0, 0.5 * phi};
+    return { cx{c}*(W[0]-cx{cos_a}) + iph,
+             cx{c}* W[1],
+             cx{c}* W[2],
+             cx{c}*(W[3]-cx{cos_a}) + iph };
+}
+
+// 2×2 link matrix Q0† Q1, normalized so |det| = 1.
+static M2 link_mat(const cx Q0[8], const cx Q1[8]) {
+    M2 M{};
+    for (int row = 0; row < 4; ++row)
         for (int i = 0; i < 2; ++i)
             for (int j = 0; j < 2; ++j)
                 M[i*2+j] += std::conj(Q0[row*2+i]) * Q1[row*2+j];
+    cx d = M[0]*M[3] - M[1]*M[2];
+    double r = std::abs(d);
+    if (r > 1e-14) {
+        double s = 1.0 / std::sqrt(r);
+        for (auto& v : M) v *= s;
     }
-    return M[0]*M[3] - M[1]*M[2];  // det of 2×2
+    return M;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,7 +227,7 @@ build_grid(int N_k, double m, double t) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// E.  Second Chern number via Abelian 4D FHS
+// E.  Second Chern number via non-Abelian 4D FHS
 // ─────────────────────────────────────────────────────────────────────────────
 
 static int compute_c2(int N_k, double m, double t) {
@@ -192,10 +238,10 @@ static int compute_c2(int N_k, double m, double t) {
         return (long)i1*N1*N1*N1 + i2*N1*N1 + i3*N1 + i4;
     };
 
-    // Precompute scalar link determinants  U_μ(k)  for all k and μ=0..3
+    // Precompute 2×2 link matrices U_μ(k) = Q(k)† Q(k+eμ) (normalized)
     // ul[μ * N_k^4 + flat_idx]
     long N4 = (long)N_k * N_k * N_k * N_k;
-    std::vector<cx> ul(4 * N4);
+    std::vector<M2> ul(4 * N4);
 
     auto flat4 = [&](int i1,int i2,int i3,int i4) -> long {
         return (long)i1*N_k*N_k*N_k + i2*N_k*N_k + i3*N_k + i4;
@@ -207,45 +253,47 @@ static int compute_c2(int N_k, double m, double t) {
     for (int i4 = 0; i4 < N_k; ++i4) {
         long f = flat4(i1,i2,i3,i4);
         const cx* Q0 = grid[idx(i1,i2,i3,i4)].data();
-        ul[0*N4 + f] = link_det(Q0, grid[idx(i1+1,i2,i3,i4)].data());
-        ul[1*N4 + f] = link_det(Q0, grid[idx(i1,i2+1,i3,i4)].data());
-        ul[2*N4 + f] = link_det(Q0, grid[idx(i1,i2,i3+1,i4)].data());
-        ul[3*N4 + f] = link_det(Q0, grid[idx(i1,i2,i3,i4+1)].data());
+        ul[0*N4+f] = link_mat(Q0, grid[idx(i1+1,i2,i3,i4)].data());
+        ul[1*N4+f] = link_mat(Q0, grid[idx(i1,i2+1,i3,i4)].data());
+        ul[2*N4+f] = link_mat(Q0, grid[idx(i1,i2,i3+1,i4)].data());
+        ul[3*N4+f] = link_mat(Q0, grid[idx(i1,i2,i3,i4+1)].data());
     }
 
-    // Compute plaquette fluxes and accumulate C₂
-    // f_μν(k) = Im log( U_μ(k) U_ν(k+eμ) conj(U_μ(k+eν)) conj(U_ν(k)) )
+    // Plaquette F_μν = U_μ(k) U_ν(k+eμ) U_μ(k+eν)† U_ν(k)†
+    // Field strength f_μν = log(F_μν)
+    // C₂ = round( (1/8π²) Σ_k Re Tr(f₁₂f₃₄ - f₁₃f₂₄ + f₁₄f₂₃) )
     double c2_sum = 0.0;
+
     for (int i1 = 0; i1 < N_k; ++i1)
     for (int i2 = 0; i2 < N_k; ++i2)
     for (int i3 = 0; i3 < N_k; ++i3)
     for (int i4 = 0; i4 < N_k; ++i4) {
-        long f   = flat4(i1,i2,i3,i4);
-        long f12 = flat4((i1+1)%N_k, i2, i3, i4);
-        long f13 = flat4(i1, (i2+1)%N_k, i3, i4);
-        long f14 = flat4(i1, i2, (i3+1)%N_k, i4);
-        long f23 = flat4(i1, i2, i3, (i4+1)%N_k);
-        // μ=0(k₁),ν=1(k₂): flux12
-        auto plaq = [&](int mu, int nu, long km, long kn, long kmn) -> double {
-            cx p = ul[mu*N4+f] * ul[nu*N4+km]
-                 * std::conj(ul[mu*N4+kn]) * std::conj(ul[nu*N4+f]);
-            double r = std::abs(p);
-            if (r < 1e-14) return 0.0;
-            return std::arg(p / r);
-        };
-        double fl12 = plaq(0,1, f12, f13, flat4((i1+1)%N_k,(i2+1)%N_k,i3,i4));
-        double fl34 = plaq(2,3, flat4(i1,i2,(i3+1)%N_k,i4),
-                               flat4(i1,i2,i3,(i4+1)%N_k),
-                               flat4(i1,i2,(i3+1)%N_k,(i4+1)%N_k));
-        double fl13 = plaq(0,2, f12, f14, flat4((i1+1)%N_k,i2,(i3+1)%N_k,i4));
-        double fl24 = plaq(1,3, f13, f23, flat4(i1,(i2+1)%N_k,i3,(i4+1)%N_k));
-        double fl14 = plaq(0,3, f12, f23, flat4((i1+1)%N_k,i2,i3,(i4+1)%N_k));
-        double fl23 = plaq(1,2, f13, f14, flat4(i1,(i2+1)%N_k,(i3+1)%N_k,i4));
+        long k0  = flat4(i1, i2, i3, i4);
+        // shifted flat indices (one step along each axis)
+        long k1p = flat4((i1+1)%N_k, i2, i3, i4);
+        long k2p = flat4(i1, (i2+1)%N_k, i3, i4);
+        long k3p = flat4(i1, i2, (i3+1)%N_k, i4);
+        long k4p = flat4(i1, i2, i3, (i4+1)%N_k);
 
-        c2_sum += fl12*fl34 - fl13*fl24 + fl14*fl23;
+        // F_μν(k) = U_μ(k) U_ν(k+eμ) U_μ(k+eν)† U_ν(k)†
+        auto plaq = [&](int mu, int nu, long km, long kn) -> M2 {
+            return m2mul(m2mul(m2mul(ul[mu*N4+k0], ul[nu*N4+km]),
+                               m2dag(ul[mu*N4+kn])),
+                         m2dag(ul[nu*N4+k0]));
+        };
+
+        M2 f12 = mat2_log(plaq(0, 1, k1p, k2p));
+        M2 f34 = mat2_log(plaq(2, 3, k3p, k4p));
+        M2 f13 = mat2_log(plaq(0, 2, k1p, k3p));
+        M2 f24 = mat2_log(plaq(1, 3, k2p, k4p));
+        M2 f14 = mat2_log(plaq(0, 3, k1p, k4p));
+        M2 f23 = mat2_log(plaq(1, 2, k2p, k3p));
+
+        c2_sum += (m2tr(m2mul(f12,f34)) - m2tr(m2mul(f13,f24))
+                 + m2tr(m2mul(f14,f23))).real();
     }
 
-    return static_cast<int>(std::round(c2_sum / (4.0 * M_PI * M_PI)));
+    return static_cast<int>(std::round(c2_sum / (8.0 * M_PI * M_PI)));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,6 +332,10 @@ SecondChernResult run_second_chern(const SecondChernOptions& opts) {
                       ", C2=" + std::to_string(c2);
 
     } else if (opts.scenario == "phase_diagram") {
+        if (opts.sweep_param != "m" && opts.sweep_param != "t")
+            throw std::runtime_error(
+                "SecondChern: unsupported sweep_param '" + opts.sweep_param +
+                "' — use m or t");
         int n = opts.n_sweep;
         if (n < 2) throw std::runtime_error("SecondChern: n_sweep must be >= 2");
         res.sweep_vals.resize(n);
