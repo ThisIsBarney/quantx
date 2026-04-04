@@ -6883,6 +6883,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("tenfold",            "10-Fold Way AZ 拓扑分类"),
           ("second_chern",       "Second Chern Number 4D QHE"),
           ("wilson_loop",        "Wilson Loop WCC BHZ Z₂ TI"),
+          ("edge_states",        "Edge States / Surface Spectrum BHZ"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -11388,6 +11389,427 @@ def _second_chern_page(data: dict, title: str = "Second Chern Number — 4D Quan
 </html>"""
 
 
+def _edge_states_frames(
+    M: float = 1.0,
+    A: float = 1.0,
+    B: float = 1.0,
+    C: float = 0.0,
+    D: float = 0.0,
+    n_kx: int = 60,
+    n_y: int = 20,
+    scenario: str = "spectrum",
+    sweep_param: str = "M",
+    param_min: float = -1.0,
+    param_max: float = 5.0,
+    n_sweep: int = 40,
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: BHZ strip edge-state spectrum and Z₂ phase diagram.
+
+    Strip geometry: y-direction finite (n_y sites, open BCs), x periodic.
+    On-site block  H_on(kx) and hopping H_hop(-DI + BΓ₅ - iA/2 Γ₂).
+    Γ₁=σx⊗σx, Γ₂=σx⊗σy, Γ₅=σz⊗I  (same conventions as Wilson-loop solver).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    N = n_y            # lattice sites along y
+    DIM = 4 * N        # Hilbert-space dimension of strip
+
+    # ── BHZ on-site 4×4 block H_on(kx) ──────────────────────────────────────
+    def onsite(kx, M_val):
+        # On-site contribution from kx (ky-dependent terms handled by hopping blocks)
+        eps = C - 2*D*(2 - np.cos(kx))
+        d1  = A * np.sin(kx)
+        d5  = M_val - 2*B*(2 - np.cos(kx))
+        H = np.zeros((4, 4), dtype=complex)
+        H[0, 0] = eps + d5;   H[0, 3] = d1
+        H[1, 1] = eps + d5;   H[1, 2] = d1
+        H[2, 1] = d1;          H[2, 2] = eps - d5
+        H[3, 0] = d1;          H[3, 3] = eps - d5
+        return H
+
+    # ── y-hopping 4×4 block (forward, +y direction) ──────────────────────────
+    # H_hop = -D I + B Γ₅ - (iA/2) Γ₂
+    # Γ₅ = diag(1,1,-1,-1); Γ₂ = σx⊗σy = [[0,0,-i,0],[0,0,0,i],[i,0,0,0],[0,-i,0,0]]
+    def hop(_M_val=None):  # noqa: ARG001  (M unused — hop doesn't depend on M)
+        # H_hop = -D I + B Γ₅ - (iA/2) Γ₂
+        # Γ₂ = σx⊗σy: (0,3)=-i, (1,2)=+i, (2,1)=-i, (3,0)=+i
+        # -(iA/2)*(-i)=-A/2; -(iA/2)*(+i)=+A/2
+        H = np.zeros((4, 4), dtype=complex)
+        H[0, 0] = -D + B;   H[1, 1] = -D + B
+        H[2, 2] = -D - B;   H[3, 3] = -D - B
+        H[0, 3] = -A / 2
+        H[1, 2] = +A / 2
+        H[2, 1] = -A / 2
+        H[3, 0] = +A / 2
+        return H
+
+    # ── Build (4N)×(4N) strip Hamiltonian at kx ───────────────────────────────
+    def build_strip(kx, M_val):
+        H = np.zeros((DIM, DIM), dtype=complex)
+        Hon = onsite(kx, M_val)
+        Hop = hop(M_val)
+        for i in range(N):
+            r0 = 4 * i
+            H[r0:r0+4, r0:r0+4] += Hon
+            if i + 1 < N:
+                r1 = 4 * (i + 1)
+                H[r0:r0+4, r1:r1+4] += Hop
+                H[r1:r1+4, r0:r0+4] += Hop.conj().T
+        return H
+
+    def edge_weight(eigvecs, col):
+        """Probability on first/last 2 sites (8 components out of 4N)."""
+        v = eigvecs[:, col]
+        left  = float(np.sum(np.abs(v[:8])**2))
+        right = float(np.sum(np.abs(v[-8:])**2))
+        return min(1.0, left + right)
+
+    # ── Wilson loop / WCC on strip (quick Z₂ from bulk) ──────────────────────
+    def lower_evecs_bulk(kx, ky, M_val):
+        eps = C - 2*D*(2 - np.cos(kx) - np.cos(ky))
+        d1  = A * np.sin(kx)
+        d2  = A * np.sin(ky)
+        d5  = M_val - 2*B*(2 - np.cos(kx) - np.cos(ky))
+        H = np.zeros((4, 4), dtype=complex)
+        H[0, 0] = eps + d5;  H[0, 3] = d1 - 1j*d2
+        H[1, 1] = eps + d5;  H[1, 2] = d1 + 1j*d2
+        H[2, 1] = d1 - 1j*d2; H[2, 2] = eps - d5
+        H[3, 0] = d1 + 1j*d2; H[3, 3] = eps - d5
+        evals, evecs = np.linalg.eigh(H)
+        return evecs[:, :2]
+
+    def wcc_at_ky(ky, n_kx_wl, M_val):
+        kxs = 2 * np.pi * np.arange(n_kx_wl) / n_kx_wl
+        W = np.eye(2, dtype=complex)
+        for ix in range(n_kx_wl):
+            Q0 = lower_evecs_bulk(kxs[ix], ky, M_val)
+            Q1 = lower_evecs_bulk(2*np.pi*((ix+1)%n_kx_wl)/n_kx_wl, ky, M_val)
+            W = W @ (Q0.conj().T @ Q1)
+        evals = np.linalg.eigvals(W)
+        return sorted((-np.angle(ev)/(2*np.pi)) % 1.0 for ev in evals)
+
+    def z2_bulk(M_val, n_kx_wl=20, n_ky_wl=20):
+        """Branch-continuity Z₂ from bulk Wilson loop."""
+        ky_grid = np.linspace(0, np.pi, n_ky_wl)
+        wcc_grid = [wcc_at_ky(ky, n_kx_wl, M_val) for ky in ky_grid]
+
+        def circ_dist(a, b):
+            d = abs(a - b)
+            return 1.0 - d if d > 0.5 else d
+
+        track = list(wcc_grid[0])
+        crossings = 0
+        for i in range(1, len(wcc_grid)):
+            c0, c1 = wcc_grid[i]
+            ds = circ_dist(c0, track[0]) + circ_dist(c1, track[1])
+            dc = circ_dist(c1, track[0]) + circ_dist(c0, track[1])
+            nxt = [c0, c1] if ds <= dc else [c1, c0]
+            for b in range(2):
+                if (track[b] - 0.5) * (nxt[b] - 0.5) < 0:
+                    crossings += 1
+            track = nxt
+        return crossings % 2
+
+    # ── Spectrum at nominal M ──────────────────────────────────────────────────
+    kx_vals = np.linspace(-np.pi, np.pi, n_kx).tolist()
+    all_energies: list = []
+    all_weights: list = []
+    for kx in kx_vals:
+        H = build_strip(kx, M)
+        evals, evecs = np.linalg.eigh(H)
+        for b in range(DIM):
+            all_energies.append(float(evals[b]))
+            all_weights.append(edge_weight(evecs, b))
+
+    z2 = z2_bulk(M)
+    phase_label = f"Topological (Z\u2082=1)" if z2 == 1 else f"Trivial (Z\u2082=0)"
+
+    # ── Phase diagram sweep ───────────────────────────────────────────────────
+    if sweep_param not in ("M",):
+        raise ValueError(f"_edge_states_frames: unsupported sweep_param {sweep_param!r} — use 'M'")
+
+    sweep_vals = np.linspace(param_min, param_max, n_sweep).tolist()
+    sweep_z2: list = []
+    sweep_phase: list = []
+    for Mp in sweep_vals:
+        z2_s = z2_bulk(Mp, n_kx_wl=16, n_ky_wl=16)
+        sweep_z2.append(z2_s)
+        sweep_phase.append("Topological" if z2_s == 1 else "Trivial")
+
+    return {
+        "M": M, "A": A, "B": B, "C": C, "D": D,
+        "n_kx": n_kx, "n_y": n_y,
+        "scenario": scenario,
+        "z2": z2,
+        "phase_label": phase_label,
+        "kx_vals": kx_vals,
+        "n_bands": DIM,
+        "energies": all_energies,
+        "edge_weight": all_weights,
+        "sweep_param": sweep_param,
+        "param_min": param_min,
+        "param_max": param_max,
+        "sweep_vals": sweep_vals,
+        "sweep_z2": sweep_z2,
+        "sweep_phase": sweep_phase,
+        "source": source,
+    }
+
+
+def _edge_states_page(data: dict, title: str = "Edge States / Surface Spectrum — BHZ Topological Insulator") -> str:
+    """HTML page: kx-energy scatter colored by edge weight + Z₂ phase diagram."""
+    import json as _json  # noqa: PLC0415
+    data_json = _json.dumps(data, ensure_ascii=False)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  :root {{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --topo:#3fb950; --trivial:#8b949e;
+  }}
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+        display:flex;flex-direction:column;align-items:center;padding:32px 16px;gap:24px}}
+  h1{{font-size:1.3rem;color:var(--accent);text-align:center}}
+  .subtitle{{color:var(--muted);font-size:0.9rem;text-align:center}}
+  .card{{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+         padding:20px;width:100%;max-width:900px}}
+  .card h2{{font-size:1rem;color:var(--muted);margin-bottom:14px}}
+  .info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}}
+  .info-box{{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+             padding:12px;text-align:center}}
+  .info-box .label{{font-size:0.75rem;color:var(--muted);margin-bottom:6px}}
+  .info-box .value{{font-size:1.4rem;font-weight:700}}
+  .topo{{color:var(--topo)}} .trivial{{color:var(--trivial)}}
+  canvas{{display:block;width:100%;cursor:crosshair}}
+  .legend{{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:0.8rem;color:var(--muted)}}
+  .cb-row{{display:flex;align-items:stretch;gap:8px}}
+  .cb-row canvas:first-child{{flex:1}}
+  .cb-col{{display:flex;flex-direction:column;justify-content:space-between;
+           font-size:10px;color:var(--muted);padding:20px 0 40px}}
+  .footer{{color:var(--muted);font-size:0.75rem;text-align:center}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">BHZ strip &nbsp;·&nbsp; N_y={data.get("n_y",20)} sites (open BCs) &nbsp;·&nbsp; color = edge-state probability &nbsp;·&nbsp; teal = bulk, red = edge</p>
+
+<div class="card">
+  <h2>Parameters &amp; Z₂ Invariant</h2>
+  <div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div class="card">
+  <h2>Band Structure E(kx) — colored by edge probability (bulk=teal → edge=red)</h2>
+  <div class="cb-row">
+    <canvas id="specPlot" height="400"></canvas>
+    <canvas id="colorbar" width="18" height="400" style="flex:none"></canvas>
+    <div class="cb-col" id="cbLabels"><span>edge</span><span>0.5</span><span>bulk</span></div>
+  </div>
+  <div class="legend">
+    <span style="color:#f85149">■ Edge state (high boundary probability)</span>
+    <span style="color:#39d353">■ Mid-gap bridge</span>
+    <span style="color:#58a6ff">■ Bulk band</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Z₂ Phase Diagram — Z₂ vs M &nbsp;(topological: 0&lt;M/B&lt;4, gap closes at M=0 and M=4B)</h2>
+  <canvas id="phasePlot" height="200"></canvas>
+  <div class="legend">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--topo);margin-right:4px"></span>Topological (Z₂=1)</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--trivial);margin-right:4px"></span>Trivial (Z₂=0)</span>
+  </div>
+</div>
+
+<p class="footer">Source: {data.get("source","python-reference")} &nbsp;·&nbsp; n_kx={data.get("n_kx",60)} &nbsp;·&nbsp; n_y={data.get("n_y",20)}</p>
+
+<script>
+(function(){{
+  const DATA = {data_json};
+
+  // ── Edge-weight colormap: bulk (teal) → edge (red) ──────────────────────
+  function edgeColor(w) {{
+    // w in [0,1]: 0=bulk (teal #58a6ff), 0.5=mid (#39d353), 1=edge (#f85149)
+    const t = Math.max(0, Math.min(1, w));
+    if (t < 0.5) {{
+      const s = t * 2;   // 0→1
+      const r = Math.round(88  + (57  - 88)  * s);  // 88→57
+      const g = Math.round(166 + (211 - 166) * s);  // 166→211
+      const b = Math.round(255 + (83  - 255) * s);  // 255→83
+      return `rgb(${{r}},${{g}},${{b}})`;
+    }} else {{
+      const s = (t - 0.5) * 2;  // 0→1
+      const r = Math.round(57  + (248 - 57)  * s);  // 57→248
+      const g = Math.round(211 + (81  - 211) * s);  // 211→81
+      const b = Math.round(83  + (73  - 83)  * s);  // 83→73
+      return `rgb(${{r}},${{g}},${{b}})`;
+    }}
+  }}
+
+  // ── Info grid ────────────────────────────────────────────────────────────
+  const grid = document.getElementById('infoGrid');
+  const isTopo = DATA.z2 === 1;
+  [
+    ['M', DATA.M?.toFixed(2)],
+    ['A', DATA.A?.toFixed(2)],
+    ['B', DATA.B?.toFixed(2)],
+    ['N_y', DATA.n_y],
+    ['Z₂', DATA.z2],
+    ['Phase', DATA.phase_label],
+  ].forEach(([lbl,val])=>{{
+    const box=document.createElement('div'); box.className='info-box';
+    const hi=(lbl==='Z₂'&&val===1)||(lbl==='Phase'&&String(val).includes('Topo'));
+    box.innerHTML=`<div class="label">${{lbl}}</div><div class="value ${{hi?'topo':'trivial'}}">${{val}}</div>`;
+    grid.appendChild(box);
+  }});
+
+  // ── Colorbar ────────────────────────────────────────────────────────────
+  function drawColorbar() {{
+    const cb = document.getElementById('colorbar');
+    const ctx2 = cb.getContext('2d');
+    const h = cb.height;
+    for (let y = 0; y < h; y++) {{
+      const w = 1 - y / h;   // top=1(edge), bottom=0(bulk)
+      ctx2.fillStyle = edgeColor(w);
+      ctx2.fillRect(0, y, cb.width, 1);
+    }}
+  }}
+  drawColorbar();
+
+  // ── Spectrum scatter plot ────────────────────────────────────────────────
+  const specCanvas = document.getElementById('specPlot');
+  function drawSpec() {{
+    const dpr = window.devicePixelRatio || 1;
+    const W = specCanvas.clientWidth, H = parseInt(specCanvas.getAttribute('height'));
+    specCanvas.width = W*dpr; specCanvas.height = H*dpr;
+    const ctx = specCanvas.getContext('2d'); ctx.scale(dpr, dpr);
+    const pad = {{l:55,r:10,t:20,b:40}};
+    const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+
+    const kx = DATA.kx_vals;
+    const en = DATA.energies;
+    const ew = DATA.edge_weight;
+    const nb = DATA.n_bands;
+    if (!kx || kx.length === 0 || !en) return;
+
+    const enMin = Math.min(...en), enMax = Math.max(...en);
+    const kxMin = kx[0], kxMax = kx[kx.length-1];
+
+    function sx(v) {{ return pad.l + (v - kxMin) / (kxMax - kxMin) * pw; }}
+    function sy(v) {{ return pad.t + (1 - (v - enMin) / (enMax - enMin)) * ph; }}
+
+    ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+    for (let k = 0; k <= 4; k++) {{
+      const v = enMin + k * (enMax - enMin) / 4;
+      ctx.beginPath(); ctx.moveTo(pad.l, sy(v)); ctx.lineTo(W-pad.r, sy(v)); ctx.stroke();
+    }}
+    // E=0 line
+    if (enMin < 0 && enMax > 0) {{
+      ctx.strokeStyle = '#484f58'; ctx.setLineDash([5,4]);
+      ctx.beginPath(); ctx.moveTo(pad.l, sy(0)); ctx.lineTo(W-pad.r, sy(0)); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#21262d';
+    }}
+
+    // Scatter: one dot per (kx_i, band_b)
+    const nk = kx.length;
+    for (let i = 0; i < nk; i++) {{
+      for (let b = 0; b < nb; b++) {{
+        const idx = i * nb + b;
+        ctx.fillStyle = edgeColor(ew[idx]);
+        ctx.fillRect(sx(kx[i])-0.8, sy(en[idx])-0.8, 1.6, 1.6);
+      }}
+    }}
+
+    // Axes
+    ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+
+    ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace'; ctx.textAlign = 'right';
+    for (let k = 0; k <= 4; k++) {{
+      const v = enMin + k*(enMax-enMin)/4;
+      ctx.fillText(v.toFixed(1), pad.l-4, sy(v)+4);
+    }}
+    ctx.textAlign = 'center';
+    [-Math.PI, 0, Math.PI].forEach(v => {{
+      ctx.fillText(v===0?'0':v>0?'π':'−π', sx(v), H-pad.b+14);
+    }});
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
+    ctx.textAlign = 'left'; ctx.fillText('E', 4, pad.t+12);
+    ctx.textAlign = 'center'; ctx.fillText('kx', W/2, H-4);
+  }}
+  drawSpec();
+
+  // ── Phase diagram ────────────────────────────────────────────────────────
+  const phCanvas = document.getElementById('phasePlot');
+  function drawPhase() {{
+    const dpr = window.devicePixelRatio||1;
+    const W = phCanvas.clientWidth, H = parseInt(phCanvas.getAttribute('height'));
+    phCanvas.width = W*dpr; phCanvas.height = H*dpr;
+    const ctx = phCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+    const pad = {{l:50,r:20,t:20,b:40}};
+    const pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+    const sv = DATA.sweep_vals, sz = DATA.sweep_z2;
+    if (!sv||sv.length===0) return;
+    const smin=sv[0], smax=sv[sv.length-1];
+    function sx(v) {{ return pad.l+(v-smin)/(smax-smin)*pw; }}
+    function sy(z) {{ return pad.t+(1-z)*ph; }}
+
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+    // Filled regions
+    for (let i=0;i<sv.length-1;i++) {{
+      ctx.fillStyle = sz[i]===1?'#3fb95033':'#8b949e22';
+      ctx.fillRect(sx(sv[i]),pad.t,sx(sv[i+1])-sx(sv[i]),ph);
+    }}
+
+    // Step-function Z₂ line
+    ctx.lineWidth=2.5;
+    for (let i=0;i<sv.length-1;i++) {{
+      ctx.strokeStyle=sz[i]===1?'#3fb950':'#8b949e';
+      ctx.beginPath(); ctx.moveTo(sx(sv[i]),sy(sz[i])); ctx.lineTo(sx(sv[i+1]),sy(sz[i])); ctx.stroke();
+    }}
+
+    // Transition markers M=0 and M=4B
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    [0, 4*DATA.B].forEach(mx=>{{
+      if (mx>=smin&&mx<=smax) {{
+        ctx.beginPath(); ctx.moveTo(sx(mx),pad.t); ctx.lineTo(sx(mx),H-pad.b); ctx.stroke();
+      }}
+    }});
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+
+    ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+    ctx.fillText('0',pad.l-4,sy(0)+4); ctx.fillText('1',pad.l-4,sy(1)+4);
+    ctx.textAlign='center';
+    [smin,(smin+smax)/2,smax].forEach(v=>{{ ctx.fillText(v.toFixed(1),sx(v),H-pad.b+14); }});
+    [0,4*DATA.B].forEach(v=>{{ if(v>=smin&&v<=smax) ctx.fillText(v===0?'0':`4B=${{(4*DATA.B).toFixed(1)}}`,sx(v),H-pad.b+14); }});
+    ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+    ctx.textAlign='left'; ctx.fillText('Z₂',2,pad.t+12);
+    ctx.textAlign='center'; ctx.fillText('M',W/2,H-4);
+  }}
+  drawPhase();
+  window.addEventListener('resize',()=>{{drawSpec();drawPhase();}});
+}})();
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -11395,7 +11817,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -11580,6 +12002,17 @@ def main() -> int:
   parser.add_argument("--second-chern-param-min", type=float, default=-5.0, help="sweep parameter minimum")
   parser.add_argument("--second-chern-param-max", type=float, default=5.0,  help="sweep parameter maximum")
   parser.add_argument("--second-chern-n-sweep",   type=int,   default=40,   help="number of sweep points")
+  parser.add_argument("--edge-states-M",           type=float, default=1.0,  help="BHZ mass parameter M (band-inversion strength)")
+  parser.add_argument("--edge-states-A",           type=float, default=1.0,  help="BHZ velocity parameter A")
+  parser.add_argument("--edge-states-B",           type=float, default=1.0,  help="BHZ curvature parameter B")
+  parser.add_argument("--edge-states-C",           type=float, default=0.0,  help="BHZ particle-hole asymmetry C")
+  parser.add_argument("--edge-states-D",           type=float, default=0.0,  help="BHZ particle-hole asymmetry D")
+  parser.add_argument("--edge-states-nkx",         type=int,   default=60,   help="k-grid points along kx for strip spectrum")
+  parser.add_argument("--edge-states-ny",          type=int,   default=20,   help="strip width (sites along y, open BCs)")
+  parser.add_argument("--edge-states-sweep-param", default="M",              help="parameter to sweep in phase_diagram (only M supported)")
+  parser.add_argument("--edge-states-param-min",   type=float, default=-1.0, help="sweep parameter minimum")
+  parser.add_argument("--edge-states-param-max",   type=float, default=5.0,  help="sweep parameter maximum")
+  parser.add_argument("--edge-states-n-sweep",     type=int,   default=40,   help="number of sweep points")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -12519,6 +12952,32 @@ def main() -> int:
     path.write_text(_second_chern_page(sc_data, title="Second Chern Number — 4D Quantum Hall Effect"), encoding="utf-8")
     generated.append(path)
 
+  # ── M37: Edge States / Surface Spectrum ───────────────────────────────────
+  if args.scenario in {"edge_states", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("edge_states skipped: numpy not available", file=sys.stderr)
+    else:
+      es_data = _edge_states_frames(
+          M=args.edge_states_M,
+          A=args.edge_states_A,
+          B=args.edge_states_B,
+          C=args.edge_states_C,
+          D=args.edge_states_D,
+          n_kx=args.edge_states_nkx,
+          n_y=args.edge_states_ny,
+          scenario="spectrum",
+          sweep_param=args.edge_states_sweep_param,
+          param_min=args.edge_states_param_min,
+          param_max=args.edge_states_param_max,
+          n_sweep=args.edge_states_n_sweep,
+          source="python-reference",
+      )
+      path = out_dir / "quantum_edge_states.html"
+      path.write_text(_edge_states_page(es_data, title="Edge States / Surface Spectrum — BHZ Topological Insulator"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -12570,6 +13029,7 @@ def main() -> int:
         "tenfold":            "quantum_tenfold",
         "second_chern":       "quantum_second_chern",
         "wilson_loop":        "quantum_wilson_loop",
+        "edge_states":        "quantum_edge_states",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

@@ -104,5 +104,9 @@ std::string second_chern_result_to_json(const SecondChernResult& result);
 WilsonLoopOptions wilson_loop_options_from_json(const std::string& json);
 // Serialize Wilson loop result to JSON string.
 std::string wilson_loop_result_to_json(const WilsonLoopResult& result);
+// Parse edge states / surface spectrum options from JSON string.
+EdgeStatesOptions edge_states_options_from_json(const std::string& json);
+// Serialize edge states result to JSON string.
+std::string edge_states_result_to_json(const EdgeStatesResult& result);
 
 }  // namespace qx

@@ -1689,6 +1689,47 @@ std::string wilson_loop_result_to_json(const WilsonLoopResult& r) {
   return j.dump();
 }
 
+EdgeStatesOptions edge_states_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  EdgeStatesOptions o;
+  if (j.contains("M"))           o.M           = j["M"].get<double>();
+  if (j.contains("A"))           o.A           = j["A"].get<double>();
+  if (j.contains("B"))           o.B           = j["B"].get<double>();
+  if (j.contains("C"))           o.C           = j["C"].get<double>();
+  if (j.contains("D"))           o.D           = j["D"].get<double>();
+  if (j.contains("n_kx"))        o.n_kx        = j["n_kx"].get<int>();
+  if (j.contains("n_y"))         o.n_y         = j["n_y"].get<int>();
+  if (j.contains("scenario"))    o.scenario    = j["scenario"].get<std::string>();
+  if (j.contains("sweep_param")) o.sweep_param = j["sweep_param"].get<std::string>();
+  if (j.contains("param_min"))   o.param_min   = j["param_min"].get<double>();
+  if (j.contains("param_max"))   o.param_max   = j["param_max"].get<double>();
+  if (j.contains("n_sweep"))     o.n_sweep     = j["n_sweep"].get<int>();
+  return o;
+}
+
+std::string edge_states_result_to_json(const EdgeStatesResult& r) {
+  json j;
+  j["ok"]          = r.ok;
+  j["M"]           = r.M;
+  j["A"]           = r.A;
+  j["B"]           = r.B;
+  j["n_y"]         = r.n_y;
+  j["n_bands"]     = r.n_bands;
+  j["scenario"]    = r.scenario;
+  j["z2"]          = r.z2;
+  j["phase_label"] = r.phase_label;
+  j["kx_vals"]     = r.kx_vals;
+  j["energies"]    = r.energies;
+  j["edge_weight"] = r.edge_weight;
+  j["sweep_vals"]  = r.sweep_vals;
+  j["sweep_z2"]    = r.sweep_z2;
+  j["sweep_phase"] = r.sweep_phase;
+  j["elapsed_ms"]  = r.elapsed_ms;
+  j["message"]     = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 SpectralOptions spectral_options_from_json(const std::string& json_str) {
   auto j = json::parse(json_str);
   SpectralOptions o;
