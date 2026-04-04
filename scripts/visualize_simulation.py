@@ -11433,16 +11433,15 @@ def _edge_states_frames(
     # Γ₅ = diag(1,1,-1,-1); Γ₂ = σx⊗σy = [[0,0,-i,0],[0,0,0,i],[i,0,0,0],[0,-i,0,0]]
     def hop(_M_val=None):  # noqa: ARG001  (M unused — hop doesn't depend on M)
         # H_hop = -D I + B Γ₅ - (iA/2) Γ₂
-        # Γ₅ = diag(+1,+1,-1,-1)
-        # Γ₂[0,2]=-i, Γ₂[1,3]=+i, Γ₂[2,0]=+i, Γ₂[3,1]=-i
-        # -(iA/2)*(-i) = -A/2;  -(iA/2)*(+i) = +A/2
+        # Γ₂ = σx⊗σy: (0,3)=-i, (1,2)=+i, (2,1)=-i, (3,0)=+i
+        # -(iA/2)*(-i)=-A/2; -(iA/2)*(+i)=+A/2
         H = np.zeros((4, 4), dtype=complex)
         H[0, 0] = -D + B;   H[1, 1] = -D + B
         H[2, 2] = -D - B;   H[3, 3] = -D - B
-        H[0, 2] = -A / 2
-        H[1, 3] = +A / 2
-        H[2, 0] = +A / 2
-        H[3, 1] = -A / 2
+        H[0, 3] = -A / 2
+        H[1, 2] = +A / 2
+        H[2, 1] = -A / 2
+        H[3, 0] = +A / 2
         return H
 
     # ── Build (4N)×(4N) strip Hamiltonian at kx ───────────────────────────────

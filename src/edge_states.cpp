@@ -33,6 +33,7 @@
 #include "qx/types.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -316,16 +317,12 @@ static int z2_strip(double M, double A, double B, double C, double D,
         double c0 = grid[i][0], c1 = grid[i][1];
         double ds = circ_dist(c0,track[0]) + circ_dist(c1,track[1]);
         double dc = circ_dist(c1,track[0]) + circ_dist(c0,track[1]);
-        double next[2] = (ds <= dc) ? std::array<double,2>{c0,c1}.data()
-                                    : std::array<double,2>{c1,c0}.data();
-        // write inline to avoid VLA
         double n0, n1;
         if (ds <= dc) { n0=c0; n1=c1; } else { n0=c1; n1=c0; }
         if ((track[0]-0.5)*(n0-0.5) < 0) ++crossings;
         if ((track[1]-0.5)*(n1-0.5) < 0) ++crossings;
         track[0]=n0; track[1]=n1;
     }
-    (void)next;
     return crossings % 2;
 }
 
