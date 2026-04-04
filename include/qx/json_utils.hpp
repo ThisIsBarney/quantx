@@ -100,5 +100,9 @@ std::string tenfold_result_to_json(const TenfoldResult& result);
 SecondChernOptions second_chern_options_from_json(const std::string& json);
 // Serialize second Chern number result to JSON string.
 std::string second_chern_result_to_json(const SecondChernResult& result);
+// Parse Wilson loop / Wannier Charge Center options from JSON string.
+WilsonLoopOptions wilson_loop_options_from_json(const std::string& json);
+// Serialize Wilson loop result to JSON string.
+std::string wilson_loop_result_to_json(const WilsonLoopResult& result);
 
 }  // namespace qx

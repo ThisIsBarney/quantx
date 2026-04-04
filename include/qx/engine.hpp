@@ -64,5 +64,7 @@ SpectralResult run_spectral(const SpectralOptions& opts);
 TenfoldResult run_tenfold(const TenfoldOptions& opts);
 // Run second Chern number computation for the 4D Quantum Hall Effect (Zhang-Hu model).
 SecondChernResult run_second_chern(const SecondChernOptions& opts);
+// Run Wilson loop / Wannier Charge Center computation for the BHZ Z₂ topological insulator.
+WilsonLoopResult run_wilson_loop(const WilsonLoopOptions& opts);
 
 }  // namespace qx

@@ -972,6 +972,50 @@ struct TenfoldResult {
   std::string message;
 };
 
+// ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
+//
+// Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the
+// Bernevig-Hughes-Zhang (BHZ) 2D topological insulator model.
+// W(ky) = Π_{kx} Q(kx,ky)† Q(kx+Δkx,ky)  [2×2 product of overlaps]
+// WCC θᵢ(ky) = -arg(λᵢ(W)) / 2π ∈ [0,1)
+// Z₂ = parity of WCC crossings of θ=0.5 as ky sweeps [0, π].
+// Phase diagram: topological when 0 < M/B < 4 (gap closes at M=0, M=4B).
+
+struct WilsonLoopOptions {
+  double M{1.0};          // BHZ mass parameter (band-inversion strength)
+  double A{1.0};          // BHZ velocity parameter (off-diagonal coupling)
+  double B{1.0};          // BHZ curvature parameter (quadratic k term)
+  double C{0.0};          // particle-hole asymmetry (set 0 for pure TI)
+  double D{0.0};          // particle-hole asymmetry (set 0 for pure TI)
+  int    n_kx{40};        // k-grid points along kx for Wilson loop product
+  int    n_ky{40};        // k-grid points along ky for WCC spectrum
+  std::string scenario{"wcc"};       // wcc | phase_diagram
+  std::string sweep_param{"M"};      // parameter to sweep (phase_diagram)
+  double param_min{-1.0};
+  double param_max{5.0};
+  int    n_sweep{40};
+};
+
+struct WilsonLoopResult {
+  bool ok{false};
+  double M{0.0}, A{0.0}, B{0.0};
+  std::string scenario;
+  int    z2{0};            // Z₂ invariant (0 = trivial, 1 = topological)
+  std::string phase_label; // "Topological (Z₂=1)" | "Trivial (Z₂=0)"
+  double gap_gamma{0.0};   // energy gap at Γ = (0,0)
+  double gap_m_pt{0.0};    // energy gap at M = (π,π)
+  // WCC spectrum
+  std::vector<double> ky_vals;  // ky grid [0, π]
+  std::vector<double> wcc1;     // lower WCC θ₁(ky) ∈ [0,1)
+  std::vector<double> wcc2;     // upper WCC θ₂(ky) ∈ [0,1)
+  // Phase diagram sweep
+  std::vector<double>      sweep_vals;
+  std::vector<int>         sweep_z2;
+  std::vector<std::string> sweep_phase;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M35: Second Chern Number & 4D Quantum Hall Effect ─────────────────────
 //
 // Computes the second Chern number C₂ of the Zhang-Hu 4D QHE model
