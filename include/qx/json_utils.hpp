@@ -96,5 +96,9 @@ std::string spectral_result_to_json(const SpectralResult& result);
 TenfoldOptions tenfold_options_from_json(const std::string& json);
 // Serialize 10-fold way topological classification result to JSON string.
 std::string tenfold_result_to_json(const TenfoldResult& result);
+// Parse second Chern number (4D QHE) options from JSON string.
+SecondChernOptions second_chern_options_from_json(const std::string& json);
+// Serialize second Chern number result to JSON string.
+std::string second_chern_result_to_json(const SecondChernResult& result);
 
 }  // namespace qx

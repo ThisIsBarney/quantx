@@ -972,6 +972,37 @@ struct TenfoldResult {
   std::string message;
 };
 
+// ── M35: Second Chern Number & 4D Quantum Hall Effect ─────────────────────
+//
+// Computes the second Chern number C₂ of the Zhang-Hu 4D QHE model
+// H(k) = Σ dₐ(k) Γₐ  (a=1..5, Γ matrices = tensor products of Paulis).
+// Uses the 4D Abelian Fukui-Hatsugai-Suzuki lattice-gauge algorithm.
+// Phase diagram: C₂ = 0 (|m|>4), ±1 (2<|m|<4), ±3 (0<|m|<2).
+
+struct SecondChernOptions {
+  double m{1.0};               // mass / band-inversion parameter
+  double t{1.0};               // hopping amplitude
+  int    n_k{6};               // k-grid points per dimension (6^4 = 1296 cubes)
+  std::string scenario{"invariant"};  // invariant | phase_diagram
+  double param_min{-5.0};
+  double param_max{5.0};
+  int    n_sweep{40};
+  std::string sweep_param{"m"};  // only "m" supported currently
+};
+
+struct SecondChernResult {
+  bool ok{false};
+  double m{0.0}, t{0.0};
+  std::string scenario;
+  int    second_chern{0};
+  std::string phase_label;     // "C₂=+3 (4D QH)" | "C₂=±1" | "Trivial (C₂=0)"
+  std::vector<double>      sweep_vals;
+  std::vector<int>         sweep_c2;
+  std::vector<std::string> sweep_phase;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M33: Spectral Functions & Imaginary-Time Evolution ───────────────────
 //
 // Dynamical structure factor S(k,omega) = sum_n |<n|S^z_k|0>|^2 delta(omega-(E_n-E_0))

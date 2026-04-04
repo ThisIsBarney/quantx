@@ -6881,6 +6881,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("mbl",                "MBL 多体局域化 (XXZ+disorder)"),
           ("spectral",           "Spectral S(k,ω) 动力学结构因子"),
           ("tenfold",            "10-Fold Way AZ 拓扑分类"),
+          ("second_chern",       "Second Chern Number 4D QHE"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -10607,6 +10608,365 @@ var DATA = {jdata};
 </html>"""
 
 
+def _second_chern_frames(
+    m: float = 1.0,
+    t: float = 1.0,
+    n_k: int = 6,
+    scenario: str = "phase_diagram",
+    sweep_param: str = "m",
+    param_min: float = -5.0,
+    param_max: float = 5.0,
+    n_sweep: int = 40,
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: second Chern number for the Zhang-Hu 4D QHE model."""
+    import numpy as np  # noqa: PLC0415
+
+    # ── 4×4 Hamiltonian ────────────────────────────────────────────────────
+    # Gamma matrices: Γ₁=σ₁⊗σ₁, Γ₂=σ₁⊗σ₂, Γ₃=σ₁⊗σ₃, Γ₄=σ₂⊗I, Γ₅=σ₃⊗I
+    def build_ham(d1, d2, d3, d4, d5):
+        return np.array([
+            [d5,          0,            d3 - 1j*d4,  d1 - 1j*d2],
+            [0,           d5,           d1 + 1j*d2, -d3 - 1j*d4],
+            [d3 + 1j*d4,  d1 - 1j*d2, -d5,          0          ],
+            [d1 + 1j*d2, -d3 + 1j*d4,  0,           -d5        ],
+        ], dtype=complex)
+
+    def lower_basis(m_val, t_val, k):
+        """Return 4×2 orthonormal lower-band eigenvector matrix Q via projector + GS."""
+        k1, k2, k3, k4 = k
+        d1 = np.sin(k1)
+        d2 = np.sin(k2)
+        d3 = np.sin(k3)
+        d4 = np.sin(k4)
+        d5 = m_val + t_val * (np.cos(k1) + np.cos(k2) + np.cos(k3) + np.cos(k4))
+        r = np.sqrt(d1**2 + d2**2 + d3**2 + d4**2 + d5**2)
+        if r < 1e-14:
+            return np.eye(4, 2, dtype=complex)
+        H = build_ham(d1, d2, d3, d4, d5)
+        P = (np.eye(4, dtype=complex) - H / r) / 2.0
+        # Gram-Schmidt on P's columns
+        basis = []
+        for col in range(4):
+            v = P[:, col].copy()
+            for b in basis:
+                v -= np.dot(b.conj(), v) * b
+            nrm = np.linalg.norm(v)
+            if nrm > 1e-10:
+                basis.append(v / nrm)
+                if len(basis) == 2:
+                    break
+        while len(basis) < 2:
+            basis.append(np.zeros(4, dtype=complex))
+        return np.column_stack(basis)  # 4×2
+
+    def link_det(Q0, Q1):
+        M = Q0.conj().T @ Q1  # 2×2
+        return M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]
+
+    def compute_c2(m_val, t_val, nk):
+        N1 = nk + 1
+        # Build grid
+        ks = 2 * np.pi * np.arange(nk) / nk
+        grid = {}
+        for i1 in range(N1):
+            for i2 in range(N1):
+                for i3 in range(N1):
+                    for i4 in range(N1):
+                        k = (ks[i1 % nk], ks[i2 % nk], ks[i3 % nk], ks[i4 % nk])
+                        grid[(i1, i2, i3, i4)] = lower_basis(m_val, t_val, k)
+        # Precompute link dets (4 directions)
+        U = {}
+        steps = [(1,0,0,0),(0,1,0,0),(0,0,1,0),(0,0,0,1)]
+        for i1 in range(nk):
+            for i2 in range(nk):
+                for i3 in range(nk):
+                    for i4 in range(nk):
+                        p = (i1, i2, i3, i4)
+                        Q0 = grid[p]
+                        for mu, s in enumerate(steps):
+                            pn = (p[0]+s[0], p[1]+s[1], p[2]+s[2], p[3]+s[3])
+                            U[(mu,) + p] = link_det(Q0, grid[pn])
+        # Plaquette fluxes and C₂
+        def plaq(mu, nu, p):
+            i1, i2, i3, i4 = p
+            sm = steps[mu]
+            sn = steps[nu]
+            pm  = ((i1+sm[0])%nk, (i2+sm[1])%nk, (i3+sm[2])%nk, (i4+sm[3])%nk)
+            pn  = ((i1+sn[0])%nk, (i2+sn[1])%nk, (i3+sn[2])%nk, (i4+sn[3])%nk)
+            val = U[(mu,)+p] * U[(nu,)+pm] * np.conj(U[(mu,)+pn]) * np.conj(U[(nu,)+p])
+            r = abs(val)
+            if r < 1e-14:
+                return 0.0
+            return np.angle(val / r)
+        c2_sum = 0.0
+        for i1 in range(nk):
+            for i2 in range(nk):
+                for i3 in range(nk):
+                    for i4 in range(nk):
+                        p = (i1, i2, i3, i4)
+                        f12 = plaq(0, 1, p)
+                        f34 = plaq(2, 3, p)
+                        f13 = plaq(0, 2, p)
+                        f24 = plaq(1, 3, p)
+                        f14 = plaq(0, 3, p)
+                        f23 = plaq(1, 2, p)
+                        c2_sum += f12*f34 - f13*f24 + f14*f23
+        return int(round(c2_sum / (4 * np.pi**2)))
+
+    def phase_label(c2):
+        if c2 == 0:
+            return "Trivial (C₂=0)"
+        return f"4D QHE (C₂={c2:+d})"
+
+    # ── sweep ──────────────────────────────────────────────────────────────
+    sweep_vals = np.linspace(param_min, param_max, n_sweep).tolist()
+    sweep_c2 = []
+    sweep_phase = []
+    for p in sweep_vals:
+        m_k = p if sweep_param == "m" else m
+        t_k = p if sweep_param == "t" else t
+        c2 = compute_c2(m_k, t_k, n_k) if t_k != 0 else 0
+        sweep_c2.append(int(c2))
+        sweep_phase.append(phase_label(c2))
+
+    c2_mid = sweep_c2[n_sweep // 2] if n_sweep > 0 else compute_c2(m, t, n_k)
+
+    return {
+        "m": m,
+        "t": t,
+        "n_k": n_k,
+        "scenario": scenario,
+        "sweep_param": sweep_param,
+        "param_min": param_min,
+        "param_max": param_max,
+        "second_chern": c2_mid,
+        "phase_label": phase_label(c2_mid),
+        "sweep_vals": sweep_vals,
+        "sweep_c2": sweep_c2,
+        "sweep_phase": sweep_phase,
+        "source": source,
+    }
+
+
+def _second_chern_page(data: dict, title: str = "Second Chern Number — 4D Quantum Hall Effect") -> str:
+    """Generate an HTML page for the second Chern number / 4D QHE phase diagram."""
+    import json as _json  # noqa: PLC0415
+
+    data_json = _json.dumps(data, ensure_ascii=False)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  :root {{
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --topo: #d29922; --trivial: #8b949e;
+  }}
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif;
+          display: flex; flex-direction: column; align-items: center; padding: 32px 16px; gap: 24px; }}
+  h1 {{ font-size: 1.3rem; color: var(--accent); text-align: center; }}
+  .subtitle {{ color: var(--muted); font-size: 0.9rem; text-align: center; }}
+  .card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+           padding: 20px; width: 100%; max-width: 860px; }}
+  .card h2 {{ font-size: 1rem; color: var(--muted); margin-bottom: 14px; }}
+  .info-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }}
+  .info-box {{ background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+               padding: 12px; text-align: center; }}
+  .info-box .label {{ font-size: 0.75rem; color: var(--muted); margin-bottom: 6px; }}
+  .info-box .value {{ font-size: 1.4rem; font-weight: 700; }}
+  .topo {{ color: var(--topo); }}
+  .trivial {{ color: var(--trivial); }}
+  canvas {{ display: block; width: 100%; cursor: crosshair; }}
+  .phase-legend {{ display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; font-size: 0.8rem; color: var(--muted); }}
+  .legend-dot {{ width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }}
+  .footer {{ color: var(--muted); font-size: 0.75rem; text-align: center; }}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">Zhang-Hu model &nbsp;·&nbsp; H(k) = Σ dₐ(k) Γₐ &nbsp;·&nbsp; 4D lattice Fukui-Hatsugai-Suzuki</p>
+
+<div class="card">
+  <h2>Model Parameters &amp; Invariant</h2>
+  <div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div class="card">
+  <h2>Phase Diagram: C₂ vs m &nbsp;(gap closes at m = 0, ±2, ±4)</h2>
+  <canvas id="phasePlot" height="280"></canvas>
+  <div class="phase-legend">
+    <span><span class="legend-dot" style="background:#d29922"></span>|C₂|=3 &nbsp;(0&lt;|m|&lt;2)</span>
+    <span><span class="legend-dot" style="background:#58a6ff"></span>|C₂|=1 &nbsp;(2&lt;|m|&lt;4)</span>
+    <span><span class="legend-dot" style="background:#8b949e"></span>Trivial (C₂=0)</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Phase Classification Rules</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;font-family:monospace">
+    <thead><tr style="color:var(--muted);border-bottom:1px solid var(--border)">
+      <th style="text-align:left;padding:6px">m range</th>
+      <th style="text-align:center;padding:6px">C₂</th>
+      <th style="text-align:left;padding:6px">Phase</th>
+    </tr></thead>
+    <tbody id="phaseTable"></tbody>
+  </table>
+</div>
+
+<p class="footer">Source: {data.get("source","python-reference")} &nbsp;·&nbsp; k-grid: {data.get("n_k",6)}⁴ &nbsp;·&nbsp; n_sweep: {len(data.get("sweep_vals",[]))}</p>
+
+<script>
+(function() {{
+  const DATA = {data_json};
+  const C2_COLOR = {{
+    0: '#8b949e', 1: '#58a6ff', '-1': '#58a6ff',
+    3: '#d29922', '-3': '#d29922',
+  }};
+  function c2Color(c2) {{
+    return C2_COLOR[c2] || (Math.abs(c2) >= 2 ? '#d29922' : '#58a6ff');
+  }}
+
+  // ── Info grid ───────────────────────────────────────────────────────────
+  const grid = document.getElementById('infoGrid');
+  const items = [
+    ['m', DATA.m.toFixed(2)],
+    ['t', DATA.t.toFixed(2)],
+    ['k-grid (per dim)', DATA.n_k],
+    ['C₂', DATA.second_chern],
+    ['Phase', DATA.phase_label],
+  ];
+  items.forEach(([lbl, val]) => {{
+    const box = document.createElement('div');
+    box.className = 'info-box';
+    const isTopo = (lbl === 'C₂' && val !== 0) || (lbl === 'Phase' && String(val).includes('QHE'));
+    box.innerHTML = `<div class="label">${{lbl}}</div>`
+                  + `<div class="value ${{isTopo ? 'topo' : 'trivial'}}">${{val}}</div>`;
+    grid.appendChild(box);
+  }});
+
+  // ── Phase table ─────────────────────────────────────────────────────────
+  const rows = [
+    ['|m| > 4', 0, 'Trivial'],
+    ['2 < |m| < 4', '±1', '4D QHE (weak)'],
+    ['0 < |m| < 2', '±3', '4D QHE (strong)'],
+  ];
+  const tbody = document.getElementById('phaseTable');
+  rows.forEach(([range, c2, phase]) => {{
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid #30363d';
+    const color = c2 === 0 ? '#8b949e' : (String(c2).includes('3') ? '#d29922' : '#58a6ff');
+    tr.innerHTML = `<td style="padding:6px">${{range}}</td>`
+                 + `<td style="padding:6px;text-align:center;color:${{color}};font-weight:700">${{c2}}</td>`
+                 + `<td style="padding:6px;color:var(--muted)">${{phase}}</td>`;
+    tbody.appendChild(tr);
+  }});
+
+  // ── Phase diagram plot ───────────────────────────────────────────────────
+  const canvas = document.getElementById('phasePlot');
+  function draw() {{
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.clientWidth, H = parseInt(canvas.getAttribute('height'));
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const pad = {{l:50,r:20,t:20,b:40}};
+    const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    const sv = DATA.sweep_vals, sc = DATA.sweep_c2;
+    if (!sv || sv.length === 0) return;
+    const smin = sv[0], smax = sv[sv.length-1];
+    const allC2 = sc.map(v => Math.abs(v));
+    const maxC2 = Math.max(...allC2, 1);
+
+    function sx(v) {{ return pad.l + (v - smin) / (smax - smin) * pw; }}
+    function sy(v) {{ return pad.t + ph - (v / maxC2) * ph; }}
+
+    // Background
+    ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, W, H);
+
+    // Grid lines
+    ctx.strokeStyle = '#21262d'; ctx.lineWidth = 1;
+    [-3,-2,-1,0,1,2,3].forEach(v => {{
+      if (Math.abs(v) > maxC2) return;
+      ctx.beginPath(); ctx.moveTo(pad.l, sy(v)); ctx.lineTo(W-pad.r, sy(v)); ctx.stroke();
+    }});
+
+    // Transition markers (m = 0, ±2, ±4)
+    ctx.strokeStyle = '#30363d'; ctx.setLineDash([4,4]);
+    [-4,-2,0,2,4].forEach(mx => {{
+      if (mx < smin || mx > smax) return;
+      ctx.beginPath(); ctx.moveTo(sx(mx), pad.t); ctx.lineTo(sx(mx), H-pad.b); ctx.stroke();
+    }});
+    ctx.setLineDash([]);
+
+    // Filled region
+    if (sv.length > 1) {{
+      for (let i = 0; i < sv.length - 1; i++) {{
+        const v0 = sc[i], v1 = sc[i+1];
+        const c = c2Color(v0);
+        if (v0 === 0) continue;
+        ctx.fillStyle = c + '33';
+        ctx.fillRect(sx(sv[i]), pad.t, sx(sv[i+1])-sx(sv[i]), ph);
+      }}
+    }}
+
+    // Step-function line
+    ctx.lineWidth = 2.5;
+    for (let i = 0; i < sv.length - 1; i++) {{
+      ctx.strokeStyle = c2Color(sc[i]);
+      ctx.beginPath();
+      ctx.moveTo(sx(sv[i]), sy(sc[i]));
+      ctx.lineTo(sx(sv[i+1]), sy(sc[i]));
+      ctx.stroke();
+    }}
+    // Last segment
+    if (sv.length > 0) {{
+      ctx.strokeStyle = c2Color(sc[sc.length-1]);
+      ctx.beginPath();
+      ctx.moveTo(sx(sv[sv.length-2]||sv[0]), sy(sc[sc.length-1]));
+      ctx.lineTo(sx(sv[sv.length-1]), sy(sc[sc.length-1]));
+      ctx.stroke();
+    }}
+
+    // Axes
+    ctx.strokeStyle = '#484f58'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, H-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l, sy(0)); ctx.lineTo(W-pad.r, sy(0)); ctx.stroke();
+
+    // Labels
+    ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace';
+    ctx.textAlign = 'right';
+    [-3,-1,1,3].forEach(v => {{
+      if (Math.abs(v) <= maxC2)
+        ctx.fillText(v, pad.l-4, sy(v)+4);
+    }});
+    ctx.textAlign = 'center';
+    [smin, (smin+smax)/2, smax].forEach(v => {{
+      ctx.fillText(v.toFixed(1), sx(v), H-pad.b+14);
+    }});
+    [-4,-2,0,2,4].forEach(v => {{
+      if (v >= smin && v <= smax)
+        ctx.fillText(v.toFixed(0), sx(v), H-pad.b+14);
+    }});
+    ctx.fillStyle = '#8b949e'; ctx.font = '10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('C₂', 2, pad.t+12);
+    ctx.textAlign = 'center';
+    ctx.fillText(DATA.sweep_param || 'm', W/2, H-4);
+  }}
+  draw();
+  window.addEventListener('resize', draw);
+}})();
+</script>
+</body>
+</html>"""
+
+
 def main() -> int:
   """Parse CLI arguments, generate requested visualizations, and write them to disk."""
   parser = argparse.ArgumentParser(
@@ -10614,7 +10974,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -10781,6 +11141,13 @@ def main() -> int:
   parser.add_argument("--tenfold-param-min",  type=float, default=-2.0, help="sweep parameter minimum")
   parser.add_argument("--tenfold-param-max",  type=float, default=2.0,  help="sweep parameter maximum")
   parser.add_argument("--tenfold-n-sweep",    type=int,   default=80,   help="number of sweep points")
+  parser.add_argument("--second-chern-m",         type=float, default=1.0,  help="Zhang-Hu mass parameter m")
+  parser.add_argument("--second-chern-t",         type=float, default=1.0,  help="Zhang-Hu hopping t")
+  parser.add_argument("--second-chern-nk",        type=int,   default=6,    help="k-grid points per dimension (nk^4 hypercubes)")
+  parser.add_argument("--second-chern-sweep-param", default="m",            help="parameter to sweep: m | t")
+  parser.add_argument("--second-chern-param-min", type=float, default=-5.0, help="sweep parameter minimum")
+  parser.add_argument("--second-chern-param-max", type=float, default=5.0,  help="sweep parameter maximum")
+  parser.add_argument("--second-chern-n-sweep",   type=int,   default=40,   help="number of sweep points")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -11682,6 +12049,23 @@ def main() -> int:
     path.write_text(_tenfold_page(tenfold_data, title="10-Fold Way — Altland-Zirnbauer Topological Classification"), encoding="utf-8")
     generated.append(path)
 
+  # ── M35: Second Chern Number & 4D Quantum Hall Effect ─────────────────────
+  if args.scenario in {"second_chern", "all"}:
+    sc_data = _second_chern_frames(
+        m=args.second_chern_m,
+        t=args.second_chern_t,
+        n_k=args.second_chern_nk,
+        scenario="phase_diagram",
+        sweep_param=args.second_chern_sweep_param,
+        param_min=args.second_chern_param_min,
+        param_max=args.second_chern_param_max,
+        n_sweep=args.second_chern_n_sweep,
+        source="python-reference",
+    )
+    path = out_dir / "quantum_second_chern.html"
+    path.write_text(_second_chern_page(sc_data, title="Second Chern Number — 4D Quantum Hall Effect"), encoding="utf-8")
+    generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -11731,6 +12115,7 @@ def main() -> int:
         "mbl":                "quantum_mbl",
         "spectral":           "quantum_spectral",
         "tenfold":            "quantum_tenfold",
+        "second_chern":       "quantum_second_chern",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
