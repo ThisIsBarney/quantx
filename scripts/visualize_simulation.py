@@ -6882,6 +6882,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("spectral",           "Spectral S(k,ω) 动力学结构因子"),
           ("tenfold",            "10-Fold Way AZ 拓扑分类"),
           ("second_chern",       "Second Chern Number 4D QHE"),
+          ("wilson_loop",        "Wilson Loop WCC BHZ Z₂ TI"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
@@ -10608,6 +10609,407 @@ var DATA = {jdata};
 </html>"""
 
 
+def _wilson_loop_frames(
+    M: float = 1.0,
+    A: float = 1.0,
+    B: float = 1.0,
+    C: float = 0.0,
+    D: float = 0.0,
+    n_kx: int = 40,
+    n_ky: int = 40,
+    scenario: str = "phase_diagram",
+    sweep_param: str = "M",
+    param_min: float = -1.0,
+    param_max: float = 5.0,
+    n_sweep: int = 40,
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Wilson loop / Wannier Charge Centers for BHZ model."""
+    import numpy as np  # noqa: PLC0415
+
+    # ── BHZ 4×4 Hamiltonian (lattice) ────────────────────────────────────
+    # Γ₁=σx⊗σx, Γ₂=σx⊗σy, Γ₅=σz⊗I
+    # H = ε I₄ + d₁Γ₁ + d₂Γ₂ + d₅Γ₅
+    # ε = C - 2D(2-cos kx-cos ky)
+    # d₁ = A sin kx,  d₂ = A sin ky
+    # d₅ = M - 2B(2-cos kx-cos ky)
+    def bhz_ham(kx, ky):
+        eps = C - 2*D*(2 - np.cos(kx) - np.cos(ky))
+        d1  = A * np.sin(kx)
+        d2  = A * np.sin(ky)
+        d5  = M - 2*B*(2 - np.cos(kx) - np.cos(ky))
+        # Explicit 4×4:
+        # H[0][0]=ε+d5, H[0][3]=d1-id2
+        # H[1][1]=ε+d5, H[1][2]=d1+id2
+        # H[2][1]=d1-id2, H[2][2]=ε-d5
+        # H[3][0]=d1+id2, H[3][3]=ε-d5
+        H = np.zeros((4, 4), dtype=complex)
+        H[0, 0] = eps + d5;  H[0, 3] = d1 - 1j*d2
+        H[1, 1] = eps + d5;  H[1, 2] = d1 + 1j*d2
+        H[2, 1] = d1 - 1j*d2; H[2, 2] = eps - d5
+        H[3, 0] = d1 + 1j*d2; H[3, 3] = eps - d5
+        return H
+
+    def lower_evecs(kx, ky):
+        """Return 4×2 lower eigenvector matrix."""
+        H = bhz_ham(kx, ky)
+        evals, evecs = np.linalg.eigh(H)
+        # eigh returns sorted eigenvalues; lower 2 are indices 0,1
+        return evecs[:, :2]
+
+    def wilson_wcc(ky_val):
+        """Compute 2 WCC values for a fixed ky."""
+        kxs = 2 * np.pi * np.arange(n_kx) / n_kx
+        W = np.eye(2, dtype=complex)
+        for ix in range(n_kx):
+            kx0 = kxs[ix]
+            kx1 = 2 * np.pi * ((ix + 1) % n_kx) / n_kx
+            Q0 = lower_evecs(kx0, ky_val)
+            Q1 = lower_evecs(kx1, ky_val)
+            Ov = Q0.conj().T @ Q1   # 2×2 overlap
+            W = W @ Ov
+        evals = np.linalg.eigvals(W)
+        wcc = sorted((-np.angle(ev) / (2 * np.pi)) % 1.0 for ev in evals)
+        return wcc  # list of 2 values in [0,1)
+
+    def z2_from_wcc_grid(wcc_grid):
+        """Count θ=0.5 crossings over BOTH WCC branches with continuity tracking.
+
+        Sorting at each step loses branch connectivity: when the two WCC bands
+        wind past each other, sorting swaps their labels, creating false crossings
+        and missing real ones.  We instead assign each new pair of WCC values to
+        the existing tracked branches by minimising total circular distance, then
+        count sign changes of (branch - 0.5) on each branch independently.
+        """
+        n = len(wcc_grid)
+        if n < 2:
+            return 0
+
+        def circ_dist(a, b):
+            d = abs(a - b)
+            return 1.0 - d if d > 0.5 else d
+
+        track = list(wcc_grid[0])   # [branch0, branch1]
+        crossings = 0
+
+        for i in range(1, n):
+            c0, c1 = wcc_grid[i][0], wcc_grid[i][1]
+            d_straight = circ_dist(c0, track[0]) + circ_dist(c1, track[1])
+            d_crossed  = circ_dist(c1, track[0]) + circ_dist(c0, track[1])
+
+            if d_straight <= d_crossed:
+                nxt = [c0, c1]
+            else:
+                nxt = [c1, c0]
+
+            for b in range(2):
+                w0 = track[b] - 0.5
+                w1 = nxt[b]   - 0.5
+                if w0 * w1 < 0:
+                    crossings += 1
+
+            track = nxt
+
+        return crossings % 2
+
+    def compute_wcc_spectrum(M_val):
+        """Full WCC spectrum: ky in [0, π]."""
+        ky_vals = np.linspace(0, np.pi, n_ky).tolist()
+        wcc_grid = []
+        for ky in ky_vals:
+            # Temporarily patch closure M → M_val
+            nonlocal M
+            M_save = M
+            M = M_val
+            w = wilson_wcc(ky)
+            M = M_save
+            wcc_grid.append(w)
+        z2 = z2_from_wcc_grid(wcc_grid)
+        return ky_vals, [w[0] for w in wcc_grid], [w[1] for w in wcc_grid], z2
+
+    def gap_at(kx, ky, M_val):
+        nonlocal M
+        M_save = M
+        M = M_val
+        H = bhz_ham(kx, ky)
+        M = M_save
+        evals = np.linalg.eigvalsh(H)
+        return float(abs(evals[2] - evals[1]))
+
+    # ── Full WCC spectrum at nominal M ───────────────────────────────────
+    ky_vals, wcc1, wcc2, z2 = compute_wcc_spectrum(M)
+
+    phase_label = f"Topological (Z\u2082=1)" if z2 == 1 else f"Trivial (Z\u2082=0)"
+
+    # ── Phase diagram sweep ───────────────────────────────────────────────
+    if sweep_param != "M":
+        raise ValueError(f"_wilson_loop_frames: unsupported sweep_param {sweep_param!r} — use 'M'")
+    sweep_vals = np.linspace(param_min, param_max, n_sweep).tolist()
+    sweep_z2 = []
+    sweep_phase = []
+    for Mp in sweep_vals:
+        # Use coarser grid for sweep
+        ky_s = np.linspace(0, np.pi, max(8, n_ky // 4)).tolist()
+        wcc_g = []
+        for ky in ky_s:
+            nonlocal_M_save = M
+            M_tmp = Mp
+            # direct compute without closure patch
+            kxs = 2 * np.pi * np.arange(n_kx) / n_kx
+            W = np.eye(2, dtype=complex)
+            for ix in range(n_kx):
+                kx0 = kxs[ix]
+                kx1 = 2 * np.pi * ((ix + 1) % n_kx) / n_kx
+                eps0 = C - 2*D*(2 - np.cos(kx0) - np.cos(ky))
+                d1_0 = A * np.sin(kx0);  d2_0 = A * np.sin(ky)
+                d5_0 = M_tmp - 2*B*(2 - np.cos(kx0) - np.cos(ky))
+                H0 = np.zeros((4,4),dtype=complex)
+                H0[0,0]=eps0+d5_0; H0[0,3]=d1_0-1j*d2_0
+                H0[1,1]=eps0+d5_0; H0[1,2]=d1_0+1j*d2_0
+                H0[2,1]=d1_0-1j*d2_0; H0[2,2]=eps0-d5_0
+                H0[3,0]=d1_0+1j*d2_0; H0[3,3]=eps0-d5_0
+                eps1 = C - 2*D*(2 - np.cos(kx1) - np.cos(ky))
+                d1_1 = A * np.sin(kx1);  d2_1 = A * np.sin(ky)
+                d5_1 = M_tmp - 2*B*(2 - np.cos(kx1) - np.cos(ky))
+                H1 = np.zeros((4,4),dtype=complex)
+                H1[0,0]=eps1+d5_1; H1[0,3]=d1_1-1j*d2_1
+                H1[1,1]=eps1+d5_1; H1[1,2]=d1_1+1j*d2_1
+                H1[2,1]=d1_1-1j*d2_1; H1[2,2]=eps1-d5_1
+                H1[3,0]=d1_1+1j*d2_1; H1[3,3]=eps1-d5_1
+                _, ev0 = np.linalg.eigh(H0); Q0 = ev0[:,:2]
+                _, ev1 = np.linalg.eigh(H1); Q1 = ev1[:,:2]
+                W = W @ (Q0.conj().T @ Q1)
+            evals = np.linalg.eigvals(W)
+            wcc_g.append(sorted((-np.angle(ev)/(2*np.pi)) % 1.0 for ev in evals))
+        z2_sweep = z2_from_wcc_grid(wcc_g)
+        sweep_z2.append(z2_sweep)
+        sweep_phase.append("Topological" if z2_sweep == 1 else "Trivial")
+
+    return {
+        "M": M, "A": A, "B": B, "C": C, "D": D,
+        "n_kx": n_kx, "n_ky": n_ky,
+        "scenario": scenario,
+        "z2": z2,
+        "phase_label": phase_label,
+        "gap_gamma": gap_at(0.0, 0.0, M),
+        "gap_m_pt":  gap_at(np.pi, np.pi, M),
+        "ky_vals": ky_vals,
+        "wcc1": wcc1,
+        "wcc2": wcc2,
+        "sweep_param": sweep_param,
+        "param_min": param_min,
+        "param_max": param_max,
+        "sweep_vals": sweep_vals,
+        "sweep_z2": sweep_z2,
+        "sweep_phase": sweep_phase,
+        "source": source,
+    }
+
+
+def _wilson_loop_page(data: dict, title: str = "Wilson Loop & Wannier Charge Centers — BHZ Z₂ Topological Insulator") -> str:
+    """HTML page: WCC spectrum + Z₂ phase diagram for the BHZ model."""
+    import json as _json  # noqa: PLC0415
+    data_json = _json.dumps(data, ensure_ascii=False)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  :root {{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --topo:#3fb950; --trivial:#8b949e;
+    --wcc1:#f78166; --wcc2:#d2a8ff;
+  }}
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+        display:flex;flex-direction:column;align-items:center;padding:32px 16px;gap:24px}}
+  h1{{font-size:1.3rem;color:var(--accent);text-align:center}}
+  .subtitle{{color:var(--muted);font-size:0.9rem;text-align:center}}
+  .card{{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+         padding:20px;width:100%;max-width:860px}}
+  .card h2{{font-size:1rem;color:var(--muted);margin-bottom:14px}}
+  .info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}}
+  .info-box{{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+             padding:12px;text-align:center}}
+  .info-box .label{{font-size:0.75rem;color:var(--muted);margin-bottom:6px}}
+  .info-box .value{{font-size:1.4rem;font-weight:700}}
+  .topo{{color:var(--topo)}} .trivial{{color:var(--trivial)}}
+  canvas{{display:block;width:100%;cursor:crosshair}}
+  .legend{{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:0.8rem;color:var(--muted)}}
+  .dot{{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:4px}}
+  .footer{{color:var(--muted);font-size:0.75rem;text-align:center}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">BHZ model &nbsp;·&nbsp; H(k)=εI+d₁Γ₁+d₂Γ₂+d₅Γ₅ &nbsp;·&nbsp; Wilson loop W(ky)=∏Q†Q′ &nbsp;·&nbsp; Z₂=parity of WCC crossings</p>
+
+<div class="card">
+  <h2>Parameters &amp; Z₂ Invariant</h2>
+  <div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div class="card">
+  <h2>Wannier Charge Centers θ(ky) — Wilson loop spectrum along kx, vs ky ∈ [0, π]</h2>
+  <canvas id="wccPlot" height="300"></canvas>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--wcc1)"></span>θ₁(ky) lower WCC</span>
+    <span><span class="dot" style="background:var(--wcc2)"></span>θ₂(ky) upper WCC</span>
+    <span style="border-left:1px dashed #484f58;padding-left:12px">Dashed line: θ=0.5 (crossing reference)</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Z₂ Phase Diagram — Z₂ vs M &nbsp;(topological when 0&lt;M/B&lt;4, gap closes at M=0 and M=4B)</h2>
+  <canvas id="phasePlot" height="200"></canvas>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--topo)"></span>Topological (Z₂=1)</span>
+    <span><span class="dot" style="background:var(--trivial)"></span>Trivial (Z₂=0)</span>
+  </div>
+</div>
+
+<p class="footer">Source: {data.get("source","python-reference")} &nbsp;·&nbsp; n_kx={data.get("n_kx",40)} &nbsp;·&nbsp; n_ky={data.get("n_ky",40)}</p>
+
+<script>
+(function(){{
+  const DATA = {data_json};
+
+  // ── Info grid ────────────────────────────────────────────────────────────
+  const grid = document.getElementById('infoGrid');
+  const isTopo = DATA.z2 === 1;
+  [
+    ['M', DATA.M?.toFixed(2)],
+    ['A', DATA.A?.toFixed(2)],
+    ['B', DATA.B?.toFixed(2)],
+    ['Z₂', DATA.z2],
+    ['Phase', DATA.phase_label],
+    ['Gap Γ', DATA.gap_gamma?.toFixed(3)],
+    ['Gap M', DATA.gap_m_pt?.toFixed(3)],
+  ].forEach(([lbl,val])=>{{
+    const box=document.createElement('div'); box.className='info-box';
+    const hi=(lbl==='Z₂'&&val===1)||(lbl==='Phase'&&String(val).includes('Topo'));
+    box.innerHTML=`<div class="label">${{lbl}}</div><div class="value ${{hi?'topo':'trivial'}}">${{val}}</div>`;
+    grid.appendChild(box);
+  }});
+
+  // ── WCC spectrum plot ────────────────────────────────────────────────────
+  const wccCanvas = document.getElementById('wccPlot');
+  function drawWCC(){{
+    const dpr=window.devicePixelRatio||1;
+    const W=wccCanvas.clientWidth, H=parseInt(wccCanvas.getAttribute('height'));
+    wccCanvas.width=W*dpr; wccCanvas.height=H*dpr;
+    const ctx=wccCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+    const pad={{l:50,r:20,t:20,b:40}};
+    const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+    const ky=DATA.ky_vals, w1=DATA.wcc1, w2=DATA.wcc2;
+    if(!ky||ky.length===0)return;
+    const kyMin=ky[0], kyMax=ky[ky.length-1];
+    function sx(v){{return pad.l+(v-kyMin)/(kyMax-kyMin)*pw;}}
+    function sy(v){{return pad.t+(1-v)*ph;}}  // v in [0,1)
+
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+    // Grid
+    ctx.strokeStyle='#21262d'; ctx.lineWidth=1;
+    [0,0.25,0.5,0.75,1].forEach(v=>{{
+      ctx.beginPath(); ctx.moveTo(pad.l,sy(v)); ctx.lineTo(W-pad.r,sy(v)); ctx.stroke();
+    }});
+
+    // θ=0.5 reference line
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1; ctx.setLineDash([5,4]);
+    ctx.beginPath(); ctx.moveTo(pad.l,sy(0.5)); ctx.lineTo(W-pad.r,sy(0.5)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // WCC curves
+    function drawCurve(arr, color){{
+      ctx.strokeStyle=color; ctx.lineWidth=2;
+      ctx.beginPath();
+      arr.forEach((v,i)=>{{
+        const x=sx(ky[i]), y=sy(v);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      }});
+      ctx.stroke();
+    }}
+    drawCurve(w1,'#f78166');
+    drawCurve(w2,'#d2a8ff');
+
+    // Axes labels
+    ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+    [0,0.5,1].forEach(v=>{{ ctx.fillText(v.toFixed(1),pad.l-4,sy(v)+4); }});
+    ctx.textAlign='center';
+    [0, Math.PI/2, Math.PI].forEach(v=>{{
+      ctx.fillText(v===0?'0':v===Math.PI?'π':'π/2', sx(v), H-pad.b+14);
+    }});
+    ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+    ctx.textAlign='left'; ctx.fillText('θ',2,pad.t+12);
+    ctx.textAlign='center'; ctx.fillText('ky',W/2,H-4);
+  }}
+  drawWCC();
+
+  // ── Phase diagram ────────────────────────────────────────────────────────
+  const phCanvas=document.getElementById('phasePlot');
+  function drawPhase(){{
+    const dpr=window.devicePixelRatio||1;
+    const W=phCanvas.clientWidth, H=parseInt(phCanvas.getAttribute('height'));
+    phCanvas.width=W*dpr; phCanvas.height=H*dpr;
+    const ctx=phCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+    const pad={{l:50,r:20,t:20,b:40}};
+    const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+    const sv=DATA.sweep_vals, sz=DATA.sweep_z2;
+    if(!sv||sv.length===0)return;
+    const smin=sv[0], smax=sv[sv.length-1];
+    function sx(v){{return pad.l+(v-smin)/(smax-smin)*pw;}}
+    function sy(z){{return pad.t+(1-z)*ph;}}
+
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+    // Filled regions
+    for(let i=0;i<sv.length-1;i++){{
+      const c=sz[i]===1?'#3fb95033':'#8b949e22';
+      ctx.fillStyle=c;
+      ctx.fillRect(sx(sv[i]),pad.t,sx(sv[i+1])-sx(sv[i]),ph);
+    }}
+
+    // Step-function Z₂ line
+    ctx.lineWidth=2.5;
+    for(let i=0;i<sv.length-1;i++){{
+      ctx.strokeStyle=sz[i]===1?'#3fb950':'#8b949e';
+      ctx.beginPath(); ctx.moveTo(sx(sv[i]),sy(sz[i])); ctx.lineTo(sx(sv[i+1]),sy(sz[i])); ctx.stroke();
+    }}
+
+    // Transition markers: M=0 and M=4B
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    [0, 4*DATA.B].forEach(mx=>{{
+      if(mx>=smin&&mx<=smax){{
+        ctx.beginPath(); ctx.moveTo(sx(mx),pad.t); ctx.lineTo(sx(mx),H-pad.b); ctx.stroke();
+      }}
+    }});
+    ctx.setLineDash([]);
+
+    // Axes
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+
+    ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+    ctx.fillText('0',pad.l-4,sy(0)+4); ctx.fillText('1',pad.l-4,sy(1)+4);
+    ctx.textAlign='center';
+    [smin,(smin+smax)/2,smax].forEach(v=>{{ ctx.fillText(v.toFixed(1),sx(v),H-pad.b+14); }});
+    [0,4*DATA.B].forEach(v=>{{ if(v>=smin&&v<=smax) ctx.fillText(v===0?'0':`4B=${{(4*DATA.B).toFixed(1)}}`,sx(v),H-pad.b+14); }});
+    ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+    ctx.textAlign='left'; ctx.fillText('Z₂',2,pad.t+12);
+    ctx.textAlign='center'; ctx.fillText('M',W/2,H-4);
+  }}
+  drawPhase();
+  window.addEventListener('resize',()=>{{drawWCC();drawPhase();}});
+}})();
+</script>
+</body>
+</html>"""
+
+
 def _second_chern_frames(
     m: float = 1.0,
     t: float = 1.0,
@@ -10993,7 +11395,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -11160,6 +11562,17 @@ def main() -> int:
   parser.add_argument("--tenfold-param-min",  type=float, default=-2.0, help="sweep parameter minimum")
   parser.add_argument("--tenfold-param-max",  type=float, default=2.0,  help="sweep parameter maximum")
   parser.add_argument("--tenfold-n-sweep",    type=int,   default=80,   help="number of sweep points")
+  parser.add_argument("--wilson-loop-M",           type=float, default=1.0,  help="BHZ mass parameter M (band-inversion strength)")
+  parser.add_argument("--wilson-loop-A",           type=float, default=1.0,  help="BHZ velocity parameter A")
+  parser.add_argument("--wilson-loop-B",           type=float, default=1.0,  help="BHZ curvature parameter B")
+  parser.add_argument("--wilson-loop-C",           type=float, default=0.0,  help="BHZ particle-hole asymmetry C")
+  parser.add_argument("--wilson-loop-D",           type=float, default=0.0,  help="BHZ particle-hole asymmetry D")
+  parser.add_argument("--wilson-loop-nkx",         type=int,   default=40,   help="k-grid points along kx for Wilson loop")
+  parser.add_argument("--wilson-loop-nky",         type=int,   default=40,   help="k-grid points along ky for WCC spectrum")
+  parser.add_argument("--wilson-loop-sweep-param", default="M",              help="parameter to sweep in phase_diagram (only M supported)")
+  parser.add_argument("--wilson-loop-param-min",   type=float, default=-1.0, help="sweep parameter minimum")
+  parser.add_argument("--wilson-loop-param-max",   type=float, default=5.0,  help="sweep parameter maximum")
+  parser.add_argument("--wilson-loop-n-sweep",     type=int,   default=40,   help="number of sweep points")
   parser.add_argument("--second-chern-m",         type=float, default=1.0,  help="Zhang-Hu mass parameter m")
   parser.add_argument("--second-chern-t",         type=float, default=1.0,  help="Zhang-Hu hopping t")
   parser.add_argument("--second-chern-nk",        type=int,   default=6,    help="k-grid points per dimension (nk^4 hypercubes)")
@@ -12068,6 +12481,27 @@ def main() -> int:
     path.write_text(_tenfold_page(tenfold_data, title="10-Fold Way — Altland-Zirnbauer Topological Classification"), encoding="utf-8")
     generated.append(path)
 
+  # ── M36: Wilson Loop & Wannier Charge Centers ─────────────────────────────
+  if args.scenario in {"wilson_loop", "all"}:
+    wl_data = _wilson_loop_frames(
+        M=args.wilson_loop_M,
+        A=args.wilson_loop_A,
+        B=args.wilson_loop_B,
+        C=args.wilson_loop_C,
+        D=args.wilson_loop_D,
+        n_kx=args.wilson_loop_nkx,
+        n_ky=args.wilson_loop_nky,
+        scenario="phase_diagram",
+        sweep_param=args.wilson_loop_sweep_param,
+        param_min=args.wilson_loop_param_min,
+        param_max=args.wilson_loop_param_max,
+        n_sweep=args.wilson_loop_n_sweep,
+        source="python-reference",
+    )
+    path = out_dir / "quantum_wilson_loop.html"
+    path.write_text(_wilson_loop_page(wl_data, title="Wilson Loop & Wannier Charge Centers — BHZ Z₂ Topological Insulator"), encoding="utf-8")
+    generated.append(path)
+
   # ── M35: Second Chern Number & 4D Quantum Hall Effect ─────────────────────
   if args.scenario in {"second_chern", "all"}:
     sc_data = _second_chern_frames(
@@ -12135,6 +12569,7 @@ def main() -> int:
         "spectral":           "quantum_spectral",
         "tenfold":            "quantum_tenfold",
         "second_chern":       "quantum_second_chern",
+        "wilson_loop":        "quantum_wilson_loop",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
