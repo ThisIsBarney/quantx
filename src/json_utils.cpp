@@ -1617,6 +1617,37 @@ std::string tenfold_result_to_json(const TenfoldResult& r) {
   return j.dump();
 }
 
+SecondChernOptions second_chern_options_from_json(const std::string& json_str) {
+  auto j = json::parse(json_str);
+  SecondChernOptions o;
+  if (j.contains("m"))           o.m           = j["m"].get<double>();
+  if (j.contains("t"))           o.t           = j["t"].get<double>();
+  if (j.contains("n_k"))         o.n_k         = j["n_k"].get<int>();
+  if (j.contains("scenario"))    o.scenario    = j["scenario"].get<std::string>();
+  if (j.contains("param_min"))   o.param_min   = j["param_min"].get<double>();
+  if (j.contains("param_max"))   o.param_max   = j["param_max"].get<double>();
+  if (j.contains("n_sweep"))     o.n_sweep     = j["n_sweep"].get<int>();
+  if (j.contains("sweep_param")) o.sweep_param = j["sweep_param"].get<std::string>();
+  return o;
+}
+
+std::string second_chern_result_to_json(const SecondChernResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["m"]            = r.m;
+  j["t"]            = r.t;
+  j["scenario"]     = r.scenario;
+  j["second_chern"] = r.second_chern;
+  j["phase_label"]  = r.phase_label;
+  j["sweep_vals"]   = r.sweep_vals;
+  j["sweep_c2"]     = r.sweep_c2;
+  j["sweep_phase"]  = r.sweep_phase;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 SpectralOptions spectral_options_from_json(const std::string& json_str) {
   auto j = json::parse(json_str);
   SpectralOptions o;

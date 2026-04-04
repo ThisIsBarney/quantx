@@ -62,6 +62,7 @@ int main(int argc, char** argv) {
     std::string mbl_path;
     std::string spectral_path;
     std::string tenfold_path;
+    std::string second_chern_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -96,6 +97,7 @@ int main(int argc, char** argv) {
     app.add_option("--mbl", mbl_path, "mbl options json path (run Many-Body Localization disordered XXZ chain simulation)");
     app.add_option("--spectral", spectral_path, "spectral options json path (run dynamical structure factor S(k,omega) simulation)");
     app.add_option("--tenfold", tenfold_path, "tenfold options json path (run 10-fold way Altland-Zirnbauer topological classification)");
+    app.add_option("--second-chern", second_chern_path, "second-chern options json path (run second Chern number / 4D Quantum Hall Effect)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -143,11 +145,11 @@ int main(int argc, char** argv) {
         tfi_path.empty() && ssh_path.empty() &&
         kitaev_path.empty() && anderson_path.empty() &&
         chern_path.empty() && hofstadter_path.empty() && mbl_path.empty() &&
-        spectral_path.empty() && tenfold_path.empty()) {
+        spectral_path.empty() && tenfold_path.empty() && second_chern_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
-          "--anderson, --chern, --hofstadter, --mbl, --spectral, or --tenfold");
+          "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, or --second-chern");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -169,12 +171,13 @@ int main(int argc, char** argv) {
                   (!hofstadter_path.empty()   ? 1 : 0) +
                   (!mbl_path.empty()          ? 1 : 0) +
                   (!spectral_path.empty()     ? 1 : 0) +
-                  (!tenfold_path.empty()      ? 1 : 0);
+                  (!tenfold_path.empty()      ? 1 : 0) +
+                  (!second_chern_path.empty() ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
             "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
-            "--anderson, --chern, --hofstadter, --mbl, --spectral, or --tenfold");
+            "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, or --second-chern");
       }
     }
 
@@ -360,6 +363,14 @@ int main(int argc, char** argv) {
       const qx::TenfoldOptions tenfold_opts = qx::tenfold_options_from_json(tenfold_json);
       qx::log::info("loaded tenfold options file: " + tenfold_path);
       output_json = qx::tenfold_result_to_json(qx::run_tenfold(tenfold_opts));
+    } else if (!second_chern_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --second-chern mode");
+      }
+      const std::string sc_json = read_text_file(second_chern_path);
+      const qx::SecondChernOptions sc_opts = qx::second_chern_options_from_json(sc_json);
+      qx::log::info("loaded second-chern options file: " + second_chern_path);
+      output_json = qx::second_chern_result_to_json(qx::run_second_chern(sc_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

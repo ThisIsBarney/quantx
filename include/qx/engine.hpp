@@ -62,5 +62,7 @@ MBLResult run_mbl(const MBLOptions& opts);
 SpectralResult run_spectral(const SpectralOptions& opts);
 // Run 10-fold way topological classification (Altland-Zirnbauer).
 TenfoldResult run_tenfold(const TenfoldOptions& opts);
+// Run second Chern number computation for the 4D Quantum Hall Effect (Zhang-Hu model).
+SecondChernResult run_second_chern(const SecondChernOptions& opts);
 
 }  // namespace qx
