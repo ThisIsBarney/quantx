@@ -66,5 +66,7 @@ TenfoldResult run_tenfold(const TenfoldOptions& opts);
 SecondChernResult run_second_chern(const SecondChernOptions& opts);
 // Run Wilson loop / Wannier Charge Center computation for the BHZ Z₂ topological insulator.
 WilsonLoopResult run_wilson_loop(const WilsonLoopOptions& opts);
+// Run edge states / surface spectrum computation for the BHZ strip geometry.
+EdgeStatesResult run_edge_states(const EdgeStatesOptions& opts);
 
 }  // namespace qx

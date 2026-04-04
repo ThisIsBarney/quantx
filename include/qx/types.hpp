@@ -972,6 +972,49 @@ struct TenfoldResult {
   std::string message;
 };
 
+// ── M37: Edge States / Surface Spectrum (BHZ strip geometry) ──────────────────
+//
+// Computes the energy band structure of the BHZ model in a strip geometry:
+// y finite (N_y sites, open BCs), x periodic (kx a good quantum number).
+// For each kx: diagonalize (4*N_y)×(4*N_y) block-tridiagonal Hamiltonian.
+// Topological edge states (Z₂=1, 0<M/B<4) appear as in-gap bands colored
+// by edge localization weight (red=edge, gray=bulk).
+
+struct EdgeStatesOptions {
+  double M{1.0};          // BHZ mass parameter
+  double A{1.0};          // BHZ velocity (off-diagonal coupling)
+  double B{1.0};          // BHZ curvature (quadratic k term)
+  double C{0.0};          // particle-hole asymmetry C
+  double D{0.0};          // particle-hole asymmetry D
+  int    n_kx{60};        // number of kx grid points in [-π, π]
+  int    n_y{20};         // number of sites in y direction (strip width)
+  std::string scenario{"spectrum"};   // spectrum | phase_diagram
+  std::string sweep_param{"M"};
+  double param_min{-1.0};
+  double param_max{5.0};
+  int    n_sweep{40};
+};
+
+struct EdgeStatesResult {
+  bool ok{false};
+  double M{0.0}, A{0.0}, B{0.0};
+  int    n_y{0};
+  int    n_bands{0};       // = 4 * n_y
+  std::string scenario;
+  int    z2{0};
+  std::string phase_label;
+  // Band spectrum (flattened, size = n_kx * n_bands)
+  std::vector<double> kx_vals;    // length n_kx
+  std::vector<double> energies;   // [kx_idx * n_bands + band_idx]
+  std::vector<double> edge_weight; // same shape, 0=bulk 1=edge
+  // Phase diagram
+  std::vector<double>      sweep_vals;
+  std::vector<int>         sweep_z2;
+  std::vector<std::string> sweep_phase;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the
