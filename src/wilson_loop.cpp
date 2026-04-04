@@ -298,20 +298,58 @@ static std::array<double,2> wilson_wcc(double ky, int n_kx,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// D.  Z₂ invariant from WCC evolution
-//     Sweep ky from 0 to π; count crossings of θ = 0.5 by the lower WCC.
-//     Odd count → Z₂ = 1.
+// D.  Z₂ invariant from WCC evolution — branch-continuity crossing count
+//
+// The Z₂ is the parity of the total number of times any WCC band crosses
+// the reference line θ = 0.5 as ky sweeps from 0 to π.
+//
+// Crucially, the two WCC eigenvalues at each ky step are unordered phases.
+// Simply sorting and tracking only the minimum ("lower branch") loses branch
+// connectivity: when the two bands wind past each other, sorting swaps their
+// labels, creating false crossings at the swap point and silently missing
+// real θ=0.5 crossings — returning Z₂=0 for topological inputs.
+//
+// Fix: track both branches by continuity. At each ky step, assign the two
+// new WCC values to the existing tracked branches by minimising total
+// displacement, then count θ=0.5 crossings over BOTH branches.
 // ─────────────────────────────────────────────────────────────────────────────
 
 static int z2_from_wcc(const std::vector<std::array<double,2>>& wcc_grid) {
-    // Count sign changes of (wcc[0] - 0.5) across ky in [0, π]
-    // (Only need half BZ for TR-invariant system)
-    int crossings = 0;
     int n = static_cast<int>(wcc_grid.size());
-    for (int i = 0; i < n - 1; ++i) {
-        double w0 = wcc_grid[i][0]   - 0.5;
-        double w1 = wcc_grid[i+1][0] - 0.5;
-        if (w0 * w1 < 0) ++crossings;
+    if (n < 2) return 0;
+
+    // Initialise tracked branches at ky=0 (sorted order is fine as starting point)
+    double track[2] = { wcc_grid[0][0], wcc_grid[0][1] };
+    int crossings = 0;
+
+    for (int i = 1; i < n; ++i) {
+        double c0 = wcc_grid[i][0], c1 = wcc_grid[i][1];
+
+        // Assign by continuity: choose pairing that minimises total |Δθ|.
+        // Account for wrap-around in [0,1): distance on the circle.
+        auto circ_dist = [](double a, double b) -> double {
+            double d = std::abs(a - b);
+            return d > 0.5 ? 1.0 - d : d;
+        };
+        double d_straight = circ_dist(c0, track[0]) + circ_dist(c1, track[1]);
+        double d_crossed  = circ_dist(c1, track[0]) + circ_dist(c0, track[1]);
+
+        double next[2];
+        if (d_straight <= d_crossed) {
+            next[0] = c0; next[1] = c1;
+        } else {
+            next[0] = c1; next[1] = c0;
+        }
+
+        // Count θ=0.5 crossings on each branch (sign change of branch - 0.5)
+        for (int b = 0; b < 2; ++b) {
+            double w0 = track[b] - 0.5;
+            double w1 = next[b]  - 0.5;
+            if (w0 * w1 < 0) ++crossings;
+        }
+
+        track[0] = next[0];
+        track[1] = next[1];
     }
     return crossings % 2;
 }

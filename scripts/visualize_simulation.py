@@ -10673,13 +10673,43 @@ def _wilson_loop_frames(
         return wcc  # list of 2 values in [0,1)
 
     def z2_from_wcc_grid(wcc_grid):
-        """Count crossings of lower WCC through 0.5; parity = Z₂."""
+        """Count θ=0.5 crossings over BOTH WCC branches with continuity tracking.
+
+        Sorting at each step loses branch connectivity: when the two WCC bands
+        wind past each other, sorting swaps their labels, creating false crossings
+        and missing real ones.  We instead assign each new pair of WCC values to
+        the existing tracked branches by minimising total circular distance, then
+        count sign changes of (branch - 0.5) on each branch independently.
+        """
+        n = len(wcc_grid)
+        if n < 2:
+            return 0
+
+        def circ_dist(a, b):
+            d = abs(a - b)
+            return 1.0 - d if d > 0.5 else d
+
+        track = list(wcc_grid[0])   # [branch0, branch1]
         crossings = 0
-        for i in range(len(wcc_grid) - 1):
-            w0 = wcc_grid[i][0] - 0.5
-            w1 = wcc_grid[i+1][0] - 0.5
-            if w0 * w1 < 0:
-                crossings += 1
+
+        for i in range(1, n):
+            c0, c1 = wcc_grid[i][0], wcc_grid[i][1]
+            d_straight = circ_dist(c0, track[0]) + circ_dist(c1, track[1])
+            d_crossed  = circ_dist(c1, track[0]) + circ_dist(c0, track[1])
+
+            if d_straight <= d_crossed:
+                nxt = [c0, c1]
+            else:
+                nxt = [c1, c0]
+
+            for b in range(2):
+                w0 = track[b] - 0.5
+                w1 = nxt[b]   - 0.5
+                if w0 * w1 < 0:
+                    crossings += 1
+
+            track = nxt
+
         return crossings % 2
 
     def compute_wcc_spectrum(M_val):
