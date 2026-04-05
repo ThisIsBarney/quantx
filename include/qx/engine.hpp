@@ -68,5 +68,7 @@ SecondChernResult run_second_chern(const SecondChernOptions& opts);
 WilsonLoopResult run_wilson_loop(const WilsonLoopOptions& opts);
 // Run edge states / surface spectrum computation for the BHZ strip geometry.
 EdgeStatesResult run_edge_states(const EdgeStatesOptions& opts);
+// Run Haldane model (Quantum Anomalous Hall Effect) — Chern number, Berry curvature, phase diagram.
+HaldaneResult    run_haldane(const HaldaneOptions& opts);
 
 }  // namespace qx
