@@ -64,6 +64,7 @@ from viz.topology import (
     _second_chern_frames, _second_chern_page,
     _edge_states_frames, _edge_states_page,
     _weyl_frames, _weyl_page,
+    _haldane_frames, _haldane_page,
 )
 
 
@@ -80,7 +81,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "weyl", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -276,6 +277,16 @@ def main() -> int:
   parser.add_argument("--edge-states-param-min",   type=float, default=-1.0, help="sweep parameter minimum")
   parser.add_argument("--edge-states-param-max",   type=float, default=5.0,  help="sweep parameter maximum")
   parser.add_argument("--edge-states-n-sweep",     type=int,   default=40,   help="number of sweep points")
+  # M38: Haldane Model (QAH)
+  parser.add_argument("--haldane-t1",          type=float, default=1.0,       help="Haldane NN hopping t1")
+  parser.add_argument("--haldane-t2",          type=float, default=0.1,       help="Haldane NNN hopping magnitude t2")
+  parser.add_argument("--haldane-phi",         type=float, default=1.5707963, help="Haldane NNN flux phase phi (radians)")
+  parser.add_argument("--haldane-M",           type=float, default=0.0,       help="Haldane staggered on-site potential M")
+  parser.add_argument("--haldane-nk",          type=int,   default=40,        help="BZ k-grid resolution n_k (n_k^2 points)")
+  parser.add_argument("--haldane-sweep-param", default="M",                   help="parameter to sweep: M | phi")
+  parser.add_argument("--haldane-param-min",   type=float, default=-6.0,      help="sweep parameter minimum")
+  parser.add_argument("--haldane-param-max",   type=float, default=6.0,       help="sweep parameter maximum")
+  parser.add_argument("--haldane-n-sweep",     type=int,   default=60,        help="number of sweep points")
   # M39: Weyl Semimetal & Surface Fermi Arcs
   parser.add_argument("--weyl-m",             type=float, default=2.0,  help="Weyl mass parameter m (nodes at kz=+-arccos(m-2) for 1<m<3)")
   parser.add_argument("--weyl-nk",            type=int,   default=20,   help="kx-ky grid resolution for Chern/arc computations")
@@ -1250,6 +1261,30 @@ def main() -> int:
       path.write_text(_edge_states_page(es_data, title="Edge States / Surface Spectrum — BHZ Topological Insulator"), encoding="utf-8")
       generated.append(path)
 
+  # ── M38: Haldane Model (Quantum Anomalous Hall Effect) ─────────────────────
+  if args.scenario in {"haldane", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("haldane skipped: numpy not available", file=sys.stderr)
+    else:
+      h_data = _haldane_frames(
+          t1=args.haldane_t1,
+          t2=args.haldane_t2,
+          phi=args.haldane_phi,
+          M_val=args.haldane_M,
+          n_k=args.haldane_nk,
+          scenario="phase_diagram",
+          sweep_param=args.haldane_sweep_param,
+          param_min=args.haldane_param_min,
+          param_max=args.haldane_param_max,
+          n_sweep=args.haldane_n_sweep,
+          source="python-reference",
+      )
+      path = out_dir / "quantum_haldane.html"
+      path.write_text(_haldane_page(h_data, title="Haldane Model — Quantum Anomalous Hall Effect"), encoding="utf-8")
+      generated.append(path)
+
   # ── M39: Weyl Semimetal & Surface Fermi Arcs ──────────────────────────────
   if args.scenario in {"weyl", "all"}:
     try:
@@ -1271,6 +1306,7 @@ def main() -> int:
       )
       path = out_dir / "quantum_weyl.html"
       path.write_text(_weyl_page(weyl_data, title="Weyl Semimetal & Surface Fermi Arcs"), encoding="utf-8")
+      generated.append(path)
       generated.append(path)
 
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
@@ -1325,6 +1361,7 @@ def main() -> int:
         "second_chern":       "quantum_second_chern",
         "wilson_loop":        "quantum_wilson_loop",
         "edge_states":        "quantum_edge_states",
+        "haldane":            "quantum_haldane",
         "weyl":               "quantum_weyl",
     }
     dash_pages: dict = {}

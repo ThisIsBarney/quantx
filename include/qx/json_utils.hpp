@@ -108,6 +108,10 @@ std::string wilson_loop_result_to_json(const WilsonLoopResult& result);
 EdgeStatesOptions edge_states_options_from_json(const std::string& json);
 // Serialize edge states result to JSON string.
 std::string edge_states_result_to_json(const EdgeStatesResult& result);
+// Parse Haldane model (QAH effect) options from JSON string.
+HaldaneOptions haldane_options_from_json(const std::string& json);
+// Serialize Haldane model result to JSON string.
+std::string    haldane_result_to_json(const HaldaneResult& result);
 // Parse Weyl semimetal options from JSON string.
 WeylOptions weyl_options_from_json(const std::string& json);
 // Serialize Weyl semimetal result to JSON string.

@@ -108,6 +108,7 @@ add_library(qx_core
   src/second_chern.cpp
   src/wilson_loop.cpp
   src/edge_states.cpp
+  src/haldane.cpp
   src/weyl.cpp
   src/json_utils.cpp
 )
