@@ -1422,13 +1422,14 @@ canvas{{width:100%;background:#161b22;border:1px solid #30363d;border-radius:6px
     function ssy(v){{return pad.t+(1-(v-kyMin)/(kyMax-kyMin+1e-12))*ph;}}
 
     function bcColor(v){{
-      const t=v/bcMax;
+      // Diverging red–white–blue: positive→red, zero→white, negative→blue
+      const t=Math.max(-1,Math.min(1,v/bcMax));
       if(t>=0){{
-        const r=Math.round(255*t),b2=Math.round(255*(1-t));
-        return 'rgb('+r+',0,'+b2+')';
+        const c=Math.round(255*(1-t));
+        return 'rgb(255,'+c+','+c+')';
       }}
-      const b2=Math.round(255*(1+t));
-      return 'rgb(0,0,'+b2+')';
+      const c=Math.round(255*(1+t));
+      return 'rgb('+c+','+c+',255)';
     }}
 
     const dotR = Math.max(1.5, pw/DATA.n_k*0.45);

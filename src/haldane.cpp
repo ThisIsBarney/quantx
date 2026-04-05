@@ -309,7 +309,12 @@ HaldaneResult run_haldane(const HaldaneOptions& opts) {
         }
     }
 
-    // ── Ribbon: not implemented (skip) ─────────────────────────────────────
+    // ── Ribbon: not implemented — reject "spectrum" scenario explicitly ────
+    if (opts.scenario == "spectrum") {
+        throw std::runtime_error(
+            "haldane: scenario \"spectrum\" (zigzag ribbon) is not yet implemented; "
+            "use \"chern\" or \"phase_diagram\"");
+    }
     res.n_ribbon_bands = 0;
 
     auto t_end = std::chrono::steady_clock::now();
