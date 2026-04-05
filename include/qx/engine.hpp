@@ -68,5 +68,7 @@ SecondChernResult run_second_chern(const SecondChernOptions& opts);
 WilsonLoopResult run_wilson_loop(const WilsonLoopOptions& opts);
 // Run edge states / surface spectrum computation for the BHZ strip geometry.
 EdgeStatesResult run_edge_states(const EdgeStatesOptions& opts);
+// Run Weyl semimetal & Surface Fermi Arcs computation.
+WeylResult run_weyl(const WeylOptions& opts);
 
 }  // namespace qx

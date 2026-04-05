@@ -1769,5 +1769,48 @@ std::string spectral_result_to_json(const SpectralResult& r) {
   return j.dump();
 }
 
+WeylOptions weyl_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  WeylOptions o;
+  if (j.contains("m"))            o.m_param      = j["m"].get<double>();
+  if (j.contains("n_k"))          o.n_k          = j["n_k"].get<int>();
+  if (j.contains("n_z"))          o.n_z          = j["n_z"].get<int>();
+  if (j.contains("n_kz"))         o.n_kz         = j["n_kz"].get<int>();
+  if (j.contains("fermi_energy")) o.fermi_energy = j["fermi_energy"].get<double>();
+  if (j.contains("scenario"))     o.scenario     = j["scenario"].get<std::string>();
+  if (j.contains("param_min"))    o.param_min    = j["param_min"].get<double>();
+  if (j.contains("param_max"))    o.param_max    = j["param_max"].get<double>();
+  if (j.contains("n_sweep"))      o.n_sweep      = j["n_sweep"].get<int>();
+  return o;
+}
+
+std::string weyl_result_to_json(const WeylResult& r) {
+  json j;
+  j["ok"]            = r.ok;
+  j["m"]             = r.m_param;
+  j["n_k"]           = r.n_k;
+  j["n_z"]           = r.n_z;
+  j["scenario"]      = r.scenario;
+  j["node_kz_pos"]   = r.node_kz_pos;
+  j["node_kz_neg"]   = r.node_kz_neg;
+  j["kz_vals"]       = r.kz_vals;
+  j["chern_kz"]      = r.chern_kz;
+  j["arc_kx"]        = r.arc_kx;
+  j["arc_ky"]        = r.arc_ky;
+  j["arc_weight"]    = r.arc_weight;
+  j["arc_energy"]    = r.arc_energy;
+  j["n_arc_pts"]     = r.n_arc_pts;
+  j["cone_kz"]       = r.cone_kz;
+  j["cone_E_plus"]   = r.cone_E_plus;
+  j["cone_E_minus"]  = r.cone_E_minus;
+  j["sweep_vals"]    = r.sweep_vals;
+  j["sweep_node_kz"] = r.sweep_node_kz;
+  j["sweep_phase"]   = r.sweep_phase;
+  j["elapsed_ms"]    = r.elapsed_ms;
+  j["message"]       = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
 

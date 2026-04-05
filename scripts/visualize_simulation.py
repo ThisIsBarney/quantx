@@ -63,6 +63,7 @@ from viz.topology import (
     _wilson_loop_frames, _wilson_loop_page,
     _second_chern_frames, _second_chern_page,
     _edge_states_frames, _edge_states_page,
+    _weyl_frames, _weyl_page,
 )
 
 
@@ -79,7 +80,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "weyl", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -275,6 +276,15 @@ def main() -> int:
   parser.add_argument("--edge-states-param-min",   type=float, default=-1.0, help="sweep parameter minimum")
   parser.add_argument("--edge-states-param-max",   type=float, default=5.0,  help="sweep parameter maximum")
   parser.add_argument("--edge-states-n-sweep",     type=int,   default=40,   help="number of sweep points")
+  # M39: Weyl Semimetal & Surface Fermi Arcs
+  parser.add_argument("--weyl-m",             type=float, default=2.0,  help="Weyl mass parameter m (nodes at kz=+-arccos(m-2) for 1<m<3)")
+  parser.add_argument("--weyl-nk",            type=int,   default=20,   help="kx-ky grid resolution for Chern/arc computations")
+  parser.add_argument("--weyl-nz",            type=int,   default=20,   help="slab thickness (unit cells in z, open BCs)")
+  parser.add_argument("--weyl-nkz",           type=int,   default=40,   help="number of kz values for Chern sweep")
+  parser.add_argument("--weyl-fermi-energy",  type=float, default=0.0,  help="Fermi level for arc detection")
+  parser.add_argument("--weyl-param-min",     type=float, default=1.1,  help="minimum m for node sweep")
+  parser.add_argument("--weyl-param-max",     type=float, default=2.9,  help="maximum m for node sweep")
+  parser.add_argument("--weyl-n-sweep",       type=int,   default=30,   help="number of m sweep points for node diagram")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1240,6 +1250,29 @@ def main() -> int:
       path.write_text(_edge_states_page(es_data, title="Edge States / Surface Spectrum — BHZ Topological Insulator"), encoding="utf-8")
       generated.append(path)
 
+  # ── M39: Weyl Semimetal & Surface Fermi Arcs ──────────────────────────────
+  if args.scenario in {"weyl", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("weyl skipped: numpy not available", file=sys.stderr)
+    else:
+      weyl_data = _weyl_frames(
+          m_param=args.weyl_m,
+          n_k=args.weyl_nk,
+          n_z=args.weyl_nz,
+          n_kz=args.weyl_nkz,
+          fermi_energy=args.weyl_fermi_energy,
+          scenario="fermi_arc",
+          param_min=args.weyl_param_min,
+          param_max=args.weyl_param_max,
+          n_sweep=args.weyl_n_sweep,
+          source="python-reference",
+      )
+      path = out_dir / "quantum_weyl.html"
+      path.write_text(_weyl_page(weyl_data, title="Weyl Semimetal & Surface Fermi Arcs"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -1292,6 +1325,7 @@ def main() -> int:
         "second_chern":       "quantum_second_chern",
         "wilson_loop":        "quantum_wilson_loop",
         "edge_states":        "quantum_edge_states",
+        "weyl":               "quantum_weyl",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

@@ -1015,6 +1015,55 @@ struct EdgeStatesResult {
   std::string message;
 };
 
+// ── M39: Weyl Semimetal & Surface Fermi Arcs ──────────────────────────────
+//
+// Minimal 2-band cubic-lattice Weyl Hamiltonian:
+// H(k) = sin(kx)σx + sin(ky)σy + (m - cos(kx) - cos(ky) - cos(kz))σz
+// Weyl nodes at kx=ky=0, cos(kz)=m-2 (exist for 1<m<3).
+// Chern number on kx-ky slices: C=+1 between nodes, 0 outside.
+// Surface Fermi arcs on z-slab connect projected Weyl nodes in surface BZ.
+
+struct WeylOptions {
+  double m_param{2.0};     // controls Weyl node separation; nodes at kz=±arccos(m-2)
+  int    n_k{20};          // kx-ky grid resolution for Chern/arc computations
+  int    n_z{20};          // slab thickness (unit cells in z, open BCs)
+  int    n_kz{40};         // number of kz values for Chern sweep
+  double fermi_energy{0.0}; // Fermi level for arc detection
+  std::string scenario{"fermi_arc"};  // "fermi_arc" | "chern_sweep" | "both"
+  double param_min{1.1};
+  double param_max{2.9};
+  int    n_sweep{30};
+};
+
+struct WeylResult {
+  bool ok{false};
+  double m_param{0.0};
+  int    n_k{0}, n_z{0};
+  std::string scenario;
+  // Weyl node positions
+  double node_kz_pos{0.0};   // +arccos(m-2), chirality +1
+  double node_kz_neg{0.0};   // -arccos(m-2), chirality -1
+  // Chern number vs kz (on kx-ky slices)
+  std::vector<double> kz_vals;
+  std::vector<int>    chern_kz;
+  // Surface Fermi arc: (kx, ky, weight) on n_k × n_k grid
+  std::vector<double> arc_kx;       // n_k² flattened
+  std::vector<double> arc_ky;       // n_k²
+  std::vector<double> arc_weight;   // n_k², edge probability of state at Fermi energy
+  std::vector<double> arc_energy;   // n_k², energy of state closest to Fermi level
+  int    n_arc_pts{0};              // = n_k²
+  // Bulk Weyl cone spectrum (kz scan at kx=ky=0)
+  std::vector<double> cone_kz;
+  std::vector<double> cone_E_plus;   // upper band E+(0,0,kz)
+  std::vector<double> cone_E_minus;  // lower band E-(0,0,kz)
+  // m_param sweep (Weyl node kz positions vs m)
+  std::vector<double>      sweep_vals;
+  std::vector<double>      sweep_node_kz;   // arccos(m-2) for each m, NaN if no nodes
+  std::vector<std::string> sweep_phase;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the

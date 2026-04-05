@@ -1206,3 +1206,455 @@ def _edge_states_page(data: dict, title: str = "Edge States / Surface Spectrum �
 </html>"""
 
 
+def _weyl_frames(
+    m_param: float = 2.0,
+    n_k: int = 20,
+    n_z: int = 20,
+    n_kz: int = 40,
+    fermi_energy: float = 0.0,
+    scenario: str = "fermi_arc",
+    param_min: float = 1.1,
+    param_max: float = 2.9,
+    n_sweep: int = 30,
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Weyl semimetal Hamiltonian, Chern numbers, and surface Fermi arcs."""
+    import numpy as np  # noqa: PLC0415
+
+    def weyl_ham(kx, ky, kz):
+        dx = np.sin(kx)
+        dy = np.sin(ky)
+        dz = m_param - np.cos(kx) - np.cos(ky) - np.cos(kz)
+        return np.array([[dz, dx - 1j * dy], [dx + 1j * dy, -dz]])
+
+    def lower_evec(kx, ky, kz):
+        H = weyl_ham(kx, ky, kz)
+        evals, evecs = np.linalg.eigh(H)
+        return evecs[:, 0]
+
+    # Chern number on kx-ky slice at fixed kz (FHS lattice gauge)
+    def chern_slice(kz):
+        kpts = np.linspace(-np.pi, np.pi, n_k, endpoint=False)
+        vecs = [[lower_evec(kx, ky, kz) for ky in kpts] for kx in kpts]
+
+        def link(v1, v2):
+            z = np.vdot(v1, v2)
+            return z / abs(z) if abs(z) > 1e-12 else 1.0
+
+        F_sum = 0.0
+        for i in range(n_k):
+            for j in range(n_k):
+                ip = (i + 1) % n_k
+                jp = (j + 1) % n_k
+                U1  = link(vecs[i][j],  vecs[ip][j])
+                U2  = link(vecs[i][j],  vecs[i][jp])
+                U1p = link(vecs[i][jp], vecs[ip][jp])
+                U2p = link(vecs[ip][j], vecs[ip][jp])
+                F_sum += np.angle(U1 * U2p * np.conj(U1p) * np.conj(U2))
+        return int(round(F_sum / (2 * np.pi)))
+
+    # Weyl node positions
+    val = m_param - 2.0
+    if abs(val) < 1.0:
+        node_kz = float(np.arccos(val))
+    else:
+        node_kz = float("nan")
+
+    # Bulk Weyl cone: E+(0,0,kz)
+    kz_line = np.linspace(-np.pi, np.pi, 80).tolist()
+    cone_E_plus = []
+    cone_E_minus = []
+    for kz in kz_line:
+        dz = m_param - 1.0 - 1.0 - np.cos(kz)  # kx=ky=0 => cos(0)=1 each
+        e = float(np.sqrt(dz ** 2))
+        cone_E_plus.append(e)
+        cone_E_minus.append(-e)
+
+    # Chern sweep over kz
+    kz_vals = np.linspace(-np.pi, np.pi, n_kz).tolist()
+    chern_kz = [chern_slice(kz) for kz in kz_vals]
+
+    # Surface Fermi arc: slab spectrum
+    kx_arc = np.linspace(-np.pi, np.pi, n_k, endpoint=False)
+    ky_arc = np.linspace(-np.pi, np.pi, n_k, endpoint=False)
+    arc_kx: list = []
+    arc_ky: list = []
+    arc_weight: list = []
+    arc_energy: list = []
+
+    def build_slab(kx, ky):
+        H = np.zeros((2 * n_z, 2 * n_z), dtype=complex)
+        dx = np.sin(kx)
+        dy = np.sin(ky)
+        dz_on = m_param - np.cos(kx) - np.cos(ky)
+        H_on  = np.array([[dz_on, dx - 1j * dy], [dx + 1j * dy, -dz_on]])
+        H_hop = np.array([[-0.5, 0.0], [0.0, 0.5]])  # -(1/2)*sigma_z
+        for iz in range(n_z):
+            H[2 * iz: 2 * iz + 2, 2 * iz: 2 * iz + 2] = H_on
+            if iz + 1 < n_z:
+                H[2 * iz: 2 * iz + 2,     2 * (iz + 1): 2 * (iz + 1) + 2] = H_hop
+                H[2 * (iz + 1): 2 * (iz + 1) + 2, 2 * iz: 2 * iz + 2]    = H_hop.conj().T
+        return H
+
+    for kx in kx_arc:
+        for ky in ky_arc:
+            H_slab = build_slab(kx, ky)
+            evals, evecs = np.linalg.eigh(H_slab)
+            idx = int(np.argmin(np.abs(evals - fermi_energy)))
+            v = evecs[:, idx]
+            w = float(np.sum(np.abs(v[:2]) ** 2) + np.sum(np.abs(v[-2:]) ** 2))
+            arc_kx.append(float(kx))
+            arc_ky.append(float(ky))
+            arc_weight.append(min(w, 1.0))
+            arc_energy.append(float(evals[idx]))
+
+    # m sweep: node kz position vs m
+    sweep_vals_list = np.linspace(param_min, param_max, n_sweep).tolist()
+    sweep_node_kz: list = []
+    sweep_phase: list = []
+    for m_s in sweep_vals_list:
+        vs = m_s - 2.0
+        if abs(vs) < 1.0:
+            sweep_node_kz.append(float(np.arccos(vs)))
+            sweep_phase.append("Weyl semimetal")
+        else:
+            sweep_node_kz.append(float("nan"))
+            sweep_phase.append("Trivial/Insulator")
+
+    return {
+        "m":             m_param,
+        "n_k":           n_k,
+        "n_z":           n_z,
+        "n_kz":          n_kz,
+        "scenario":      scenario,
+        "node_kz_pos":   node_kz if not (node_kz != node_kz) else None,
+        "node_kz_neg":   -node_kz if not (node_kz != node_kz) else None,
+        "kz_vals":       kz_vals,
+        "chern_kz":      chern_kz,
+        "arc_kx":        arc_kx,
+        "arc_ky":        arc_ky,
+        "arc_weight":    arc_weight,
+        "arc_energy":    arc_energy,
+        "n_arc_pts":     n_k * n_k,
+        "cone_kz":       kz_line,
+        "cone_E_plus":   cone_E_plus,
+        "cone_E_minus":  cone_E_minus,
+        "sweep_vals":    sweep_vals_list,
+        "sweep_node_kz": sweep_node_kz,
+        "sweep_phase":   sweep_phase,
+        "source":        source,
+    }
+
+
+def _weyl_page(data: dict, title: str = "Weyl Semimetal & Surface Fermi Arcs") -> str:
+    """HTML page: Surface Fermi arc + Chern vs kz + bulk cone + node diagram."""
+    import json as _json  # noqa: PLC0415
+    data_json = _json.dumps(data, ensure_ascii=False)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>{title}</title>
+<style>
+  :root {{
+    --bg:#0d1117; --surface:#161b22; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e;
+    --accent:#58a6ff; --topo:#3fb950; --trivial:#8b949e;
+  }}
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;
+        display:flex;flex-direction:column;align-items:center;padding:32px 16px;gap:24px}}
+  h1{{font-size:1.3rem;color:var(--accent);text-align:center}}
+  .subtitle{{color:var(--muted);font-size:0.9rem;text-align:center}}
+  .card{{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+         padding:20px;width:100%;max-width:900px}}
+  .card h2{{font-size:1rem;color:var(--muted);margin-bottom:14px}}
+  .info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}}
+  .info-box{{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+             padding:12px;text-align:center}}
+  .info-box .label{{font-size:0.75rem;color:var(--muted);margin-bottom:6px}}
+  .info-box .value{{font-size:1.4rem;font-weight:700}}
+  .weyl{{color:#f78166}} .trivial{{color:var(--trivial)}}
+  canvas{{display:block;width:100%;cursor:crosshair}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">H(k) = sin(k&#x2093;)&#x3C3;&#x2093; + sin(k&#x1D67;)&#x3C3;&#x1D67; + (m&minus;cos k&#x2093;&minus;cos k&#x1D67;&minus;cos k&#x1D69;)&#x3C3;&#x1D69; &nbsp;|&nbsp; Weyl nodes at k&#x1D69;=&plusmn;arccos(m&minus;2)</p>
+
+<div class="card">
+<h2>Parameters</h2>
+<div class="info-grid" id="infoGrid"></div>
+</div>
+
+<div class="card">
+<h2>Surface Fermi Arc (E&#x2248;0 edge weight, k&#x2093;&ndash;k&#x1D67; slab BZ)</h2>
+<canvas id="arcPlot" height="420"></canvas>
+</div>
+
+<div class="card">
+<h2>Chern Number C&#x2081;(k&#x1D69;) on k&#x2093;&ndash;k&#x1D67; Slices</h2>
+<canvas id="chernPlot" height="260"></canvas>
+</div>
+
+<div class="card">
+<h2>Bulk Weyl Cone E(0,0,k&#x1D69;)</h2>
+<canvas id="conePlot" height="260"></canvas>
+</div>
+
+<div class="card">
+<h2>Weyl Node k&#x1D69; Position vs m (Node Diagram)</h2>
+<canvas id="nodePlot" height="260"></canvas>
+</div>
+
+<script>
+(function(){{
+const DATA = {data_json};
+
+// ── Info grid ─────────────────────────────────────────────────────────────
+const ig = document.getElementById('infoGrid');
+function ib(label,value,cls='') {{
+  return `<div class="info-box"><div class="label">${{label}}</div><div class="value ${{cls}}">${{value}}</div></div>`;
+}}
+const hasNodes = DATA.node_kz_pos !== null && !isNaN(DATA.node_kz_pos);
+const phaseLabel = hasNodes ? 'Weyl' : 'Trivial';
+const phaseCls   = hasNodes ? 'weyl' : 'trivial';
+ig.innerHTML =
+  ib('m',DATA.m.toFixed(3)) +
+  ib('n_k',DATA.n_k) +
+  ib('n_z',DATA.n_z) +
+  ib('Node k\u2080 +',hasNodes?DATA.node_kz_pos.toFixed(3):'—') +
+  ib('Node k\u2080 −',hasNodes?DATA.node_kz_neg.toFixed(3):'—') +
+  ib('Phase',phaseLabel,phaseCls);
+
+// ── Colour scale: teal (bulk) → red (edge) ─────────────────────────────
+function weightColour(w) {{
+  const r = Math.round(w*220+(1-w)*30);
+  const g = Math.round((1-w)*180+w*50);
+  const b = Math.round((1-w)*200+w*50);
+  return `rgb(${{r}},${{g}},${{b}})`;
+}}
+
+// ── Surface Fermi arc plot ────────────────────────────────────────────────
+const arcCanvas = document.getElementById('arcPlot');
+function drawArc() {{
+  const dpr = window.devicePixelRatio||1;
+  const W = arcCanvas.clientWidth;
+  const H = parseInt(arcCanvas.getAttribute('height'));
+  arcCanvas.width  = W*dpr;
+  arcCanvas.height = H*dpr;
+  const ctx = arcCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const pad = {{l:50,r:20,t:20,b:40}};
+  const pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+  const kmin=-Math.PI, kmax=Math.PI;
+  function sx(v){{ return pad.l+(v-kmin)/(kmax-kmin)*pw; }}
+  function sy(v){{ return pad.t+(kmax-v)/(kmax-kmin)*ph; }}
+
+  const kx=DATA.arc_kx, ky=DATA.arc_ky, wt=DATA.arc_weight;
+  if(!kx||kx.length===0) return;
+  const nk = DATA.n_k;
+  const sz = Math.max(2, Math.floor(pw/nk)-1);
+  for(let i=0;i<kx.length;i++) {{
+    ctx.fillStyle = weightColour(wt[i]);
+    ctx.fillRect(sx(kx[i])-sz/2, sy(ky[i])-sz/2, sz, sz);
+  }}
+
+  // Mark projected Weyl nodes (both project to kx=ky=0)
+  if(hasNodes) {{
+    ctx.strokeStyle='#f78166'; ctx.lineWidth=2;
+    const px=sx(0), py=sy(0);
+    ctx.beginPath(); ctx.arc(px,py,6,0,2*Math.PI); ctx.stroke();
+  }}
+
+  // Axes
+  ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace';
+  ctx.textAlign='center';
+  ['-π','0','π'].forEach((lbl,ii)=>{{
+    const v=[-Math.PI,0,Math.PI][ii];
+    ctx.fillText(lbl,sx(v),H-pad.b+14);
+  }});
+  ctx.textAlign='right';
+  ['-π','0','π'].forEach((lbl,ii)=>{{
+    const v=[-Math.PI,0,Math.PI][ii];
+    ctx.fillText(lbl,pad.l-4,sy(v)+4);
+  }});
+  ctx.textAlign='center'; ctx.fillText('kₓ',W/2,H-4);
+  ctx.save(); ctx.translate(12,H/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('k\u1d67',0,0); ctx.restore();
+
+  // Colour legend
+  const lgx=W-pad.r-120, lgy=pad.t+10;
+  const grad=ctx.createLinearGradient(lgx,0,lgx+100,0);
+  grad.addColorStop(0,weightColour(0));
+  grad.addColorStop(1,weightColour(1));
+  ctx.fillStyle=grad; ctx.fillRect(lgx,lgy,100,10);
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace'; ctx.textAlign='left';
+  ctx.fillText('bulk',lgx,lgy+22); ctx.textAlign='right';
+  ctx.fillText('edge',lgx+100,lgy+22);
+}}
+drawArc();
+
+// ── Chern number vs kz ────────────────────────────────────────────────────
+const chCanvas = document.getElementById('chernPlot');
+function drawChern() {{
+  const dpr = window.devicePixelRatio||1;
+  const W = chCanvas.clientWidth, H = parseInt(chCanvas.getAttribute('height'));
+  chCanvas.width = W*dpr; chCanvas.height = H*dpr;
+  const ctx = chCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const pad = {{l:50,r:20,t:20,b:40}};
+  const pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+  const kz=DATA.kz_vals, ch=DATA.chern_kz;
+  if(!kz||kz.length===0) return;
+  const kmin=kz[0], kmax=kz[kz.length-1];
+  function sx(v){{ return pad.l+(v-kmin)/(kmax-kmin)*pw; }}
+  function sy(c){{ return pad.t+(1-c)*ph/2; }}
+
+  // Filled regions
+  for(let i=0;i<kz.length-1;i++) {{
+    ctx.fillStyle = ch[i]===1?'#3fb95033':'#8b949e22';
+    ctx.fillRect(sx(kz[i]),pad.t,sx(kz[i+1])-sx(kz[i]),ph);
+  }}
+
+  // Step function
+  ctx.lineWidth=2.5;
+  for(let i=0;i<kz.length-1;i++) {{
+    ctx.strokeStyle = ch[i]===1?'#3fb950':'#8b949e';
+    ctx.beginPath(); ctx.moveTo(sx(kz[i]),sy(ch[i])); ctx.lineTo(sx(kz[i+1]),sy(ch[i])); ctx.stroke();
+  }}
+
+  // Vertical lines at Weyl node positions
+  if(hasNodes) {{
+    ctx.strokeStyle='#f78166'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    [DATA.node_kz_pos, DATA.node_kz_neg].forEach(kzn=>{{
+      if(kzn>=kmin&&kzn<=kmax) {{
+        ctx.beginPath(); ctx.moveTo(sx(kzn),pad.t); ctx.lineTo(sx(kzn),H-pad.b); ctx.stroke();
+      }}
+    }});
+    ctx.setLineDash([]);
+  }}
+
+  ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+  ctx.fillText('0',pad.l-4,sy(0)+4); ctx.fillText('1',pad.l-4,sy(1)+4);
+  ctx.textAlign='center';
+  ['-π','0','π'].forEach((lbl,ii)=>{{ const v=[-Math.PI,0,Math.PI][ii]; ctx.fillText(lbl,sx(v),H-pad.b+14); }});
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='left'; ctx.fillText('C\u2081',2,pad.t+12);
+  ctx.textAlign='center'; ctx.fillText('k\u1d69',W/2,H-4);
+}}
+drawChern();
+
+// ── Bulk Weyl cone ────────────────────────────────────────────────────────
+const coneCanvas = document.getElementById('conePlot');
+function drawCone() {{
+  const dpr = window.devicePixelRatio||1;
+  const W = coneCanvas.clientWidth, H = parseInt(coneCanvas.getAttribute('height'));
+  coneCanvas.width = W*dpr; coneCanvas.height = H*dpr;
+  const ctx = coneCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const pad = {{l:50,r:20,t:20,b:40}};
+  const pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+  const kz=DATA.cone_kz, ep=DATA.cone_E_plus, em=DATA.cone_E_minus;
+  if(!kz||kz.length===0) return;
+  const kmin=kz[0], kmax=kz[kz.length-1];
+  const allE=ep.concat(em);
+  const emin=Math.min(...allE), emax=Math.max(...allE);
+  const espan=emax-emin||1;
+  function sx(v){{ return pad.l+(v-kmin)/(kmax-kmin)*pw; }}
+  function sy(e){{ return pad.t+(1-(e-emin)/espan)*ph; }}
+
+  function drawBand(arr,col) {{
+    ctx.strokeStyle=col; ctx.lineWidth=2; ctx.beginPath();
+    arr.forEach((e,i)=>{{ if(i===0) ctx.moveTo(sx(kz[i]),sy(e)); else ctx.lineTo(sx(kz[i]),sy(e)); }});
+    ctx.stroke();
+  }}
+  drawBand(ep,'#58a6ff');
+  drawBand(em,'#f78166');
+
+  // Vertical lines at Weyl nodes
+  if(hasNodes) {{
+    ctx.strokeStyle='#8b949e'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    [DATA.node_kz_pos, DATA.node_kz_neg].forEach(kzn=>{{
+      ctx.beginPath(); ctx.moveTo(sx(kzn),pad.t); ctx.lineTo(sx(kzn),H-pad.b); ctx.stroke();
+    }});
+    ctx.setLineDash([]);
+  }}
+
+  ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+  [emin,0,emax].forEach(e=>{{ ctx.fillText(e.toFixed(1),pad.l-4,sy(e)+4); }});
+  ctx.textAlign='center';
+  ['-π','0','π'].forEach((lbl,ii)=>{{ const v=[-Math.PI,0,Math.PI][ii]; ctx.fillText(lbl,sx(v),H-pad.b+14); }});
+  ctx.textAlign='left'; ctx.fillStyle='#8b949e'; ctx.font='10px monospace'; ctx.fillText('E',2,pad.t+12);
+  ctx.textAlign='center'; ctx.fillText('k\u1d69',W/2,H-4);
+}}
+drawCone();
+
+// ── Node diagram: kz0 vs m ────────────────────────────────────────────────
+const nodeCanvas = document.getElementById('nodePlot');
+function drawNode() {{
+  const dpr = window.devicePixelRatio||1;
+  const W = nodeCanvas.clientWidth, H = parseInt(nodeCanvas.getAttribute('height'));
+  nodeCanvas.width = W*dpr; nodeCanvas.height = H*dpr;
+  const ctx = nodeCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  const pad = {{l:50,r:20,t:20,b:40}};
+  const pw = W-pad.l-pad.r, ph = H-pad.t-pad.b;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+  const sv=DATA.sweep_vals, sk=DATA.sweep_node_kz;
+  if(!sv||sv.length===0) return;
+  const smin=sv[0], smax=sv[sv.length-1];
+  const ymin=-Math.PI, ymax=Math.PI;
+  function sx(v){{ return pad.l+(v-smin)/(smax-smin)*pw; }}
+  function sy(v){{ return pad.t+(ymax-v)/(ymax-ymin)*ph; }}
+
+  // Two branches: +kz0 and -kz0
+  ctx.lineWidth=2.5;
+  const posPts = [], negPts = [];
+  for(let i=0;i<sv.length;i++) {{
+    if(!isNaN(sk[i])) {{ posPts.push([sv[i],sk[i]]); negPts.push([sv[i],-sk[i]]); }}
+  }}
+  function drawPts(pts,col) {{
+    if(!pts.length) return;
+    ctx.strokeStyle=col; ctx.beginPath();
+    pts.forEach(([x,y],i)=>{{ if(i===0) ctx.moveTo(sx(x),sy(y)); else ctx.lineTo(sx(x),sy(y)); }});
+    ctx.stroke();
+  }}
+  drawPts(posPts,'#f78166');
+  drawPts(negPts,'#58a6ff');
+
+  // Zero line
+  ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+  ['-π','0','π'].forEach((lbl,ii)=>{{
+    const v=[-Math.PI,0,Math.PI][ii]; ctx.fillText(lbl,pad.l-4,sy(v)+4);
+  }});
+  ctx.textAlign='center';
+  [smin,(smin+smax)/2,smax].forEach(v=>{{ ctx.fillText(v.toFixed(1),sx(v),H-pad.b+14); }});
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='left'; ctx.fillText('k\u1d69\u2080',2,pad.t+12);
+  ctx.textAlign='center'; ctx.fillText('m',W/2,H-4);
+}}
+drawNode();
+
+window.addEventListener('resize',()=>{{drawArc();drawChern();drawCone();drawNode();}});
+}})();
+</script>
+</body>
+</html>"""
+

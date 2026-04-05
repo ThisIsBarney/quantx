@@ -77,6 +77,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("second_chern",       "Second Chern Number 4D QHE"),
           ("wilson_loop",        "Wilson Loop WCC BHZ Z₂ TI"),
           ("edge_states",        "Edge States / Surface Spectrum BHZ"),
+          ("weyl",               "Weyl Semimetal Fermi Arcs"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),
