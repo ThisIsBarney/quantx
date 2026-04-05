@@ -1516,16 +1516,22 @@ function drawChern() {{
   function sx(v){{ return pad.l+(v-kmin)/(kmax-kmin)*pw; }}
   function sy(c){{ return pad.t+(1-c)*ph/2; }}
 
+  function chernColor(c, alpha) {{
+    if(c===1)  return alpha?'#3fb95033':'#3fb950';
+    if(c===-1) return alpha?'#58a6ff33':'#58a6ff';
+    return alpha?'#8b949e22':'#8b949e';
+  }}
+
   // Filled regions
   for(let i=0;i<kz.length-1;i++) {{
-    ctx.fillStyle = ch[i]===1?'#3fb95033':'#8b949e22';
+    ctx.fillStyle = chernColor(ch[i], true);
     ctx.fillRect(sx(kz[i]),pad.t,sx(kz[i+1])-sx(kz[i]),ph);
   }}
 
   // Step function
   ctx.lineWidth=2.5;
   for(let i=0;i<kz.length-1;i++) {{
-    ctx.strokeStyle = ch[i]===1?'#3fb950':'#8b949e';
+    ctx.strokeStyle = chernColor(ch[i], false);
     ctx.beginPath(); ctx.moveTo(sx(kz[i]),sy(ch[i])); ctx.lineTo(sx(kz[i+1]),sy(ch[i])); ctx.stroke();
   }}
 
@@ -1544,7 +1550,7 @@ function drawChern() {{
   ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
   ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
-  ctx.fillText('0',pad.l-4,sy(0)+4); ctx.fillText('1',pad.l-4,sy(1)+4);
+  ctx.fillText('0',pad.l-4,sy(0)+4); ctx.fillText('1',pad.l-4,sy(1)+4); ctx.fillText('-1',pad.l-4,sy(-1)+4);
   ctx.textAlign='center';
   ['-π','0','π'].forEach((lbl,ii)=>{{ const v=[-Math.PI,0,Math.PI][ii]; ctx.fillText(lbl,sx(v),H-pad.b+14); }});
   ctx.fillStyle='#8b949e'; ctx.font='10px monospace';

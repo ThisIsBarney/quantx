@@ -291,6 +291,15 @@ WeylResult run_weyl(const WeylOptions& opts) {
     res.n_z      = n_z;
     res.scenario = opts.scenario;
 
+    // ── Scenario validation ───────────────────────────────────────────────
+    if (opts.scenario != "fermi_arc" &&
+        opts.scenario != "chern_sweep" &&
+        opts.scenario != "both") {
+        throw std::runtime_error(
+            "Weyl: unknown scenario \"" + opts.scenario +
+            "\"; valid values: fermi_arc, chern_sweep, both");
+    }
+
     // ── Weyl node positions ───────────────────────────────────────────────
     double val = m - 2.0;
     double node_kz = 0.0;
