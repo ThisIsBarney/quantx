@@ -112,5 +112,9 @@ std::string edge_states_result_to_json(const EdgeStatesResult& result);
 HaldaneOptions haldane_options_from_json(const std::string& json);
 // Serialize Haldane model result to JSON string.
 std::string    haldane_result_to_json(const HaldaneResult& result);
+// Parse Weyl semimetal options from JSON string.
+WeylOptions weyl_options_from_json(const std::string& json);
+// Serialize Weyl semimetal result to JSON string.
+std::string weyl_result_to_json(const WeylResult& result);
 
 }  // namespace qx

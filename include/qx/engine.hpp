@@ -70,5 +70,7 @@ WilsonLoopResult run_wilson_loop(const WilsonLoopOptions& opts);
 EdgeStatesResult run_edge_states(const EdgeStatesOptions& opts);
 // Run Haldane model (Quantum Anomalous Hall Effect) — Chern number, Berry curvature, phase diagram.
 HaldaneResult    run_haldane(const HaldaneOptions& opts);
+// Run Weyl semimetal & Surface Fermi Arcs computation.
+WeylResult run_weyl(const WeylOptions& opts);
 
 }  // namespace qx
