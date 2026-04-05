@@ -1206,3 +1206,333 @@ def _edge_states_page(data: dict, title: str = "Edge States / Surface Spectrum �
 </html>"""
 
 
+def _haldane_frames(
+    t1: float = 1.0,
+    t2: float = 0.1,
+    phi: float = 1.5707963,
+    M_val: float = 0.0,
+    n_k: int = 40,
+    scenario: str = "phase_diagram",
+    sweep_param: str = "M",
+    param_min: float = -6.0,
+    param_max: float = 6.0,
+    n_sweep: int = 60,
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Haldane Model / Quantum Anomalous Hall Effect.
+
+    Computes the Chern number C1 via the Fukui-Hatsugai-Suzuki lattice gauge
+    formula, Berry curvature map over the BZ, and a phase diagram sweep.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    sqrt3 = np.sqrt(3.0)
+
+    # NN vectors A->B
+    delta = np.array([
+        [0.0,       1.0],
+        [sqrt3/2,  -0.5],
+        [-sqrt3/2, -0.5],
+    ])
+    # NNN vectors (A->A CCW)
+    b_nnn = np.array([
+        [sqrt3,    0.0],
+        [sqrt3/2,  1.5],
+        [-sqrt3/2, 1.5],
+    ])
+    # Reciprocal lattice vectors
+    G1 = np.array([2*np.pi/sqrt3, -2*np.pi/3])
+    G2 = np.array([0.0,            4*np.pi/3])
+
+    def _haldane_ham(kx, ky, _t1, _t2, _phi, _M):
+        k = np.array([kx, ky])
+        f = sum(np.exp(1j * float(k @ d)) for d in delta)
+        g_cos = sum(float(np.cos(k @ b)) for b in b_nnn)
+        g_sin = sum(float(np.sin(k @ b)) for b in b_nnn)
+        h0 = 2 * _t2 * np.cos(_phi) * g_cos
+        hz = _M - 2 * _t2 * np.sin(_phi) * g_sin
+        hx = _t1 * f.real
+        hy = _t1 * f.imag
+        H = np.array([[h0 + hz, hx - 1j*hy],
+                      [hx + 1j*hy, h0 - hz]], dtype=complex)
+        return H
+
+    def _lower_evec(kx, ky, _t1, _t2, _phi, _M):
+        H = _haldane_ham(kx, ky, _t1, _t2, _phi, _M)
+        _, vecs = np.linalg.eigh(H)
+        return vecs[:, 0]  # eigh sorts ascending -> index 0 is lower
+
+    def _link(v1, v2):
+        z = np.vdot(v1, v2)
+        a = abs(z)
+        return (z / a) if a > 1e-12 else complex(1.0)
+
+    def _compute_chern(_t1, _t2, _phi, _M, _nk):
+        kpts = np.zeros((_nk, _nk, 2))
+        vecs = np.zeros((_nk, _nk, 2), dtype=complex)
+        for i in range(_nk):
+            for j in range(_nk):
+                kpts[i, j] = (i/_nk)*G1 + (j/_nk)*G2
+                vecs[i, j] = _lower_evec(kpts[i, j, 0], kpts[i, j, 1],
+                                         _t1, _t2, _phi, _M)
+
+        bc = np.zeros(_nk * _nk)
+        kx_out = []
+        ky_out = []
+        F_sum = 0.0
+        for i in range(_nk):
+            for j in range(_nk):
+                ip = (i + 1) % _nk
+                jp = (j + 1) % _nk
+                U1  = _link(vecs[i, j],  vecs[ip, j])
+                U2  = _link(vecs[i, j],  vecs[i,  jp])
+                U1p = _link(vecs[i, jp], vecs[ip, jp])
+                U2p = _link(vecs[ip, j], vecs[ip, jp])
+                F = np.angle(U1 * U2p * np.conj(U1p) * np.conj(U2))
+                bc[i*_nk + j] = float(F)
+                kx_out.append(float(kpts[i, j, 0]))
+                ky_out.append(float(kpts[i, j, 1]))
+                F_sum += float(F)
+        C1 = int(round(F_sum / (2*np.pi)))
+        return C1, kx_out, ky_out, bc.tolist()
+
+    def _phase_label_h(C1):
+        if C1 > 0:
+            return f"QAH (C\u2081=+{C1})"
+        elif C1 < 0:
+            return f"QAH (C\u2081={C1})"
+        return "Trivial (C\u2081=0)"
+
+    # Compute Chern + Berry curvature at reference parameters
+    C1, kx_bz, ky_bz, berry_curv = _compute_chern(t1, t2, phi, M_val, n_k)
+
+    # Phase diagram sweep
+    sweep_vals = []
+    sweep_chern = []
+    sweep_phase = []
+    if n_sweep >= 2:
+        for s in range(n_sweep):
+            v = param_min + s * (param_max - param_min) / (n_sweep - 1)
+            sweep_vals.append(float(v))
+            if sweep_param == "M":
+                C1s, _, _, _ = _compute_chern(t1, t2, phi, v, n_k)
+            else:
+                C1s, _, _, _ = _compute_chern(t1, t2, v, M_val, n_k)
+            sweep_chern.append(C1s)
+            sweep_phase.append(_phase_label_h(C1s))
+
+    return {
+        "t1": t1,
+        "t2": t2,
+        "phi": phi,
+        "M": M_val,
+        "n_k": n_k,
+        "scenario": scenario,
+        "sweep_param": sweep_param,
+        "chern": C1,
+        "phase_label": _phase_label_h(C1),
+        "kx_bz": kx_bz,
+        "ky_bz": ky_bz,
+        "berry_curv": berry_curv,
+        "sweep_vals": sweep_vals,
+        "sweep_chern": sweep_chern,
+        "sweep_phase": sweep_phase,
+        "source": source,
+    }
+
+
+def _haldane_page(data: dict, title: str = "Haldane Model \u2014 Quantum Anomalous Hall Effect") -> str:
+    """Render HTML page: info grid + Berry curvature BZ scatter + phase diagram."""
+    import json as _json  # noqa: PLC0415
+
+    data_js = _json.dumps(data)
+    sweep_param_label = data.get("sweep_param", "M")
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',monospace,sans-serif;padding:16px}}
+h1{{font-size:1.15rem;color:#58a6ff;margin-bottom:12px}}
+.info-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:14px}}
+.info-card{{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:8px 10px}}
+.info-card .lbl{{font-size:0.68rem;color:#8b949e;margin-bottom:2px}}
+.info-card .val{{font-size:1.05rem;color:#e6edf3;font-weight:600}}
+.plots{{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}}
+canvas{{width:100%;background:#161b22;border:1px solid #30363d;border-radius:6px;display:block}}
+@media(max-width:700px){{.plots{{grid-template-columns:1fr}}}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="info-grid" id="infoGrid"></div>
+<div class="plots">
+  <canvas id="bzPlot" height="340"></canvas>
+  <canvas id="phasePlot" height="340"></canvas>
+</div>
+<script>
+(function(){{
+  const DATA = {data_js};
+
+  // ── Info grid ──────────────────────────────────────────────────────────
+  const grid = document.getElementById('infoGrid');
+  const fields = [
+    ['t\u2081',  DATA.t1.toFixed(3)],
+    ['t\u2082',  DATA.t2.toFixed(4)],
+    ['\u03c6',   DATA.phi.toFixed(4)],
+    ['M',        DATA.M.toFixed(3)],
+    ['C\u2081',  String(DATA.chern)],
+    ['Phase',    DATA.phase_label],
+    ['n_k',      String(DATA.n_k)],
+    ['Source',   DATA.source || 'python-reference'],
+  ];
+  fields.forEach(([l,v])=>{{
+    const d=document.createElement('div'); d.className='info-card';
+    d.innerHTML='<div class="lbl">'+l+'</div><div class="val">'+v+'</div>';
+    grid.appendChild(d);
+  }});
+
+  // ── Berry curvature BZ scatter ─────────────────────────────────────────
+  const bzCanvas = document.getElementById('bzPlot');
+  function drawBZ(){{
+    const dpr = window.devicePixelRatio||1;
+    const W = bzCanvas.clientWidth;
+    const H = parseInt(bzCanvas.getAttribute('height'));
+    bzCanvas.width  = W*dpr;
+    bzCanvas.height = H*dpr;
+    const ctx = bzCanvas.getContext('2d');
+    ctx.scale(dpr,dpr);
+    const pad={{l:50,r:24,t:32,b:40}};
+    const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+    const kx=DATA.kx_bz, ky=DATA.ky_bz, bc=DATA.berry_curv;
+    if(!kx||kx.length===0) return;
+
+    const kxMin=Math.min(...kx), kxMax=Math.max(...kx);
+    const kyMin=Math.min(...ky), kyMax=Math.max(...ky);
+    let bcMax=0; bc.forEach(v=>{{if(Math.abs(v)>bcMax) bcMax=Math.abs(v);}});
+    if(bcMax<1e-14) bcMax=1.0;
+
+    function ssx(v){{return pad.l+(v-kxMin)/(kxMax-kxMin+1e-12)*pw;}}
+    function ssy(v){{return pad.t+(1-(v-kyMin)/(kyMax-kyMin+1e-12))*ph;}}
+
+    function bcColor(v){{
+      const t=v/bcMax;
+      if(t>=0){{
+        const r=Math.round(255*t),b2=Math.round(255*(1-t));
+        return 'rgb('+r+',0,'+b2+')';
+      }}
+      const b2=Math.round(255*(1+t));
+      return 'rgb(0,0,'+b2+')';
+    }}
+
+    const dotR = Math.max(1.5, pw/DATA.n_k*0.45);
+    for(let i=0;i<kx.length;i++){{
+      ctx.fillStyle=bcColor(bc[i]);
+      ctx.beginPath();
+      ctx.arc(ssx(kx[i]),ssy(ky[i]),dotR,0,2*Math.PI);
+      ctx.fill();
+    }}
+
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+
+    ctx.fillStyle='#8b949e'; ctx.font='10px monospace'; ctx.textAlign='center';
+    ctx.fillText('kx', W/2, H-4);
+    ctx.save(); ctx.translate(12,H/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('ky',0,0); ctx.restore();
+
+    ctx.fillStyle='#c9d1d9'; ctx.font='11px monospace'; ctx.textAlign='center';
+    ctx.fillText('Berry Curvature \u03a9(k) over BZ', W/2, pad.t-10);
+
+    // Color legend bar
+    const lx=W-pad.r-58, ly=pad.t+4, lw=50, lh=10;
+    const grad=ctx.createLinearGradient(lx,ly,lx+lw,ly);
+    grad.addColorStop(0,'rgb(0,0,255)');
+    grad.addColorStop(0.5,'rgb(0,0,0)');
+    grad.addColorStop(1,'rgb(255,0,0)');
+    ctx.fillStyle=grad; ctx.fillRect(lx,ly,lw,lh);
+    ctx.strokeStyle='#484f58'; ctx.strokeRect(lx,ly,lw,lh);
+    ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+    ctx.textAlign='right'; ctx.fillText('-',lx-2,ly+lh);
+    ctx.textAlign='left';  ctx.fillText('+',lx+lw+2,ly+lh);
+  }}
+  drawBZ();
+
+  // ── Phase diagram ──────────────────────────────────────────────────────
+  const phCanvas = document.getElementById('phasePlot');
+  function drawPhase(){{
+    const dpr = window.devicePixelRatio||1;
+    const W = phCanvas.clientWidth;
+    const H = parseInt(phCanvas.getAttribute('height'));
+    phCanvas.width  = W*dpr;
+    phCanvas.height = H*dpr;
+    const ctx = phCanvas.getContext('2d');
+    ctx.scale(dpr,dpr);
+    const pad={{l:56,r:20,t:32,b:40}};
+    const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+    ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+    const sv=DATA.sweep_vals, sc=DATA.sweep_chern;
+    if(!sv||sv.length===0) return;
+
+    const smin=sv[0], smax=sv[sv.length-1];
+    let cmin=0,cmax=0;
+    sc.forEach(v=>{{if(v<cmin)cmin=v;if(v>cmax)cmax=v;}});
+    const ymin=cmin-0.6, ymax=cmax+0.6;
+
+    function ssx(v){{return pad.l+(v-smin)/(smax-smin+1e-12)*pw;}}
+    function ssy(v){{return pad.t+(1-(v-ymin)/(ymax-ymin+1e-12))*ph;}}
+
+    for(let i=0;i<sv.length-1;i++){{
+      let col='#8b949e22';
+      if(sc[i]>0) col='#3fb95033';
+      else if(sc[i]<0) col='#da363333';
+      ctx.fillStyle=col;
+      ctx.fillRect(ssx(sv[i]),pad.t,ssx(sv[i+1])-ssx(sv[i]),ph);
+    }}
+
+    ctx.lineWidth=2.5;
+    for(let i=0;i<sv.length-1;i++){{
+      let col='#8b949e';
+      if(sc[i]>0) col='#3fb950';
+      else if(sc[i]<0) col='#f85149';
+      ctx.strokeStyle=col;
+      ctx.beginPath(); ctx.moveTo(ssx(sv[i]),ssy(sc[i])); ctx.lineTo(ssx(sv[i+1]),ssy(sc[i])); ctx.stroke();
+    }}
+
+    if(ymin<0&&ymax>0){{
+      ctx.strokeStyle='#484f58'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+      ctx.beginPath(); ctx.moveTo(pad.l,ssy(0)); ctx.lineTo(W-pad.r,ssy(0)); ctx.stroke();
+      ctx.setLineDash([]);
+    }}
+
+    ctx.strokeStyle='#484f58'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+
+    ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='right';
+    const yTicks=[...new Set([cmin,0,cmax])];
+    yTicks.forEach(v=>{{ ctx.fillText(String(v),pad.l-4,ssy(v)+4); }});
+    ctx.textAlign='center';
+    [smin,(smin+smax)/2,smax].forEach(v=>{{ ctx.fillText(v.toFixed(2),ssx(v),H-pad.b+14); }});
+    ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+    ctx.textAlign='left'; ctx.fillText('C\u2081',2,pad.t+12);
+    ctx.textAlign='center'; ctx.fillText('{sweep_param_label}',W/2,H-4);
+    ctx.fillStyle='#c9d1d9'; ctx.font='11px monospace';
+    ctx.fillText('Phase Diagram: C\u2081 vs {sweep_param_label}',W/2,pad.t-10);
+  }}
+  drawPhase();
+
+  window.addEventListener('resize',()=>{{drawBZ();drawPhase();}});
+}})();
+</script>
+</body>
+</html>"""

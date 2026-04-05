@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
     std::string second_chern_path;
     std::string wilson_loop_path;
     std::string edge_states_path;
+    std::string haldane_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -102,6 +103,7 @@ int main(int argc, char** argv) {
     app.add_option("--second-chern", second_chern_path, "second-chern options json path (run second Chern number / 4D Quantum Hall Effect)");
     app.add_option("--wilson-loop", wilson_loop_path, "wilson-loop options json path (run Wilson loop / Wannier Charge Centers for BHZ Z2 TI)");
     app.add_option("--edge-states", edge_states_path, "edge-states options json path (run BHZ strip spectrum / topological edge states)");
+    app.add_option("--haldane", haldane_path, "haldane options json path (run Haldane model / QAH Chern number)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -150,12 +152,12 @@ int main(int argc, char** argv) {
         kitaev_path.empty() && anderson_path.empty() &&
         chern_path.empty() && hofstadter_path.empty() && mbl_path.empty() &&
         spectral_path.empty() && tenfold_path.empty() && second_chern_path.empty() &&
-        wilson_loop_path.empty() && edge_states_path.empty()) {
+        wilson_loop_path.empty() && edge_states_path.empty() && haldane_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
           "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, --second-chern, "
-          "--wilson-loop, or --edge-states");
+          "--wilson-loop, --edge-states, or --haldane");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -180,13 +182,14 @@ int main(int argc, char** argv) {
                   (!tenfold_path.empty()      ? 1 : 0) +
                   (!second_chern_path.empty() ? 1 : 0) +
                   (!wilson_loop_path.empty()  ? 1 : 0) +
-                  (!edge_states_path.empty()  ? 1 : 0);
+                  (!edge_states_path.empty()  ? 1 : 0) +
+                  (!haldane_path.empty()      ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
             "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
             "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, --second-chern, "
-            "--wilson-loop, or --edge-states");
+            "--wilson-loop, --edge-states, or --haldane");
       }
     }
 
@@ -396,6 +399,14 @@ int main(int argc, char** argv) {
       const qx::EdgeStatesOptions es_opts = qx::edge_states_options_from_json(es_json);
       qx::log::info("loaded edge-states options file: " + edge_states_path);
       output_json = qx::edge_states_result_to_json(qx::run_edge_states(es_opts));
+    } else if (!haldane_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --haldane mode");
+      }
+      const std::string hal_json = read_text_file(haldane_path);
+      const qx::HaldaneOptions hal_opts = qx::haldane_options_from_json(hal_json);
+      qx::log::info("loaded haldane options file: " + haldane_path);
+      output_json = qx::haldane_result_to_json(qx::run_haldane(hal_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

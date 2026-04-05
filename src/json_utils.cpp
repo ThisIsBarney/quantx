@@ -1769,5 +1769,45 @@ std::string spectral_result_to_json(const SpectralResult& r) {
   return j.dump();
 }
 
+HaldaneOptions haldane_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  HaldaneOptions o;
+  if (j.contains("t1"))          o.t1          = j["t1"].get<double>();
+  if (j.contains("t2"))          o.t2          = j["t2"].get<double>();
+  if (j.contains("phi"))         o.phi         = j["phi"].get<double>();
+  if (j.contains("M"))           o.M_val       = j["M"].get<double>();
+  if (j.contains("n_k"))         o.n_k         = j["n_k"].get<int>();
+  if (j.contains("n_y"))         o.n_y         = j["n_y"].get<int>();
+  if (j.contains("scenario"))    o.scenario    = j["scenario"].get<std::string>();
+  if (j.contains("sweep_param")) o.sweep_param = j["sweep_param"].get<std::string>();
+  if (j.contains("param_min"))   o.param_min   = j["param_min"].get<double>();
+  if (j.contains("param_max"))   o.param_max   = j["param_max"].get<double>();
+  if (j.contains("n_sweep"))     o.n_sweep     = j["n_sweep"].get<int>();
+  return o;
+}
+
+std::string haldane_result_to_json(const HaldaneResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["t1"]           = r.t1;
+  j["t2"]           = r.t2;
+  j["phi"]          = r.phi;
+  j["M"]            = r.M_val;
+  j["n_k"]          = r.n_k;
+  j["scenario"]     = r.scenario;
+  j["chern"]        = r.chern;
+  j["phase_label"]  = r.phase_label;
+  j["kx_bz"]        = r.kx_bz;
+  j["ky_bz"]        = r.ky_bz;
+  j["berry_curv"]   = r.berry_curv;
+  j["sweep_vals"]   = r.sweep_vals;
+  j["sweep_chern"]  = r.sweep_chern;
+  j["sweep_phase"]  = r.sweep_phase;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
 

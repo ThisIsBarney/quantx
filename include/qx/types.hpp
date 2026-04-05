@@ -1090,6 +1090,51 @@ struct SecondChernResult {
   std::string message;
 };
 
+// ── M38: Haldane Model (Quantum Anomalous Hall Effect) ─────────────────────
+//
+// 2-band tight-binding model on honeycomb lattice with complex NNN hopping.
+// H(k) = h0 I₂ + hx σx + hy σy + hz σz
+// Chern number C₁ via Fukui-Hatsugai-Suzuki lattice gauge formula on BZ grid.
+// Phase diagram: C₁=±1 when |M/t2| < 3√3|sin(φ)|, trivial otherwise.
+
+struct HaldaneOptions {
+  double t1{1.0};           // NN hopping amplitude
+  double t2{0.1};           // NNN hopping magnitude
+  double phi{1.5707963};    // NNN phase φ (Haldane flux); π/2 maximizes gap
+  double M_val{0.0};        // staggered on-site potential (inversion breaking)
+  int    n_k{40};           // k-grid resolution per dimension (n_k² points in BZ)
+  int    n_y{20};           // strip width (unit cells, for ribbon spectrum)
+  std::string scenario{"phase_diagram"};  // "chern" | "phase_diagram" | "spectrum"
+  std::string sweep_param{"M"};  // "M" | "phi"
+  double param_min{-6.0};        // sweep range min (in units of t2)
+  double param_max{6.0};         // sweep range max
+  int    n_sweep{60};
+};
+
+struct HaldaneResult {
+  bool ok{false};
+  double t1{0.0}, t2{0.0}, phi{0.0}, M_val{0.0};
+  int    n_k{0};
+  std::string scenario;
+  int    chern{0};               // first Chern number C₁
+  std::string phase_label;       // "QAH (C₁=+1)" | "QAH (C₁=-1)" | "Trivial (C₁=0)"
+  // Berry curvature map over BZ (n_k × n_k, flattened row-major)
+  std::vector<double> kx_bz;    // n_k² kx coordinates (Cartesian)
+  std::vector<double> ky_bz;    // n_k² ky coordinates
+  std::vector<double> berry_curv; // n_k² Berry curvature values (sum = 2π·C₁)
+  // Ribbon spectrum (kx ∈ [-π,π], 2*n_y bands)
+  std::vector<double> ribbon_kx;
+  std::vector<double> ribbon_energies;   // length n_kx_ribbon * 2*n_y
+  std::vector<double> ribbon_edge_weight;
+  int    n_ribbon_bands{0};
+  // Phase diagram sweep
+  std::vector<double>      sweep_vals;
+  std::vector<int>         sweep_chern;
+  std::vector<std::string> sweep_phase;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M33: Spectral Functions & Imaginary-Time Evolution ───────────────────
 //
 // Dynamical structure factor S(k,omega) = sum_n |<n|S^z_k|0>|^2 delta(omega-(E_n-E_0))
