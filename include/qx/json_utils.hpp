@@ -121,5 +121,9 @@ std::string weyl_result_to_json(const WeylResult& result);
 FuKaneOptions fu_kane_options_from_json(const std::string& json);
 // Serialize Fu-Kane superconductor result to JSON string.
 std::string   fu_kane_result_to_json(const FuKaneResult& result);
+// Parse Lutchyn-Oreg Majorana nanowire options from JSON string.
+LutchynOregOptions lutchyn_oreg_options_from_json(const std::string& json);
+// Serialize Lutchyn-Oreg Majorana nanowire result to JSON string.
+std::string        lutchyn_oreg_result_to_json(const LutchynOregResult& result);
 
 }  // namespace qx

@@ -66,6 +66,7 @@ from viz.topology import (
     _weyl_frames, _weyl_page,
     _haldane_frames, _haldane_page,
     _fu_kane_frames, _fu_kane_page,
+    _lutchyn_oreg_frames, _lutchyn_oreg_page,
 )
 
 
@@ -82,7 +83,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -305,6 +306,14 @@ def main() -> int:
   parser.add_argument("--fu-kane-nk",     type=int,   default=30,   help="k-grid for Chern number")
   parser.add_argument("--fu-kane-ny",     type=int,   default=24,   help="strip width (sites in y)")
   parser.add_argument("--fu-kane-nkx",    type=int,   default=80,   help="kx points for band / strip spectrum")
+  # M41: Lutchyn-Oreg Majorana nanowire
+  parser.add_argument("--lo-t",           type=float, default=1.0,   help="Lutchyn-Oreg hopping t")
+  parser.add_argument("--lo-alpha",       type=float, default=0.5,   help="Lutchyn-Oreg Rashba coupling alpha")
+  parser.add_argument("--lo-mu",          type=float, default=0.0,   help="Lutchyn-Oreg chemical potential mu")
+  parser.add_argument("--lo-Delta",       type=float, default=0.25,  help="Lutchyn-Oreg SC gap Delta")
+  parser.add_argument("--lo-Vz",          type=float, default=0.0,   help="Lutchyn-Oreg Zeeman field V_z")
+  parser.add_argument("--lo-nk",          type=int,   default=200,   help="k-grid points for bulk BdG")
+  parser.add_argument("--lo-nsites",      type=int,   default=60,    help="wire length (sites, open BCs)")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1341,6 +1350,28 @@ def main() -> int:
       path.write_text(_fu_kane_page(fk_data, title="Fu-Kane Superconductor \u2014 Majorana Zero Modes"), encoding="utf-8")
       generated.append(path)
 
+  # ── M41: Lutchyn-Oreg Majorana Nanowire ──────────────────────────────────
+  if args.scenario in {"lutchyn_oreg", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("lutchyn_oreg skipped: numpy not available", file=sys.stderr)
+    else:
+      lo_data = _lutchyn_oreg_frames(
+          t=args.lo_t,
+          alpha=args.lo_alpha,
+          mu=args.lo_mu,
+          Delta=args.lo_Delta,
+          V_z=args.lo_Vz,
+          n_k=args.lo_nk,
+          n_sites=args.lo_nsites,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_lutchyn_oreg.html"
+      path.write_text(_lutchyn_oreg_page(lo_data, title="Lutchyn-Oreg Majorana Nanowire"), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1397,6 +1428,7 @@ def main() -> int:
         "haldane":            "quantum_haldane",
         "weyl":               "quantum_weyl",
         "fu_kane":            "quantum_fu_kane",
+        "lutchyn_oreg":       "quantum_lutchyn_oreg",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

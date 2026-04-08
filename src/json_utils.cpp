@@ -1901,4 +1901,54 @@ std::string fu_kane_result_to_json(const FuKaneResult& r) {
   return j.dump();
 }
 
+LutchynOregOptions lutchyn_oreg_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  LutchynOregOptions o;
+  if (j.contains("t"))         o.t        = j["t"].get<double>();
+  if (j.contains("alpha"))     o.alpha    = j["alpha"].get<double>();
+  if (j.contains("mu"))        o.mu       = j["mu"].get<double>();
+  if (j.contains("Delta"))     o.Delta    = j["Delta"].get<double>();
+  if (j.contains("V_z"))       o.V_z      = j["V_z"].get<double>();
+  if (j.contains("n_k"))       o.n_k      = j["n_k"].get<int>();
+  if (j.contains("n_sites"))   o.n_sites  = j["n_sites"].get<int>();
+  if (j.contains("n_Vz"))      o.n_Vz     = j["n_Vz"].get<int>();
+  if (j.contains("n_mu"))      o.n_mu     = j["n_mu"].get<int>();
+  if (j.contains("Vz_max"))    o.Vz_max   = j["Vz_max"].get<double>();
+  if (j.contains("mu_max"))    o.mu_max   = j["mu_max"].get<double>();
+  if (j.contains("scenario"))  o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string lutchyn_oreg_result_to_json(const LutchynOregResult& r) {
+  json j;
+  j["ok"]            = r.ok;
+  j["scenario"]      = r.scenario;
+  j["t"]             = r.t;
+  j["alpha"]         = r.alpha;
+  j["mu"]            = r.mu;
+  j["Delta"]         = r.Delta;
+  j["V_z"]           = r.V_z;
+  j["z2"]            = r.z2;
+  j["phase_label"]   = r.phase_label;
+  j["gap"]           = r.gap;
+  j["V_z_critical"]  = r.V_z_critical;
+  j["k_bulk"]        = r.k_bulk;
+  j["E0"]            = r.E0;
+  j["E1"]            = r.E1;
+  j["E2"]            = r.E2;
+  j["E3"]            = r.E3;
+  j["E_wire"]        = r.E_wire;
+  j["ldos_left"]     = r.ldos_left;
+  j["ldos_right"]    = r.ldos_right;
+  j["osc_L"]         = r.osc_L;
+  j["osc_gap"]       = r.osc_gap;
+  j["pd_Vz_vals"]    = r.pd_Vz_vals;
+  j["pd_mu_vals"]    = r.pd_mu_vals;
+  j["pd_z2"]         = r.pd_z2;
+  j["elapsed_ms"]    = r.elapsed_ms;
+  j["message"]       = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx

@@ -75,5 +75,7 @@ WeylResult run_weyl(const WeylOptions& opts);
 
 // Run Fu-Kane superconductor — BdG spectrum, Chern number, chiral Majorana edge mode.
 FuKaneResult run_fu_kane(const FuKaneOptions& opts);
+// Run Lutchyn-Oreg Majorana nanowire — BdG bands, Majorana end modes, Z₂ phase diagram.
+LutchynOregResult run_lutchyn_oreg(const LutchynOregOptions& opts);
 
 }  // namespace qx

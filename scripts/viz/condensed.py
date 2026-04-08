@@ -80,6 +80,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("haldane",            "Haldane Model QAH C₁=±1"),
           ("weyl",               "Weyl Semimetal Fermi Arcs"),
           ("fu_kane",            "Fu-Kane SC Majorana C=1"),
+          ("lutchyn_oreg",       "Lutchyn-Oreg Majorana Wire Z\u2082"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),

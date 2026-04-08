@@ -1115,6 +1115,60 @@ struct FuKaneResult {
   std::string message;
 };
 
+// ── M41: Lutchyn-Oreg Majorana Nanowire ──────────────────────────────────────
+//
+// 1D semiconductor nanowire with Rashba spin-orbit coupling, proximity-induced
+// s-wave SC gap, and Zeeman field V_z (applied via magnetic field along wire).
+// BdG Hamiltonian (lattice, tight-binding):
+//   H(k) = (2t(1−cos k) − μ) τ_z + α sin(k) σ_y τ_z + V_z σ_x + Δ τ_x
+// Phase transition: V_z,c = √(μ² + Δ²)
+//   V_z < V_z,c → trivial SC (Z₂ = +1)
+//   V_z > V_z,c → topological SC (Z₂ = −1), Majorana zero modes at wire ends
+// Scenarios: "bulk" | "wire" | "phase_diagram" | "both"
+
+struct LutchynOregOptions {
+  double t{1.0};       // hopping amplitude (sets bandwidth 4t)
+  double alpha{0.5};   // Rashba spin-orbit coupling
+  double mu{0.0};      // chemical potential
+  double Delta{0.25};  // s-wave SC proximity gap
+  double V_z{0.0};     // Zeeman field (drives topological transition at V_z,c = √(μ²+Δ²))
+  int    n_k{200};     // k-grid points for bulk BdG band structure
+  int    n_sites{80};  // wire length (sites, open BCs) for real-space Majorana calc
+  int    n_Vz{60};     // V_z points for phase diagram sweep
+  int    n_mu{60};     // μ points for phase diagram sweep
+  double Vz_max{2.0};  // V_z range for phase diagram
+  double mu_max{2.0};  // |μ| range for phase diagram
+  std::string scenario{"bulk"};  // "bulk" | "wire" | "phase_diagram" | "both"
+};
+
+struct LutchynOregResult {
+  bool ok{false};
+  std::string scenario;
+  // Operating-point parameters
+  double t{0.0}, alpha{0.0}, mu{0.0}, Delta{0.0}, V_z{0.0};
+  // Phase at this (V_z, μ, Δ)
+  int    z2{0};               // topological invariant: +1 trivial, -1 topological
+  std::string phase_label;
+  double gap{0.0};            // min |E| over BZ
+  double V_z_critical{0.0};  // √(μ² + Δ²)
+  // Bulk BdG band structure (4 bands vs k ∈ [−π, π])
+  std::vector<double> k_bulk;
+  std::vector<double> E0, E1, E2, E3;  // sorted branches
+  // Real-space wire spectrum: eigenvalues and edge LDOS
+  std::vector<double> E_wire;          // 4*n_sites eigenvalues (sorted)
+  std::vector<double> ldos_left;       // LDOS at left end vs E  (same length)
+  std::vector<double> ldos_right;      // LDOS at right end vs E (same length)
+  // Majorana oscillations: gap vs wire length L
+  std::vector<int>    osc_L;           // wire lengths
+  std::vector<double> osc_gap;         // min |E| at each length
+  // Phase diagram: Z₂(V_z, μ) on 2D grid
+  std::vector<double> pd_Vz_vals;      // n_Vz values in [0, Vz_max]
+  std::vector<double> pd_mu_vals;      // n_mu values in [−mu_max, mu_max]
+  std::vector<int>    pd_z2;           // flattened [n_Vz × n_mu]
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the
