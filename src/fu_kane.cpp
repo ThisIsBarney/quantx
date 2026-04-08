@@ -320,6 +320,8 @@ static void compute_edge(const FuKaneOptions& opts, FuKaneResult& res) {
 // ── Phase diagram: Chern(M, μ) on a 2D grid ───────────────────────────────
 static void compute_phase_diagram(const FuKaneOptions& opts, FuKaneResult& res) {
     const int nM = opts.n_M, nmu = opts.n_mu, nk = opts.n_k;
+    if (nM < 2)  throw std::runtime_error("FuKane: n_M must be >= 2 for phase_diagram");
+    if (nmu < 2) throw std::runtime_error("FuKane: n_mu must be >= 2 for phase_diagram");
     const double vF = opts.v_F, D = opts.Delta;
 
     res.pd_M_vals.resize(nM);
@@ -365,7 +367,9 @@ FuKaneResult run_fu_kane(const FuKaneOptions& opts) {
 
     // Always compute the Chern number at the requested operating point
     res.chern = chern_fu_kane(opts.v_F, opts.M_val, opts.mu, opts.Delta, opts.n_k);
-    res.phase_label = (res.chern != 0) ? "Topological SC (C=1)" : "Trivial SC (C=0)";
+    res.phase_label = (res.chern != 0)
+        ? "Topological SC (C=" + std::to_string(res.chern) + ")"
+        : "Trivial SC (C=0)";
 
     if (sc == "bulk" || sc == "both")
         compute_bulk(opts, res);
