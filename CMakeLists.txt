@@ -111,6 +111,7 @@ add_library(qx_core
   src/haldane.cpp
   src/weyl.cpp
   src/fu_kane.cpp
+  src/lutchyn_oreg.cpp
   src/json_utils.cpp
 )
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)

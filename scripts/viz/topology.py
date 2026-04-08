@@ -2307,3 +2307,374 @@ function setupCanvas(id, H){{
 </script>
 </body>
 </html>"""
+
+
+def _lutchyn_oreg_frames(
+    t: float = 1.0,
+    alpha: float = 0.5,
+    mu: float = 0.0,
+    Delta: float = 0.25,
+    V_z: float = 0.0,
+    n_k: int = 200,
+    n_sites: int = 60,
+    n_Vz: int = 50,
+    n_mu: int = 50,
+    Vz_max: float = 2.0,
+    mu_max: float = 2.0,
+    scenario: str = "bulk",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Lutchyn-Oreg Majorana nanowire BdG computation."""
+    import numpy as np  # noqa: PLC0415
+
+    def lo_ham_k(k):
+        eps = 2*t*(1 - np.cos(k)) - mu
+        sk  = np.sin(k)
+        # 4×4 BdG in {e↑, e↓, h↓, -h↑} basis
+        H = np.zeros((4, 4), dtype=complex)
+        # electron sector
+        H[0, 0] = eps;  H[1, 1] = eps
+        H[0, 1] = V_z - 1j*alpha*sk;  H[1, 0] = V_z + 1j*alpha*sk
+        # pairing
+        H[0, 3] =  Delta;  H[3, 0] =  Delta
+        H[1, 2] = -Delta;  H[2, 1] = -Delta
+        # hole sector
+        H[2, 2] = -eps;  H[3, 3] = -eps
+        H[2, 3] = -V_z + 1j*alpha*sk;  H[3, 2] = -V_z - 1j*alpha*sk
+        return H
+
+    def compute_z2():
+        pf0  = V_z**2 - mu**2 - Delta**2
+        pfpi = V_z**2 - (mu - 4*t)**2 - Delta**2
+        return -1 if pf0 * pfpi < 0 else +1
+
+    z2 = compute_z2()
+    Vzc = np.sqrt(mu**2 + Delta**2)
+
+    # Bulk bands
+    k_vals = np.linspace(-np.pi, np.pi, n_k)
+    bands  = np.zeros((n_k, 4))
+    for i, k in enumerate(k_vals):
+        ev = np.linalg.eigvalsh(lo_ham_k(k))
+        bands[i] = np.sort(ev)
+    gap = float(np.min(np.abs(bands)))
+
+    result: dict = {
+        "source":      source,
+        "scenario":    scenario,
+        "t": t, "alpha": alpha, "mu": mu, "Delta": Delta, "V_z": V_z,
+        "z2":          z2,
+        "phase_label": f"Topological SC (Z\u2082=-1)" if z2 < 0 else "Trivial SC (Z\u2082=+1)",
+        "gap":         gap,
+        "V_z_critical": float(Vzc),
+        "k_bulk":  k_vals.tolist(),
+        "E0": bands[:, 0].tolist(),
+        "E1": bands[:, 1].tolist(),
+        "E2": bands[:, 2].tolist(),
+        "E3": bands[:, 3].tolist(),
+    }
+
+    if scenario in ("wire", "both"):
+        N = 4 * n_sites
+        H_big = np.zeros((N, N), dtype=complex)
+        eps0 = 2*t - mu
+        ah   = alpha / 2.0
+        for j in range(n_sites):
+            b = 4 * j
+            # onsite electron
+            H_big[b, b] = eps0;       H_big[b+1, b+1] = eps0
+            H_big[b, b+1] = V_z;      H_big[b+1, b] = V_z
+            # pairing
+            H_big[b, b+3]   =  Delta; H_big[b+3, b]   =  Delta
+            H_big[b+1, b+2] = -Delta; H_big[b+2, b+1] = -Delta
+            # onsite hole
+            H_big[b+2, b+2] = -eps0;  H_big[b+3, b+3] = -eps0
+            H_big[b+2, b+3] = -V_z;   H_big[b+3, b+2] = -V_z
+            if j + 1 < n_sites:
+                b2 = 4 * (j + 1)
+                # electron hop
+                H_big[b, b2]     = -t;   H_big[b2, b]     = -t
+                H_big[b+1, b2+1] = -t;   H_big[b2+1, b+1] = -t
+                H_big[b, b2+1]   = -ah;  H_big[b2+1, b]   = -ah
+                H_big[b+1, b2]   =  ah;  H_big[b2, b+1]   =  ah
+                # hole hop (sign of t flipped, same spin structure)
+                H_big[b+2, b2+2] =  t;   H_big[b2+2, b+2] =  t
+                H_big[b+3, b2+3] =  t;   H_big[b2+3, b+3] =  t
+                H_big[b+2, b2+3] = -ah;  H_big[b2+3, b+2] = -ah
+                H_big[b+3, b2+2] =  ah;  H_big[b2+2, b+3] =  ah
+
+        ev_w, evec_w = np.linalg.eigh(H_big)
+        # LDOS at ends (first 2 and last 2 sites)
+        n_edge = min(2, n_sites)
+        ldos_l = np.zeros(N)
+        ldos_r = np.zeros(N)
+        for n in range(N):
+            for j in range(n_edge):
+                ldos_l[n] += float(np.sum(np.abs(evec_w[4*j:4*j+4, n])**2))
+            for j in range(n_sites - n_edge, n_sites):
+                ldos_r[n] += float(np.sum(np.abs(evec_w[4*j:4*j+4, n])**2))
+
+        # Majorana oscillations
+        osc_L   = list(range(10, n_sites + 1, 5))
+        osc_gap = []
+        for L in osc_L:
+            Nl = 4 * L
+            Hl = H_big[:Nl, :Nl].copy()
+            evl = np.linalg.eigvalsh(Hl)
+            osc_gap.append(float(np.min(np.abs(evl))))
+
+        result["E_wire"]    = ev_w.tolist()
+        result["ldos_left"] = ldos_l.tolist()
+        result["ldos_right"]= ldos_r.tolist()
+        result["osc_L"]     = osc_L
+        result["osc_gap"]   = osc_gap
+
+    if scenario == "phase_diagram":
+        Vz_arr = np.linspace(0, Vz_max, n_Vz)
+        mu_arr = np.linspace(-mu_max, mu_max, n_mu)
+        pd_z2  = np.zeros((n_Vz, n_mu), dtype=int)
+        for iVz, Vzi in enumerate(Vz_arr):
+            for imu, mui in enumerate(mu_arr):
+                pf0  = Vzi**2 - mui**2 - Delta**2
+                pfpi = Vzi**2 - (mui - 4*t)**2 - Delta**2
+                pd_z2[iVz, imu] = -1 if pf0 * pfpi < 0 else +1
+        result["pd_Vz_vals"] = Vz_arr.tolist()
+        result["pd_mu_vals"] = mu_arr.tolist()
+        result["pd_z2"]      = pd_z2.flatten().tolist()
+
+    return result
+
+
+def _lutchyn_oreg_page(
+    data: dict,
+    title: str = "Lutchyn-Oreg Majorana Nanowire",
+) -> str:
+    """Render a 3-panel HTML page: BdG bulk bands, wire spectrum + LDOS, Majorana oscillations."""
+    import json as _json  # noqa: PLC0415
+    DATA_JSON = _json.dumps(data)
+    Vzc_fmt = f"{data.get('V_z_critical', 0):.3f}"
+    z2      = data.get("z2", 1)
+    phase   = data.get("phase_label", "")
+    phase_color = "#3fb950" if z2 < 0 else "#8b949e"
+
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{title}</title>
+<style>
+  :root{{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;
+        --topo:#3fb950;--trivial:#6e7681}}
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;padding:20px;min-height:100vh}}
+  h1{{font-size:1.2rem;margin-bottom:4px}}
+  .subtitle{{color:var(--muted);font-size:0.85rem;margin-bottom:20px}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1100px}}
+  .card{{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:100%}}
+  .card h2{{font-size:1rem;color:var(--muted);margin-bottom:14px}}
+  .wide{{grid-column:1/-1}}
+  .info-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}}
+  .info-box{{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center}}
+  .info-box .label{{font-size:0.75rem;color:var(--muted);margin-bottom:4px}}
+  .info-box .value{{font-size:1.3rem;font-weight:700}}
+  .topo{{color:var(--topo)}} .trivial{{color:var(--trivial)}}
+  canvas{{display:block;width:100%;cursor:crosshair}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<p class="subtitle">1D Rashba nanowire + s-wave proximity SC + Zeeman field &mdash; Majorana end modes</p>
+
+<div class="grid">
+  <div class="card wide">
+    <div class="info-grid">
+      <div class="info-box"><div class="label">Phase</div>
+        <div class="value" style="font-size:1rem;color:{phase_color}">{phase}</div></div>
+      <div class="info-box"><div class="label">V&#8239;_z / V&#8239;_z,c</div>
+        <div class="value">{data.get('V_z',0):.3f} / {Vzc_fmt}</div></div>
+      <div class="info-box"><div class="label">Bulk gap</div>
+        <div class="value">{data.get('gap',0):.4f}</div></div>
+      <div class="info-box"><div class="label">Z&#8322; invariant</div>
+        <div class="value" style="color:{phase_color}">{z2:+d}</div></div>
+      <div class="info-box"><div class="label">&Delta; (SC gap)</div>
+        <div class="value">{data.get('Delta',0):.3f}</div></div>
+      <div class="info-box"><div class="label">&alpha; (Rashba)</div>
+        <div class="value">{data.get('alpha',0):.3f}</div></div>
+    </div>
+  </div>
+
+  <!-- BdG bulk bands -->
+  <div class="card">
+    <h2>BdG Bulk Band Structure</h2>
+    <canvas id="bulkPlot" height="280"></canvas>
+  </div>
+
+  <!-- Wire spectrum + LDOS -->
+  <div class="card">
+    <h2>Wire Spectrum &amp; End LDOS</h2>
+    <canvas id="wirePlot" height="280"></canvas>
+  </div>
+
+  <!-- Majorana oscillations -->
+  <div class="card wide">
+    <h2>Majorana Gap Oscillations vs Wire Length</h2>
+    <canvas id="oscPlot" height="200"></canvas>
+  </div>
+</div>
+
+<script>
+(function(){{
+const DATA = {DATA_JSON};
+const Vzc  = DATA.V_z_critical || 0;
+const isTop = DATA.z2 < 0;
+
+// ── Helper ────────────────────────────────────────────────────────────────
+function drawAxes(ctx,pad,W,H,xlabels,ylabels){{
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,H-pad.b);
+  ctx.moveTo(pad.l,H-pad.b); ctx.lineTo(W-pad.r,H-pad.b); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace'; ctx.textAlign='center';
+  xlabels.forEach(([v,lbl])=>{{ ctx.fillText(lbl,v,H-pad.b+14); }});
+  ctx.textAlign='right';
+  ylabels.forEach(([v,lbl])=>{{ ctx.fillText(lbl,pad.l-4,v+4); }});
+}}
+
+// ── Bulk BdG bands ────────────────────────────────────────────────────────
+const bulkCanvas = document.getElementById('bulkPlot');
+function drawBulk(){{
+  const dpr=window.devicePixelRatio||1;
+  const W=bulkCanvas.clientWidth, H=parseInt(bulkCanvas.getAttribute('height'));
+  bulkCanvas.width=W*dpr; bulkCanvas.height=H*dpr;
+  const ctx=bulkCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+  const pad={{l:50,r:15,t:15,b:35}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+  const k=DATA.k_bulk||[], E0=DATA.E0||[], E1=DATA.E1||[], E2=DATA.E2||[], E3=DATA.E3||[];
+  if(!k.length) return;
+
+  const allE=[...E0,...E1,...E2,...E3];
+  const kmin=k[0], kmax=k[k.length-1];
+  const Emin=Math.min(...allE)*1.1, Emax=Math.max(...allE)*1.1;
+  const sx=v=>pad.l+(v-kmin)/(kmax-kmin)*pw;
+  const sy=e=>pad.t+(1-(e-Emin)/(Emax-Emin))*ph;
+
+  // Shaded gap region
+  if(isTop){{ ctx.fillStyle='rgba(63,185,80,0.07)'; ctx.fillRect(pad.l,pad.t,pw,ph); }}
+
+  // Zero line
+  ctx.strokeStyle='#21262d'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bands
+  const colors=['#58a6ff','#79c0ff','#58a6ff','#79c0ff'];
+  [E0,E1,E2,E3].forEach((band,bi)=>{{
+    ctx.strokeStyle=colors[bi]; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    band.forEach((e,i)=>{{ i===0?ctx.moveTo(sx(k[i]),sy(e)):ctx.lineTo(sx(k[i]),sy(e)); }});
+    ctx.stroke();
+  }});
+
+  drawAxes(ctx,pad,W,H,
+    [[sx(-Math.PI),'-π'],[sx(0),'0'],[sx(Math.PI),'π']],
+    [[sy(0),'0']]
+  );
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='left'; ctx.fillText('E',2,pad.t+12);
+  ctx.textAlign='center'; ctx.fillText('k',W/2,H-4);
+}}
+drawBulk();
+
+// ── Wire spectrum + LDOS ──────────────────────────────────────────────────
+const wireCanvas = document.getElementById('wirePlot');
+function drawWire(){{
+  const dpr=window.devicePixelRatio||1;
+  const W=wireCanvas.clientWidth, H=parseInt(wireCanvas.getAttribute('height'));
+  wireCanvas.width=W*dpr; wireCanvas.height=H*dpr;
+  const ctx=wireCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+  const pad={{l:50,r:15,t:15,b:35}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+  const Ew=DATA.E_wire||[], ldosL=DATA.ldos_left||[], ldosR=DATA.ldos_right||[];
+  if(!Ew.length){{ ctx.fillStyle='#8b949e'; ctx.font='13px monospace';
+    ctx.textAlign='center'; ctx.fillText('(run with scenario "wire" or "both")',W/2,H/2); return; }}
+
+  const N=Ew.length;
+  const Emin=Math.min(...Ew)*1.1, Emax=Math.max(...Ew)*1.1;
+  const wmax=Math.max(...ldosL,...ldosR)||1;
+  // x-axis: eigenstate index; y-axis: energy
+  const sx=i=>pad.l+i/N*pw;
+  const sy=e=>pad.t+(1-(e-Emin)/(Emax-Emin))*ph;
+
+  // Zero line
+  ctx.strokeStyle='#21262d'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(W-pad.r,sy(0)); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Scatter: colour by LDOS weight at ends
+  for(let n=0;n<N;n++){{
+    const w=Math.min(1,(ldosL[n]+ldosR[n])/wmax);
+    const r=Math.round(63+(255-63)*w), gb=Math.round(185*(1-w));
+    ctx.fillStyle=`rgb(${{r}},${{gb}},${{gb}})`;
+    ctx.fillRect(sx(n)-1, sy(Ew[n])-1, 2, 2);
+  }}
+
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='left'; ctx.fillText('E',2,pad.t+12);
+  ctx.textAlign='center'; ctx.fillText('eigenstate index',W/2,H-4);
+  // Zero label
+  ctx.fillStyle='#484f58'; ctx.textAlign='right'; ctx.fillText('0',pad.l-4,sy(0)+4);
+}}
+drawWire();
+
+// ── Majorana oscillations ─────────────────────────────────────────────────
+const oscCanvas = document.getElementById('oscPlot');
+function drawOsc(){{
+  const dpr=window.devicePixelRatio||1;
+  const W=oscCanvas.clientWidth, H=parseInt(oscCanvas.getAttribute('height'));
+  oscCanvas.width=W*dpr; oscCanvas.height=H*dpr;
+  const ctx=oscCanvas.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+  const pad={{l:55,r:15,t:15,b:35}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+  const L=DATA.osc_L||[], G=DATA.osc_gap||[];
+  if(!L.length){{ ctx.fillStyle='#8b949e'; ctx.font='13px monospace';
+    ctx.textAlign='center'; ctx.fillText('(run with scenario "wire" or "both")',W/2,H/2); return; }}
+
+  const Lmin=L[0], Lmax=L[L.length-1];
+  const Gmax=Math.max(...G)||1;
+  const sx=v=>pad.l+(v-Lmin)/(Lmax-Lmin)*pw;
+  const sy=g=>pad.t+(1-g/Gmax)*ph;
+
+  // Shaded background
+  ctx.fillStyle='rgba(30,40,30,0.5)'; ctx.fillRect(pad.l,pad.t,pw,ph);
+
+  // Line
+  const col=isTop?'#3fb950':'#8b949e';
+  ctx.strokeStyle=col; ctx.lineWidth=2;
+  ctx.beginPath();
+  L.forEach((v,i)=>{{ i===0?ctx.moveTo(sx(v),sy(G[i])):ctx.lineTo(sx(v),sy(G[i])); }});
+  ctx.stroke();
+  // Dots
+  ctx.fillStyle=col;
+  L.forEach((v,i)=>{{ ctx.beginPath(); ctx.arc(sx(v),sy(G[i]),3,0,2*Math.PI); ctx.fill(); }});
+
+  drawAxes(ctx,pad,W,H,
+    [[sx(Lmin),String(Lmin)],[sx(Math.round((Lmin+Lmax)/2)),String(Math.round((Lmin+Lmax)/2))],[sx(Lmax),String(Lmax)]],
+    [[sy(Gmax),Gmax.toFixed(3)],[sy(0),'0']]
+  );
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='left'; ctx.fillText('gap',2,pad.t+12);
+  ctx.textAlign='center'; ctx.fillText('wire length (sites)',W/2,H-4);
+}}
+drawOsc();
+
+window.addEventListener('resize',()=>{{drawBulk();drawWire();drawOsc();}});
+}})();
+</script>
+</body>
+</html>"""

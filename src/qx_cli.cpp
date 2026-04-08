@@ -68,6 +68,7 @@ int main(int argc, char** argv) {
     std::string haldane_path;
     std::string weyl_path;
     std::string fu_kane_path;
+    std::string lutchyn_oreg_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -108,6 +109,7 @@ int main(int argc, char** argv) {
     app.add_option("--haldane", haldane_path, "haldane options json path (run Haldane model / QAH Chern number)");
     app.add_option("--weyl", weyl_path, "weyl options json path (run Weyl semimetal & Surface Fermi Arcs)");
     app.add_option("--fu-kane", fu_kane_path, "fu-kane options json path (run Fu-Kane superconductor / Majorana zero modes)");
+    app.add_option("--lutchyn-oreg", lutchyn_oreg_path, "lutchyn-oreg options json path (run Lutchyn-Oreg Majorana nanowire)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -158,12 +160,13 @@ int main(int argc, char** argv) {
         spectral_path.empty() && tenfold_path.empty() && second_chern_path.empty() &&
         wilson_loop_path.empty() && edge_states_path.empty() &&
         haldane_path.empty() && weyl_path.empty() &&
-        fu_kane_path.empty()) {
+        fu_kane_path.empty() &&
+        lutchyn_oreg_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
           "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, --second-chern, "
-          "--wilson-loop, --edge-states, --haldane, --weyl, or --fu-kane");
+          "--wilson-loop, --edge-states, --haldane, --weyl, --fu-kane, or --lutchyn-oreg");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -191,13 +194,14 @@ int main(int argc, char** argv) {
                   (!edge_states_path.empty()  ? 1 : 0) +
                   (!haldane_path.empty()      ? 1 : 0) +
                   (!weyl_path.empty()         ? 1 : 0) +
-                  (!fu_kane_path.empty()     ? 1 : 0);
+                  (!fu_kane_path.empty()      ? 1 : 0) +
+                  (!lutchyn_oreg_path.empty() ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
             "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
             "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, --second-chern, "
-            "--wilson-loop, --edge-states, --haldane, --weyl, or --fu-kane");
+            "--wilson-loop, --edge-states, --haldane, --weyl, --fu-kane, or --lutchyn-oreg");
       }
     }
 
@@ -431,6 +435,14 @@ int main(int argc, char** argv) {
       const qx::FuKaneOptions fk_opts = qx::fu_kane_options_from_json(fk_json);
       qx::log::info("loaded fu-kane options file: " + fu_kane_path);
       output_json = qx::fu_kane_result_to_json(qx::run_fu_kane(fk_opts));
+    } else if (!lutchyn_oreg_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --lutchyn-oreg mode");
+      }
+      const std::string lo_json = read_text_file(lutchyn_oreg_path);
+      const qx::LutchynOregOptions lo_opts = qx::lutchyn_oreg_options_from_json(lo_json);
+      qx::log::info("loaded lutchyn-oreg options file: " + lutchyn_oreg_path);
+      output_json = qx::lutchyn_oreg_result_to_json(qx::run_lutchyn_oreg(lo_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {
