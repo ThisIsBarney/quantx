@@ -1064,6 +1064,57 @@ struct WeylResult {
   std::string message;
 };
 
+// ── M40: Fu-Kane Superconductor — Majorana Zero Modes ────────────────────────
+//
+// BdG Hamiltonian for the surface of a 3D topological insulator proximitized
+// with an s-wave superconductor, plus a Zeeman exchange field M:
+//
+//   H_BdG(k) = [h(k),  iΔσ_y]    h(k) = v_F(kx σ_y − ky σ_x) + M σ_z − μ I
+//              [−iΔσ_y*, −h^T(−k)]
+//
+// Phase transition at M_c = √(μ² + Δ²): topological (C=1) for M < M_c.
+// Chiral Majorana edge mode crosses E=0 on the strip spectrum in the topo phase.
+struct FuKaneOptions {
+  double v_F{1.0};      // Fermi velocity of the TI surface Dirac cone
+  double M_val{0.5};    // Zeeman exchange field (drives topo transition at M_c=√(μ²+Δ²))
+  double mu{0.0};       // chemical potential
+  double Delta{0.3};    // s-wave SC proximity gap
+  int    n_k{40};       // kx-ky grid resolution for Chern / phase diagram
+  int    n_y{30};       // strip width (sites along y, open BCs) for edge-state calc
+  int    n_kx{80};      // kx points for band structure / strip spectrum
+  int    n_M{40};       // number of M values for phase diagram sweep
+  int    n_mu{40};      // number of μ values for phase diagram sweep
+  double M_max{2.0};    // |M| range for phase diagram
+  double mu_max{2.0};   // |μ| range for phase diagram
+  // "bulk" | "edge" | "phase_diagram" | "both"
+  std::string scenario{"bulk"};
+};
+
+struct FuKaneResult {
+  bool ok{false};
+  std::string scenario;
+  // Parameters
+  double v_F{0.0}, M_val{0.0}, mu{0.0}, Delta{0.0};
+  // Phase label at the given (M, μ, Δ)
+  int    chern{0};
+  std::string phase_label;
+  double gap{0.0};           // min quasiparticle gap across BZ
+  double M_critical{0.0};    // √(μ² + Δ²)
+  // BdG bulk band structure (kx scan at ky=0)
+  std::vector<double> kx_bulk;   // n_kx values in [−π, π]
+  std::vector<double> E0, E1, E2, E3;  // four BdG branches (sorted)
+  // Strip edge-state spectrum (kx scan, n_y-site strip with open BCs in y)
+  std::vector<double> kx_edge;       // n_kx values
+  std::vector<double> E_edge;        // flattened [n_kx × 4*n_y], all eigenvalues
+  int    n_edge_evals{0};            // eigenvalues per kx = 4 * n_y
+  // Phase diagram: Chern number on (M, μ) grid
+  std::vector<double> pd_M_vals;     // n_M values in [0, M_max]
+  std::vector<double> pd_mu_vals;    // n_mu values in [−mu_max, mu_max]
+  std::vector<int>    pd_chern;      // flattened [n_M × n_mu]
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the

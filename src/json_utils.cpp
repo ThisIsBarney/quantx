@@ -1852,5 +1852,53 @@ std::string weyl_result_to_json(const WeylResult& r) {
   return j.dump();
 }
 
-}  // namespace qx
 
+
+FuKaneOptions fu_kane_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  FuKaneOptions o;
+  if (j.contains("v_F"))      o.v_F      = j["v_F"].get<double>();
+  if (j.contains("M"))        o.M_val    = j["M"].get<double>();
+  if (j.contains("mu"))       o.mu       = j["mu"].get<double>();
+  if (j.contains("Delta"))    o.Delta    = j["Delta"].get<double>();
+  if (j.contains("n_k"))      o.n_k      = j["n_k"].get<int>();
+  if (j.contains("n_y"))      o.n_y      = j["n_y"].get<int>();
+  if (j.contains("n_kx"))     o.n_kx     = j["n_kx"].get<int>();
+  if (j.contains("n_M"))      o.n_M      = j["n_M"].get<int>();
+  if (j.contains("n_mu"))     o.n_mu     = j["n_mu"].get<int>();
+  if (j.contains("M_max"))    o.M_max    = j["M_max"].get<double>();
+  if (j.contains("mu_max"))   o.mu_max   = j["mu_max"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string fu_kane_result_to_json(const FuKaneResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["scenario"]     = r.scenario;
+  j["v_F"]          = r.v_F;
+  j["M"]            = r.M_val;
+  j["mu"]           = r.mu;
+  j["Delta"]        = r.Delta;
+  j["chern"]        = r.chern;
+  j["phase_label"]  = r.phase_label;
+  j["gap"]          = r.gap;
+  j["M_critical"]   = r.M_critical;
+  j["kx_bulk"]      = r.kx_bulk;
+  j["E0"]           = r.E0;
+  j["E1"]           = r.E1;
+  j["E2"]           = r.E2;
+  j["E3"]           = r.E3;
+  j["kx_edge"]      = r.kx_edge;
+  j["E_edge"]       = r.E_edge;
+  j["n_edge_evals"] = r.n_edge_evals;
+  j["pd_M_vals"]    = r.pd_M_vals;
+  j["pd_mu_vals"]   = r.pd_mu_vals;
+  j["pd_chern"]     = r.pd_chern;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
+}  // namespace qx

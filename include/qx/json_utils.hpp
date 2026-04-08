@@ -117,4 +117,9 @@ WeylOptions weyl_options_from_json(const std::string& json);
 // Serialize Weyl semimetal result to JSON string.
 std::string weyl_result_to_json(const WeylResult& result);
 
+// Parse Fu-Kane superconductor options from JSON string.
+FuKaneOptions fu_kane_options_from_json(const std::string& json);
+// Serialize Fu-Kane superconductor result to JSON string.
+std::string   fu_kane_result_to_json(const FuKaneResult& result);
+
 }  // namespace qx

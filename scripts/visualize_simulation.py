@@ -65,6 +65,7 @@ from viz.topology import (
     _edge_states_frames, _edge_states_page,
     _weyl_frames, _weyl_page,
     _haldane_frames, _haldane_page,
+    _fu_kane_frames, _fu_kane_page,
 )
 
 
@@ -81,7 +82,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -296,6 +297,14 @@ def main() -> int:
   parser.add_argument("--weyl-param-min",     type=float, default=1.1,  help="minimum m for node sweep")
   parser.add_argument("--weyl-param-max",     type=float, default=2.9,  help="maximum m for node sweep")
   parser.add_argument("--weyl-n-sweep",       type=int,   default=30,   help="number of m sweep points for node diagram")
+  # M40: Fu-Kane superconductor
+  parser.add_argument("--fu-kane-vF",     type=float, default=1.0,  help="Fu-Kane Fermi velocity v_F")
+  parser.add_argument("--fu-kane-M",      type=float, default=0.5,  help="Fu-Kane Zeeman exchange field M")
+  parser.add_argument("--fu-kane-mu",     type=float, default=0.0,  help="Fu-Kane chemical potential mu")
+  parser.add_argument("--fu-kane-Delta",  type=float, default=0.3,  help="Fu-Kane s-wave SC gap Delta")
+  parser.add_argument("--fu-kane-nk",     type=int,   default=30,   help="k-grid for Chern number")
+  parser.add_argument("--fu-kane-ny",     type=int,   default=24,   help="strip width (sites in y)")
+  parser.add_argument("--fu-kane-nkx",    type=int,   default=80,   help="kx points for band / strip spectrum")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1306,9 +1315,33 @@ def main() -> int:
       )
       path = out_dir / "quantum_weyl.html"
       path.write_text(_weyl_page(weyl_data, title="Weyl Semimetal & Surface Fermi Arcs"), encoding="utf-8")
-      generated.append(path)
+      path = out_dir / "quantum_weyl.html"
+      path.write_text(_weyl_page(weyl_data, title="Weyl Semimetal & Surface Fermi Arcs"), encoding="utf-8")
       generated.append(path)
 
+  # ── M40: Fu-Kane Superconductor — Majorana Zero Modes ────────────────────
+  if args.scenario in {"fu_kane", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("fu_kane skipped: numpy not available", file=sys.stderr)
+    else:
+      fk_data = _fu_kane_frames(
+          v_F=args.fu_kane_vF,
+          M_val=args.fu_kane_M,
+          mu=args.fu_kane_mu,
+          Delta=args.fu_kane_Delta,
+          n_k=args.fu_kane_nk,
+          n_y=args.fu_kane_ny,
+          n_kx=args.fu_kane_nkx,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_fu_kane.html"
+      path.write_text(_fu_kane_page(fk_data, title="Fu-Kane Superconductor \u2014 Majorana Zero Modes"), encoding="utf-8")
+      generated.append(path)
+
+  # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
   # quantum_dashboard.html that embeds every scenario page via iframe srcdoc.
@@ -1363,6 +1396,7 @@ def main() -> int:
         "edge_states":        "quantum_edge_states",
         "haldane":            "quantum_haldane",
         "weyl":               "quantum_weyl",
+        "fu_kane":            "quantum_fu_kane",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
