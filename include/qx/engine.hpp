@@ -77,5 +77,7 @@ WeylResult run_weyl(const WeylOptions& opts);
 FuKaneResult run_fu_kane(const FuKaneOptions& opts);
 // Run Lutchyn-Oreg Majorana nanowire — BdG bands, Majorana end modes, Z₂ phase diagram.
 LutchynOregResult run_lutchyn_oreg(const LutchynOregOptions& opts);
+// Run Kitaev honeycomb model — Majorana band structure, phase diagram, Chern number.
+KitaevHcResult run_kitaev_honeycomb(const KitaevHcOptions& opts);
 
 }  // namespace qx

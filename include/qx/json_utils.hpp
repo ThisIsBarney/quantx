@@ -125,5 +125,9 @@ std::string   fu_kane_result_to_json(const FuKaneResult& result);
 LutchynOregOptions lutchyn_oreg_options_from_json(const std::string& json);
 // Serialize Lutchyn-Oreg Majorana nanowire result to JSON string.
 std::string        lutchyn_oreg_result_to_json(const LutchynOregResult& result);
+// Parse Kitaev honeycomb model options from JSON string.
+KitaevHcOptions kitaev_hc_options_from_json(const std::string& json);
+// Serialize Kitaev honeycomb model result to JSON string.
+std::string     kitaev_hc_result_to_json(const KitaevHcResult& result);
 
 }  // namespace qx

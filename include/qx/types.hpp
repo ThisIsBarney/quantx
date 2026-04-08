@@ -1169,6 +1169,60 @@ struct LutchynOregResult {
   std::string message;
 };
 
+// ── M42: Kitaev Honeycomb Model ───────────────────────────────────────────────
+//
+// Exactly solvable spin-1/2 model on the honeycomb lattice:
+//   H = -Jx Σ_x σ_i^x σ_j^x  -Jy Σ_y σ_i^y σ_j^y  -Jz Σ_z σ_i^z σ_j^z
+//       -κ Σ_NNN ν_ij c_i c_j   (magnetic field → effective NNN term)
+//
+// Solved via Majorana representation in zero-flux sector.
+// 2-band Bloch Hamiltonian:
+//   H(k) = [[m(k),  if(k)],
+//            [-if*(k), -m(k)]]
+//   f(k) = Jz + Jx e^{i k·a1} + Jy e^{i k·a2},  a1=(1,0), a2=(1/2,√3/2)
+//   m(k) = 2κ(sin(k·a1)+sin(k·a2)+sin(k·(a2-a1)))   [NNN from field]
+//
+// Phase diagram (on Jx+Jy+Jz=1 simplex):
+//   A_x phase: Jx > Jy+Jz  (gapped)
+//   A_y phase: Jy > Jx+Jz  (gapped)
+//   A_z phase: Jz > Jx+Jy  (gapped)
+//   B phase:   triangle inequality satisfied  (gapless Dirac; gapped Chern C=±1 with κ≠0)
+//
+// Scenarios: "spectrum" | "phase_diagram" | "chern" | "both"
+
+struct KitaevHcOptions {
+  double Jx{1.0};    // x-bond coupling
+  double Jy{1.0};    // y-bond coupling
+  double Jz{1.0};    // z-bond coupling
+  double kappa{0.0}; // effective NNN coupling from magnetic field h (∝ hx·hy·hz/J²)
+  int    n_k{60};    // BZ grid per reciprocal direction (n_k² k-points total)
+  int    n_pd{80};   // simplex grid resolution for phase diagram
+  std::string scenario{"spectrum"};  // "spectrum"|"phase_diagram"|"chern"|"both"
+};
+
+struct KitaevHcResult {
+  bool ok{false};
+  std::string scenario;
+  double Jx{0}, Jy{0}, Jz{0}, kappa{0};
+  // Phase classification at given (Jx,Jy,Jz,κ)
+  std::string phase_label;  // "A_x"|"A_y"|"A_z"|"B (gapless)"|"B (topo, C=±1)"
+  double gap{0.0};          // min E+(k) over BZ
+  int    chern{0};          // Chern number (0 in A phases, ±1 in B+κ phase)
+  // Band structure: kx,ky on BZ grid, E±(k)
+  std::vector<double> kx_bz;   // n_k² points
+  std::vector<double> ky_bz;
+  std::vector<double> E_plus;  // upper band
+  std::vector<double> E_minus; // lower band
+  // Phase diagram: phase label at each simplex point
+  // Parametrize simplex as (Jx,Jy,Jz) with Jx+Jy+Jz=1, Jx,Jy,Jz≥0
+  // Store as ternary grid: pd_Jx[i], pd_Jy[i], pd_Jz[i], pd_phase[i]
+  std::vector<double>      pd_Jx, pd_Jy, pd_Jz;
+  std::vector<std::string> pd_phase;
+  std::vector<double>      pd_gap;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the
