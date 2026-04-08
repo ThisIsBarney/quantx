@@ -1997,3 +1997,313 @@ window.addEventListener('resize',()=>{{drawArc();drawChern();drawCone();drawNode
 </body>
 </html>"""
 
+
+def _fu_kane_frames(
+    v_F: float = 1.0,
+    M_val: float = 0.5,
+    mu: float = 0.0,
+    Delta: float = 0.3,
+    n_k: int = 30,
+    n_y: int = 24,
+    n_kx: int = 80,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Fu-Kane superconductor BdG spectrum and chiral Majorana edge mode."""
+    import numpy as np  # noqa: PLC0415
+
+    def fu_kane_ham(kx, ky):
+        h01 = -v_F * (ky + 1j * kx)
+        h10 =  v_F * (1j * kx - ky)
+        return np.array([
+            [M_val - mu,  h01,         0,                         Delta],
+            [h10,        -M_val - mu, -Delta,                     0    ],
+            [0,          -Delta,       mu - M_val, -v_F * (ky - 1j * kx)],
+            [Delta,       0,          -v_F * (ky + 1j * kx),  M_val + mu],
+        ], dtype=complex)
+
+    def lower_evecs(kx, ky):
+        _, vecs = np.linalg.eigh(fu_kane_ham(kx, ky))
+        return vecs[:, :2]
+
+    def chern_fk():
+        kpts = np.linspace(-np.pi, np.pi, n_k, endpoint=False)
+        Q = [[lower_evecs(kx, ky) for ky in kpts] for kx in kpts]
+
+        def det_link(i0, j0, i1, j1):
+            ov = Q[i0 % n_k][j0 % n_k].conj().T @ Q[i1 % n_k][j1 % n_k]
+            d = np.linalg.det(ov)
+            return d / abs(d) if abs(d) > 1e-14 else 1.0
+
+        F = 0.0
+        for i in range(n_k):
+            for j in range(n_k):
+                U1  = det_link(i,   j,   i+1, j  )
+                U2  = det_link(i,   j,   i,   j+1)
+                U1p = det_link(i,   j+1, i+1, j+1)
+                U2p = det_link(i+1, j,   i+1, j+1)
+                F  += np.angle(U1 * U2p * np.conj(U1p) * np.conj(U2))
+        return int(round(F / (2 * np.pi)))
+
+    M_c = float(np.sqrt(mu ** 2 + Delta ** 2))
+    chern = chern_fk()
+    phase_label = "Topological SC (C=1)" if chern != 0 else "Trivial SC (C=0)"
+
+    kx_vals = np.linspace(-np.pi, np.pi, n_kx)
+    bands = np.array([np.sort(np.linalg.eigvalsh(fu_kane_ham(kx, 0.0))) for kx in kx_vals])
+    gap = float(np.min(np.abs(bands)))
+
+    ivF2 = 1j * v_F * 0.5
+    T = np.zeros((4, 4), dtype=complex)
+    T[0, 1] = ivF2;  T[1, 0] = ivF2
+    T[2, 3] = -ivF2; T[3, 2] = -ivF2
+
+    N = 4 * n_y
+    E_strip = np.zeros((n_kx, N))
+    for i, kx in enumerate(kx_vals):
+        H_big = np.zeros((N, N), dtype=complex)
+        H4 = fu_kane_ham(kx, 0.0)
+        for j in range(n_y):
+            H_big[4*j:4*j+4, 4*j:4*j+4] += H4
+        for j in range(n_y - 1):
+            H_big[4*(j+1):4*(j+1)+4, 4*j:4*j+4] += T
+            H_big[4*j:4*j+4, 4*(j+1):4*(j+1)+4] += T.conj().T
+        E_strip[i] = np.sort(np.linalg.eigvalsh(H_big))
+
+    return {
+        "source": source,
+        "v_F": v_F,
+        "M_val": M_val,
+        "mu": mu,
+        "Delta": Delta,
+        "M_critical": M_c,
+        "chern": chern,
+        "phase_label": phase_label,
+        "gap": gap,
+        "kx_bulk": kx_vals.tolist(),
+        "E0": bands[:, 0].tolist(),
+        "E1": bands[:, 1].tolist(),
+        "E2": bands[:, 2].tolist(),
+        "E3": bands[:, 3].tolist(),
+        "kx_edge": kx_vals.tolist(),
+        "E_edge": E_strip.flatten().tolist(),
+        "n_edge_evals": N,
+    }
+
+
+def _fu_kane_page(data: dict, title: str = "Fu-Kane Superconductor \u2014 Majorana Zero Modes") -> str:
+    """Render a 3-panel HTML page: BdG bands, strip edge spectrum, phase indicator."""
+    import json as _json  # noqa: PLC0415
+    DATA_JSON = _json.dumps(data)
+    Mc_fmt = f"{data.get('M_critical', 0):.3f}"
+
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+  h1{{font-size:1.15rem;font-weight:600;color:#e6edf3;margin-bottom:18px}}
+  .grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:1100px}}
+  .card{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+  .card h2{{font-size:0.85rem;color:#8b949e;margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}}
+  canvas{{display:block;width:100%;cursor:crosshair}}
+  .info-row{{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;align-items:center}}
+  .badge{{padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600}}
+  .topo{{background:#1a3a1a;color:#3fb950;border:1px solid #3fb950}}
+  .trivial{{background:#2a1a1a;color:#f85149;border:1px solid #f85149}}
+  .param-box{{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:6px 12px;font-size:0.75rem;color:#8b949e}}
+  .param-box .val{{font-size:1rem;font-weight:700;color:#e6edf3}}
+  .legend{{display:flex;gap:16px;margin-top:8px;font-size:0.75rem;color:#8b949e;align-items:center}}
+  .dot{{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}}
+  .line{{display:inline-block;width:20px;height:3px;border-radius:1px;vertical-align:middle;margin-right:4px}}
+</style>
+</head>
+<body>
+<h1>{title}</h1>
+<div class="info-row" id="infoRow"></div>
+
+<div class="grid">
+  <div class="card">
+    <h2>BdG Bulk Spectrum (k<sub>y</sub>=0)</h2>
+    <canvas id="bulkCanvas" height="260"></canvas>
+    <div class="legend">
+      <span><span class="line" style="background:#58a6ff"></span>E\u2080,E\u2083 outer bands</span>
+      <span><span class="line" style="background:#f0883e"></span>E\u2081,E\u2082 inner bands</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Strip Spectrum \u2014 Chiral Majorana Edge Mode</h2>
+    <canvas id="edgeCanvas" height="260"></canvas>
+    <div class="legend">
+      <span><span class="dot" style="background:#8b949e"></span>bulk states</span>
+      <span><span class="dot" style="background:#f78166"></span>in-gap (|E|&lt;\u0394/2)</span>
+    </div>
+  </div>
+  <div class="card" style="grid-column:1/-1">
+    <h2>Topological Phase Boundary \u2014 M<sub>c</sub> = \u221a(\u03bc\u00b2+\u0394\u00b2) = {Mc_fmt}</h2>
+    <canvas id="phaseCanvas" height="120"></canvas>
+  </div>
+</div>
+
+<script>
+const DATA = {DATA_JSON};
+const M_c = DATA.M_critical;
+const topological = DATA.chern !== 0;
+
+// Info row
+(function(){{
+  const ir = document.getElementById('infoRow');
+  const badge = topological
+    ? '<span class="badge topo">\u25cf ' + DATA.phase_label + '</span>'
+    : '<span class="badge trivial">\u25cf ' + DATA.phase_label + '</span>';
+  const params = [
+    ['M', DATA.M_val.toFixed(3)],['M\u2099', M_c.toFixed(3)],
+    ['\u03bc', DATA.mu.toFixed(3)],['\u0394', DATA.Delta.toFixed(3)],
+    ['v\u1da0', DATA.v_F.toFixed(2)],['gap', DATA.gap.toFixed(4)],
+  ];
+  ir.innerHTML = badge + params.map(([l,v])=>
+    `<div class="param-box"><div>${{l}}</div><div class="val">${{v}}</div></div>`
+  ).join('');
+}})();
+
+// ── Shared helpers ────────────────────────────────────────────────────────
+function setupCanvas(id, H){{
+  const c=document.getElementById(id);
+  const dpr=window.devicePixelRatio||1;
+  const W=c.clientWidth;
+  c.width=W*dpr; c.height=H*dpr;
+  const ctx=c.getContext('2d'); ctx.scale(dpr,dpr);
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+  return {{ctx,W,H}};
+}}
+
+// ── Panel 1: BdG bulk bands ───────────────────────────────────────────────
+(function(){{
+  const {{ctx,W,H}}=setupCanvas('bulkCanvas',260);
+  const pad={{l:46,r:14,t:14,b:34}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+  const kx=DATA.kx_bulk; if(!kx||!kx.length) return;
+  const kmin=kx[0],kmax=kx[kx.length-1];
+  let ymax=0;
+  [DATA.E0,DATA.E1,DATA.E2,DATA.E3].forEach(b=>b.forEach(v=>{{ymax=Math.max(ymax,Math.abs(v));}}));
+  ymax*=1.08;
+  function sx(v){{return pad.l+(v-kmin)/(kmax-kmin)*pw;}}
+  function sy(v){{return pad.t+(1-v/ymax)*ph/2;}}
+
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(pad.l,sy(0));ctx.lineTo(W-pad.r,sy(0));ctx.stroke();
+  ctx.setLineDash([]);
+
+  const cols=['#58a6ff','#f0883e','#f0883e','#58a6ff'];
+  [DATA.E0,DATA.E1,DATA.E2,DATA.E3].forEach((b,bi)=>{{
+    ctx.strokeStyle=cols[bi];ctx.lineWidth=1.8;ctx.beginPath();
+    b.forEach((v,i)=>{{i===0?ctx.moveTo(sx(kx[i]),sy(v)):ctx.lineTo(sx(kx[i]),sy(v));}});
+    ctx.stroke();
+  }});
+
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='10px monospace';ctx.textAlign='right';
+  [ymax,0,-ymax].forEach(v=>ctx.fillText(v.toFixed(1),pad.l-4,sy(v)+4));
+  ctx.textAlign='center';
+  ['\u2212\u03c0','0','\u03c0'].forEach((l,i)=>{{
+    ctx.fillText(l,sx([-Math.PI,0,Math.PI][i]),H-pad.b+14);
+  }});
+  ctx.fillText('k\u2093',W/2,H-4);
+}})();
+
+// ── Panel 2: Strip edge spectrum ──────────────────────────────────────────
+(function(){{
+  const {{ctx,W,H}}=setupCanvas('edgeCanvas',260);
+  const pad={{l:46,r:14,t:14,b:34}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+  const kx=DATA.kx_edge, Ee=DATA.E_edge, ne=DATA.n_edge_evals;
+  if(!kx||!Ee) return;
+  const nkx=kx.length;
+  const kmin=kx[0],kmax=kx[kx.length-1];
+  let ymax=0;
+  for(let v of Ee) ymax=Math.max(ymax,Math.abs(v));
+  ymax=Math.min(ymax*1.05,3.5*Math.abs(DATA.Delta)+0.2);
+  function sx(v){{return pad.l+(v-kmin)/(kmax-kmin)*pw;}}
+  function sy(v){{return pad.t+(1-v/ymax)*ph/2;}}
+
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(pad.l,sy(0));ctx.lineTo(W-pad.r,sy(0));ctx.stroke();
+  ctx.strokeStyle='#58a6ff44';
+  [DATA.Delta,-DATA.Delta].forEach(v=>{{
+    ctx.beginPath();ctx.moveTo(pad.l,sy(v));ctx.lineTo(W-pad.r,sy(v));ctx.stroke();
+  }});
+  ctx.setLineDash([]);
+
+  const thr=Math.abs(DATA.Delta)*0.55;
+  for(let ik=0;ik<nkx;ik++){{
+    for(let b=0;b<ne;b++){{
+      const e=Ee[ik*ne+b];
+      if(Math.abs(e)>ymax) continue;
+      ctx.fillStyle=Math.abs(e)<thr?'#f78166':'#8b949e55';
+      ctx.fillRect(sx(kx[ik])-0.8,sy(e)-0.8,1.6,1.6);
+    }}
+  }}
+
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='10px monospace';ctx.textAlign='right';
+  [ymax,0,-ymax].forEach(v=>ctx.fillText(v.toFixed(2),pad.l-4,sy(v)+4));
+  ctx.textAlign='center';
+  ['\u2212\u03c0','0','\u03c0'].forEach((l,i)=>{{
+    ctx.fillText(l,sx([-Math.PI,0,Math.PI][i]),H-pad.b+14);
+  }});
+  ctx.fillText('k\u2093',W/2,H-4);
+}})();
+
+// ── Panel 3: Phase indicator bar ──────────────────────────────────────────
+(function(){{
+  const {{ctx,W,H}}=setupCanvas('phaseCanvas',120);
+  const pad={{l:60,r:30,t:34,b:36}};
+  const pw=W-pad.l-pad.r;
+  const Mshow=Math.max(DATA.M_val,M_c)*1.45+0.4;
+  function sx(v){{return pad.l+(v/Mshow)*pw;}}
+  const barY=pad.t, barH=26;
+
+  // Topo region
+  const gradT=ctx.createLinearGradient(pad.l,0,sx(M_c),0);
+  gradT.addColorStop(0,'#1a3a1a');gradT.addColorStop(1,'#2a4a2a');
+  ctx.fillStyle=gradT;ctx.fillRect(pad.l,barY,sx(M_c)-pad.l,barH);
+  ctx.fillStyle='#161b22';ctx.fillRect(sx(M_c),barY,W-pad.r-sx(M_c),barH);
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.strokeRect(pad.l,barY,pw,barH);
+
+  // M_c
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(sx(M_c),barY-6);ctx.lineTo(sx(M_c),barY+barH+6);ctx.stroke();
+  ctx.fillStyle='#f0883e';ctx.font='10px monospace';ctx.textAlign='center';
+  ctx.fillText('M\u2099='+M_c.toFixed(3),sx(M_c),barY-9);
+
+  // Current M
+  ctx.strokeStyle=topological?'#3fb950':'#f85149';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(sx(DATA.M_val),barY);ctx.lineTo(sx(DATA.M_val),barY+barH);ctx.stroke();
+  ctx.fillStyle=topological?'#3fb950':'#f85149';ctx.font='bold 10px monospace';ctx.textAlign='center';
+  ctx.fillText('M='+DATA.M_val.toFixed(3),sx(DATA.M_val),barY+barH+14);
+
+  ctx.font='10px monospace';ctx.textAlign='center';
+  ctx.fillStyle='#3fb950';
+  ctx.fillText('Topological  C=1',pad.l+(sx(M_c)-pad.l)/2,barY+barH/2+4);
+  ctx.fillStyle='#8b949e';
+  ctx.fillText('Trivial  C=0',sx(M_c)+(W-pad.r-sx(M_c))/2,barY+barH/2+4);
+
+  [0,M_c,Mshow*0.9].forEach(v=>{{
+    ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+    ctx.fillText(v.toFixed(2),sx(v),barY+barH+26);
+    ctx.strokeStyle='#484f58';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(sx(v),barY+barH);ctx.lineTo(sx(v),barY+barH+5);ctx.stroke();
+  }});
+  ctx.fillStyle='#8b949e';ctx.font='10px monospace';ctx.textAlign='center';
+  ctx.fillText('M',W/2,H-4);
+}})();
+</script>
+</body>
+</html>"""

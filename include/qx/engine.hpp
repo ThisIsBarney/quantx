@@ -73,4 +73,7 @@ HaldaneResult    run_haldane(const HaldaneOptions& opts);
 // Run Weyl semimetal & Surface Fermi Arcs computation.
 WeylResult run_weyl(const WeylOptions& opts);
 
+// Run Fu-Kane superconductor — BdG spectrum, Chern number, chiral Majorana edge mode.
+FuKaneResult run_fu_kane(const FuKaneOptions& opts);
+
 }  // namespace qx
