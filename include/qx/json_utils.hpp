@@ -141,5 +141,9 @@ std::string         floquet_topo_result_to_json(const FloquetTopoResult& result)
 NonHermOptions  non_herm_options_from_json(const std::string& json);
 // Serialize non-Hermitian topology result to JSON string.
 std::string     non_herm_result_to_json(const NonHermResult& result);
+// Parse Aubry-Andre-Harper quasicrystal options from JSON string.
+AAHOptions  aah_options_from_json(const std::string& json);
+// Serialize Aubry-Andre-Harper quasicrystal result to JSON string.
+std::string aah_result_to_json(const AAHResult& result);
 
 }  // namespace qx

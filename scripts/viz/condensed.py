@@ -85,6 +85,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("bbh",                "BBH Quadrupole Insulator HOTI"),
           ("floquet_topo",       "Floquet Topological Anomalous Edge"),
           ("non_herm",           "Non-Hermitian Skin Effect EP"),
+          ("aah",                "Aubry-Andre-Harper Quasicrystal MIT"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),

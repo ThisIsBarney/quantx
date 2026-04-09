@@ -3980,3 +3980,253 @@ window.addEventListener('resize',()=>{{drawComplex();drawSkin();drawEP();}});
 </script>
 </body>
 </html>"""
+
+
+# M46  Aubry-André-Harper Quasicrystal
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _aah_frames(
+    t: float = 1.0,
+    V: float = 0.5,
+    beta: float = 0.0,
+    phi: float = 0.0,
+    n_sites: int = 89,
+    n_V: int = 60,
+    V_max: float = 2.0,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Aubry-André-Harper quasicrystal (metal-insulator transition)."""
+    import numpy as np  # noqa: PLC0415
+
+    GOLDEN = (math.sqrt(5) - 1) / 2  # ≈ 0.6180339887
+    beta_used = GOLDEN if beta == 0.0 else beta
+
+    def build_H(V_val: float) -> np.ndarray:
+        n = np.arange(n_sites, dtype=float)
+        diag = 2.0 * V_val * np.cos(2 * math.pi * beta_used * n + phi)
+        off  = np.full(n_sites - 1, t)
+        return np.diag(diag) + np.diag(off, 1) + np.diag(off, -1)
+
+    def ipr_from_evecs(evecs: np.ndarray) -> np.ndarray:
+        """IPR = sum_n |psi_n|^4 for each eigenstate (column)."""
+        return np.sum(evecs**4, axis=0)
+
+    out: dict = {"source": source, "t": t, "V": V, "beta_used": beta_used}
+
+    if scenario in ("spectrum", "both"):
+        H = build_H(V)
+        evals, evecs = np.linalg.eigh(H)
+        ipr = ipr_from_evecs(evecs)
+        mean_ipr = float(np.mean(ipr))
+        lyapunov = float(max(0.0, math.log(V / t))) if t > 0 else 0.0
+        eps = 0.05
+        if abs(V - t) < eps * t:
+            phase_label = "Critical (V=t)"
+        elif V < t:
+            phase_label = "Metal (V<t)"
+        else:
+            phase_label = "Insulator (V>t)"
+        out.update({
+            "eigenvalues": evals.tolist(),
+            "ipr": ipr.tolist(),
+            "mean_ipr": mean_ipr,
+            "lyapunov": lyapunov,
+            "phase_label": phase_label,
+        })
+
+    if scenario in ("phase", "both"):
+        pd_V, pd_E, pd_ipr_mean = [], [], []
+        Vs = np.linspace(0.0, V_max, n_V) if n_V > 1 else np.array([V_max])
+        for Vv in Vs:
+            H = build_H(float(Vv))
+            evals, evecs = np.linalg.eigh(H)
+            ipr = ipr_from_evecs(evecs)
+            pd_V.append(float(Vv))
+            pd_E.extend(sorted(evals.tolist()))
+            pd_ipr_mean.append(float(np.mean(ipr)))
+        out.update({
+            "pd_V": pd_V,
+            "pd_E": pd_E,
+            "pd_ipr_mean": pd_ipr_mean,
+        })
+        if "phase_label" not in out:
+            out["phase_label"] = "AAH phase diagram"
+
+    return out
+
+
+def _aah_page(data: dict) -> str:
+    """Render AAH quasicrystal results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    t_val   = data.get("t", 1.0)
+    V_val   = data.get("V", 0.5)
+    beta_v  = data.get("beta_used", 0.618)
+    phase   = data.get("phase_label", "")
+    lya     = data.get("lyapunov", 0.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Aubry-André-Harper Quasicrystal — QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Aubry-André-Harper Quasicrystal: Metal-Insulator Transition</h2>
+<div class="info">
+  <span><b>t</b>={t_val:.3f}</span>
+  <span><b>V</b>={V_val:.3f}</span>
+  <span><b>&#946;</b>={beta_v:.4f}</span>
+  <span><b>&#947;</b>={lya:.3f}</span>
+  <span><b>Phase</b>: {phase}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Eigenvalue Spectrum (fixed V, coloured by IPR)</div>
+    <canvas id="cSpec" width="400" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">IPR vs Eigenstate Index</div>
+    <canvas id="cIPR" width="360" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Fractal Butterfly: Spectrum vs V</div>
+    <canvas id="cButt" width="400" height="340"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+const DATA={payload};
+const t={t_val};const V_cur={V_val};
+
+// ── Panel 1: Spectrum coloured by IPR ────────────────────────────────────────
+function drawSpec(){{
+  const cv=document.getElementById('cSpec');
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const evals=DATA.eigenvalues||[],ipr=DATA.ipr||[];
+  if(evals.length===0)return;
+  const N=evals.length;
+  const emin=Math.min(...evals),emax=Math.max(...evals);
+  const er=emax-emin||1;
+  const imax=Math.max(...ipr)||1;
+  const toX=i=>(pad+(i/N)*(W-2*pad));
+  const toY=e=>(H-pad-(e-emin)/er*(H-2*pad));
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+  // Dots coloured by IPR (low=blue=extended, high=red=localised)
+  for(var i=0;i<N;i++){{
+    const ipr_n=ipr[i]/imax;
+    const r=Math.round(255*ipr_n),b=Math.round(255*(1-ipr_n));
+    ctx.fillStyle=`rgb(${{r}},80,${{b}})`;
+    ctx.beginPath(); ctx.arc(toX(i),toY(evals[i]),2.5,0,2*Math.PI); ctx.fill();
+  }}
+  // Critical line at V=t
+  const ycrit=H/2;
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+  ctx.fillText('E',4,pad+4);
+  ctx.fillText('index',W/2-12,H-8);
+  ctx.fillStyle='#388bfd'; ctx.fillText('IPR low=extended',pad+4,pad+12);
+  ctx.fillStyle='#ff7b72'; ctx.fillText('IPR high=localised',pad+4,pad+22);
+}}
+
+// ── Panel 2: IPR vs eigenstate index ─────────────────────────────────────────
+function drawIPR(){{
+  const cv=document.getElementById('cIPR');
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const ipr=DATA.ipr||[];
+  if(ipr.length===0)return;
+  const N=ipr.length;
+  const imax=Math.max(...ipr)||1;
+  const toX=i=>(pad+(i/N)*(W-2*pad));
+  const toY=v=>(H-pad-(v/imax)*(H-2*pad));
+  // Fill
+  ctx.fillStyle='rgba(240,136,62,0.15)';
+  ctx.beginPath(); ctx.moveTo(toX(0),H-pad);
+  for(var i=0;i<N;i++) ctx.lineTo(toX(i),toY(ipr[i]));
+  ctx.lineTo(toX(N-1),H-pad); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#f0883e'; ctx.lineWidth=1;
+  ctx.beginPath();
+  for(var i=0;i<N;i++){{
+    if(i===0) ctx.moveTo(toX(i),toY(ipr[i]));
+    else ctx.lineTo(toX(i),toY(ipr[i]));
+  }}
+  ctx.stroke();
+  // Mean IPR line
+  const mean=DATA.mean_ipr||0;
+  ctx.strokeStyle='#e3b341'; ctx.lineWidth=1; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(pad,toY(mean)); ctx.lineTo(W-pad,toY(mean)); ctx.stroke();
+  ctx.setLineDash([]);
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+  ctx.fillText('IPR',4,pad+4);
+  ctx.fillText('index',W/2-12,H-8);
+  ctx.fillStyle='#e3b341';
+  ctx.fillText('mean='+mean.toFixed(3),pad+4,pad+12);
+}}
+
+// ── Panel 3: Fractal butterfly (spectrum vs V) ────────────────────────────────
+function drawButt(){{
+  const cv=document.getElementById('cButt');
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const pdV=DATA.pd_V||[],pdE=DATA.pd_E||[];
+  if(pdV.length===0)return;
+  const nV=pdV.length;
+  const N=pdE.length/nV|0;
+  const vmax=pdV[nV-1]||2;
+  // Range of E
+  var emin=Infinity,emax=-Infinity;
+  for(var i=0;i<pdE.length;i++){{if(pdE[i]<emin)emin=pdE[i];if(pdE[i]>emax)emax=pdE[i];}}
+  const er=emax-emin||1;
+  const toX=v=>(pad+v/vmax*(W-2*pad));
+  const toY=e=>(H-pad-(e-emin)/er*(H-2*pad));
+  // Draw dots
+  ctx.fillStyle='rgba(56,139,253,0.7)';
+  for(var vi=0;vi<nV;vi++){{
+    const x=toX(pdV[vi]);
+    for(var i=0;i<N;i++){{
+      ctx.fillRect(x,toY(pdE[vi*N+i]),1,1);
+    }}
+  }}
+  // MIT line at V=t
+  const xmit=toX(t);
+  ctx.strokeStyle='#e3b341'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(xmit,pad); ctx.lineTo(xmit,H-pad); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#e3b341'; ctx.font='9px monospace';
+  ctx.fillText('MIT',xmit+2,pad+10);
+  // Current V marker
+  const xcur=toX(V_cur);
+  ctx.strokeStyle='#ff7b72'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(xcur,pad); ctx.lineTo(xcur,H-pad); ctx.stroke();
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+  ctx.fillText('E',4,pad+4);
+  ctx.fillText('V',W/2-4,H-8);
+  ctx.fillText('0',pad-8,H-pad+12);
+  ctx.fillText(vmax.toFixed(1),W-pad-12,H-pad+12);
+}}
+
+drawSpec();drawIPR();drawButt();
+window.addEventListener('resize',()=>{{drawSpec();drawIPR();drawButt();}});
+}})();
+</script>
+</body>
+</html>"""

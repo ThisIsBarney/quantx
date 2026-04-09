@@ -2109,4 +2109,39 @@ std::string non_herm_result_to_json(const NonHermResult& r) {
   return j.dump();
 }
 
+AAHOptions aah_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  AAHOptions o;
+  if (j.contains("t"))        o.t        = j["t"].get<double>();
+  if (j.contains("V"))        o.V        = j["V"].get<double>();
+  if (j.contains("beta"))     o.beta     = j["beta"].get<double>();
+  if (j.contains("phi"))      o.phi      = j["phi"].get<double>();
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<int>();
+  if (j.contains("n_V"))      o.n_V      = j["n_V"].get<int>();
+  if (j.contains("V_max"))    o.V_max    = j["V_max"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string aah_result_to_json(const AAHResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["scenario"]     = r.scenario;
+  j["t"]            = r.t;
+  j["V"]            = r.V;
+  j["beta_used"]    = r.beta_used;
+  j["eigenvalues"]  = r.eigenvalues;
+  j["ipr"]          = r.ipr;
+  j["mean_ipr"]     = r.mean_ipr;
+  j["lyapunov"]     = r.lyapunov;
+  j["phase_label"]  = r.phase_label;
+  j["pd_V"]         = r.pd_V;
+  j["pd_E"]         = r.pd_E;
+  j["pd_ipr_mean"]  = r.pd_ipr_mean;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx

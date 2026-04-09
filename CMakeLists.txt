@@ -116,6 +116,7 @@ add_library(qx_core
   src/bbh.cpp
   src/floquet_topo.cpp
   src/non_herm.cpp
+  src/aah.cpp
   src/json_utils.cpp
 )
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
