@@ -1808,4 +1808,55 @@ struct CircuitCapabilities {
   bool supports_cirq_like{true};
 };
 
+// ── M45: Non-Hermitian Topology ────────────────────────────────────────────────
+//
+// Two canonical non-Hermitian topological phenomena:
+//
+// 1. Hatano-Nelson skin effect (asymmetric hopping chain):
+//    H = Σ_n J_R c†_{n+1}c_n + J_L c†_n c_{n+1},  J_R=J+γ/2, J_L=J-γ/2
+//    PBC: E(k) = 2J cos(k) + iγ sin(k)  (complex ellipse, winding W=sign(γ))
+//    OBC: E_n = 2√(J_R J_L) cos(nπ/(N+1))  — all real, skin-localized eigenstates
+//
+// 2. Exceptional point (2×2 non-Hermitian, off-diagonal gain-loss):
+//    H(δ,γ) = [[δ, J+γ],[J-γ, -δ]]
+//    E = ±√(δ² + J² - γ²);  EP at δ=0, γ=J (eigenvalues and eigenvectors coalesce)
+//
+// Scenarios: "skin" | "ep" | "both"
+
+struct NonHermOptions {
+  double J{1.0};         // base hopping amplitude
+  double gamma{0.5};     // asymmetry / non-Hermitian gain-loss parameter
+  double delta{0.0};     // detuning for EP scenario (on-site energy imbalance)
+  int    n_sites{60};    // OBC chain length
+  int    n_k{100};       // k-grid for PBC spectrum
+  int    n_gamma{80};    // points for gamma-sweep
+  double gamma_max{2.0}; // maximum gamma for sweeps
+  std::string scenario{"both"};  // "skin"|"ep"|"both"
+};
+
+struct NonHermResult {
+  bool ok{false};
+  std::string scenario;
+  double J{0}, gamma{0}, delta{0};
+  int    W{0};               // skin winding number (PBC, reference energy = 0)
+  std::string phase_label;   // e.g. "Skin (W=+1)" or "Trivial (W=0)"
+  // Skin effect — PBC complex spectrum (one band, n_k points)
+  std::vector<double> k_pbc;
+  std::vector<double> e_re_pbc, e_im_pbc;
+  // Skin effect — OBC real spectrum (n_sites eigenvalues)
+  std::vector<double> e_re_obc;
+  // Skin localization — |ψ_r|² profile of the most localized eigenstate
+  std::vector<double> skin_site;     // site indices 1..N
+  std::vector<double> skin_density;  // |ψ_r|² (normalized)
+  // Winding-number sweep — W vs gamma (n_gamma points)
+  std::vector<double> sweep_gamma;
+  std::vector<int>    sweep_W;
+  // Exceptional point — E vs gamma at delta=0 (n_gamma points, two branches ±)
+  std::vector<double> ep_gamma;
+  std::vector<double> ep_e_re_plus,  ep_e_im_plus;   // + branch
+  std::vector<double> ep_e_re_minus, ep_e_im_minus;  // - branch
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 }  // namespace qx

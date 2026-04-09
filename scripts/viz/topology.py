@@ -3674,3 +3674,309 @@ window.addEventListener('resize',()=>{{drawEdge();drawWind();drawBulk();}});
 </script>
 </body>
 </html>"""
+
+
+# M45  Non-Hermitian Topology
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _non_herm_frames(
+    J: float = 1.0,
+    gamma: float = 0.5,
+    delta: float = 0.0,
+    n_sites: int = 60,
+    n_k: int = 100,
+    n_gamma: int = 80,
+    gamma_max: float = 2.0,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Non-Hermitian topology (skin effect + exceptional points)."""
+    import numpy as np  # noqa: PLC0415
+
+    PI = math.pi
+    J_R = J + gamma / 2.0
+    J_L = J - gamma / 2.0
+
+    def pbc_spectrum(J_val: float, gam: float) -> tuple:
+        """E(k) = 2J cos(k) + i*gamma*sin(k) for k in [-pi, pi)."""
+        k = np.linspace(-PI, PI, n_k, endpoint=False)
+        e_re = 2.0 * J_val * np.cos(k)
+        e_im = gam * np.sin(k)
+        return k.tolist(), e_re.tolist(), e_im.tolist()
+
+    def obc_spectrum(J_val: float, gam: float, N: int) -> list:
+        """E_n = 2*sqrt(J_R*J_L)*cos(n*pi/(N+1)) for n=1..N (all real)."""
+        jr = J_val + gam / 2.0
+        jl = J_val - gam / 2.0
+        e0 = 2.0 * math.sqrt(max(jr * jl, 0.0))
+        ns = np.arange(1, N + 1)
+        return sorted((e0 * np.cos(ns * PI / (N + 1))).tolist())
+
+    def skin_density_profile(J_val: float, gam: float, N: int) -> tuple:
+        """|psi_r|^2 for middle eigenstate, using stable log-space computation."""
+        jr = J_val + gam / 2.0
+        jl = J_val - gam / 2.0
+        n_mid = N // 2 + 1
+        theta = n_mid * PI / (N + 1)
+        r = np.arange(1, N + 1, dtype=float)
+        log_ratio = math.log(abs(jr / jl)) if abs(jl) > 1e-14 else 30.0
+        log_rho = r * log_ratio + 2.0 * np.log(np.maximum(1e-300, np.abs(np.sin(theta * r))))
+        log_rho -= log_rho.max()
+        rho = np.exp(log_rho)
+        rho /= rho.sum()
+        return r.tolist(), rho.tolist()
+
+    def winding(J_val: float, gam: float) -> int:
+        """Winding number of E(k) around E=0.
+        Special-case gamma=0 (Hermitian): contour is real, W=0.
+        Without this guard, E(k) passes through the origin, producing
+        a spurious ±2pi phase jump that rounds to W=±1."""
+        if abs(gam) < 1e-12:
+            return 0
+        k = np.linspace(0, 2*PI, n_k, endpoint=False)
+        e_re = 2.0 * J_val * np.cos(k)
+        e_im = gam * np.sin(k)
+        E = e_re + 1j * e_im
+        total = float(np.sum(np.angle(E * np.conj(np.roll(E, -1)))))
+        return int(round(total / (2 * PI)))
+
+    def ep_sweep(J_val: float, delta_val: float) -> tuple:
+        """E(gamma) = ±sqrt(delta^2 + J^2 - gamma^2); EP at gamma=sqrt(delta^2+J^2)."""
+        gams = np.linspace(0.0, gamma_max, n_gamma)
+        disc = delta_val**2 + J_val**2 - gams**2
+        re = np.where(disc >= 0, np.sqrt(np.maximum(disc, 0.0)), 0.0)
+        im = np.where(disc < 0, np.sqrt(np.maximum(-disc, 0.0)), 0.0)
+        return (gams.tolist(),
+                re.tolist(), im.tolist(),
+                (-re).tolist(), (-im).tolist())
+
+    out: dict = {"source": source, "J": J, "gamma": gamma, "delta": delta}
+
+    if scenario in ("skin", "both"):
+        k_pbc, e_re_pbc, e_im_pbc = pbc_spectrum(J, gamma)
+        e_re_obc = obc_spectrum(J, gamma, n_sites)
+        sites, density = skin_density_profile(J, gamma, n_sites)
+        W = winding(J, gamma)
+        # Winding sweep
+        gams = np.linspace(0.0, gamma_max, n_gamma)
+        sweep_W = [winding(J, float(g)) for g in gams]
+        out.update({
+            "k_pbc": k_pbc, "e_re_pbc": e_re_pbc, "e_im_pbc": e_im_pbc,
+            "e_re_obc": e_re_obc,
+            "skin_site": sites, "skin_density": density,
+            "W": W,
+            "sweep_gamma": gams.tolist(), "sweep_W": sweep_W,
+            "phase_label": f"Skin (W={W:+d})" if W != 0 else "Trivial (W=0)",
+        })
+
+    if scenario in ("ep", "both"):
+        ep_gams, ep_re_p, ep_im_p, ep_re_m, ep_im_m = ep_sweep(J, delta)
+        out.update({
+            "ep_gamma": ep_gams,
+            "ep_e_re_plus": ep_re_p, "ep_e_im_plus": ep_im_p,
+            "ep_e_re_minus": ep_re_m, "ep_e_im_minus": ep_im_m,
+        })
+        if "phase_label" not in out:
+            out["phase_label"] = ("Below EP" if abs(gamma) < J else "Above EP")
+
+    return out
+
+
+def _non_herm_page(data: dict) -> str:
+    """Render non-Hermitian topology results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    J_val    = data.get("J", 1.0)
+    gam_val  = data.get("gamma", 0.5)
+    W_val    = data.get("W", 0)
+    phase    = data.get("phase_label", "")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Non-Hermitian Topology — QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Non-Hermitian Topology: Skin Effect &amp; Exceptional Points</h2>
+<div class="info">
+  <span><b>J</b>={J_val:.3f}</span>
+  <span><b>&#947;</b>={gam_val:.3f}</span>
+  <span><b>W</b>={W_val:+d}</span>
+  <span><b>Phase</b>: {phase}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Complex Energy Plane (PBC ellipse + OBC eigenvalues)</div>
+    <canvas id="cComplex" width="400" height="360"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Skin Density |&#968;|&#178; vs Site</div>
+    <canvas id="cSkin" width="360" height="360"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Exceptional Point: E vs &#947; (&#948;=0)</div>
+    <canvas id="cEP" width="360" height="360"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+const DATA={payload};
+const W={W_val};const J={J_val};const DELTA={data.get("delta",0.0)};
+const EP_GAMMA=Math.sqrt(DELTA*DELTA+J*J);
+
+// ── Panel 1: Complex energy plane ──────────────────────────────────────────
+function drawComplex(){{
+  const cv=document.getElementById('cComplex');
+  const W2=cv.width,H2=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W2,H2);
+  const re_pbc=DATA.e_re_pbc||[],im_pbc=DATA.e_im_pbc||[];
+  const re_obc=DATA.e_re_obc||[];
+  if(re_pbc.length===0)return;
+  // Ranges
+  var rmin=Infinity,rmax=-Infinity,imin=Infinity,imax=-Infinity;
+  for(var i=0;i<re_pbc.length;i++){{
+    if(re_pbc[i]<rmin)rmin=re_pbc[i]; if(re_pbc[i]>rmax)rmax=re_pbc[i];
+    if(im_pbc[i]<imin)imin=im_pbc[i]; if(im_pbc[i]>imax)imax=im_pbc[i];
+  }}
+  // Add 15% margin
+  var dr=(rmax-rmin)||1,di=(imax-imin)||1;
+  rmin-=dr*0.15; rmax+=dr*0.15; imin-=di*0.25; imax+=di*0.25;
+  const toX=r=>(pad+(r-rmin)/(rmax-rmin)*(W2-2*pad));
+  const toY=i=>(H2-pad-(i-imin)/(imax-imin)*(H2-2*pad));
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  const x0=toX(0),y0=toY(0);
+  ctx.beginPath(); ctx.moveTo(pad,y0); ctx.lineTo(W2-pad,y0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0,pad); ctx.lineTo(x0,H2-pad); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+  ctx.fillText('Re(E)',W2-pad-20,y0-4);
+  ctx.fillText('Im(E)',x0+4,pad+10);
+  // PBC ellipse (gradient k→hue)
+  ctx.lineWidth=1.5;
+  for(var i=0;i<re_pbc.length-1;i++){{
+    const hue=Math.round(240*i/re_pbc.length);
+    ctx.strokeStyle=`hsl(${{hue}},80%,55%)`;
+    ctx.beginPath();
+    ctx.moveTo(toX(re_pbc[i]),toY(im_pbc[i]));
+    ctx.lineTo(toX(re_pbc[i+1]),toY(im_pbc[i+1]));
+    ctx.stroke();
+  }}
+  // OBC eigenvalues (dots on real axis)
+  ctx.fillStyle='#f0883e';
+  for(var i=0;i<re_obc.length;i++){{
+    ctx.beginPath(); ctx.arc(toX(re_obc[i]),toY(0),2,0,2*Math.PI); ctx.fill();
+  }}
+  // Origin dot
+  ctx.fillStyle='#ff7b72'; ctx.beginPath(); ctx.arc(x0,y0,4,0,2*Math.PI); ctx.fill();
+  ctx.fillStyle='#c9d1d9'; ctx.font='9px monospace';
+  ctx.fillText('PBC',pad+4,pad+12);
+  ctx.fillStyle='#f0883e'; ctx.fillText('OBC',pad+4,pad+22);
+}}
+
+// ── Panel 2: Skin density ─────────────────────────────────────────────────
+function drawSkin(){{
+  const cv=document.getElementById('cSkin');
+  const W2=cv.width,H2=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W2,H2);
+  const sites=DATA.skin_site||[],dens=DATA.skin_density||[];
+  if(sites.length===0)return;
+  const N=sites.length;
+  const dmax=Math.max(...dens)||1;
+  const toX=r=>(pad+(r-1)/(N-1)*(W2-2*pad));
+  const toY=d=>(H2-pad-d/dmax*(H2-2*pad));
+  // Fill
+  ctx.fillStyle='rgba(56,139,253,0.15)';
+  ctx.beginPath(); ctx.moveTo(toX(1),H2-pad);
+  for(var i=0;i<N;i++) ctx.lineTo(toX(sites[i]),toY(dens[i]));
+  ctx.lineTo(toX(N),H2-pad); ctx.closePath(); ctx.fill();
+  // Line
+  ctx.strokeStyle='#388bfd'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(var i=0;i<N;i++){{
+    if(i===0)ctx.moveTo(toX(sites[i]),toY(dens[i]));
+    else ctx.lineTo(toX(sites[i]),toY(dens[i]));
+  }}
+  ctx.stroke();
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H2-pad); ctx.lineTo(W2-pad,H2-pad); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+  ctx.fillText('Site',W2/2-10,H2-8);
+  ctx.fillText('|psi|^2',4,pad+4);
+  ctx.fillText('1',pad-6,H2-pad+12);
+  ctx.fillText(String(N),W2-pad-8,H2-pad+12);
+}}
+
+// ── Panel 3: Exceptional point ────────────────────────────────────────────
+function drawEP(){{
+  const cv=document.getElementById('cEP');
+  const W2=cv.width,H2=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W2,H2);
+  const gams=DATA.ep_gamma||[];
+  const rep=DATA.ep_e_re_plus||[],imp=DATA.ep_e_im_plus||[];
+  const rem=DATA.ep_e_re_minus||[],imm=DATA.ep_e_im_minus||[];
+  if(gams.length===0)return;
+  const N=gams.length;
+  const gmax=gams[N-1]||2;
+  // Collect all values for range
+  const allvals=[...rep,...rem,...imp,...imm];
+  var vmin=Math.min(...allvals),vmax=Math.max(...allvals);
+  if(vmax-vmin<1e-10){{vmin-=0.1;vmax+=0.1;}}
+  vmin-=(vmax-vmin)*0.08; vmax+=(vmax-vmin)*0.08;
+  const toX=g=>(pad+g/gmax*(W2-2*pad));
+  const toY=v=>(H2-pad-(v-vmin)/(vmax-vmin)*(H2-2*pad));
+  // Zero axis
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,toY(0)); ctx.lineTo(W2-pad,toY(0)); ctx.stroke();
+  // EP vertical line at gamma=sqrt(delta^2+J^2)
+  const xep=toX(EP_GAMMA);
+  ctx.strokeStyle='#e3b341'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(xep,pad); ctx.lineTo(xep,H2-pad); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#e3b341'; ctx.font='9px monospace';
+  ctx.fillText('EP',xep+2,pad+10);
+  // Re(E) branches — solid
+  function drawLine(vals, color){{
+    ctx.strokeStyle=color; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for(var i=0;i<N;i++){{
+      if(i===0)ctx.moveTo(toX(gams[i]),toY(vals[i]));
+      else ctx.lineTo(toX(gams[i]),toY(vals[i]));
+    }}
+    ctx.stroke();
+  }}
+  drawLine(rep,'#79c0ff');   // Re(E+)
+  drawLine(rem,'#79c0ff');   // Re(E-)
+  // Im(E) branches — dashed
+  ctx.setLineDash([4,3]);
+  drawLine(imp,'#ff7b72');   // Im(E+)
+  drawLine(imm,'#ff7b72');   // Im(E-)
+  ctx.setLineDash([]);
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H2-pad); ctx.lineTo(W2-pad,H2-pad); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='9px monospace';
+  ctx.fillText('gamma',W2/2-14,H2-8);
+  ctx.fillText('E',4,pad+4);
+  ctx.fillText('0',pad-10,H2-pad+4);
+  ctx.fillText(gmax.toFixed(1),W2-pad-16,H2-pad+12);
+  ctx.fillStyle='#79c0ff'; ctx.fillText('Re(E)',W2-pad-34,pad+12);
+  ctx.fillStyle='#ff7b72'; ctx.fillText('Im(E)',W2-pad-34,pad+24);
+}}
+
+drawComplex();drawSkin();drawEP();
+window.addEventListener('resize',()=>{{drawComplex();drawSkin();drawEP();}});
+}})();
+</script>
+</body>
+</html>"""
