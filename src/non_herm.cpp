@@ -43,7 +43,11 @@ namespace qx {
 // ── Winding number of PBC spectrum around E=0 ─────────────────────────────────
 // E(k) = 2J cos(k) + i*gamma*sin(k)  traces an ellipse; winding = sign(gamma).
 // Computed numerically via phase accumulation.
+// Special case: gamma=0 → Hermitian limit, E(k) is real, W=0.  Without this
+// guard the contour passes through the origin (E=0 at k=π/2), producing a
+// spurious ±2π jump and incorrectly rounding to W=±1.
 static int skin_winding(double J, double gamma, int nk) {
+    if (std::abs(gamma) < 1e-12) return 0;
     const double dkx = 2.0 * M_PI / nk;
     double total_phase = 0.0;
     double prev_re = 2.0*J;  // E(0) = 2J
@@ -162,13 +166,15 @@ static void compute_ep(const NonHermOptions& opts, NonHermResult& res) {
     for (int i = 0; i < ng; ++i) {
         const double gv = (ng > 1) ? gmax * i / (ng - 1) : gmax;
         res.ep_gamma[i] = gv;
-        const double disc = J*J - gv*gv;  // J² - γ²
+        // Full discriminant includes on-site detuning delta:
+        // E = ±√(δ² + J² − γ²);  EP when δ² + J² = γ²
+        const double disc = opts.delta*opts.delta + J*J - gv*gv;
         double re, im;
         if (disc >= 0.0) {
-            // Below EP: real eigenvalues ±√(J²-γ²)
+            // Below EP: real eigenvalues ±√(δ²+J²-γ²)
             re = std::sqrt(disc); im = 0.0;
         } else {
-            // Above EP: purely imaginary ±i√(γ²-J²)
+            // Above EP: purely imaginary ±i√(γ²-δ²-J²)
             re = 0.0; im = std::sqrt(-disc);
         }
         res.ep_e_re_plus[i]  =  re;  res.ep_e_im_plus[i]  =  im;

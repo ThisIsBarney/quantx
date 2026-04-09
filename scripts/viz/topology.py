@@ -3727,19 +3727,23 @@ def _non_herm_frames(
         return r.tolist(), rho.tolist()
 
     def winding(J_val: float, gam: float) -> int:
-        """Winding number of E(k) around E=0."""
+        """Winding number of E(k) around E=0.
+        Special-case gamma=0 (Hermitian): contour is real, W=0.
+        Without this guard, E(k) passes through the origin, producing
+        a spurious ±2pi phase jump that rounds to W=±1."""
+        if abs(gam) < 1e-12:
+            return 0
         k = np.linspace(0, 2*PI, n_k, endpoint=False)
         e_re = 2.0 * J_val * np.cos(k)
         e_im = gam * np.sin(k)
         E = e_re + 1j * e_im
-        dE = np.diff(np.append(E, E[0]))
         total = float(np.sum(np.angle(E * np.conj(np.roll(E, -1)))))
         return int(round(total / (2 * PI)))
 
-    def ep_sweep(J_val: float) -> tuple:
-        """E(gamma) = ±sqrt(J^2 - gamma^2) at delta=0."""
+    def ep_sweep(J_val: float, delta_val: float) -> tuple:
+        """E(gamma) = ±sqrt(delta^2 + J^2 - gamma^2); EP at gamma=sqrt(delta^2+J^2)."""
         gams = np.linspace(0.0, gamma_max, n_gamma)
-        disc = J_val**2 - gams**2
+        disc = delta_val**2 + J_val**2 - gams**2
         re = np.where(disc >= 0, np.sqrt(np.maximum(disc, 0.0)), 0.0)
         im = np.where(disc < 0, np.sqrt(np.maximum(-disc, 0.0)), 0.0)
         return (gams.tolist(),
@@ -3766,7 +3770,7 @@ def _non_herm_frames(
         })
 
     if scenario in ("ep", "both"):
-        ep_gams, ep_re_p, ep_im_p, ep_re_m, ep_im_m = ep_sweep(J)
+        ep_gams, ep_re_p, ep_im_p, ep_re_m, ep_im_m = ep_sweep(J, delta)
         out.update({
             "ep_gamma": ep_gams,
             "ep_e_re_plus": ep_re_p, "ep_e_im_plus": ep_im_p,
@@ -3827,7 +3831,8 @@ def _non_herm_page(data: dict) -> str:
 <script>
 (function(){{
 const DATA={payload};
-const W={W_val};const J={J_val};
+const W={W_val};const J={J_val};const DELTA={data.get("delta",0.0)};
+const EP_GAMMA=Math.sqrt(DELTA*DELTA+J*J);
 
 // ── Panel 1: Complex energy plane ──────────────────────────────────────────
 function drawComplex(){{
@@ -3933,8 +3938,8 @@ function drawEP(){{
   // Zero axis
   ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(pad,toY(0)); ctx.lineTo(W2-pad,toY(0)); ctx.stroke();
-  // EP vertical line at gamma=J
-  const xep=toX(J);
+  // EP vertical line at gamma=sqrt(delta^2+J^2)
+  const xep=toX(EP_GAMMA);
   ctx.strokeStyle='#e3b341'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
   ctx.beginPath(); ctx.moveTo(xep,pad); ctx.lineTo(xep,H2-pad); ctx.stroke();
   ctx.setLineDash([]);
