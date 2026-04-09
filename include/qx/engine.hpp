@@ -83,5 +83,7 @@ KitaevHcResult run_kitaev_honeycomb(const KitaevHcOptions& opts);
 BBHResult run_bbh(const BBHOptions& opts);
 // Run Floquet topological insulator — quasienergy spectrum, edge states, winding numbers.
 FloquetTopoResult run_floquet_topo(const FloquetTopoOptions& opts);
+// Run non-Hermitian topology — Hatano-Nelson skin effect, exceptional points.
+NonHermResult run_non_herm(const NonHermOptions& opts);
 
 }  // namespace qx

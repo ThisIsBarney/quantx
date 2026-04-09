@@ -137,5 +137,9 @@ std::string bbh_result_to_json(const BBHResult& result);
 FloquetTopoOptions  floquet_topo_options_from_json(const std::string& json);
 // Serialize Floquet topological insulator result to JSON string.
 std::string         floquet_topo_result_to_json(const FloquetTopoResult& result);
+// Parse non-Hermitian topology options from JSON string.
+NonHermOptions  non_herm_options_from_json(const std::string& json);
+// Serialize non-Hermitian topology result to JSON string.
+std::string     non_herm_result_to_json(const NonHermResult& result);
 
 }  // namespace qx

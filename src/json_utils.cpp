@@ -2067,4 +2067,46 @@ std::string floquet_topo_result_to_json(const FloquetTopoResult& r) {
   return j.dump();
 }
 
+NonHermOptions non_herm_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  NonHermOptions o;
+  if (j.contains("J"))          o.J         = j["J"].get<double>();
+  if (j.contains("gamma"))      o.gamma     = j["gamma"].get<double>();
+  if (j.contains("delta"))      o.delta     = j["delta"].get<double>();
+  if (j.contains("n_sites"))    o.n_sites   = j["n_sites"].get<int>();
+  if (j.contains("n_k"))        o.n_k       = j["n_k"].get<int>();
+  if (j.contains("n_gamma"))    o.n_gamma   = j["n_gamma"].get<int>();
+  if (j.contains("gamma_max"))  o.gamma_max = j["gamma_max"].get<double>();
+  if (j.contains("scenario"))   o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string non_herm_result_to_json(const NonHermResult& r) {
+  json j;
+  j["ok"]             = r.ok;
+  j["scenario"]       = r.scenario;
+  j["J"]              = r.J;
+  j["gamma"]          = r.gamma;
+  j["delta"]          = r.delta;
+  j["W"]              = r.W;
+  j["phase_label"]    = r.phase_label;
+  j["k_pbc"]          = r.k_pbc;
+  j["e_re_pbc"]       = r.e_re_pbc;
+  j["e_im_pbc"]       = r.e_im_pbc;
+  j["e_re_obc"]       = r.e_re_obc;
+  j["skin_site"]      = r.skin_site;
+  j["skin_density"]   = r.skin_density;
+  j["sweep_gamma"]    = r.sweep_gamma;
+  j["sweep_W"]        = r.sweep_W;
+  j["ep_gamma"]       = r.ep_gamma;
+  j["ep_e_re_plus"]   = r.ep_e_re_plus;
+  j["ep_e_im_plus"]   = r.ep_e_im_plus;
+  j["ep_e_re_minus"]  = r.ep_e_re_minus;
+  j["ep_e_im_minus"]  = r.ep_e_im_minus;
+  j["elapsed_ms"]     = r.elapsed_ms;
+  j["message"]        = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx

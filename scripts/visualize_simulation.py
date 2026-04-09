@@ -70,6 +70,7 @@ from viz.topology import (
     _kitaev_honeycomb_frames, _kitaev_honeycomb_page,
     _bbh_frames, _bbh_page,
     _floquet_topo_frames, _floquet_topo_page,
+    _non_herm_frames, _non_herm_page,
 )
 
 
@@ -86,7 +87,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -339,6 +340,13 @@ def main() -> int:
   parser.add_argument("--ft-ny",    type=int,   default=30,   help="strip width n_y for Floquet edge states")
   parser.add_argument("--ft-nJ",    type=int,   default=50,   help="winding sweep J-grid points")
   parser.add_argument("--ft-Jmax",  type=float, default=2.5,  help="max J for winding sweep")
+  # ── M45: Non-Hermitian topology ──────────────────────────────────────────
+  parser.add_argument("--nh-J",       type=float, default=1.0,  help="Non-Herm base hopping J")
+  parser.add_argument("--nh-gamma",   type=float, default=0.5,  help="Non-Herm asymmetry gamma")
+  parser.add_argument("--nh-nsites",  type=int,   default=60,   help="OBC chain length")
+  parser.add_argument("--nh-nk",      type=int,   default=100,  help="k-grid for PBC spectrum")
+  parser.add_argument("--nh-ngamma",  type=int,   default=80,   help="gamma sweep points")
+  parser.add_argument("--nh-gammax",  type=float, default=2.0,  help="max gamma for sweeps")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1461,6 +1469,26 @@ def main() -> int:
       path.write_text(_floquet_topo_page(ft_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"non_herm", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("non_herm skipped: numpy not available", file=sys.stderr)
+    else:
+      nh_data = _non_herm_frames(
+          J=args.nh_J,
+          gamma=args.nh_gamma,
+          n_sites=args.nh_nsites,
+          n_k=args.nh_nk,
+          n_gamma=args.nh_ngamma,
+          gamma_max=args.nh_gammax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_non_herm.html"
+      path.write_text(_non_herm_page(nh_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1521,6 +1549,7 @@ def main() -> int:
         "kitaev_honeycomb":   "quantum_kitaev_honeycomb",
         "bbh":                "quantum_bbh",
         "floquet_topo":       "quantum_floquet_topo",
+        "non_herm":           "quantum_non_herm",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
