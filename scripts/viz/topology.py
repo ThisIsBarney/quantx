@@ -2999,3 +2999,314 @@ window.addEventListener('resize',()=>{{drawBand();drawPhase();}});
 </script>
 </body>
 </html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M43  BBH Quadrupole Insulator (Higher-Order Topological Insulator)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _bbh_frames(
+    gamma_x: float = 0.5,
+    lambda_x: float = 1.0,
+    gamma_y: float = 0.5,
+    lambda_y: float = 1.0,
+    n_k: int = 60,
+    n_sites: int = 8,
+    n_pd: int = 60,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: BBH quadrupole insulator bulk bands + corner states."""
+    import numpy as np  # noqa: PLC0415
+
+    PI = math.pi
+
+    # ── Gamma matrices (4×4) ───────────────────────────────────────────────
+    sx = np.array([[0,1],[1,0]], dtype=complex)
+    sy = np.array([[0,-1j],[1j,0]], dtype=complex)
+    sz = np.array([[1,0],[0,-1]], dtype=complex)
+    s0 = np.eye(2, dtype=complex)
+
+    G1 = np.kron(sy, sx)   # sigma_y ⊗ sigma_x
+    G2 = np.kron(sx, s0)   # sigma_x ⊗ I
+    G3 = np.kron(sy, sy)   # sigma_y ⊗ sigma_y
+    G4 = np.kron(sy, sz)   # sigma_y ⊗ sigma_z
+
+    def bbh_ham(kx: float, ky: float) -> np.ndarray:
+        c1 = lambda_y * math.sin(ky)
+        c2 = gamma_y  + lambda_y * math.cos(ky)
+        c3 = lambda_x * math.sin(kx)
+        c4 = gamma_x  + lambda_x * math.cos(kx)
+        return c1*G1 + c2*G2 + c3*G3 + c4*G4
+
+    out: dict = {
+        "source": source,
+        "gamma_x": gamma_x, "lambda_x": lambda_x,
+        "gamma_y": gamma_y, "lambda_y": lambda_y,
+    }
+    topo = abs(gamma_x / lambda_x) < 1.0 and abs(gamma_y / lambda_y) < 1.0
+    out["phase_label"] = "Quadrupole (q_xy=1/2)" if topo else "Trivial"
+
+    # ── Bulk spectrum ─────────────────────────────────────────────────────
+    if scenario in ("spectrum", "both"):
+        kx_list, ky_list = [], []
+        E0_list, E1_list, E2_list, E3_list = [], [], [], []
+        for si in range(n_k):
+            for ti in range(n_k):
+                kx = 2*PI*si/n_k - PI
+                ky = 2*PI*ti/n_k - PI
+                H = bbh_ham(kx, ky)
+                evals = np.linalg.eigvalsh(H)
+                kx_list.append(float(kx)); ky_list.append(float(ky))
+                E0_list.append(float(evals[0])); E1_list.append(float(evals[1]))
+                E2_list.append(float(evals[2])); E3_list.append(float(evals[3]))
+        gap = float(min(E2_list[i] - E1_list[i] for i in range(len(E0_list))))
+        out.update({
+            "kx_bulk": kx_list, "ky_bulk": ky_list,
+            "E0": E0_list, "E1": E1_list, "E2": E2_list, "E3": E3_list,
+            "gap": gap,
+        })
+
+    # ── Finite-lattice open-BC spectrum ───────────────────────────────────
+    if scenario in ("corner", "both"):
+        Ns = n_sites
+        Norb = 4
+        dim = Ns * Ns * Norb
+
+        def orb_idx(ix: int, iy: int, o: int) -> int:
+            return (iy * Ns + ix) * Norb + o
+
+        H_full = np.zeros((dim, dim), dtype=complex)
+
+        def add_block(ix: int, iy: int, jx: int, jy: int,
+                      c: complex, G: np.ndarray) -> None:
+            if not (0 <= ix < Ns and 0 <= iy < Ns): return
+            if not (0 <= jx < Ns and 0 <= jy < Ns): return
+            for a in range(Norb):
+                for b in range(Norb):
+                    H_full[orb_idx(ix,iy,a), orb_idx(jx,jy,b)] += c * G[a,b]
+
+        for iy in range(Ns):
+            for ix in range(Ns):
+                # On-site
+                add_block(ix, iy, ix, iy, gamma_x, G4)
+                add_block(ix, iy, ix, iy, gamma_y, G2)
+                # x-direction hops
+                add_block(ix, iy, ix+1, iy, lambda_x * 0.5,     G4)
+                add_block(ix, iy, ix+1, iy, -1j * lambda_x*0.5, G3)
+                add_block(ix, iy, ix-1, iy, lambda_x * 0.5,     G4)
+                add_block(ix, iy, ix-1, iy,  1j * lambda_x*0.5, G3)
+                # y-direction hops
+                add_block(ix, iy, ix, iy+1, lambda_y * 0.5,     G2)
+                add_block(ix, iy, ix, iy+1, -1j * lambda_y*0.5, G1)
+                add_block(ix, iy, ix, iy-1, lambda_y * 0.5,     G2)
+                add_block(ix, iy, ix, iy-1,  1j * lambda_y*0.5, G1)
+
+        evals = np.linalg.eigvalsh(H_full)
+        # Sort 8 closest to zero
+        near_zero = sorted(evals, key=abs)[:8]
+        out["E_open"] = [float(e) for e in sorted(evals)]
+        out["ldos_corner"] = [float(e) for e in near_zero]
+
+    # ── Phase diagram ─────────────────────────────────────────────────────
+    if scenario in ("phase_diagram", "both"):
+        n = n_pd
+        pd_rx, pd_ry, pd_topo = [], [], []
+        for i in range(n):
+            for j in range(n):
+                rx = -1.5 + 3.0 * i / (n - 1)
+                ry = -1.5 + 3.0 * j / (n - 1)
+                pd_rx.append(float(rx)); pd_ry.append(float(ry))
+                pd_topo.append(1 if (abs(rx) < 1.0 and abs(ry) < 1.0) else 0)
+        out.update({"pd_gx_over_lx": pd_rx, "pd_gy_over_ly": pd_ry, "pd_topo": pd_topo})
+
+    return out
+
+
+def _bbh_page(data: dict) -> str:
+    """Render BBH quadrupole insulator results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    phase_label = data.get("phase_label", "")
+    gap = data.get("gap", 0.0)
+    gx = data.get("gamma_x", 0.5); lx = data.get("lambda_x", 1.0)
+    gy = data.get("gamma_y", 0.5); ly = data.get("lambda_y", 1.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>BBH Quadrupole Insulator — QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>BBH Quadrupole Insulator (Higher-Order TI)</h2>
+<div class="info">
+  <span><b>gx</b>={gx:.3f}</span><span><b>lx</b>={lx:.3f}</span>
+  <span><b>gy</b>={gy:.3f}</span><span><b>ly</b>={ly:.3f}</span>
+  <span><b>gx/lx</b>={gx/lx:.3f}</span><span><b>gy/ly</b>={gy/ly:.3f}</span>
+  <span><b>Phase</b>: {phase_label}</span>
+  <span><b>Bulk gap</b>: {gap:.4f}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Open-BC Spectrum (corner states near E=0)</div>
+    <canvas id="cOpen" width="420" height="320"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Phase Diagram (gx/lx vs gy/ly)</div>
+    <canvas id="cPhase" width="380" height="320"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Bulk Bands (E vs kx)</div>
+    <canvas id="cBulk" width="380" height="320"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+'use strict';
+const DATA={payload};
+
+function drawAxes(ctx,pad,W,H,xTicks,yTicks){{
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,pad.t+(H-pad.t-pad.b));
+  ctx.lineTo(pad.l+(W-pad.l-pad.r),pad.t+(H-pad.t-pad.b));ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  xTicks.forEach(([x,lbl])=>ctx.fillText(lbl,x,H-pad.b+10));
+  ctx.textAlign='right';
+  yTicks.forEach(([y,lbl])=>ctx.fillText(lbl,pad.l-3,y+3));
+}}
+
+// ── Open-BC spectrum ─────────────────────────────────────────────────────
+function drawOpen(){{
+  const cv=document.getElementById('cOpen');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  const pad={{l:50,r:15,t:15,b:30}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+  const ev=DATA.E_open||[];
+  if(!ev.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "corner" or "both")',W/2,H/2);return;}}
+  const emin=ev[0], emax=ev[ev.length-1];
+  const sy=e=>pad.t+(1-(e-emin)/(emax-emin||1))*ph;
+  // Draw all eigenvalues as horizontal bars at index x
+  const n=ev.length;
+  const sx=i=>pad.l+i/(n-1)*pw;
+  // Color: near zero → bright, others → dim
+  ev.forEach((e,i)=>{{
+    const norm=Math.abs(e)/(Math.max(Math.abs(emin),Math.abs(emax))||1);
+    ctx.fillStyle=norm<0.15?'#f78166':'#8b949e';
+    ctx.fillRect(Math.round(sx(i))-1,Math.round(sy(e))-1,2,2);
+  }});
+  // Zero line
+  if(emin<0&&emax>0){{
+    ctx.strokeStyle='rgba(255,255,255,0.2)';ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(pad.l,sy(0));ctx.lineTo(pad.l+pw,sy(0));ctx.stroke();
+    ctx.setLineDash([]);
+  }}
+  drawAxes(ctx,pad,W,H,
+    [[pad.l,'0'],[pad.l+pw/2,String(Math.round(n/2))],[pad.l+pw,String(n)]],
+    [[sy(emax),emax.toFixed(2)],[sy(0),'0'],[sy(emin),emin.toFixed(2)]]
+  );
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText('state index',W/2,H-2);
+  ctx.save();ctx.translate(12,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('E',0,0);ctx.restore();
+  // Annotation
+  const nc=DATA.ldos_corner||[];
+  const nMid=nc.filter(e=>Math.abs(e)<0.15).length;
+  ctx.fillStyle='#f78166';ctx.font='10px monospace';ctx.textAlign='left';
+  ctx.fillText('corner states (red): '+nMid+' near E=0',pad.l+4,pad.t+12);
+}}
+
+// ── Phase diagram ────────────────────────────────────────────────────────
+function drawPhase(){{
+  const cv=document.getElementById('cPhase');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  const pad={{l:40,r:15,t:15,b:35}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+  const rx=DATA.pd_gx_over_lx||[],ry=DATA.pd_gy_over_ly||[],tp=DATA.pd_topo||[];
+  if(!rx.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "phase_diagram" or "both")',W/2,H/2);return;}}
+  const xmin=Math.min(...rx),xmax=Math.max(...rx);
+  const ymin=Math.min(...ry),ymax=Math.max(...ry);
+  const sx=v=>pad.l+(v-xmin)/(xmax-xmin)*pw;
+  const sy=v=>pad.t+(1-(v-ymin)/(ymax-ymin))*ph;
+  for(let i=0;i<rx.length;i++){{
+    ctx.fillStyle=tp[i]?'#3fb950':'#21262d';
+    ctx.fillRect(Math.round(sx(rx[i]))-2,Math.round(sy(ry[i]))-2,4,4);
+  }}
+  // Current point marker
+  const cx2=sx(DATA.gamma_x/DATA.lambda_x), cy2=sy(DATA.gamma_y/DATA.lambda_y);
+  ctx.strokeStyle='#fff';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.arc(cx2,cy2,7,0,2*Math.PI);ctx.stroke();
+  // Unit square (topo region)
+  ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.setLineDash([4,4]);
+  ctx.strokeRect(sx(-1),sy(1),sx(1)-sx(-1),sy(-1)-sy(1));
+  ctx.setLineDash([]);
+  drawAxes(ctx,pad,W,H,
+    [[sx(-1),'-1'],[sx(0),'0'],[sx(1),'1']],
+    [[sy(1),'1'],[sy(0),'0'],[sy(-1),'-1']]
+  );
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText('gx/lx',W/2,H-4);
+  ctx.save();ctx.translate(10,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('gy/ly',0,0);ctx.restore();
+  ctx.fillStyle='#3fb950';ctx.fillRect(pad.l+2,pad.t+2,8,8);
+  ctx.fillStyle='#8b949e';ctx.textAlign='left';ctx.fillText('Topo',pad.l+13,pad.t+9);
+}}
+
+// ── Bulk bands ────────────────────────────────────────────────────────────
+function drawBulk(){{
+  const cv=document.getElementById('cBulk');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  const pad={{l:45,r:15,t:15,b:30}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+  const kx=DATA.kx_bulk||[],nk2=Math.round(Math.sqrt(kx.length||1));
+  const E1=DATA.E1||[],E2=DATA.E2||[];
+  if(!kx.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "spectrum" or "both")',W/2,H/2);return;}}
+  // Show kx slice at ky≈0 (ti = nk/2)
+  const ti0=Math.floor(nk2/2);
+  const e1s=[],e2s=[],kxs=[];
+  for(let si=0;si<nk2;si++){{
+    const idx=si*nk2+ti0;
+    kxs.push(kx[idx]);e1s.push(E1[idx]);e2s.push(E2[idx]);
+  }}
+  const kmin=Math.min(...kxs),kmax=Math.max(...kxs);
+  const emin=Math.min(...e1s),emax=Math.max(...e2s);
+  const sxf=v=>pad.l+(v-kmin)/(kmax-kmin||1)*pw;
+  const syf=e=>pad.t+(1-(e-emin)/(emax-emin||1))*ph;
+  ctx.strokeStyle='#58a6ff';ctx.lineWidth=1.5;
+  ctx.beginPath();kxs.forEach((v,i)=>i===0?ctx.moveTo(sxf(v),syf(e1s[i])):ctx.lineTo(sxf(v),syf(e1s[i])));ctx.stroke();
+  ctx.strokeStyle='#3fb950';ctx.lineWidth=1.5;
+  ctx.beginPath();kxs.forEach((v,i)=>i===0?ctx.moveTo(sxf(v),syf(e2s[i])):ctx.lineTo(sxf(v),syf(e2s[i])));ctx.stroke();
+  if(emin<0&&emax>0){{ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(pad.l,syf(0));ctx.lineTo(pad.l+pw,syf(0));ctx.stroke();ctx.setLineDash([]);}}
+  drawAxes(ctx,pad,W,H,
+    [[sxf(-Math.PI),'-π'],[sxf(0),'0'],[sxf(Math.PI),'π']],
+    [[syf(emax),emax.toFixed(2)],[syf(0),'0'],[syf(emin),emin.toFixed(2)]]
+  );
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText('kx (ky=0)',W/2,H-2);
+  ctx.fillStyle='#8b949e';ctx.font='10px monospace';ctx.textAlign='left';
+  ctx.fillText('gap='+((DATA.gap||0).toFixed(4)),pad.l+4,pad.t+12);
+}}
+
+drawOpen();drawPhase();drawBulk();
+window.addEventListener('resize',()=>{{drawOpen();drawPhase();drawBulk();}});
+}})();
+</script>
+</body>
+</html>"""
