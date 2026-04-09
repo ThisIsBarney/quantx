@@ -3310,3 +3310,357 @@ window.addEventListener('resize',()=>{{drawOpen();drawPhase();drawBulk();}});
 </script>
 </body>
 </html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M44  Floquet Topological Insulator
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _floquet_topo_frames(
+    J: float = 1.0,
+    T: float = 1.0,
+    n_k: int = 50,
+    n_y: int = 30,
+    n_J: int = 50,
+    J_max: float = 2.5,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Floquet topological insulator (5-step drive protocol)."""
+    import numpy as np  # noqa: PLC0415
+
+    PI = math.pi
+    dt = T / 5.0
+
+    sx = np.array([[0,1],[1,0]], dtype=complex)
+    sy = np.array([[0,-1j],[1j,0]], dtype=complex)
+    s0 = np.eye(2, dtype=complex)
+
+    def step_U(kphase: float, t: float) -> np.ndarray:
+        """exp(-i t J (cos(kphase) sx - sin(kphase) sy))"""
+        f = complex(J * math.cos(kphase), J * math.sin(kphase))
+        H = f * (sx + 1j*sy) * 0.5 + f.conjugate() * (sx - 1j*sy) * 0.5
+        # H = Re(f)*sx + Im(f)*sy  ← actually H = [[0,f],[f*,0]] for σx/σy combo
+        # = J*cos*sx - J*sin*sy
+        H2 = np.array([[0, f], [f.conjugate(), 0]], dtype=complex)
+        # wait, let me be explicit:
+        # H = J(cos kphase σx - sin kphase σy)
+        # = [[0, J*cos + i*J*sin], [J*cos - i*J*sin, 0]]
+        # = [[0, J e^{i kphase}], [J e^{-i kphase}, 0]]
+        # eigenvalues ±J → exp(-i t H) = cos(tJ) I - i sin(tJ) H/J
+        E = J if J > 1e-15 else 1e-15
+        c = math.cos(t * E)
+        s = math.sin(t * E) / E
+        return c * s0 - 1j * s * np.array([[0, J*math.cos(kphase) + 1j*J*math.sin(kphase)],
+                                             [J*math.cos(kphase) - 1j*J*math.sin(kphase), 0]])
+
+    def floquet_U_bulk(kx: float, ky: float) -> np.ndarray:
+        U1 = step_U(kx,  dt)  # +x hop
+        U2 = step_U(ky,  dt)  # +y hop
+        U3 = step_U(-kx, dt)  # -x hop
+        U4 = step_U(-ky, dt)  # -y hop
+        U5 = s0.copy()         # trivial step
+        return U5 @ U4 @ U3 @ U2 @ U1
+
+    def quasi_energy(U: np.ndarray) -> tuple:
+        tr = (U[0,0] + U[1,1]).real * 0.5
+        theta = math.acos(max(-1.0, min(1.0, tr)))
+        return -theta / T, theta / T
+
+    def winding_W_pi(J_val: float) -> int:
+        phase_total = 0.0
+        nk_w = n_k
+        prev = None
+        for i in range(nk_w + 1):
+            kx = 2*PI * i / nk_w - PI
+            U1t = step_U(kx,  dt) if J_val > 1e-15 else s0.copy()
+            # rebuild with J_val
+            def step_Jv(kp: float) -> np.ndarray:
+                e = J_val if J_val > 1e-15 else 1e-15
+                c2 = math.cos(dt * e); s2 = math.sin(dt * e) / e
+                return c2 * s0 - 1j * s2 * np.array(
+                    [[0, J_val*math.cos(kp) + 1j*J_val*math.sin(kp)],
+                     [J_val*math.cos(kp) - 1j*J_val*math.sin(kp), 0]])
+            U = step_Jv(-0.0) @ step_Jv(-0.0) @ step_Jv(-kx) @ step_Jv(0.0) @ step_Jv(kx)
+            val = U[0, 1]
+            if prev is not None:
+                phase_total += float(np.angle(val * np.conj(prev)))
+            prev = val
+        return int(round(phase_total / (2 * PI)))
+
+    out: dict = {"source": source, "J": J, "T": T}
+
+    # Bulk spectrum
+    if scenario in ("spectrum", "both"):
+        kx_list, ky_list, em_list, ep_list = [], [], [], []
+        for si in range(n_k):
+            for ti in range(n_k):
+                kx = 2*PI*si/n_k - PI
+                ky = 2*PI*ti/n_k - PI
+                U = floquet_U_bulk(kx, ky)
+                em, ep = quasi_energy(U)
+                kx_list.append(float(kx)); ky_list.append(float(ky))
+                em_list.append(em); ep_list.append(ep)
+        out.update({"kx_bulk": kx_list, "ky_bulk": ky_list,
+                    "eps_minus": em_list, "eps_plus": ep_list})
+
+    # Edge spectrum (strip)
+    if scenario in ("edge", "both"):
+        Ny = n_y; dim = 2 * Ny
+        kx_edge, eps_edge = [], []
+        for si in range(n_k):
+            kx = 2*PI*si/n_k - PI
+            kx_edge.append(float(kx))
+            # Build dim×dim strip Floquet operator
+            Ustrip = np.eye(dim, dtype=complex)
+            # Step 1: x-hops, block diagonal
+            U1b = step_U(kx, dt)
+            S1 = np.zeros((dim, dim), dtype=complex)
+            for iy in range(Ny):
+                S1[2*iy:2*iy+2, 2*iy:2*iy+2] = U1b
+            Ustrip = S1 @ Ustrip
+            # Step 2: +y hops, pairs (2iy+1, 2iy+2) for iy=0,2,...
+            S2 = np.eye(dim, dtype=complex)
+            for iy in range(0, Ny-1, 2):
+                blk = step_U(0.0, dt)  # σx block (kphase=0)
+                bA = 2*iy+1; aB = 2*(iy+1)
+                S2[bA, bA] = blk[0,0]; S2[bA, aB] = blk[0,1]
+                S2[aB, bA] = blk[1,0]; S2[aB, aB] = blk[1,1]
+            Ustrip = S2 @ Ustrip
+            # Step 3: x-hops (-kx)
+            U3b = step_U(-kx, dt)
+            S3 = np.zeros((dim, dim), dtype=complex)
+            for iy in range(Ny):
+                S3[2*iy:2*iy+2, 2*iy:2*iy+2] = U3b
+            Ustrip = S3 @ Ustrip
+            # Step 4: -y hops, pairs (2iy+1, 2iy+2) for iy=1,3,...
+            S4 = np.eye(dim, dtype=complex)
+            for iy in range(1, Ny-1, 2):
+                blk = step_U(0.0, dt)
+                bB = 2*iy+1; aA = 2*(iy+1)
+                S4[bB, bB] = blk[0,0]; S4[bB, aA] = blk[0,1]
+                S4[aA, bB] = blk[1,0]; S4[aA, aA] = blk[1,1]
+            Ustrip = S4 @ Ustrip
+            # Step 5: identity
+            # Quasienergies: use imag part of (U-U†)/2i = sin(εT)
+            Msym = (Ustrip - Ustrip.conj().T) / (2j)
+            evals_sin = np.linalg.eigvalsh(Msym.real)
+            eps_row = [float(np.arcsin(max(-1.0, min(1.0, s))) / T) for s in evals_sin]
+            eps_edge.extend(sorted(eps_row))
+        out.update({"kx_edge": kx_edge, "eps_edge": eps_edge})
+
+    # Winding sweep
+    if scenario in ("winding", "both"):
+        w_pi = winding_W_pi(J)
+        out["W_pi"] = w_pi
+        out["W_0"]  = 0
+        out["phase_label"] = (f"Anomalous Floquet (W_pi={w_pi:+d})"
+                              if w_pi != 0 else "Trivial Floquet (W_pi=0)")
+        sweep_J_list, sweep_W_list = [], []
+        for i in range(n_J):
+            Jv = J_max * i / (n_J - 1)
+            sweep_J_list.append(float(Jv))
+            sweep_W_list.append(winding_W_pi(Jv))
+        out.update({"sweep_J": sweep_J_list, "sweep_W_pi": sweep_W_list})
+    else:
+        out.setdefault("W_pi", 0)
+        out.setdefault("phase_label", "Floquet")
+
+    return out
+
+
+def _floquet_topo_page(data: dict) -> str:
+    """Render Floquet topological insulator results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    phase_label = data.get("phase_label", "")
+    J_val = data.get("J", 1.0)
+    T_val = data.get("T", 1.0)
+    W_pi = data.get("W_pi", 0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Floquet Topological Insulator — QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Floquet Topological Insulator (5-step drive protocol)</h2>
+<div class="info">
+  <span><b>J</b>={J_val:.3f}</span>
+  <span><b>T</b>={T_val:.3f}</span>
+  <span><b>W_pi</b>={W_pi:+d}</span>
+  <span><b>Phase</b>: {phase_label}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Edge Spectrum (strip, open y)</div>
+    <canvas id="cEdge" width="440" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Winding Number W_pi vs J</div>
+    <canvas id="cWind" width="380" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Bulk Quasienergy (kx slice, ky=0)</div>
+    <canvas id="cBulk" width="380" height="340"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+'use strict';
+const DATA={payload};
+const PI=Math.PI;
+
+function drawAxes(ctx,pad,W,H,xTicks,yTicks){{
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);
+  ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.textAlign='center';xTicks.forEach(([x,l])=>ctx.fillText(l,x,H-pad.b+10));
+  ctx.textAlign='right';yTicks.forEach(([y,l])=>ctx.fillText(l,pad.l-3,y+3));
+}}
+
+// ── Edge spectrum ──────────────────────────────────────────────────────────
+function drawEdge(){{
+  const cv=document.getElementById('cEdge');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  const pad={{l:50,r:15,t:15,b:30}};
+  const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  const kx=DATA.kx_edge||[],eps=DATA.eps_edge||[];
+  if(!kx.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "edge" or "both")',W/2,H/2);return;}}
+  const nk=kx.length, nb=eps.length/nk;
+  const T2=DATA.T||1;
+  const emax=PI/T2;
+  const sxf=v=>pad.l+(v+PI)/(2*PI)*pw;
+  const syf=e=>pad.t+(1-(e+emax)/(2*emax))*ph;
+  // Draw all bands as grey dots
+  ctx.fillStyle='#21262d';
+  for(let si=0;si<nk;si++)for(let b=0;b<nb;b++){{
+    const e=eps[si*nb+b];
+    ctx.fillRect(Math.round(sxf(kx[si]))-1,Math.round(syf(e))-1,2,2);
+  }}
+  // Highlight near-zero (edge states in 0-gap) and near ±π/T (π-gap)
+  const thr=0.15*emax;
+  ctx.fillStyle='#f78166';
+  for(let si=0;si<nk;si++)for(let b=0;b<nb;b++){{
+    const e=eps[si*nb+b];
+    if(Math.abs(e)<thr||Math.abs(Math.abs(e)-emax)<thr)
+      ctx.fillRect(Math.round(sxf(kx[si]))-1,Math.round(syf(e))-1,2,2);
+  }}
+  // ±π/T lines
+  ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.setLineDash([3,3]);
+  [0, PI/T2, -PI/T2].forEach(e=>{{
+    ctx.beginPath();ctx.moveTo(pad.l,syf(e));ctx.lineTo(pad.l+pw,syf(e));ctx.stroke();
+  }});
+  ctx.setLineDash([]);
+  drawAxes(ctx,pad,W,H,
+    [[sxf(-PI),'-π'],[sxf(0),'0'],[sxf(PI),'π']],
+    [[syf(emax),'π/T'],[syf(0),'0'],[syf(-emax),'-π/T']]
+  );
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText('kx',W/2,H-2);
+  ctx.fillStyle='#f78166';ctx.font='9px monospace';ctx.textAlign='left';
+  ctx.fillText('edge states (red)',pad.l+4,pad.t+10);
+}}
+
+// ── Winding-number plot ────────────────────────────────────────────────────
+function drawWind(){{
+  const cv=document.getElementById('cWind');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  const pad={{l:40,r:15,t:15,b:30}};
+  const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  const sJ=DATA.sweep_J||[],sW=DATA.sweep_W_pi||[];
+  if(!sJ.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "winding" or "both")',W/2,H/2);return;}}
+  const Jmin=0,Jmax=sJ[sJ.length-1]||2.5;
+  const Wmin=Math.min(-1,...sW),Wmax=Math.max(1,...sW);
+  const sxf=v=>pad.l+(v-Jmin)/(Jmax-Jmin||1)*pw;
+  const syf=v=>pad.t+(1-(v-Wmin)/(Wmax-Wmin||1))*ph;
+  // Colour-coded step plot
+  ctx.lineWidth=2;
+  let prev=null;
+  sJ.forEach((j,i)=>{{
+    const w=sW[i];
+    ctx.strokeStyle=w!==0?'#3fb950':'#8b949e';
+    if(prev!==null){{
+      ctx.beginPath();ctx.moveTo(sxf(sJ[i-1]),syf(prev));ctx.lineTo(sxf(j),syf(w));ctx.stroke();
+    }}
+    prev=w;
+  }});
+  // W=0 line
+  ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(pad.l,syf(0));ctx.lineTo(pad.l+pw,syf(0));ctx.stroke();
+  ctx.setLineDash([]);
+  // Current J marker
+  const Jcur=DATA.J||1;
+  const Wcur=DATA.W_pi||0;
+  ctx.fillStyle='#fff';
+  ctx.beginPath();ctx.arc(sxf(Jcur),syf(Wcur),5,0,2*Math.PI);ctx.fill();
+  drawAxes(ctx,pad,W,H,
+    [[sxf(0),'0'],[sxf(Jmax/2),(Jmax/2).toFixed(1)],[sxf(Jmax),Jmax.toFixed(1)]],
+    [[syf(Wmax),String(Wmax)],[syf(0),'0'],[syf(Wmin),String(Wmin)]]
+  );
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText('J',W/2,H-2);
+  ctx.save();ctx.translate(10,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('W_pi',0,0);ctx.restore();
+}}
+
+// ── Bulk quasienergy (kx slice at ky≈0) ────────────────────────────────────
+function drawBulk(){{
+  const cv=document.getElementById('cBulk');
+  const ctx=cv.getContext('2d');
+  const W=cv.width,H=cv.height;
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  const pad={{l:50,r:15,t:15,b:30}};
+  const pw=W-pad.l-pad.r,ph=H-pad.t-pad.b;
+  const kx=DATA.kx_bulk||[];
+  const nk2=Math.round(Math.sqrt(kx.length||1));
+  const em=DATA.eps_minus||[],ep=DATA.eps_plus||[];
+  if(!kx.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "spectrum" or "both")',W/2,H/2);return;}}
+  const ti0=Math.floor(nk2/2);
+  const kxs=[],e1s=[],e2s=[];
+  for(let si=0;si<nk2;si++){{
+    const idx=si*nk2+ti0;
+    kxs.push(kx[idx]);e1s.push(em[idx]);e2s.push(ep[idx]);
+  }}
+  const T2=DATA.T||1, emax=PI/T2;
+  const sxf=v=>pad.l+(v+PI)/(2*PI)*pw;
+  const syf=e=>pad.t+(1-(e+emax)/(2*emax))*ph;
+  ctx.strokeStyle='#58a6ff';ctx.lineWidth=1.5;
+  ctx.beginPath();kxs.forEach((v,i)=>i===0?ctx.moveTo(sxf(v),syf(e1s[i])):ctx.lineTo(sxf(v),syf(e1s[i])));ctx.stroke();
+  ctx.strokeStyle='#3fb950';ctx.lineWidth=1.5;
+  ctx.beginPath();kxs.forEach((v,i)=>i===0?ctx.moveTo(sxf(v),syf(e2s[i])):ctx.lineTo(sxf(v),syf(e2s[i])));ctx.stroke();
+  // Gap lines
+  ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.setLineDash([3,3]);
+  [0, PI/T2, -PI/T2].forEach(e=>{{ctx.beginPath();ctx.moveTo(pad.l,syf(e));ctx.lineTo(pad.l+pw,syf(e));ctx.stroke();}});
+  ctx.setLineDash([]);
+  drawAxes(ctx,pad,W,H,
+    [[sxf(-PI),'-π'],[sxf(0),'0'],[sxf(PI),'π']],
+    [[syf(emax),'π/T'],[syf(0),'0'],[syf(-emax),'-π/T']]
+  );
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';ctx.textAlign='center';
+  ctx.fillText('kx (ky=0)',W/2,H-2);
+}}
+
+drawEdge();drawWind();drawBulk();
+window.addEventListener('resize',()=>{{drawEdge();drawWind();drawBulk();}});
+}})();
+</script>
+</body>
+</html>"""

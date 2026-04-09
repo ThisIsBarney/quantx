@@ -69,6 +69,7 @@ from viz.topology import (
     _lutchyn_oreg_frames, _lutchyn_oreg_page,
     _kitaev_honeycomb_frames, _kitaev_honeycomb_page,
     _bbh_frames, _bbh_page,
+    _floquet_topo_frames, _floquet_topo_page,
 )
 
 
@@ -85,7 +86,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -331,6 +332,13 @@ def main() -> int:
   parser.add_argument("--bbh-nk",       type=int,   default=40,  help="BZ grid resolution for BBH bulk")
   parser.add_argument("--bbh-nsites",   type=int,   default=6,   help="linear size of finite lattice (n x n unit cells)")
   parser.add_argument("--bbh-npd",      type=int,   default=60,  help="phase diagram grid density")
+  # ── M44: Floquet topological insulator ───────────────────────────────────
+  parser.add_argument("--ft-J",     type=float, default=1.0,  help="Floquet hopping amplitude J")
+  parser.add_argument("--ft-T",     type=float, default=1.0,  help="Floquet drive period T")
+  parser.add_argument("--ft-nk",    type=int,   default=50,   help="k-grid resolution for Floquet bulk")
+  parser.add_argument("--ft-ny",    type=int,   default=30,   help="strip width n_y for Floquet edge states")
+  parser.add_argument("--ft-nJ",    type=int,   default=50,   help="winding sweep J-grid points")
+  parser.add_argument("--ft-Jmax",  type=float, default=2.5,  help="max J for winding sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1432,6 +1440,27 @@ def main() -> int:
       path.write_text(_bbh_page(bbh_data), encoding="utf-8")
       generated.append(path)
 
+  # ── M44: Floquet topological insulator ─────────────────────────────────────
+  if args.scenario in {"floquet_topo", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("floquet_topo skipped: numpy not available", file=sys.stderr)
+    else:
+      ft_data = _floquet_topo_frames(
+          J=args.ft_J,
+          T=args.ft_T,
+          n_k=args.ft_nk,
+          n_y=args.ft_ny,
+          n_J=args.ft_nJ,
+          J_max=args.ft_Jmax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_floquet_topo.html"
+      path.write_text(_floquet_topo_page(ft_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1491,6 +1520,7 @@ def main() -> int:
         "lutchyn_oreg":       "quantum_lutchyn_oreg",
         "kitaev_honeycomb":   "quantum_kitaev_honeycomb",
         "bbh":                "quantum_bbh",
+        "floquet_topo":       "quantum_floquet_topo",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

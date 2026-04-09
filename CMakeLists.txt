@@ -114,6 +114,7 @@ add_library(qx_core
   src/lutchyn_oreg.cpp
   src/kitaev_honeycomb.cpp
   src/bbh.cpp
+  src/floquet_topo.cpp
   src/json_utils.cpp
 )
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
