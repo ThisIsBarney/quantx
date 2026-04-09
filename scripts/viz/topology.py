@@ -3277,10 +3277,11 @@ function drawBulk(){{
   const E1=DATA.E1||[],E2=DATA.E2||[];
   if(!kx.length){{ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
     ctx.fillText('(run with scenario "spectrum" or "both")',W/2,H/2);return;}}
-  // Show kx slice at ky≈0 (ti=0)
+  // Show kx slice at ky≈0 (ti = nk/2)
+  const ti0=Math.floor(nk2/2);
   const e1s=[],e2s=[],kxs=[];
   for(let si=0;si<nk2;si++){{
-    const idx=si*nk2;
+    const idx=si*nk2+ti0;
     kxs.push(kx[idx]);e1s.push(E1[idx]);e2s.push(E2[idx]);
   }}
   const kmin=Math.min(...kxs),kmax=Math.max(...kxs);

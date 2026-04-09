@@ -23,6 +23,7 @@
 #include "qx/types.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <complex>
@@ -276,15 +277,33 @@ static void compute_corner(const BBHOptions& opts, BBHResult& res) {
         }
     }
 
-    // H_cx is Hermitian. Extract as real-valued 2×2-block form for diagonalisation:
-    // verify it is actually real (it should be for this model in this basis).
-    // The BBH model with Gamma matrices as defined is real-symmetric.
-    std::vector<double> H_real(dim * dim, 0.0);
-    for (int i = 0; i < dim * dim; ++i)
-        H_real[i] = H_cx[i].real();  // imaginary parts should be ~0
-
-    // Diagonalise with Jacobi
-    auto evals = jacobi_herm_real(H_real, dim);
+    // H_cx is complex Hermitian. BBH G1 and G4 have imaginary entries, so the
+    // real-space hoppings via G1/G4 contribute purely imaginary terms that must
+    // NOT be dropped.  Use the real-doubling embedding:
+    //   H = A + iB  (A real symmetric, B real antisymmetric)
+    //   M = [[A, -B],   (2N×2N real symmetric)
+    //        [B,  A]]
+    // Eigenvalues of M are eigenvalues of H, each with multiplicity 2.
+    // So we build M, call the real Jacobi solver, sort, and take every other value.
+    const int dim2 = 2 * dim;
+    std::vector<double> M(dim2 * dim2, 0.0);
+    for (int i = 0; i < dim; ++i) {
+        for (int j = 0; j < dim; ++j) {
+            const double a = H_cx[i*dim+j].real();
+            const double b = H_cx[i*dim+j].imag();
+            M[ i         * dim2 + j         ] =  a;   // top-left: A
+            M[ i         * dim2 + (j + dim) ] = -b;   // top-right: -B
+            M[ (i + dim) * dim2 + j         ] =  b;   // bottom-left: B
+            M[ (i + dim) * dim2 + (j + dim) ] =  a;   // bottom-right: A
+        }
+    }
+    auto evals_doubled = jacobi_herm_real(M, dim2);
+    std::sort(evals_doubled.begin(), evals_doubled.end());
+    // Extract every second value (they come in pairs from the doubling)
+    std::vector<double> evals;
+    evals.reserve(dim);
+    for (int i = 0; i < dim2; i += 2)
+        evals.push_back(evals_doubled[i]);
     std::sort(evals.begin(), evals.end());
     res.E_open = std::move(evals);
 
