@@ -44,7 +44,9 @@ using Mat2 = std::array<std::array<cx, 2>, 2>;
 
 // ── 2×2 matrix utilities ─────────────────────────────────────────────────────
 static Mat2 mat2_id() {
-    return {{{ {cx{1},cx{0}}, {cx{0},cx{1}} }}};
+    Mat2 m{};
+    m[0][0] = cx{1}; m[1][1] = cx{1};
+    return m;
 }
 static Mat2 mat2_mul(const Mat2& A, const Mat2& B) {
     Mat2 C;
@@ -281,63 +283,58 @@ static void compute_edge(const FloquetTopoOptions& opts, FloquetTopoResult& res)
         }
         // Step 5: identity — already done (no-op)
 
-        // Diagonalise Ustrip (2Ny×2Ny unitary): eigenvalues e^{-iε T}
-        // Use power-iteration-free approach via Schur decomposition isn't available.
-        // Instead: real-double the unitary → orthogonal, then find eigenvalues.
-        // Faster: extract quasienergies via the real-part trick:
-        //   Hermitian M = (Ustrip + Ustrip†)/2 → eigenvalues cos(εT)
-        //   Then ε = ±acos(eigenvalue)/T, but sign ambiguity.
-        // Better: directly compute eigenphases using the fact that for a unitary
-        // U, eigenvalues are on the unit circle. Build the matrix (U - U†)/(2i)
-        // = imag(U) as a real symmetric matrix; its eigenvalues = sin(εT).
-        // Then ε = asin(eigenvalue)/T.  This works for ε ∈ [-π/2T, π/2T].
-        //
-        // For the full π-gap we need ε ∈ (-π/T, π/T].  Use the method:
-        //   Build Hermitian A = i(U - I): eigenvalues relate to ε.
-        // Simplest robust method: build real Schur (QR iteration) — too complex.
-        // Use real-doubling embedding of the unitary:
-        //   U = Re(U) + i Im(U)  →  M = [[Re(U), -Im(U)],[Im(U), Re(U)]]
-        // M is orthogonal; eigenvalues of M are e^{±iε T} (each real pair ↔ cos/sin).
-        // Then quasienergy from each eigenvalue pair.
-        //
-        // Simple approximation for strip plots: use the Hermitian form
-        //   H_eff = (i/T) log(U), and find eigenvalues of H_eff.
-        // For 2×2 blocks this is analytic; for the full 2Ny matrix we need
-        // a Jacobi iteration.
-        // We use: Tr filter to get imaginary parts of eigenvalues of (U-U†)/(2i).
-        std::vector<double> Mreal(dim * dim, 0.0);
+        // Diagonalise Ustrip via joint Jacobi on Msin and Mcos:
+        //   Msin = (Ustrip - Ustrip†)/(2i) — real symmetric, eigenvalues = sin(εT)
+        //   Mcos = (Ustrip + Ustrip†)/2    — real symmetric, eigenvalues = cos(εT)
+        // Msin and Mcos commute (same eigenbasis), so Jacobi sweeps on Msin
+        // simultaneously transform Mcos.  Then ε = atan2(sin, cos)/T covers
+        // the full range (-π/T, π/T], including the π-gap edge modes.
+        std::vector<double> Msin(dim * dim, 0.0), Mcos(dim * dim, 0.0);
         for (int i = 0; i < dim; ++i)
-            for (int j = 0; j < dim; ++j)
-                Mreal[i*dim+j] = (Ustrip[i*dim+j] - std::conj(Ustrip[j*dim+i])).imag() * 0.5;
-        // Jacobi for real symmetric:
+            for (int j = 0; j < dim; ++j) {
+                Msin[i*dim+j] = (Ustrip[i*dim+j] - std::conj(Ustrip[j*dim+i])).imag() * 0.5;
+                Mcos[i*dim+j] = (Ustrip[i*dim+j] + std::conj(Ustrip[j*dim+i])).real() * 0.5;
+            }
+        // Joint Jacobi: pivot on Msin, apply same Givens rotation to Mcos
         const int max_iter = 200 * dim * dim;
         for (int iter = 0; iter < max_iter; ++iter) {
             int p = 0, q = 1; double amax = 0.0;
             for (int i = 0; i < dim; ++i)
                 for (int j = i+1; j < dim; ++j)
-                    if (std::abs(Mreal[i*dim+j]) > amax) {
-                        amax = std::abs(Mreal[i*dim+j]); p = i; q = j;
+                    if (std::abs(Msin[i*dim+j]) > amax) {
+                        amax = std::abs(Msin[i*dim+j]); p = i; q = j;
                     }
             if (amax < 1e-12) break;
-            const double app = Mreal[p*dim+p], aqq = Mreal[q*dim+q], apq = Mreal[p*dim+q];
+            const double app = Msin[p*dim+p], aqq = Msin[q*dim+q], apq = Msin[p*dim+q];
             const double theta = 0.5 * (aqq - app) / apq;
             const double t2 = (theta >= 0)
                 ? 1.0/(theta + std::sqrt(1.0 + theta*theta))
                 : 1.0/(theta - std::sqrt(1.0 + theta*theta));
             const double c2 = 1.0/std::sqrt(1.0 + t2*t2), s2 = t2*c2;
-            Mreal[p*dim+p] = app - t2*apq; Mreal[q*dim+q] = aqq + t2*apq;
-            Mreal[p*dim+q] = Mreal[q*dim+p] = 0.0;
+            // Update Msin diagonal + zero off-diagonal pivot
+            Msin[p*dim+p] = app - t2*apq; Msin[q*dim+q] = aqq + t2*apq;
+            Msin[p*dim+q] = Msin[q*dim+p] = 0.0;
             for (int r = 0; r < dim; ++r) {
                 if (r==p||r==q) continue;
-                const double arp = Mreal[r*dim+p], arq = Mreal[r*dim+q];
-                Mreal[r*dim+p] = Mreal[p*dim+r] = c2*arp - s2*arq;
-                Mreal[r*dim+q] = Mreal[q*dim+r] = s2*arp + c2*arq;
+                const double arp = Msin[r*dim+p], arq = Msin[r*dim+q];
+                Msin[r*dim+p] = Msin[p*dim+r] = c2*arp - s2*arq;
+                Msin[r*dim+q] = Msin[q*dim+r] = s2*arp + c2*arq;
+            }
+            // Apply same Givens rotation to Mcos: R^T Mcos R
+            const double bpp = Mcos[p*dim+p], bqq = Mcos[q*dim+q], bpq = Mcos[p*dim+q];
+            Mcos[p*dim+p] = c2*c2*bpp - 2.0*c2*s2*bpq + s2*s2*bqq;
+            Mcos[q*dim+q] = s2*s2*bpp + 2.0*c2*s2*bpq + c2*c2*bqq;
+            Mcos[p*dim+q] = Mcos[q*dim+p] = c2*s2*(bpp - bqq) + (c2*c2 - s2*s2)*bpq;
+            for (int r = 0; r < dim; ++r) {
+                if (r==p||r==q) continue;
+                const double brp = Mcos[r*dim+p], brq = Mcos[r*dim+q];
+                Mcos[r*dim+p] = Mcos[p*dim+r] = c2*brp - s2*brq;
+                Mcos[r*dim+q] = Mcos[q*dim+r] = s2*brp + c2*brq;
             }
         }
-        // Eigenvalues of (U-U†)/(2i) = sin(εT) → ε = asin(ev)/T
+        // ε = atan2(sin(εT), cos(εT)) / T  — full range (-π/T, π/T]
         for (int i = 0; i < dim; ++i) {
-            const double sinval = std::max(-1.0, std::min(1.0, Mreal[i*dim+i]));
-            res.eps_edge[si * dim + i] = std::asin(sinval) / T;
+            res.eps_edge[si * dim + i] = std::atan2(Msin[i*dim+i], Mcos[i*dim+i]) / T;
         }
     }
 }

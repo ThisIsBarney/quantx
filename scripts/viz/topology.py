@@ -3442,10 +3442,16 @@ def _floquet_topo_frames(
                 S4[aA, bB] = blk[1,0]; S4[aA, aA] = blk[1,1]
             Ustrip = S4 @ Ustrip
             # Step 5: identity
-            # Quasienergies: use imag part of (U-U†)/2i = sin(εT)
-            Msym = (Ustrip - Ustrip.conj().T) / (2j)
-            evals_sin = np.linalg.eigvalsh(Msym.real)
-            eps_row = [float(np.arcsin(max(-1.0, min(1.0, s))) / T) for s in evals_sin]
+            # Quasienergies via joint diagonalisation of Msin and Mcos.
+            # Msin and Mcos commute (same unitary eigenbasis), so eigvecs of
+            # Msin simultaneously diagonalise Mcos; atan2 covers the full
+            # range (-π/T, π/T] including π-gap edge modes.
+            Msin = ((Ustrip - Ustrip.conj().T) / (2j)).real
+            Mcos = ((Ustrip + Ustrip.conj().T) / 2.0).real
+            evals_sin, V = np.linalg.eigh(Msin)
+            evals_cos_diag = np.diag(V.T @ Mcos @ V).real
+            eps_row = [float(np.arctan2(s, c) / T)
+                       for s, c in zip(evals_sin, evals_cos_diag)]
             eps_edge.extend(sorted(eps_row))
         out.update({"kx_edge": kx_edge, "eps_edge": eps_edge})
 
@@ -3457,10 +3463,14 @@ def _floquet_topo_frames(
         out["phase_label"] = (f"Anomalous Floquet (W_pi={w_pi:+d})"
                               if w_pi != 0 else "Trivial Floquet (W_pi=0)")
         sweep_J_list, sweep_W_list = [], []
-        for i in range(n_J):
-            Jv = J_max * i / (n_J - 1)
-            sweep_J_list.append(float(Jv))
-            sweep_W_list.append(winding_W_pi(Jv))
+        if n_J >= 2:
+            for i in range(n_J):
+                Jv = J_max * i / (n_J - 1)
+                sweep_J_list.append(float(Jv))
+                sweep_W_list.append(winding_W_pi(Jv))
+        else:
+            sweep_J_list = [float(J_max)]
+            sweep_W_list = [winding_W_pi(J_max)]
         out.update({"sweep_J": sweep_J_list, "sweep_W_pi": sweep_W_list})
     else:
         out.setdefault("W_pi", 0)
