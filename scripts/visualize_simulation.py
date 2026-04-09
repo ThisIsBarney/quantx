@@ -67,6 +67,7 @@ from viz.topology import (
     _haldane_frames, _haldane_page,
     _fu_kane_frames, _fu_kane_page,
     _lutchyn_oreg_frames, _lutchyn_oreg_page,
+    _kitaev_honeycomb_frames, _kitaev_honeycomb_page,
 )
 
 
@@ -83,7 +84,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -314,6 +315,13 @@ def main() -> int:
   parser.add_argument("--lo-Vz",          type=float, default=0.0,   help="Lutchyn-Oreg Zeeman field V_z")
   parser.add_argument("--lo-nk",          type=int,   default=200,   help="k-grid points for bulk BdG")
   parser.add_argument("--lo-nsites",      type=int,   default=60,    help="wire length (sites, open BCs)")
+  # ── M42: Kitaev honeycomb ──────────────────────────────────────────────
+  parser.add_argument("--kh-Jx",    type=float, default=1.0,  help="Kitaev honeycomb Jx coupling")
+  parser.add_argument("--kh-Jy",    type=float, default=1.0,  help="Kitaev honeycomb Jy coupling")
+  parser.add_argument("--kh-Jz",    type=float, default=1.0,  help="Kitaev honeycomb Jz coupling")
+  parser.add_argument("--kh-kappa", type=float, default=0.3,  help="Kitaev NNN coupling κ (breaks TRS, opens gap)")
+  parser.add_argument("--kh-nk",    type=int,   default=60,   help="BZ grid resolution for honeycomb")
+  parser.add_argument("--kh-npd",   type=int,   default=80,   help="phase diagram simplex sample density")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1372,6 +1380,27 @@ def main() -> int:
       path.write_text(_lutchyn_oreg_page(lo_data, title="Lutchyn-Oreg Majorana Nanowire"), encoding="utf-8")
       generated.append(path)
 
+  # ── M42: Kitaev honeycomb ──────────────────────────────────────────────────
+  if args.scenario in {"kitaev_honeycomb", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("kitaev_honeycomb skipped: numpy not available", file=sys.stderr)
+    else:
+      kh_data = _kitaev_honeycomb_frames(
+          Jx=args.kh_Jx,
+          Jy=args.kh_Jy,
+          Jz=args.kh_Jz,
+          kappa=args.kh_kappa,
+          n_k=args.kh_nk,
+          n_pd=args.kh_npd,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_kitaev_honeycomb.html"
+      path.write_text(_kitaev_honeycomb_page(kh_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1429,6 +1458,7 @@ def main() -> int:
         "weyl":               "quantum_weyl",
         "fu_kane":            "quantum_fu_kane",
         "lutchyn_oreg":       "quantum_lutchyn_oreg",
+        "kitaev_honeycomb":   "quantum_kitaev_honeycomb",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

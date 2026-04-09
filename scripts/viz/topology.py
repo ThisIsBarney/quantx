@@ -2678,3 +2678,324 @@ window.addEventListener('resize',()=>{{drawBulk();drawWire();drawOsc();}});
 </script>
 </body>
 </html>"""
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# M42  Kitaev honeycomb model
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _kitaev_honeycomb_frames(
+    Jx: float = 1.0,
+    Jy: float = 1.0,
+    Jz: float = 1.0,
+    kappa: float = 0.3,
+    n_k: int = 60,
+    n_pd: int = 80,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Kitaev honeycomb model spectrum + ternary phase diagram."""
+    import numpy as np  # noqa: PLC0415
+
+    PI = math.pi
+
+    # Honeycomb reciprocal lattice vectors (a=1 unit cell)
+    # b1 = 2π(1, -1/√3),  b2 = 2π(0, 2/√3)
+    b1 = np.array([2 * PI, -2 * PI / math.sqrt(3)])
+    b2 = np.array([0.0,     4 * PI / math.sqrt(3)])
+
+    def kitaev_ham(kx: float, ky: float) -> np.ndarray:
+        """2×2 Kitaev honeycomb Bloch Hamiltonian.
+
+        a1 = (1, 0),  a2 = (1/2, sqrt(3)/2)
+        f(k) = Jz + Jx*exp(i k·a1) + Jy*exp(i k·a2)
+        m(k) = 2κ[sin(k·a1) + sin(k·a2) + sin(k·(a2-a1))]
+        """
+        sqrt3_half = math.sqrt(3) * 0.5
+        dot_a1 = kx                           # k · a1 = kx
+        dot_a2 = kx * 0.5 + ky * sqrt3_half  # k · a2 = kx/2 + ky*√3/2
+        fk = Jz + Jx * np.exp(1j * dot_a1) + Jy * np.exp(1j * dot_a2)
+        mk = 2.0 * kappa * (
+            math.sin(dot_a1) + math.sin(dot_a2) + math.sin(dot_a2 - dot_a1)
+        )
+        H = np.array([[ mk,       1j * fk ],
+                      [-1j * np.conj(fk), -mk]], dtype=complex)
+        return H
+
+    def classify_phase(jx: float, jy: float, jz: float) -> str:
+        """Classify by triangle inequality (gapped/gapless phases)."""
+        vals = sorted([jx, jy, jz])
+        if vals[2] > vals[0] + vals[1]:
+            # Gapped A phases
+            if jx >= jy and jx >= jz:
+                return "A_x"
+            elif jy >= jx and jy >= jz:
+                return "A_y"
+            else:
+                return "A_z"
+        else:
+            return "B"
+
+    out: dict = {"source": source, "Jx": Jx, "Jy": Jy, "Jz": Jz, "kappa": kappa}
+
+    # ── Spectrum over honeycomb BZ ──────────────────────────────────────────
+    if scenario in ("spectrum", "chern", "both"):
+        kx_list, ky_list, ep_list, em_list = [], [], [], []
+        for si in range(n_k):
+            for ti in range(n_k):
+                s = si / n_k
+                t = ti / n_k
+                kv = s * b1 + t * b2
+                H = kitaev_ham(kv[0], kv[1])
+                evals = np.linalg.eigvalsh(H)
+                kx_list.append(float(kv[0]))
+                ky_list.append(float(kv[1]))
+                em_list.append(float(evals[0]))
+                ep_list.append(float(evals[1]))
+
+        gap = float(min(ep_list[i] - em_list[i] for i in range(len(ep_list))))
+        out.update({
+            "kx_bz": kx_list, "ky_bz": ky_list,
+            "E_plus": ep_list, "E_minus": em_list,
+            "gap": gap,
+        })
+
+        # FHS Chern number on lower band
+        chern = 0
+        if kappa != 0.0:
+            F_sum = 0.0
+            for si in range(n_k):
+                for ti in range(n_k):
+                    def evec_lower(s2, t2):
+                        kv2 = (s2 / n_k) * b1 + (t2 / n_k) * b2
+                        H2 = kitaev_ham(kv2[0], kv2[1])
+                        _, vecs = np.linalg.eigh(H2)
+                        return vecs[:, 0]
+
+                    u00 = evec_lower(si,   ti)
+                    u10 = evec_lower(si+1, ti)
+                    u01 = evec_lower(si,   ti+1)
+                    u11 = evec_lower(si+1, ti+1)
+
+                    U1  = np.vdot(u00, u10); U1  /= abs(U1)  if abs(U1)>1e-12 else 1.0
+                    U2  = np.vdot(u10, u11); U2  /= abs(U2)  if abs(U2)>1e-12 else 1.0
+                    U1p = np.vdot(u01, u11); U1p /= abs(U1p) if abs(U1p)>1e-12 else 1.0
+                    U2p = np.vdot(u00, u01); U2p /= abs(U2p) if abs(U2p)>1e-12 else 1.0
+
+                    F_sum += math.log((U1 * U2 * np.conj(U1p) * np.conj(U2p)).real
+                                       + 1j * (U1 * U2 * np.conj(U1p) * np.conj(U2p)).imag).imag
+
+            chern = int(round(F_sum / (2 * PI)))
+        out["chern"] = chern
+        out["phase_label"] = classify_phase(Jx, Jy, Jz) + (f" C={chern:+d}" if kappa != 0.0 else "")
+
+    # ── Ternary phase diagram ───────────────────────────────────────────────
+    if scenario in ("phase_diagram", "both"):
+        pd_jx, pd_jy, pd_jz, pd_gap, pd_phase = [], [], [], [], []
+        # Sample uniform simplex: Jx+Jy+Jz=1, Jx,Jy,Jz≥0
+        for si in range(n_pd + 1):
+            for ti in range(n_pd + 1 - si):
+                ui = n_pd - si - ti
+                jx_s = si / n_pd
+                jy_s = ti / n_pd
+                jz_s = ui / n_pd
+                # Quick gap estimate at Γ point
+                H = np.array([[0, 1j*(jx_s + jy_s + jz_s)],
+                               [-1j*(jx_s + jy_s + jz_s), 0]], dtype=complex)
+                evals = np.linalg.eigvalsh(H)
+                gap_s = float(evals[1] - evals[0])
+                pd_jx.append(jx_s); pd_jy.append(jy_s); pd_jz.append(jz_s)
+                pd_gap.append(gap_s)
+                pd_phase.append(classify_phase(jx_s, jy_s, jz_s))
+
+        out.update({
+            "pd_Jx": pd_jx, "pd_Jy": pd_jy, "pd_Jz": pd_jz,
+            "pd_gap": pd_gap, "pd_phase": pd_phase,
+        })
+
+    return out
+
+
+def _kitaev_honeycomb_page(data: dict) -> str:
+    """Render Kitaev honeycomb results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    phase_label = data.get("phase_label", "")
+    chern = data.get("chern", 0)
+    gap = data.get("gap", 0.0)
+    Jx = data.get("Jx", 1.0); Jy = data.get("Jy", 1.0); Jz = data.get("Jz", 1.0)
+    kappa = data.get("kappa", 0.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Kitaev Honeycomb — QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Kitaev Honeycomb Model</h2>
+<div class="info">
+  <span><b>Jx</b> = {Jx:.3f}</span>
+  <span><b>Jy</b> = {Jy:.3f}</span>
+  <span><b>Jz</b> = {Jz:.3f}</span>
+  <span><b>κ</b> = {kappa:.3f}</span>
+  <span><b>Phase</b>: {phase_label}</span>
+  <span><b>Gap</b>: {gap:.4f}</span>
+  <span><b>Chern</b>: {chern:+d}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Majorana Band Structure (BZ scatter)</div>
+    <canvas id="cBand" width="480" height="380"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Phase Diagram (Jx+Jy+Jz=1 simplex)</div>
+    <canvas id="cPhase" width="420" height="380"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+'use strict';
+const DATA={payload};
+
+// ── colour helpers ────────────────────────────────────────────────────────
+function lerp3(a,b,t){{return[a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1]),a[2]+t*(b[2]-a[2])];}}
+function energyColor(e,emin,emax){{
+  const t=Math.max(0,Math.min(1,(e-emin)/(emax-emin||1)));
+  // blue→white→red
+  const c=t<0.5?lerp3([88,166,255],[200,200,200],t*2):lerp3([200,200,200],[248,81,73],(t-0.5)*2);
+  return `rgb(${{Math.round(c[0])}},${{Math.round(c[1])}},${{Math.round(c[2])}})`;
+}}
+const PHASE_COLOR={{"A_x":"#e8b86d","A_y":"#58a6ff","A_z":"#3fb950","B":"#bc8cff"}};
+
+// ── Band scatter ──────────────────────────────────────────────────────────
+function drawBand(){{
+  const cv=document.getElementById('cBand');
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+  const pad={{l:55,r:20,t:20,b:40}};
+  const pw=W-pad.l-pad.r, ph=H-pad.t-pad.b;
+
+  const kx=DATA.kx_bz||[], ep=DATA.E_plus||[], em=DATA.E_minus||[];
+  if(!kx.length){{
+    ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "spectrum" or "both")',W/2,H/2); return;
+  }}
+
+  const kmin=Math.min(...kx), kmax=Math.max(...kx);
+  const emin=Math.min(...em), emax=Math.max(...ep);
+  const sx=v=>pad.l+(v-kmin)/(kmax-kmin||1)*pw;
+  const sy=e=>pad.t+(1-(e-emin)/(emax-emin||1))*ph;
+
+  // Draw lower band dots
+  for(let i=0;i<kx.length;i++){{
+    ctx.fillStyle=energyColor(em[i],emin,emax);
+    ctx.fillRect(Math.round(sx(kx[i])),Math.round(sy(em[i])),2,2);
+  }}
+  // Draw upper band dots (lighter)
+  for(let i=0;i<kx.length;i++){{
+    ctx.fillStyle=energyColor(ep[i],emin,emax);
+    ctx.fillRect(Math.round(sx(kx[i])),Math.round(sy(ep[i])),2,2);
+  }}
+
+  // Axes
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(pad.l,pad.t); ctx.lineTo(pad.l,pad.t+ph); ctx.lineTo(pad.l+pw,pad.t+ph); ctx.stroke();
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='center'; ctx.fillText('kx',W/2,H-4);
+  ctx.save(); ctx.translate(12,H/2); ctx.rotate(-Math.PI/2);
+  ctx.fillText('E',0,0); ctx.restore();
+  // E=0 line
+  if(emin<0 && emax>0){{
+    ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(pad.l,sy(0)); ctx.lineTo(pad.l+pw,sy(0)); ctx.stroke();
+    ctx.setLineDash([]);
+  }}
+  // Gap annotation
+  const gap=DATA.gap||0;
+  ctx.fillStyle='#8b949e'; ctx.font='10px monospace';
+  ctx.textAlign='left';
+  ctx.fillText(`gap=${{gap.toFixed(4)}}  C=${{DATA.chern>=0?'+':''}}${{DATA.chern}}`,pad.l+4,pad.t+12);
+}}
+
+// ── Ternary phase diagram ─────────────────────────────────────────────────
+function drawPhase(){{
+  const cv=document.getElementById('cPhase');
+  const ctx=cv.getContext('2d');
+  const W=cv.width, H=cv.height;
+  ctx.fillStyle='#0d1117'; ctx.fillRect(0,0,W,H);
+
+  const pjx=DATA.pd_Jx||[], pjy=DATA.pd_Jy||[], pjz=DATA.pd_Jz||[], ph=DATA.pd_phase||[];
+  if(!pjx.length){{
+    ctx.fillStyle='#8b949e';ctx.font='12px monospace';ctx.textAlign='center';
+    ctx.fillText('(run with scenario "phase_diagram" or "both")',W/2,H/2); return;
+  }}
+
+  // Ternary → cartesian: equilateral triangle
+  // Jx at bottom-left, Jy at bottom-right, Jz at top
+  const pad=30;
+  const triW=W-2*pad, triH=H-2*pad-20;
+  // Vertices
+  const vx={{x:pad, y:pad+triH}};
+  const vy={{x:pad+triW, y:pad+triH}};
+  const vz={{x:pad+triW/2, y:pad}};
+  function ternaryToXY(jx,jy,jz){{
+    return{{
+      x: jx*vx.x + jy*vy.x + jz*vz.x,
+      y: jx*vx.y + jy*vy.y + jz*vz.y,
+    }};
+  }}
+
+  // Draw dots
+  const R=4;
+  for(let i=0;i<pjx.length;i++){{
+    const p=ternaryToXY(pjx[i],pjy[i],pjz[i]);
+    ctx.fillStyle=PHASE_COLOR[ph[i]]||'#8b949e';
+    ctx.beginPath(); ctx.arc(p.x,p.y,R,0,2*Math.PI); ctx.fill();
+  }}
+
+  // Triangle border
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(vx.x,vx.y); ctx.lineTo(vy.x,vy.y);
+  ctx.lineTo(vz.x,vz.y); ctx.closePath(); ctx.stroke();
+
+  // Axis labels
+  ctx.fillStyle='#8b949e'; ctx.font='11px monospace';
+  ctx.textAlign='center';
+  ctx.fillText('Jx=1',vx.x,vx.y+14);
+  ctx.fillText('Jy=1',vy.x,vy.y+14);
+  ctx.fillText('Jz=1',vz.x,vz.y-6);
+
+  // Legend
+  const legend=[['A_x','#e8b86d'],['A_y','#58a6ff'],['A_z','#3fb950'],['B','#bc8cff']];
+  legend.forEach(([lbl,col],i)=>{{
+    ctx.fillStyle=col; ctx.fillRect(pad+i*80,H-16,10,10);
+    ctx.fillStyle='#8b949e'; ctx.textAlign='left';
+    ctx.fillText(lbl,pad+i*80+13,H-6);
+  }});
+
+  // Current point marker
+  const cp=ternaryToXY(DATA.Jx/(DATA.Jx+DATA.Jy+DATA.Jz),DATA.Jy/(DATA.Jx+DATA.Jy+DATA.Jz),DATA.Jz/(DATA.Jx+DATA.Jy+DATA.Jz));
+  ctx.strokeStyle='#ffffff'; ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.arc(cp.x,cp.y,7,0,2*Math.PI); ctx.stroke();
+}}
+
+drawBand();
+drawPhase();
+window.addEventListener('resize',()=>{{drawBand();drawPhase();}});
+}})();
+</script>
+</body>
+</html>"""

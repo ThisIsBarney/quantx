@@ -1951,4 +1951,43 @@ std::string lutchyn_oreg_result_to_json(const LutchynOregResult& r) {
   return j.dump();
 }
 
+KitaevHcOptions kitaev_hc_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  KitaevHcOptions o;
+  if (j.contains("Jx"))       o.Jx       = j["Jx"].get<double>();
+  if (j.contains("Jy"))       o.Jy       = j["Jy"].get<double>();
+  if (j.contains("Jz"))       o.Jz       = j["Jz"].get<double>();
+  if (j.contains("kappa"))    o.kappa    = j["kappa"].get<double>();
+  if (j.contains("n_k"))      o.n_k      = j["n_k"].get<int>();
+  if (j.contains("n_pd"))     o.n_pd     = j["n_pd"].get<int>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string kitaev_hc_result_to_json(const KitaevHcResult& r) {
+  json j;
+  j["ok"]          = r.ok;
+  j["scenario"]    = r.scenario;
+  j["Jx"]          = r.Jx;
+  j["Jy"]          = r.Jy;
+  j["Jz"]          = r.Jz;
+  j["kappa"]       = r.kappa;
+  j["phase_label"] = r.phase_label;
+  j["gap"]         = r.gap;
+  j["chern"]       = r.chern;
+  j["kx_bz"]       = r.kx_bz;
+  j["ky_bz"]       = r.ky_bz;
+  j["E_plus"]      = r.E_plus;
+  j["E_minus"]     = r.E_minus;
+  j["pd_Jx"]       = r.pd_Jx;
+  j["pd_Jy"]       = r.pd_Jy;
+  j["pd_Jz"]       = r.pd_Jz;
+  j["pd_phase"]    = r.pd_phase;
+  j["pd_gap"]      = r.pd_gap;
+  j["elapsed_ms"]  = r.elapsed_ms;
+  j["message"]     = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
