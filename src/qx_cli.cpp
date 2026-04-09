@@ -71,6 +71,7 @@ int main(int argc, char** argv) {
     std::string lutchyn_oreg_path;
     std::string kh_path;
     std::string bbh_path;
+    std::string floquet_topo_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -114,6 +115,7 @@ int main(int argc, char** argv) {
     app.add_option("--lutchyn-oreg", lutchyn_oreg_path, "lutchyn-oreg options json path (run Lutchyn-Oreg Majorana nanowire)");
     app.add_option("--kitaev-hc", kh_path, "kitaev-hc options json path (run Kitaev honeycomb model)");
     app.add_option("--bbh", bbh_path, "bbh options json path (run BBH quadrupole insulator / corner states)");
+    app.add_option("--floquet-topo", floquet_topo_path, "floquet-topo options json path (run Floquet topological insulator / anomalous edge modes)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -167,7 +169,8 @@ int main(int argc, char** argv) {
         fu_kane_path.empty() &&
         lutchyn_oreg_path.empty() &&
         kh_path.empty() &&
-        bbh_path.empty()) {
+        bbh_path.empty() &&
+        floquet_topo_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
@@ -203,7 +206,8 @@ int main(int argc, char** argv) {
                   (!fu_kane_path.empty()      ? 1 : 0) +
                   (!lutchyn_oreg_path.empty() ? 1 : 0) +
                   (!kh_path.empty()           ? 1 : 0) +
-                  (!bbh_path.empty()          ? 1 : 0);
+                  (!bbh_path.empty()          ? 1 : 0) +
+                  (!floquet_topo_path.empty() ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
@@ -467,6 +471,14 @@ int main(int argc, char** argv) {
       const qx::BBHOptions bbh_opts = qx::bbh_options_from_json(bbh_json);
       qx::log::info("loaded bbh options file: " + bbh_path);
       output_json = qx::bbh_result_to_json(qx::run_bbh(bbh_opts));
+    } else if (!floquet_topo_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --floquet-topo mode");
+      }
+      const std::string ft_json = read_text_file(floquet_topo_path);
+      const qx::FloquetTopoOptions ft_opts = qx::floquet_topo_options_from_json(ft_json);
+      qx::log::info("loaded floquet-topo options file: " + floquet_topo_path);
+      output_json = qx::floquet_topo_result_to_json(qx::run_floquet_topo(ft_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

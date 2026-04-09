@@ -83,6 +83,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("lutchyn_oreg",       "Lutchyn-Oreg Majorana Wire Z\u2082"),
           ("kitaev_honeycomb",   "Kitaev Honeycomb Majorana Z\u2082"),
           ("bbh",                "BBH Quadrupole Insulator HOTI"),
+          ("floquet_topo",       "Floquet Topological Anomalous Edge"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),

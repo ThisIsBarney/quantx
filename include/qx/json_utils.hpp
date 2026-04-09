@@ -133,5 +133,9 @@ std::string     kitaev_hc_result_to_json(const KitaevHcResult& result);
 BBHOptions  bbh_options_from_json(const std::string& json);
 // Serialize BBH quadrupole insulator result to JSON string.
 std::string bbh_result_to_json(const BBHResult& result);
+// Parse Floquet topological insulator options from JSON string.
+FloquetTopoOptions  floquet_topo_options_from_json(const std::string& json);
+// Serialize Floquet topological insulator result to JSON string.
+std::string         floquet_topo_result_to_json(const FloquetTopoResult& result);
 
 }  // namespace qx

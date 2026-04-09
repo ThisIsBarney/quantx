@@ -81,5 +81,7 @@ LutchynOregResult run_lutchyn_oreg(const LutchynOregOptions& opts);
 KitaevHcResult run_kitaev_honeycomb(const KitaevHcOptions& opts);
 // Run BBH quadrupole insulator — bulk spectrum, corner states, phase diagram.
 BBHResult run_bbh(const BBHOptions& opts);
+// Run Floquet topological insulator — quasienergy spectrum, edge states, winding numbers.
+FloquetTopoResult run_floquet_topo(const FloquetTopoOptions& opts);
 
 }  // namespace qx

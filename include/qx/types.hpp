@@ -1275,6 +1275,53 @@ struct BBHResult {
   std::string message;
 };
 
+// ── M44: Floquet Topological Insulator ───────────────────────────────────────
+//
+// Periodically driven 2D tight-binding model (square lattice) with a 5-step
+// drive protocol (Rudner et al., Phys. Rev. X 3, 031005, 2013).
+//
+// Each period T is split into 5 equal steps; in step i the nearest-neighbour
+// hopping along direction i is turned on with amplitude J_i.
+// The Floquet operator (stroboscopic evolution over one period) is:
+//   U(T) = U_5 U_4 U_3 U_2 U_1
+//
+// Quasienergy spectrum ε ∈ (-π/T, π/T].  Two topological invariants:
+//   W_0  = winding number in the 0-gap  (ε≈0)
+//   W_pi = winding number in the π-gap  (ε≈±π/T)
+//
+// Anomalous Floquet phase: all Chern numbers = 0 but W_pi = ±1.
+//
+// Scenarios: "spectrum" | "edge" | "winding" | "both"
+
+struct FloquetTopoOptions {
+  double J{1.0};        // hopping amplitude (uniform across all steps)
+  double T{1.0};        // drive period (sets energy scale ε∈(-π/T,π/T])
+  int    n_k{60};       // k-grid per direction for bulk quasienergy spectrum
+  int    n_y{40};       // strip width (unit cells) for edge-state calculation
+  int    n_J{50};       // number of J values for winding-number sweep
+  double J_max{2.5};    // maximum J for winding-number sweep
+  std::string scenario{"both"};  // "spectrum"|"edge"|"winding"|"both"
+};
+
+struct FloquetTopoResult {
+  bool ok{false};
+  std::string scenario;
+  double J{0}, T{0};
+  int W_0{0}, W_pi{0};          // winding numbers in 0-gap and pi-gap
+  std::string phase_label;       // e.g. "Anomalous Floquet (W_pi=1)"
+  // Bulk quasienergy: kx,ky → two quasienergies per k-point
+  std::vector<double> kx_bulk, ky_bulk;
+  std::vector<double> eps_minus, eps_plus;  // lower/upper quasienergy band
+  // Edge-state spectrum: kx → quasienergies of strip (2 n_y bands)
+  std::vector<double> kx_edge;
+  std::vector<double> eps_edge;  // n_k * 2*n_y values (all bands)
+  // Winding sweep: J values → W_pi(J)
+  std::vector<double> sweep_J;
+  std::vector<int>    sweep_W_pi;
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the

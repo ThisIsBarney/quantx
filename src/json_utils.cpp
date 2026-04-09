@@ -2031,4 +2031,40 @@ std::string bbh_result_to_json(const BBHResult& r) {
   return j.dump();
 }
 
+FloquetTopoOptions floquet_topo_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  FloquetTopoOptions o;
+  if (j.contains("J"))        o.J       = j["J"].get<double>();
+  if (j.contains("T"))        o.T       = j["T"].get<double>();
+  if (j.contains("n_k"))      o.n_k     = j["n_k"].get<int>();
+  if (j.contains("n_y"))      o.n_y     = j["n_y"].get<int>();
+  if (j.contains("n_J"))      o.n_J     = j["n_J"].get<int>();
+  if (j.contains("J_max"))    o.J_max   = j["J_max"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string floquet_topo_result_to_json(const FloquetTopoResult& r) {
+  json j;
+  j["ok"]          = r.ok;
+  j["scenario"]    = r.scenario;
+  j["J"]           = r.J;
+  j["T"]           = r.T;
+  j["W_0"]         = r.W_0;
+  j["W_pi"]        = r.W_pi;
+  j["phase_label"] = r.phase_label;
+  j["kx_bulk"]     = r.kx_bulk;
+  j["ky_bulk"]     = r.ky_bulk;
+  j["eps_minus"]   = r.eps_minus;
+  j["eps_plus"]    = r.eps_plus;
+  j["kx_edge"]     = r.kx_edge;
+  j["eps_edge"]    = r.eps_edge;
+  j["sweep_J"]     = r.sweep_J;
+  j["sweep_W_pi"]  = r.sweep_W_pi;
+  j["elapsed_ms"]  = r.elapsed_ms;
+  j["message"]     = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
