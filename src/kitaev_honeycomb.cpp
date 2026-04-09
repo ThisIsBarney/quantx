@@ -88,7 +88,7 @@ static std::string classify_phase(double Jx, double Jy, double Jz, double kappa,
     if (Jz >= Jx + Jy) return "A_z";
     // B phase
     if (kappa != 0.0 && gap > 1e-6)
-        return "B (topo, C=\xb11)";
+        return "B (topo, C=+-1)";
     return "B (gapless)";
 }
 
@@ -264,7 +264,7 @@ KitaevHcResult run_kitaev_honeycomb(const KitaevHcOptions& opts) {
 
     res.phase_label = classify_phase(opts.Jx, opts.Jy, opts.Jz, opts.kappa, res.gap);
 
-    if (sc == "phase_diagram") {
+    if (sc == "phase_diagram" || sc == "both") {
         compute_phase_diagram(opts, res);
     }
 

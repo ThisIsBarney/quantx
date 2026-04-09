@@ -2705,13 +2705,18 @@ def _kitaev_honeycomb_frames(
     b2 = np.array([0.0,     4 * PI / math.sqrt(3)])
 
     def kitaev_ham(kx: float, ky: float) -> np.ndarray:
-        """2×2 Kitaev honeycomb Bloch Hamiltonian."""
-        fk = Jx * np.exp(1j * 0.0) + Jy * np.exp(1j * (kx)) + Jz * np.exp(1j * (kx + ky))
-        # NNN hopping (κ term) contributes a real diagonal correction
-        # m(k) = 2κ[sin(k·a1) - sin(k·a2) + sin(k·(a2-a1))]
-        # a1=(1,0), a2=(1/2,√3/2) → in reciprocal coords one full lattice step
+        """2×2 Kitaev honeycomb Bloch Hamiltonian.
+
+        a1 = (1, 0),  a2 = (1/2, sqrt(3)/2)
+        f(k) = Jz + Jx*exp(i k·a1) + Jy*exp(i k·a2)
+        m(k) = 2κ[sin(k·a1) + sin(k·a2) + sin(k·(a2-a1))]
+        """
+        sqrt3_half = math.sqrt(3) * 0.5
+        dot_a1 = kx                           # k · a1 = kx
+        dot_a2 = kx * 0.5 + ky * sqrt3_half  # k · a2 = kx/2 + ky*√3/2
+        fk = Jz + Jx * np.exp(1j * dot_a1) + Jy * np.exp(1j * dot_a2)
         mk = 2.0 * kappa * (
-            math.sin(kx) - math.sin(ky) + math.sin(ky - kx)
+            math.sin(dot_a1) + math.sin(dot_a2) + math.sin(dot_a2 - dot_a1)
         )
         H = np.array([[ mk,       1j * fk ],
                       [-1j * np.conj(fk), -mk]], dtype=complex)

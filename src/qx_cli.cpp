@@ -69,7 +69,7 @@ int main(int argc, char** argv) {
     std::string weyl_path;
     std::string fu_kane_path;
     std::string lutchyn_oreg_path;
-    std::string kitaev_path;
+    std::string kh_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
     app.add_option("--weyl", weyl_path, "weyl options json path (run Weyl semimetal & Surface Fermi Arcs)");
     app.add_option("--fu-kane", fu_kane_path, "fu-kane options json path (run Fu-Kane superconductor / Majorana zero modes)");
     app.add_option("--lutchyn-oreg", lutchyn_oreg_path, "lutchyn-oreg options json path (run Lutchyn-Oreg Majorana nanowire)");
-    app.add_option("--kitaev", kitaev_path, "kitaev options json path (run Kitaev honeycomb model)");
+    app.add_option("--kitaev-hc", kh_path, "kitaev-hc options json path (run Kitaev honeycomb model)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -164,12 +164,12 @@ int main(int argc, char** argv) {
         haldane_path.empty() && weyl_path.empty() &&
         fu_kane_path.empty() &&
         lutchyn_oreg_path.empty() &&
-        kitaev_path.empty()) {
+        kh_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
           "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, --second-chern, "
-          "--wilson-loop, --edge-states, --haldane, --weyl, --fu-kane, --lutchyn-oreg, or --kitaev");
+          "--wilson-loop, --edge-states, --haldane, --weyl, --fu-kane, --lutchyn-oreg, or --kitaev-hc");
     }
     {
       int modes = (!problem_path.empty()      ? 1 : 0) +
@@ -199,13 +199,13 @@ int main(int argc, char** argv) {
                   (!weyl_path.empty()         ? 1 : 0) +
                   (!fu_kane_path.empty()      ? 1 : 0) +
                   (!lutchyn_oreg_path.empty() ? 1 : 0) +
-                  (!kitaev_path.empty()       ? 1 : 0);
+                  (!kh_path.empty()           ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
             "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
             "--anderson, --chern, --hofstadter, --mbl, --spectral, --tenfold, --second-chern, "
-            "--wilson-loop, --edge-states, --haldane, --weyl, --fu-kane, --lutchyn-oreg, or --kitaev");
+            "--wilson-loop, --edge-states, --haldane, --weyl, --fu-kane, --lutchyn-oreg, or --kitaev-hc");
       }
     }
 
@@ -447,13 +447,13 @@ int main(int argc, char** argv) {
       const qx::LutchynOregOptions lo_opts = qx::lutchyn_oreg_options_from_json(lo_json);
       qx::log::info("loaded lutchyn-oreg options file: " + lutchyn_oreg_path);
       output_json = qx::lutchyn_oreg_result_to_json(qx::run_lutchyn_oreg(lo_opts));
-    } else if (!kitaev_path.empty()) {
+    } else if (!kh_path.empty()) {
       if (explain || validate_only) {
-        throw std::runtime_error("--explain and --validate-only are not supported in --kitaev mode");
+        throw std::runtime_error("--explain and --validate-only are not supported in --kitaev-hc mode");
       }
-      const std::string kh_json = read_text_file(kitaev_path);
+      const std::string kh_json = read_text_file(kh_path);
       const qx::KitaevHcOptions kh_opts = qx::kitaev_hc_options_from_json(kh_json);
-      qx::log::info("loaded kitaev options file: " + kitaev_path);
+      qx::log::info("loaded kitaev-hc options file: " + kh_path);
       output_json = qx::kitaev_hc_result_to_json(qx::run_kitaev_honeycomb(kh_opts));
     } else {
       // QEC mode.
