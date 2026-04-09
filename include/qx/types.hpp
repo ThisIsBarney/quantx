@@ -1223,6 +1223,58 @@ struct KitaevHcResult {
   std::string message;
 };
 
+// ── M43: BBH Quadrupole Insulator (Higher-Order Topological Insulator) ───────
+//
+// Benalcazar-Bernevig-Hughes (BBH) model on a 2D square lattice.
+// 4-band model with pi-flux per plaquette; quantised bulk quadrupole moment
+// q_xy = 1/2 (mod 1) characterises the higher-order topological phase.
+//
+// Bulk Hamiltonian (4-band, momentum space):
+//   H(k) = (gamma_x + lambda_x cos kx) Gamma_4
+//         + lambda_x sin(kx) Gamma_3
+//         + (gamma_y + lambda_y cos ky) Gamma_2
+//         + lambda_y sin(ky) Gamma_1
+//
+//   Gamma_1..4 are 4x4 Dirac matrices: Gamma_i = sigma_i ⊗ sigma_z etc.
+//   See BBH Phys.Rev.B 96, 245115 (2017).
+//
+// Topological condition: |gamma_x/lambda_x| < 1 AND |gamma_y/lambda_y| < 1
+//   → quadrupole phase with 4 in-gap corner states at E≈0 on finite lattice
+//
+// Scenarios: "spectrum" | "corner" | "phase_diagram" | "both"
+
+struct BBHOptions {
+  double gamma_x{0.5};   // intra-cell hopping x
+  double lambda_x{1.0};  // inter-cell hopping x
+  double gamma_y{0.5};   // intra-cell hopping y
+  double lambda_y{1.0};  // inter-cell hopping y
+  int    n_k{60};        // k-grid resolution for bulk spectrum
+  int    n_sites{8};     // linear size of finite lattice (n_sites x n_sites unit cells)
+  int    n_pd{60};       // grid resolution per axis for phase diagram
+  std::string scenario{"both"};  // "spectrum"|"corner"|"phase_diagram"|"both"
+};
+
+struct BBHResult {
+  bool ok{false};
+  std::string scenario;
+  double gamma_x{0}, lambda_x{0}, gamma_y{0}, lambda_y{0};
+  std::string phase_label;  // "Trivial" or "Quadrupole (q_xy=1/2)"
+  double gap{0.0};          // bulk gap
+  // Bulk band structure: kx,ky over BZ, 4 bands
+  std::vector<double> kx_bulk;   // n_k^2 points
+  std::vector<double> ky_bulk;
+  std::vector<double> E0, E1, E2, E3;  // bands sorted ascending
+  // Finite lattice open-BC spectrum
+  std::vector<double> E_open;    // all eigenvalues sorted
+  std::vector<double> ldos_corner; // LDOS on 4 corner sites (summed near-zero modes)
+  // Phase diagram: quadrupole invariant over (gamma_x/lambda_x, gamma_y/lambda_y) grid
+  std::vector<double> pd_gx_over_lx;   // grid x-axis: gamma_x/lambda_x
+  std::vector<double> pd_gy_over_ly;   // grid y-axis: gamma_y/lambda_y
+  std::vector<int>    pd_topo;         // 1=topological, 0=trivial
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 // ── M36: Wilson Loop & Wannier Charge Centers (BHZ Z₂ Topological Insulator) ─
 //
 // Computes the Wilson loop spectrum (Wannier Charge Centers, WCC) for the

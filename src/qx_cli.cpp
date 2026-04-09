@@ -70,6 +70,7 @@ int main(int argc, char** argv) {
     std::string fu_kane_path;
     std::string lutchyn_oreg_path;
     std::string kh_path;
+    std::string bbh_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -112,6 +113,7 @@ int main(int argc, char** argv) {
     app.add_option("--fu-kane", fu_kane_path, "fu-kane options json path (run Fu-Kane superconductor / Majorana zero modes)");
     app.add_option("--lutchyn-oreg", lutchyn_oreg_path, "lutchyn-oreg options json path (run Lutchyn-Oreg Majorana nanowire)");
     app.add_option("--kitaev-hc", kh_path, "kitaev-hc options json path (run Kitaev honeycomb model)");
+    app.add_option("--bbh", bbh_path, "bbh options json path (run BBH quadrupole insulator / corner states)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -164,7 +166,8 @@ int main(int argc, char** argv) {
         haldane_path.empty() && weyl_path.empty() &&
         fu_kane_path.empty() &&
         lutchyn_oreg_path.empty() &&
-        kh_path.empty()) {
+        kh_path.empty() &&
+        bbh_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
@@ -199,7 +202,8 @@ int main(int argc, char** argv) {
                   (!weyl_path.empty()         ? 1 : 0) +
                   (!fu_kane_path.empty()      ? 1 : 0) +
                   (!lutchyn_oreg_path.empty() ? 1 : 0) +
-                  (!kh_path.empty()           ? 1 : 0);
+                  (!kh_path.empty()           ? 1 : 0) +
+                  (!bbh_path.empty()          ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
@@ -455,6 +459,14 @@ int main(int argc, char** argv) {
       const qx::KitaevHcOptions kh_opts = qx::kitaev_hc_options_from_json(kh_json);
       qx::log::info("loaded kitaev-hc options file: " + kh_path);
       output_json = qx::kitaev_hc_result_to_json(qx::run_kitaev_honeycomb(kh_opts));
+    } else if (!bbh_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --bbh mode");
+      }
+      const std::string bbh_json = read_text_file(bbh_path);
+      const qx::BBHOptions bbh_opts = qx::bbh_options_from_json(bbh_json);
+      qx::log::info("loaded bbh options file: " + bbh_path);
+      output_json = qx::bbh_result_to_json(qx::run_bbh(bbh_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

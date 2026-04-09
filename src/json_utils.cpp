@@ -1990,4 +1990,45 @@ std::string kitaev_hc_result_to_json(const KitaevHcResult& r) {
   return j.dump();
 }
 
+BBHOptions bbh_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  BBHOptions o;
+  if (j.contains("gamma_x"))  o.gamma_x  = j["gamma_x"].get<double>();
+  if (j.contains("lambda_x")) o.lambda_x = j["lambda_x"].get<double>();
+  if (j.contains("gamma_y"))  o.gamma_y  = j["gamma_y"].get<double>();
+  if (j.contains("lambda_y")) o.lambda_y = j["lambda_y"].get<double>();
+  if (j.contains("n_k"))      o.n_k      = j["n_k"].get<int>();
+  if (j.contains("n_sites"))  o.n_sites  = j["n_sites"].get<int>();
+  if (j.contains("n_pd"))     o.n_pd     = j["n_pd"].get<int>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string bbh_result_to_json(const BBHResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["scenario"]     = r.scenario;
+  j["gamma_x"]      = r.gamma_x;
+  j["lambda_x"]     = r.lambda_x;
+  j["gamma_y"]      = r.gamma_y;
+  j["lambda_y"]     = r.lambda_y;
+  j["phase_label"]  = r.phase_label;
+  j["gap"]          = r.gap;
+  j["kx_bulk"]      = r.kx_bulk;
+  j["ky_bulk"]      = r.ky_bulk;
+  j["E0"]           = r.E0;
+  j["E1"]           = r.E1;
+  j["E2"]           = r.E2;
+  j["E3"]           = r.E3;
+  j["E_open"]       = r.E_open;
+  j["ldos_corner"]  = r.ldos_corner;
+  j["pd_gx_over_lx"] = r.pd_gx_over_lx;
+  j["pd_gy_over_ly"] = r.pd_gy_over_ly;
+  j["pd_topo"]      = r.pd_topo;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx

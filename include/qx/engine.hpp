@@ -79,5 +79,7 @@ FuKaneResult run_fu_kane(const FuKaneOptions& opts);
 LutchynOregResult run_lutchyn_oreg(const LutchynOregOptions& opts);
 // Run Kitaev honeycomb model — Majorana band structure, phase diagram, Chern number.
 KitaevHcResult run_kitaev_honeycomb(const KitaevHcOptions& opts);
+// Run BBH quadrupole insulator — bulk spectrum, corner states, phase diagram.
+BBHResult run_bbh(const BBHOptions& opts);
 
 }  // namespace qx
