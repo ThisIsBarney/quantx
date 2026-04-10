@@ -119,6 +119,7 @@ add_library(qx_core
   src/aah.cpp
   src/syk.cpp
   src/kondo.cpp
+  src/toric.cpp
   src/mipt.cpp
   src/richardson_gaudin.cpp
   src/entanglement.cpp

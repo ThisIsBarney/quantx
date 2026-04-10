@@ -74,6 +74,7 @@ from viz.topology import (
     _aah_frames, _aah_page,
     _syk_frames, _syk_page,
     _kondo_frames, _kondo_page,
+    _toric_frames, _toric_page,
     _mipt_frames, _mipt_page,
     _rg_frames, _rg_page,
     _ent_frames, _ent_page,
@@ -93,7 +94,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "mipt", "rg", "ent", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "toric", "mipt", "rg", "ent", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -375,6 +376,12 @@ def main() -> int:
   parser.add_argument("--kondo-nV",     type=int,   default=30,   help="Kondo V sweep points")
   parser.add_argument("--kondo-Vmax",   type=float, default=0.8,  help="Kondo max V")
   parser.add_argument("--kondo-neps",   type=int,   default=40,   help="Kondo eps_d sweep points")
+  # ── M53: Toric code ─────────────────────────────────────────────────────
+  parser.add_argument("--toric-L",      type=int,   default=2,    help="Toric code torus size L (2 or 3)")
+  parser.add_argument("--toric-JA",     type=float, default=1.0,  help="Toric code vertex coupling JA")
+  parser.add_argument("--toric-JB",     type=float, default=1.0,  help="Toric code plaquette coupling JB")
+  parser.add_argument("--toric-nh",     type=int,   default=20,   help="Toric code h sweep points")
+  parser.add_argument("--toric-hmax",   type=float, default=1.0,  help="Toric code max X-field h")
   # ── M51: MIPT ───────────────────────────────────────────────────────────────
   parser.add_argument("--mipt-L",        type=int,   default=8,    help="MIPT chain length (even, <=12)")
   parser.add_argument("--mipt-p",        type=float, default=0.16, help="MIPT measurement rate for scaling")
@@ -1598,6 +1605,25 @@ def main() -> int:
       path.write_text(_kondo_page(kondo_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"toric", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("toric skipped: numpy not available", file=sys.stderr)
+    else:
+      toric_data = _toric_frames(
+          L=args.toric_L,
+          JA=args.toric_JA,
+          JB=args.toric_JB,
+          n_h=args.toric_nh,
+          h_max=args.toric_hmax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_toric.html"
+      path.write_text(_toric_page(toric_data), encoding="utf-8")
+      generated.append(path)
+
   if args.scenario in {"mipt", "all"}:
     try:
       import numpy as np  # noqa: PLC0415, F401
@@ -1722,6 +1748,7 @@ def main() -> int:
         "aah":                "quantum_aah",
         "syk":                "quantum_syk",
         "kondo":              "quantum_kondo",
+        "toric":              "quantum_toric",
         "mipt":               "quantum_mipt",
         "rg":                 "quantum_rg",
         "ent":                "quantum_ent",

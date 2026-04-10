@@ -88,6 +88,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("aah",                "Aubry-Andre-Harper Quasicrystal MIT"),
           ("syk",                "Sachdev-Ye-Kitaev Quantum Chaos SFF"),
           ("kondo",              "Kondo Effect SIAM Impurity Screening"),
+          ("toric",              "Toric Code Topological Order Anyons"),
           ("mipt",               "Measurement-Induced Phase Transition"),
           ("rg",                 "Richardson-Gaudin BCS Pairing Condensate"),
           ("ent",                "Bipartite Entanglement Entropy Area Law"),
