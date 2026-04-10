@@ -174,8 +174,8 @@ static double half_entropy_tc(const std::vector<double>& psi, int Nq) {
 
 // ── run_toric ─────────────────────────────────────────────────────────────────
 ToricResult run_toric(const ToricOptions& opts) {
-    if (opts.L < 2 || opts.L > 3)
-        throw std::runtime_error("Toric: L must be 2 or 3");
+    if (opts.L != 2)
+        throw std::runtime_error("Toric: L must be 2 (L=3 needs 2^18=262144 dim → ~549 GB)");
     const std::string& sc = opts.scenario;
     if (sc != "spectrum" && sc != "perturb" && sc != "both")
         throw std::runtime_error("Toric: unknown scenario; valid: spectrum, perturb, both");
@@ -194,6 +194,9 @@ ToricResult run_toric(const ToricOptions& opts) {
         jacobi_full_tc(H, evecs, dim);
         std::vector<double> evals(dim);
         for (int i = 0; i < dim; ++i) evals[i] = H[i*dim+i];
+        // Find GS index in the UNSORTED diagonal BEFORE sorting evals
+        const int gs_idx = static_cast<int>(
+            std::min_element(evals.begin(), evals.end()) - evals.begin());
         std::sort(evals.begin(), evals.end());
         res.eigenvalues = std::vector<double>(evals.begin(), evals.begin() + std::min(dim, 20));
         res.E0 = evals[0];
@@ -203,21 +206,12 @@ ToricResult run_toric(const ToricOptions& opts) {
         for (double e : evals) if (std::abs(e - res.E0) < tol) ++degen;
         res.gs_degeneracy = degen;
         res.anyonic_gap = (dim > degen) ? evals[degen] - res.E0 : 0.0;
-        // Ground state entanglement entropy
-        const int gs_idx = static_cast<int>(
-            std::min_element(evals.begin(), evals.end()) - evals.begin());
-        // Find column in evecs corresponding to lowest eigenvalue
-        // After Jacobi, H diagonal has eigenvalues — need original gs
-        // Use the first column where H_diag = E0
-        for (int i = 0; i < dim; ++i) {
-            if (std::abs(H[i*dim+i] - res.E0) < 1e-8) {
-                std::vector<double> psi(dim);
-                for (int r = 0; r < dim; ++r) psi[r] = evecs[r*dim+i];
-                res.entropy_gs = half_entropy_tc(psi, Nq);
-                break;
-            }
+        // Ground state entanglement entropy: use gs_idx directly
+        {
+            std::vector<double> psi(dim);
+            for (int r = 0; r < dim; ++r) psi[r] = evecs[r*dim+gs_idx];
+            res.entropy_gs = half_entropy_tc(psi, Nq);
         }
-        (void)gs_idx;
     }
 
     // ── Perturbation sweep: h_x from 0 to h_max ──────────────────────────────

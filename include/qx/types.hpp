@@ -2061,7 +2061,7 @@ struct LLResult {
 
 // ── M53: Toric Code / Surface Code ───────────────────────────────────────────
 //
-// Kitaev's toric code on an L×L torus (L=2 or 3, 2L² qubits).
+// Kitaev's toric code on an L×L torus (L=2 only; L=3 needs dim=2^18≈549 GB).
 //   H = -J_A Σ_v A_v  -  J_B Σ_p B_p  -  h Σ X_i  -  g Σ Z_i
 //
 // Topological phase (h=g=0):
@@ -2072,7 +2072,7 @@ struct LLResult {
 // Scenarios: "spectrum" | "perturb" | "both"
 
 struct ToricOptions {
-  int    L{2};             // torus size L (2 or 3; N_qubits = 2*L²)
+  int    L{2};             // torus size L (must be 2; N_qubits = 2*L², L=3 → OOM)
   double JA{1.0};          // vertex stabilizer coupling
   double JB{1.0};          // plaquette stabilizer coupling
   double h{0.0};           // transverse X perturbation
