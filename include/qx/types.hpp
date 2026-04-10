@@ -2021,4 +2021,48 @@ struct SYKResult {
   std::string message;
 };
 
+// ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
+//
+// Two complementary models:
+//
+// 1. XX free-fermion chain (correlation-matrix, O(L³), any L):
+//    H = -J Σ_i (c†_i c_{i+1} + h.c.)  PBC, half-filling.
+//    S(l) = entanglement entropy of subsystem [0,l).
+//    CFT prediction (c=1): S(l) = (1/3) ln(sin(πl/L)) + const.
+//    Scaling: S(L/2) ~ (c/3) ln(L)  →  fit gives central charge.
+//
+// 2. Transverse-field Ising chain (full ED, L ≤ 14):
+//    H = -J Σ_i σ^z_i σ^z_{i+1} - h Σ_i σ^x_i  OBC.
+//    Critical: h=J=1, c=1/2.  Area law: h≠1.
+//
+// Scenarios: "xx" | "tfi" | "both"
+
+struct EntOptions {
+  int    L{20};            // chain length (even, >= 2)
+  double J{1.0};           // hopping / ZZ coupling
+  double h{1.0};           // TFI transverse field (critical at h=J=1)
+  int    n_h{30};          // points in h sweep for TFI
+  double h_max{3.0};       // max h for TFI sweep
+  int    L_max{40};        // max L for XX scaling study
+  std::string scenario{"both"};  // "xx"|"tfi"|"both"
+};
+
+struct EntResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double J{0}, h{0};
+  // XX profile: S(l) for l=1..L/2
+  std::vector<int>    l_vals;
+  std::vector<double> S_l;
+  // XX scaling: S(L/2) vs ln(L)
+  std::vector<int>    L_vals;
+  std::vector<double> S_Lhalf, ln_L;
+  double c_fit{0};          // fitted central charge from slope = c/3
+  // TFI h sweep: S(Ltfi/2, h) for h=0..h_max
+  std::vector<double> h_vals, S_h;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 }  // namespace qx

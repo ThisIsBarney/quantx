@@ -75,6 +75,7 @@ from viz.topology import (
     _syk_frames, _syk_page,
     _kondo_frames, _kondo_page,
     _rg_frames, _rg_page,
+    _ent_frames, _ent_page,
 )
 
 
@@ -91,7 +92,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "rg", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "rg", "ent", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -379,6 +380,12 @@ def main() -> int:
   parser.add_argument("--rg-bw",    type=float, default=2.0, help="RG single-particle bandwidth")
   parser.add_argument("--rg-ng",    type=int,   default=40,  help="RG g sweep points")
   parser.add_argument("--rg-gmax",  type=float, default=1.0, help="RG max g for sweep")
+  parser.add_argument("--ent-L",        type=int,   default=20,   help="Entanglement chain length (even)")
+  parser.add_argument("--ent-J",        type=float, default=1.0,  help="Entanglement hopping / ZZ coupling J")
+  parser.add_argument("--ent-h",        type=float, default=1.0,  help="Entanglement TFI transverse field h")
+  parser.add_argument("--ent-nh",       type=int,   default=30,   help="Entanglement h sweep points")
+  parser.add_argument("--ent-hmax",     type=float, default=3.0,  help="Entanglement max h for TFI sweep")
+  parser.add_argument("--ent-Lmax",     type=int,   default=40,   help="Entanglement max L for XX scaling")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1601,6 +1608,26 @@ def main() -> int:
       path.write_text(_rg_page(rg_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"ent", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("ent skipped: numpy not available", file=sys.stderr)
+    else:
+      ent_data = _ent_frames(
+          L=args.ent_L,
+          J=args.ent_J,
+          h=args.ent_h,
+          n_h=args.ent_nh,
+          h_max=args.ent_hmax,
+          L_max=args.ent_Lmax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_ent.html"
+      path.write_text(_ent_page(ent_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1666,6 +1693,7 @@ def main() -> int:
         "syk":                "quantum_syk",
         "kondo":              "quantum_kondo",
         "rg":                 "quantum_rg",
+        "ent":                "quantum_ent",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():
