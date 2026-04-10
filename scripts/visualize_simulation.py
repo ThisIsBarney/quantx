@@ -71,6 +71,7 @@ from viz.topology import (
     _bbh_frames, _bbh_page,
     _floquet_topo_frames, _floquet_topo_page,
     _non_herm_frames, _non_herm_page,
+    _aah_frames, _aah_page,
 )
 
 
@@ -87,7 +88,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -347,6 +348,12 @@ def main() -> int:
   parser.add_argument("--nh-nk",      type=int,   default=100,  help="k-grid for PBC spectrum")
   parser.add_argument("--nh-ngamma",  type=int,   default=80,   help="gamma sweep points")
   parser.add_argument("--nh-gammax",  type=float, default=2.0,  help="max gamma for sweeps")
+  # ── M46: Aubry-André-Harper quasicrystal ─────────────────────────────────
+  parser.add_argument("--aah-t",       type=float, default=1.0,  help="AAH hopping amplitude t")
+  parser.add_argument("--aah-V",       type=float, default=0.5,  help="AAH quasiperiodic potential V")
+  parser.add_argument("--aah-nsites",  type=int,   default=89,   help="AAH chain length")
+  parser.add_argument("--aah-nV",      type=int,   default=60,   help="V sweep points for phase diagram")
+  parser.add_argument("--aah-Vmax",    type=float, default=2.0,  help="max V for phase diagram")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1489,6 +1496,25 @@ def main() -> int:
       path.write_text(_non_herm_page(nh_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"aah", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("aah skipped: numpy not available", file=sys.stderr)
+    else:
+      aah_data = _aah_frames(
+          t=args.aah_t,
+          V=args.aah_V,
+          n_sites=args.aah_nsites,
+          n_V=args.aah_nV,
+          V_max=args.aah_Vmax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_aah.html"
+      path.write_text(_aah_page(aah_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1550,6 +1576,7 @@ def main() -> int:
         "bbh":                "quantum_bbh",
         "floquet_topo":       "quantum_floquet_topo",
         "non_herm":           "quantum_non_herm",
+        "aah":                "quantum_aah",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

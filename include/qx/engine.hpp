@@ -85,5 +85,7 @@ BBHResult run_bbh(const BBHOptions& opts);
 FloquetTopoResult run_floquet_topo(const FloquetTopoOptions& opts);
 // Run non-Hermitian topology — Hatano-Nelson skin effect, exceptional points.
 NonHermResult run_non_herm(const NonHermOptions& opts);
+// Run Aubry-Andre-Harper quasicrystal — metal-insulator transition, fractal spectrum.
+AAHResult run_aah(const AAHOptions& opts);
 
 }  // namespace qx

@@ -1859,4 +1859,52 @@ struct NonHermResult {
   std::string message;
 };
 
+// ── M46: Aubry-André-Harper (AAH) Quasicrystal ────────────────────────────────
+//
+// 1D tight-binding chain with quasiperiodic on-site potential:
+//   H = Σ_n t(c†_{n+1}c_n + h.c.) + 2V cos(2πβn + φ) c†_n c_n
+//
+// Self-dual at V = t (for irrational β): metal-insulator transition.
+//   V < t: all states extended (metal,  IPR → 0 as N → ∞)
+//   V = t: critical states (multifractal, IPR ~ N^{-D₂})
+//   V > t: all states localised (insulator, IPR = O(1))
+//
+// Lyapunov exponent (localization length inverse) for V > t:
+//   γ = ln(V/t)  (same for all energies — consequence of Aubry self-duality)
+//
+// β = golden ratio (√5−1)/2 ≈ 0.6180 (default): quasiperiodic (irrational).
+//
+// Scenarios: "spectrum" | "phase" | "both"
+//   spectrum: eigenvalues + IPR at fixed V
+//   phase:    eigenvalue spectrum as V sweeps 0 → V_max  (fractal butterfly)
+
+struct AAHOptions {
+  double t{1.0};        // hopping amplitude (energy scale)
+  double V{0.5};        // quasiperiodic potential strength
+  double beta{0.0};     // frequency: 0 = golden ratio (√5-1)/2
+  double phi{0.0};      // phase offset (usually 0)
+  int    n_sites{89};   // chain length (Fibonacci number works well for golden-ratio β)
+  int    n_V{60};       // V values for phase-diagram sweep
+  double V_max{2.0};    // maximum V for sweep
+  std::string scenario{"both"};  // "spectrum"|"phase"|"both"
+};
+
+struct AAHResult {
+  bool ok{false};
+  std::string scenario;
+  double t{0}, V{0}, beta_used{0};
+  // Fixed-V spectrum and IPR
+  std::vector<double> eigenvalues;  // n_sites sorted energies
+  std::vector<double> ipr;         // inverse participation ratio per eigenstate
+  double mean_ipr{0.0};            // average IPR (localization diagnostic)
+  double lyapunov{0.0};            // analytic Lyapunov exponent = max(0, ln(V/t))
+  std::string phase_label;         // "Metal (V<t)", "Critical (V=t)", "Insulator (V>t)"
+  // Phase diagram: spectrum vs V  (n_V * n_sites values, row-major: outer=V, inner=E)
+  std::vector<double> pd_V;        // n_V V values
+  std::vector<double> pd_E;        // n_V * n_sites eigenvalues (flattened)
+  std::vector<double> pd_ipr_mean; // mean IPR at each V (n_V values)
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 }  // namespace qx
