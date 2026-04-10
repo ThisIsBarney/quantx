@@ -4230,3 +4230,250 @@ window.addEventListener('resize',()=>{{drawSpec();drawIPR();drawButt();}});
 </script>
 </body>
 </html>"""
+
+
+def _syk_frames(
+    N: int = 12,
+    J: float = 1.0,
+    beta: float = 1.0,
+    n_samples: int = 20,
+    n_t: int = 100,
+    t_max: float = 30.0,
+    seed: int = 42,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Sachdev-Ye-Kitaev model (quantum chaos, SFF)."""
+    import numpy as np  # noqa: PLC0415
+
+    M = N // 2
+    dim = 1 << M
+    sigma = J * math.sqrt(6.0) / N**1.5
+
+    def apply_gamma(j: int, alpha: int):
+        m = j // 2
+        odd = j & 1
+        mask_m = (1 << m) - 1
+        sign = -1.0 if bin(alpha & mask_m).count("1") & 1 else 1.0
+        new_state = alpha ^ (1 << m)
+        if not odd:
+            phase = complex(sign, 0.0)
+        else:
+            fac = (1 - 2 * ((alpha >> m) & 1)) * sign
+            phase = complex(0.0, fac)
+        return phase, new_state
+
+    def build_H(seed_local: int):
+        rng_l = np.random.default_rng(seed_local)
+        H = np.zeros((dim, dim), dtype=complex)
+        for i in range(N - 3):
+            for j in range(i + 1, N - 2):
+                for k in range(j + 1, N - 1):
+                    for l in range(k + 1, N):
+                        Jijkl = rng_l.normal(0.0, sigma)
+                        for alpha in range(dim):
+                            p4, s4 = apply_gamma(l, alpha)
+                            p3, s3 = apply_gamma(k, s4)
+                            p2, s2 = apply_gamma(j, s3)
+                            p1, s1 = apply_gamma(i, s2)
+                            H[s1, alpha] += Jijkl * (p1 * p2 * p3 * p4)
+        return H
+
+    def r_stat(ev):
+        r = []
+        for i in range(1, len(ev) - 1):
+            d1, d2 = float(ev[i] - ev[i - 1]), float(ev[i + 1] - ev[i])
+            if d1 > 1e-14 and d2 > 1e-14:
+                r.append(min(d1, d2) / max(d1, d2))
+        return r
+
+    out: dict = {"source": source, "N": N, "dim": dim, "J": J, "beta": beta}
+
+    if scenario in ("spectrum", "both"):
+        H = build_H(seed)
+        ev = np.sort(np.linalg.eigvalsh(H))
+        r_vals = r_stat(ev)
+        r_mean = float(np.mean(r_vals)) if r_vals else 0.0
+        out.update({
+            "eigenvalues": ev.tolist(),
+            "E0_per_N": float(ev[0]) / N,
+            "r_vals": r_vals,
+            "r_mean": r_mean,
+        })
+
+    if scenario in ("sff", "both"):
+        t_grid = [t_max * (ti + 1) / n_t for ti in range(n_t)]
+        K_sff = [0.0] * n_t
+        for s in range(n_samples):
+            H_s = build_H(seed + s * 1000)
+            ev_s = np.sort(np.linalg.eigvalsh(H_s))
+            w = np.exp(-beta * ev_s)
+            z_beta = float(np.sum(w))
+            if z_beta == 0.0:
+                continue
+            for ti, t_val in enumerate(t_grid):
+                re_z = float(np.dot(w, np.cos(t_val * ev_s)))
+                im_z = float(np.dot(w, np.sin(t_val * ev_s)))
+                K_sff[ti] += (re_z**2 + im_z**2) / (z_beta**2)
+        K_sff = [k / n_samples for k in K_sff]
+        out.update({"t_sff": t_grid, "K_sff": K_sff})
+
+    return out
+
+
+def _syk_page(data: dict) -> str:
+    """Render SYK model results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    N_val   = data.get("N", 12)
+    dim_val = data.get("dim", 64)
+    J_val   = data.get("J", 1.0)
+    beta_v  = data.get("beta", 1.0)
+    r_mean  = data.get("r_mean", 0.0)
+    E0_N    = data.get("E0_per_N", 0.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Sachdev-Ye-Kitaev Model \u2014 QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Sachdev-Ye-Kitaev Model: Quantum Chaos &amp; Spectral Statistics</h2>
+<div class="info">
+  <span><b>N</b>={N_val}</span>
+  <span><b>dim</b>={dim_val}</span>
+  <span><b>J</b>={J_val:.3f}</span>
+  <span><b>&#946;</b>={beta_v:.2f}</span>
+  <span><b>&#x27e8;r&#x27e9;</b>={r_mean:.4f}</span>
+  <span><b>E&#x2080;/N</b>={E0_N:.4f}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Eigenvalue Spectrum (coloured by index)</div>
+    <canvas id="cSpec" width="380" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Level-Spacing Ratio &#x27e8;r&#x27e9; vs GUE/Poisson</div>
+    <canvas id="cHist" width="360" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Spectral Form Factor K(t) &#x2014; disorder average</div>
+    <canvas id="cSFF" width="400" height="340"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function drawSpec(){{
+  const cv=document.getElementById('cSpec');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const evals=DATA.eigenvalues||[];
+  if(!evals.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(spectrum not computed)',pad,H/2);return;}}
+  const n=evals.length,emin=evals[0],emax=evals[n-1],er=emax-emin||1;
+  const toX=i=>(pad+(i/(n-1||1))*(W-2*pad));
+  const toY=e=>(H-pad-(e-emin)/er*(H-2*pad));
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  for(let i=0;i<n;i++){{
+    const t01=i/(n-1||1);
+    const r=Math.round(255*Math.min(1,2*t01));
+    const b=Math.round(255*Math.min(1,2*(1-t01)));
+    const g=Math.round(255*(1-Math.abs(2*t01-1)));
+    ctx.fillStyle=`rgb(${{r}},${{g}},${{b}})`;
+    ctx.fillRect(toX(i)-1,toY(evals[i])-1,2,2);
+  }}
+  ctx.fillStyle='#e3b341';ctx.font='9px monospace';
+  ctx.fillText('E\u2080/N='+(DATA.E0_per_N||0).toFixed(3),pad+2,pad+12);
+  ctx.fillStyle='#8b949e';ctx.fillText('E',4,pad+4);ctx.fillText('index',W/2-12,H-8);
+}}
+
+function drawHist(){{
+  const cv=document.getElementById('cHist');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const r_vals=DATA.r_vals||[];
+  if(!r_vals.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(spectrum not computed)',pad,H/2);return;}}
+  const nBins=20,bins=new Array(nBins).fill(0);
+  for(const rv of r_vals){{const bi=Math.min(nBins-1,Math.floor(rv*nBins));bins[bi]++;}}
+  const bmax=Math.max(...bins)||1;
+  const bw=(W-2*pad)/nBins-1;
+  const toX=b=>(pad+b/nBins*(W-2*pad));
+  const toY=v=>(H-pad-(v/bmax)*(H-2*pad));
+  ctx.fillStyle='rgba(56,139,253,0.7)';
+  for(let b=0;b<nBins;b++){{const x=toX(b);ctx.fillRect(x,toY(bins[b]),bw,H-pad-toY(bins[b]));}}
+  const xGUE=toX(0.60*nBins);
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+  ctx.beginPath();ctx.moveTo(xGUE,pad);ctx.lineTo(xGUE,H-pad);ctx.stroke();
+  const xPoi=toX(0.39*nBins);
+  ctx.strokeStyle='#3fb950';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(xPoi,pad);ctx.lineTo(xPoi,H-pad);ctx.stroke();
+  ctx.setLineDash([]);
+  const r_mean=DATA.r_mean||0,xm=toX(r_mean*nBins);
+  ctx.strokeStyle='#e3b341';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(xm,pad);ctx.lineTo(xm,H-pad);ctx.stroke();
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('count',4,pad+4);ctx.fillText('r',W/2-4,H-8);
+  ctx.fillText('0',pad-8,H-pad+12);ctx.fillText('1',W-pad-4,H-pad+12);
+  ctx.fillStyle='#f0883e';ctx.fillText('GUE 0.60',pad+4,pad+12);
+  ctx.fillStyle='#3fb950';ctx.fillText('Poisson 0.39',pad+4,pad+22);
+  ctx.fillStyle='#e3b341';ctx.fillText('\u27e8r\u27e9='+r_mean.toFixed(3),pad+4,pad+32);
+}}
+
+function drawSFF(){{
+  const cv=document.getElementById('cSFF');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=48;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const t_sff=DATA.t_sff||[],K_sff=DATA.K_sff||[];
+  if(!t_sff.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(SFF not computed)',pad,H/2);return;}}
+  const n=t_sff.length,tmin=t_sff[0],tmax=t_sff[n-1];
+  const logT0=Math.log10(tmin),logT1=Math.log10(tmax);
+  let kmin=Infinity,kmax=-Infinity;
+  for(let ki=0;ki<n;ki++){{if(K_sff[ki]>0){{kmin=Math.min(kmin,K_sff[ki]);kmax=Math.max(kmax,K_sff[ki]);}}}}
+  if(!isFinite(kmin)){{kmin=1e-4;kmax=1;}}
+  const logK0=Math.log10(kmin*0.7),logK1=Math.log10(kmax*2);
+  const toX=t=>(pad+(Math.log10(t)-logT0)/(logT1-logT0)*(W-2*pad));
+  const toY=k=>(k>0?H-pad-(Math.log10(k)-logK0)/(logK1-logK0)*(H-2*pad):H-pad);
+  ctx.strokeStyle='#21262d';ctx.lineWidth=1;
+  for(let d=Math.ceil(logK0);d<=Math.floor(logK1);d++){{
+    const y=H-pad-(d-logK0)/(logK1-logK0)*(H-2*pad);
+    ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);ctx.stroke();
+  }}
+  ctx.strokeStyle='#388bfd';ctx.lineWidth=1.5;
+  ctx.beginPath();let first=true;
+  for(let i=0;i<n;i++){{
+    if(K_sff[i]<=0)continue;
+    const x=toX(t_sff[i]),y=toY(K_sff[i]);
+    if(first){{ctx.moveTo(x,y);first=false;}}else ctx.lineTo(x,y);
+  }}
+  ctx.stroke();
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('K(t)',4,pad+4);ctx.fillText('t (log)',W/2-12,H-8);
+  ctx.fillText(tmin.toFixed(1),pad-2,H-pad+12);ctx.fillText(tmax.toFixed(0),W-pad-16,H-pad+12);
+  ctx.fillText('dip\u2192ramp\u2192plateau',pad+4,pad+24);
+}}
+
+drawSpec();drawHist();drawSFF();
+window.addEventListener('resize',()=>{{drawSpec();drawHist();drawSFF();}});
+}})();
+</script>
+</body>
+</html>"""

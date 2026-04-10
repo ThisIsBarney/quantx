@@ -86,6 +86,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("floquet_topo",       "Floquet Topological Anomalous Edge"),
           ("non_herm",           "Non-Hermitian Skin Effect EP"),
           ("aah",                "Aubry-Andre-Harper Quasicrystal MIT"),
+          ("syk",                "Sachdev-Ye-Kitaev Quantum Chaos SFF"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),

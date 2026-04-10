@@ -72,6 +72,7 @@ from viz.topology import (
     _floquet_topo_frames, _floquet_topo_page,
     _non_herm_frames, _non_herm_page,
     _aah_frames, _aah_page,
+    _syk_frames, _syk_page,
 )
 
 
@@ -88,7 +89,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -354,6 +355,13 @@ def main() -> int:
   parser.add_argument("--aah-nsites",  type=int,   default=89,   help="AAH chain length")
   parser.add_argument("--aah-nV",      type=int,   default=60,   help="V sweep points for phase diagram")
   parser.add_argument("--aah-Vmax",    type=float, default=2.0,  help="max V for phase diagram")
+  # ── M47: Sachdev-Ye-Kitaev model ─────────────────────────────────────────
+  parser.add_argument("--syk-N",        type=int,   default=12,   help="SYK number of Majorana fermions (even, <=16)")
+  parser.add_argument("--syk-J",        type=float, default=1.0,  help="SYK coupling scale J")
+  parser.add_argument("--syk-beta",     type=float, default=1.0,  help="SYK inverse temperature beta")
+  parser.add_argument("--syk-samples",  type=int,   default=20,   help="SYK disorder samples for SFF")
+  parser.add_argument("--syk-nt",       type=int,   default=100,  help="SYK number of time points for SFF")
+  parser.add_argument("--syk-tmax",     type=float, default=30.0, help="SYK max time for SFF")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1515,6 +1523,26 @@ def main() -> int:
       path.write_text(_aah_page(aah_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"syk", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("syk skipped: numpy not available", file=sys.stderr)
+    else:
+      syk_data = _syk_frames(
+          N=args.syk_N,
+          J=args.syk_J,
+          beta=args.syk_beta,
+          n_samples=args.syk_samples,
+          n_t=args.syk_nt,
+          t_max=args.syk_tmax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_syk.html"
+      path.write_text(_syk_page(syk_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1577,6 +1605,7 @@ def main() -> int:
         "floquet_topo":       "quantum_floquet_topo",
         "non_herm":           "quantum_non_herm",
         "aah":                "quantum_aah",
+        "syk":                "quantum_syk",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

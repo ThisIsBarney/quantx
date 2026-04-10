@@ -87,5 +87,7 @@ FloquetTopoResult run_floquet_topo(const FloquetTopoOptions& opts);
 NonHermResult run_non_herm(const NonHermOptions& opts);
 // Run Aubry-Andre-Harper quasicrystal — metal-insulator transition, fractal spectrum.
 AAHResult run_aah(const AAHOptions& opts);
+// Run Sachdev-Ye-Kitaev model — quantum chaos, level statistics, spectral form factor.
+SYKResult run_syk(const SYKOptions& opts);
 
 }  // namespace qx

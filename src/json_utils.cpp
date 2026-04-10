@@ -2144,4 +2144,38 @@ std::string aah_result_to_json(const AAHResult& r) {
   return j.dump();
 }
 
+SYKOptions syk_options_from_json(const std::string& s) {
+  auto j = json::parse(s);
+  SYKOptions o;
+  if (j.contains("N"))          o.N         = j["N"].get<int>();
+  if (j.contains("J"))          o.J         = j["J"].get<double>();
+  if (j.contains("beta"))       o.beta      = j["beta"].get<double>();
+  if (j.contains("n_samples"))  o.n_samples = j["n_samples"].get<int>();
+  if (j.contains("n_t"))        o.n_t       = j["n_t"].get<int>();
+  if (j.contains("t_max"))      o.t_max     = j["t_max"].get<double>();
+  if (j.contains("seed"))       o.seed      = j["seed"].get<int>();
+  if (j.contains("scenario"))   o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string syk_result_to_json(const SYKResult& r) {
+  json j;
+  j["ok"]          = r.ok;
+  j["scenario"]    = r.scenario;
+  j["N"]           = r.N;
+  j["dim"]         = r.dim;
+  j["J"]           = r.J;
+  j["beta"]        = r.beta;
+  j["eigenvalues"] = r.eigenvalues;
+  j["E0_per_N"]    = r.E0_per_N;
+  j["r_mean"]      = r.r_mean;
+  j["r_vals"]      = r.r_vals;
+  j["t_sff"]       = r.t_sff;
+  j["K_sff"]       = r.K_sff;
+  j["elapsed_ms"]  = r.elapsed_ms;
+  j["message"]     = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
