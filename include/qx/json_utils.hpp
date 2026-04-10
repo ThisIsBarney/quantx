@@ -157,5 +157,13 @@ std::string   kondo_result_to_json(const KondoResult& result);
 MIPTOptions   mipt_options_from_json(const std::string& json);
 // Serialize measurement-induced phase transition result to JSON string.
 std::string   mipt_result_to_json(const MIPTResult& result);
+// Parse Richardson-Gaudin/BCS options from JSON string.
+RGOptions   rg_options_from_json(const std::string& json);
+// Serialize Richardson-Gaudin/BCS result to JSON string.
+std::string rg_result_to_json(const RGResult& result);
+// Parse bipartite entanglement entropy options from JSON string.
+EntOptions    ent_options_from_json(const std::string& json);
+// Serialize bipartite entanglement entropy result to JSON string.
+std::string   ent_result_to_json(const EntResult& result);
 
 }  // namespace qx

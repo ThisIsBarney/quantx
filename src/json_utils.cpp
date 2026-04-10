@@ -2225,6 +2225,8 @@ std::string kondo_result_to_json(const KondoResult& r) {
   return j.dump();
 }
 
+// ── M51: Measurement-Induced Phase Transitions (MIPT) ───────────────────────
+
 MIPTOptions mipt_options_from_json(const std::string& json_str) {
   const json j = json::parse(json_str);
   MIPTOptions o;
@@ -2254,6 +2256,79 @@ std::string mipt_result_to_json(const MIPTResult& r) {
   j["S_at_pc"]    = r.S_at_pc;
   j["elapsed_ms"] = r.elapsed_ms;
   j["message"]    = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
+// ── M49: Richardson-Gaudin / BCS ────────────────────────────────────────────
+
+RGOptions rg_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  RGOptions o;
+  if (j.contains("N_levels"))  o.N_levels  = j["N_levels"].get<int>();
+  if (j.contains("g"))         o.g         = j["g"].get<double>();
+  if (j.contains("bandwidth")) o.bandwidth = j["bandwidth"].get<double>();
+  if (j.contains("n_g"))       o.n_g       = j["n_g"].get<int>();
+  if (j.contains("g_max"))     o.g_max     = j["g_max"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string rg_result_to_json(const RGResult& r) {
+  json j;
+  j["ok"]            = r.ok;
+  j["scenario"]      = r.scenario;
+  j["N_levels"]      = r.N_levels;
+  j["N_pairs"]       = r.N_pairs;
+  j["dim"]           = r.dim;
+  j["g"]             = r.g;
+  j["bandwidth"]     = r.bandwidth;
+  j["E_ground"]      = r.E_ground;
+  j["E_gap_ed"]      = r.E_gap_ed;
+  j["condensate"]    = r.condensate;
+  j["gap_bcs"]       = r.gap_bcs;
+  j["n_k"]           = r.n_k;
+  j["eigenvalues"]   = r.eigenvalues;
+  j["g_vals"]        = r.g_vals;
+  j["E0_g"]          = r.E0_g;
+  j["condensate_g"]  = r.condensate_g;
+  j["gap_bcs_g"]     = r.gap_bcs_g;
+  j["elapsed_ms"]    = r.elapsed_ms;
+  j["message"]       = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
+EntOptions ent_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  EntOptions o;
+  if (j.contains("L"))        o.L        = j["L"].get<int>();
+  if (j.contains("J"))        o.J        = j["J"].get<double>();
+  if (j.contains("h"))        o.h        = j["h"].get<double>();
+  if (j.contains("n_h"))      o.n_h      = j["n_h"].get<int>();
+  if (j.contains("h_max"))    o.h_max    = j["h_max"].get<double>();
+  if (j.contains("L_max"))    o.L_max    = j["L_max"].get<int>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string ent_result_to_json(const EntResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["scenario"]     = r.scenario;
+  j["L"]            = r.L;
+  j["J"]            = r.J;
+  j["h"]            = r.h;
+  j["l_vals"]       = r.l_vals;
+  j["S_l"]          = r.S_l;
+  j["L_vals"]       = r.L_vals;
+  j["S_Lhalf"]      = r.S_Lhalf;
+  j["ln_L"]         = r.ln_L;
+  j["c_fit"]        = r.c_fit;
+  j["h_vals"]       = r.h_vals;
+  j["S_h"]          = r.S_h;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
   j["engine_version"] = version_string();
   return j.dump();
 }
