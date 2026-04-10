@@ -2054,7 +2054,10 @@ struct LLResult {
   // Δ sweep (scenario="delta" or "both")
   std::vector<double> delta_vals, E0_delta, gap_delta;
   std::vector<double> K_delta;       // analytic K(Δ)
-  std::vector<double> Sq_pi_delta;   // S(q=π) vs Δ// ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
+  std::vector<double> Sq_pi_delta;   // S(q=π) vs Δ
+};
+
+// ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
 //
 // Two complementary models:
 //
