@@ -153,5 +153,9 @@ std::string syk_result_to_json(const SYKResult& result);
 KondoOptions  kondo_options_from_json(const std::string& json);
 // Serialize Kondo/SIAM result to JSON string.
 std::string   kondo_result_to_json(const KondoResult& result);
+// Parse toric code options from JSON string.
+ToricOptions  toric_options_from_json(const std::string& json);
+// Serialize toric code result to JSON string.
+std::string   toric_result_to_json(const ToricResult& result);
 
 }  // namespace qx

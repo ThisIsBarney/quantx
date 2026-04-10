@@ -1993,4 +1993,44 @@ struct SYKResult {
   std::string message;
 };
 
+// ── M53: Toric Code / Surface Code ───────────────────────────────────────────
+//
+// Kitaev's toric code on an L×L torus (L=2 or 3, 2L² qubits).
+//   H = -J_A Σ_v A_v  -  J_B Σ_p B_p  -  h Σ X_i  -  g Σ Z_i
+//
+// Topological phase (h=g=0):
+//   Ground state degeneracy = 4 on torus.
+//   Anyonic gap: Δ_e = 2J_A,  Δ_m = 2J_B.
+//   Topological entanglement entropy S_topo = -2 ln 2 (from TEE formula).
+//
+// Scenarios: "spectrum" | "perturb" | "both"
+
+struct ToricOptions {
+  int    L{2};             // torus size L (2 or 3; N_qubits = 2*L²)
+  double JA{1.0};          // vertex stabilizer coupling
+  double JB{1.0};          // plaquette stabilizer coupling
+  double h{0.0};           // transverse X perturbation
+  double g{0.0};           // longitudinal Z perturbation
+  int    n_h{20};          // perturbation sweep points
+  double h_max{1.0};       // max h for sweep (h_c ≈ 0.33 for L=inf)
+  std::string scenario{"both"};  // "spectrum"|"perturb"|"both"
+};
+
+struct ToricResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double JA{0}, JB{0};
+  // Fixed-parameter spectrum (first 20 eigenvalues)
+  std::vector<double> eigenvalues;
+  double E0{0};
+  int    gs_degeneracy{0};
+  double anyonic_gap{0};
+  double entropy_gs{0};      // half-chain entanglement entropy of GS
+  // Perturbation sweep: gap and entropy vs h
+  std::vector<double> h_vals, gap_h, entropy_h;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 }  // namespace qx
