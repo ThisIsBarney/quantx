@@ -2256,7 +2256,11 @@ std::string ll_result_to_json(const LLResult& r) {
   j["K_delta"]        = r.K_delta;
   j["Sq_pi_delta"]    = r.Sq_pi_delta;
   j["elapsed_ms"]     = r.elapsed_ms;
-  j["message"]        = r.message;// ── M49: Richardson-Gaudin / BCS ────────────────────────────────────────────
+  j["message"]        = r.message;
+  return j.dump();
+}
+
+// ── M49: Richardson-Gaudin / BCS ────────────────────────────────────────────
 
 RGOptions rg_options_from_json(const std::string& json_str) {
   const json j = json::parse(json_str);

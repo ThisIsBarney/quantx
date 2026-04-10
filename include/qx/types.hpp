@@ -2055,6 +2055,8 @@ struct LLResult {
   std::vector<double> delta_vals, E0_delta, gap_delta;
   std::vector<double> K_delta;       // analytic K(Δ)
   std::vector<double> Sq_pi_delta;   // S(q=π) vs Δ
+  double elapsed_ms{0};
+  std::string message;
 };
 
 // ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
