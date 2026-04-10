@@ -90,6 +90,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("kondo",              "Kondo Effect SIAM Impurity Screening"),
           ("toric",              "Toric Code Topological Order Anyons"),
           ("mipt",               "Measurement-Induced Phase Transition"),
+          ("ll",                 "Luttinger Liquid Bosonization XXZ"),
           ("rg",                 "Richardson-Gaudin BCS Pairing Condensate"),
           ("ent",                "Bipartite Entanglement Entropy Area Law"),
           ("schwinger_string",   "Schwinger 弦张力"),

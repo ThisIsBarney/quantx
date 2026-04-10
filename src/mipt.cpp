@@ -133,43 +133,52 @@ static double half_entropy(const State& psi, int L) {
     // M[a,b] = psi[a * dB + b]  but we need to reorder: site 0..L/2-1 form A
     // With qubit indexing: bit 0..L/2-1 form A, bit L/2..L-1 form B
     // psi[s]: s = (s_B << (L/2)) | s_A  (bit q0 = bit 0 → site 0)
-    std::vector<double> MTM(static_cast<size_t>(dA)*dA, 0.0);
-    // M_{a,b} = psi[b*dA + a]  (b = B bits, a = A bits)
-    // M†M_{a,a'} = Σ_b M*_{b,a} M_{b,a'} = Σ_b conj(psi[b*dA+a]) * psi[b*dA+a']
+    // Build M†M as full complex Hermitian matrix (positive semi-definite).
+    // Storing only Re() drops imaginary off-diagonal entries for generic complex states.
+    // M†M[a,a'] = Σ_b conj(ψ[b*dA+a]) * ψ[b*dA+a']
+    std::vector<Cx> MTM(static_cast<size_t>(dA)*dA, Cx(0,0));
     for (int a = 0; a < dA; ++a)
         for (int a2 = 0; a2 < dA; ++a2) {
             Cx sum = 0;
             for (int b = 0; b < dB; ++b)
                 sum += std::conj(psi[b*dA+a]) * psi[b*dA+a2];
-            MTM[a*dA+a2] = sum.real();
+            MTM[a*dA+a2] = sum;
         }
-    // Eigenvalues of M†M = squared singular values
-    // Use simple power-iteration-free approach: just sum diagonal after "Jacobi"
-    // For small dA (≤ 64), inline Jacobi
-    for (int sweep = 0; sweep < 100; ++sweep) {
+    // Complex Hermitian Jacobi: for H[p,q]=r*e^{iφ}, use rotation
+    //   H'[p,p]=H[pp]-t*r, H'[q,q]=H[qq]+t*r, H'[p,q]=0
+    //   H'[r,p]=c*H[r,p]-s*conj(phase)*H[r,q]
+    //   H'[r,q]=s*phase*H[r,p]+c*H[r,q]  (r≠p,q)
+    for (int sweep = 0; sweep < 200; ++sweep) {
         double off = 0.0;
         for (int i = 0; i < dA; ++i)
-            for (int j = i+1; j < dA; ++j) { double v = MTM[i*dA+j]; off += v*v; }
+            for (int j = i+1; j < dA; ++j) { double v = std::abs(MTM[i*dA+j]); off += v*v; }
         if (off < 1e-24) break;
         for (int p2 = 0; p2 < dA-1; ++p2) for (int q2 = p2+1; q2 < dA; ++q2) {
-            const double apq = MTM[p2*dA+q2]; if (std::abs(apq) < 1e-15) continue;
-            const double app = MTM[p2*dA+p2], aqq = MTM[q2*dA+q2];
-            const double theta = 0.5*(aqq-app)/apq;
-            const double t = (theta>=0?1.0:-1.0)/(std::abs(theta)+std::sqrt(theta*theta+1.0));
+            const Cx apq = MTM[p2*dA+q2];
+            const double r = std::abs(apq);
+            if (r < 1e-15) continue;
+            const double app = MTM[p2*dA+p2].real(), aqq = MTM[q2*dA+q2].real();
+            const double tau = 0.5*(aqq-app)/r;
+            const double t = (tau>=0?1.0:-1.0)/(std::abs(tau)+std::sqrt(tau*tau+1.0));
             const double c = 1.0/std::sqrt(t*t+1.0), s = t*c;
-            MTM[p2*dA+p2] = app-t*apq; MTM[q2*dA+q2] = aqq+t*apq; MTM[p2*dA+q2]=MTM[q2*dA+p2]=0.0;
-            for (int r = 0; r < dA; ++r) {
-                if (r==p2||r==q2) continue;
-                const double arp=MTM[r*dA+p2], arq=MTM[r*dA+q2];
-                MTM[r*dA+p2]=MTM[p2*dA+r]=c*arp-s*arq;
-                MTM[r*dA+q2]=MTM[q2*dA+r]=s*arp+c*arq;
+            const Cx phase = apq/r, cphase = std::conj(phase);
+            MTM[p2*dA+p2] = Cx(app-t*r, 0.0);
+            MTM[q2*dA+q2] = Cx(aqq+t*r, 0.0);
+            MTM[p2*dA+q2] = MTM[q2*dA+p2] = Cx(0.0, 0.0);
+            for (int r2 = 0; r2 < dA; ++r2) {
+                if (r2==p2||r2==q2) continue;
+                const Cx xp = MTM[r2*dA+p2], xq = MTM[r2*dA+q2];
+                const Cx np2 = Cx(c,0)*xp - Cx(s,0)*cphase*xq;
+                const Cx nq2 = Cx(s,0)*phase*xp + Cx(c,0)*xq;
+                MTM[r2*dA+p2] = np2; MTM[p2*dA+r2] = std::conj(np2);
+                MTM[r2*dA+q2] = nq2; MTM[q2*dA+r2] = std::conj(nq2);
             }
         }
     }
     double S = 0.0;
     for (int i = 0; i < dA; ++i) {
-        const double sv2 = std::max(0.0, MTM[i*dA+i]);
-        if (sv2 > 1e-14) S -= sv2 * std::log(sv2);
+        const double lam = std::max(0.0, MTM[i*dA+i].real());
+        if (lam > 1e-14) S -= lam * std::log(lam);
     }
     return S;
 }
@@ -253,7 +262,8 @@ MIPTResult run_mipt(const MIPTOptions& opts) {
     // ── Scaling: S(L/2) vs L at p = p_c ─────────────────────────────────────
     if (sc == "scaling" || sc == "both") {
         // Use estimated p_c or opts.p
-        const double p_scale = (sc == "both" && !res.p_vals.empty()) ? res.p_c_est : opts.p;
+        // Fall back to opts.p when p_c_est was not estimated (n_p < 3 → p_c_est == 0)
+        const double p_scale = (sc == "both" && res.p_c_est > 0.0) ? res.p_c_est : opts.p;
         for (int Lv = 4; Lv <= opts.L_max; Lv += 2) {
             if (Lv > 12) break;
             const int Tv = std::max(4 * Lv, 40);

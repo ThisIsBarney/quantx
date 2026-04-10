@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
     std::string aah_path;
     std::string syk_path;
     std::string kondo_path;
+    std::string ll_path;
     std::string toric_path;
     std::string mipt_path;
     std::string rg_path;
@@ -128,6 +129,7 @@ int main(int argc, char** argv) {
     app.add_option("--aah", aah_path, "aah options json path (run Aubry-Andre-Harper quasicrystal / metal-insulator transition)");
     app.add_option("--syk", syk_path, "syk options json path (run Sachdev-Ye-Kitaev model / quantum chaos + spectral form factor)");
     app.add_option("--kondo", kondo_path, "kondo options json path (run Kondo/SIAM model / impurity screening + Kondo cloud)");
+    app.add_option("--ll", ll_path, "ll options json path (run Luttinger liquid XXZ chain / structure factor + Luttinger K)");
     app.add_option("--toric", toric_path, "toric options json path (run toric code / topological order + anyonic excitations)");
     app.add_option("--mipt", mipt_path, "mipt options json path (run measurement-induced phase transition / volume-law vs area-law)");
     app.add_option("--rg", rg_path, "rg options json path (run Richardson-Gaudin/BCS pairing model)");
@@ -191,6 +193,7 @@ int main(int argc, char** argv) {
         aah_path.empty() &&
         syk_path.empty() &&
         kondo_path.empty() &&
+        ll_path.empty() &&
         toric_path.empty() &&
         mipt_path.empty() &&
         rg_path.empty() &&
@@ -236,6 +239,7 @@ int main(int argc, char** argv) {
                   (!aah_path.empty()          ? 1 : 0) +
                   (!syk_path.empty()          ? 1 : 0) +
                   (!kondo_path.empty()        ? 1 : 0) +
+                  (!ll_path.empty()           ? 1 : 0) +
                   (!toric_path.empty()        ? 1 : 0) +
                   (!mipt_path.empty()         ? 1 : 0) +
                   (!rg_path.empty()           ? 1 : 0) +
@@ -543,6 +547,14 @@ int main(int argc, char** argv) {
       const qx::KondoOptions kondo_opts = qx::kondo_options_from_json(kondo_json);
       qx::log::info("loaded kondo options file: " + kondo_path);
       output_json = qx::kondo_result_to_json(qx::run_kondo(kondo_opts));
+    } else if (!ll_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --ll mode");
+      }
+      const std::string ll_json = read_text_file(ll_path);
+      const qx::LLOptions ll_opts = qx::ll_options_from_json(ll_json);
+      qx::log::info("loaded ll options file: " + ll_path);
+      output_json = qx::ll_result_to_json(qx::run_luttinger(ll_opts));
     } else if (!toric_path.empty()) {
       if (explain || validate_only) {
         throw std::runtime_error("--explain and --validate-only are not supported in --toric mode");

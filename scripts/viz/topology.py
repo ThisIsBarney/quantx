@@ -4902,6 +4902,257 @@ def _toric_frames(
     return out
 
 
+# ── M52: Luttinger Liquid / Bosonization (XXZ Chain) ─────────────────────────
+
+def _ll_frames(
+    L: int = 10,
+    J: float = 1.0,
+    Delta: float = 0.0,
+    n_delta: int = 20,
+    delta_min: float = -0.9,
+    delta_max: float = 0.9,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: XXZ chain Luttinger liquid (S_z=0 sector ED)."""
+    import numpy as np  # noqa: PLC0415
+
+    if L < 4 or L % 2 != 0:
+        raise ValueError("L must be an even integer >= 4")
+    if L > 14:
+        raise ValueError("L must be <= 14 for exact diagonalisation")
+
+    def enum_sz0(L_: int) -> list:
+        return [s for s in range(1 << L_) if bin(s).count("1") == L_ // 2]
+
+    def build_xxz(states_: list, lut_: dict, L_: int, J_: float, Delta_: float) -> np.ndarray:
+        dim_ = len(states_)
+        H = np.zeros((dim_, dim_))
+        for a, sa in enumerate(states_):
+            diag = 0.0
+            for i in range(L_):
+                j = (i + 1) % L_
+                bi, bj = (sa >> i) & 1, (sa >> j) & 1
+                diag += J_ * Delta_ * 0.25 * (1 - 2*bi) * (1 - 2*bj)
+            H[a, a] = diag
+            for i in range(L_):
+                j = (i + 1) % L_
+                bi, bj = (sa >> i) & 1, (sa >> j) & 1
+                if bi == 0 and bj == 1:
+                    sb = (sa | (1 << i)) & ~(1 << j)
+                    b = lut_.get(sb, -1)
+                    if b >= 0:
+                        H[a, b] += J_ * 0.5
+                if bi == 1 and bj == 0:
+                    sb = (sa & ~(1 << i)) | (1 << j)
+                    b = lut_.get(sb, -1)
+                    if b >= 0:
+                        H[a, b] += J_ * 0.5
+        return H
+
+    def struct_factor(psi_: np.ndarray, states_: list, L_: int, q_vals_: list) -> list:
+        Cr = [0.0] * L_
+        for a, sa in enumerate(states_):
+            w = psi_[a] ** 2
+            for i in range(L_):
+                szi = 0.5 * (1 - 2 * ((sa >> i) & 1))
+                for r in range(L_):
+                    j = (i + r) % L_
+                    szj = 0.5 * (1 - 2 * ((sa >> j) & 1))
+                    Cr[r] += w * szi * szj
+        Cr = [c / L_ for c in Cr]
+        return [sum(math.cos(q * r) * Cr[r] for r in range(L_)) for q in q_vals_]
+
+    states = enum_sz0(L)
+    lut = {s: i for i, s in enumerate(states)}
+
+    # q grid: 0, 2π/L, ..., π
+    nq = L // 2 + 1
+    q_vals = [2 * math.pi * k / L for k in range(nq)]
+
+    out: dict = {"source": source, "L": L, "J": J, "Delta": Delta,
+                 "scenario": scenario, "q_vals": q_vals}
+
+    if scenario in ("structure", "both"):
+        H = build_xxz(states, lut, L, J, Delta)
+        ev, evecs = np.linalg.eigh(H)
+        out["E0"] = float(ev[0])
+        out["E_gap"] = float(ev[1] - ev[0]) if len(ev) > 1 else 0.0
+        psi = evecs[:, 0]
+        out["Sq"] = struct_factor(psi, states, L, q_vals)
+        acos_arg = max(-1.0, min(1.0, -Delta))
+        out["K_analytic"] = (math.pi / (2 * math.acos(acos_arg))
+                             if abs(Delta) < 0.999 else (0.5 if Delta > 0 else 5.0))
+
+    if scenario in ("delta", "both"):
+        dv_list: list = []
+        E0_d: list = []
+        gap_d: list = []
+        K_d: list = []
+        Sq_pi_d: list = []
+        for di in range(n_delta):
+            dv = (delta_min + (delta_max - delta_min) * di / (n_delta - 1)
+                  if n_delta > 1 else Delta)
+            dv_list.append(dv)
+            H_d = build_xxz(states, lut, L, J, dv)
+            ev_d, evecs_d = np.linalg.eigh(H_d)
+            E0_d.append(float(ev_d[0]))
+            gap_d.append(float(ev_d[1] - ev_d[0]) if len(ev_d) > 1 else 0.0)
+            acos_arg = max(-1.0, min(1.0, -dv))
+            K_d.append(math.pi / (2 * math.acos(acos_arg))
+                       if abs(dv) < 0.999 else (0.5 if dv > 0 else 5.0))
+            psi_d = evecs_d[:, 0]
+            sq_pi = struct_factor(psi_d, states, L, [math.pi])
+            Sq_pi_d.append(sq_pi[0])
+        out.update({"delta_vals": dv_list, "E0_delta": E0_d, "gap_delta": gap_d,
+                    "K_delta": K_d, "Sq_pi_delta": Sq_pi_d})
+
+    return out
+
+
+def _ll_page(data: dict) -> str:
+    """Render Luttinger liquid results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    L_val    = data.get("L", 10)
+    J_val    = data.get("J", 1.0)
+    Delta_v  = data.get("Delta", 0.0)
+    Ka       = data.get("K_analytic", 1.0)
+    scenario = data.get("scenario", "both")
+    has_sq   = scenario in ("structure", "both")
+    has_d    = scenario in ("delta", "both")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M52 Luttinger Liquid - L={L_val}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h1{{font-size:1.25rem;color:#58a6ff;margin-bottom:4px}}
+.subtitle{{font-size:.85rem;color:#8b949e;margin-bottom:20px}}
+.panels{{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:18px;max-width:1400px}}
+.panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+.panel h2{{font-size:.95rem;color:#e6edf3;margin-bottom:10px}}
+canvas{{width:100%;height:280px;display:block}}
+.badge{{display:inline-block;background:#1f6feb33;border:1px solid #1f6feb;color:#58a6ff;
+        border-radius:12px;padding:2px 10px;font-size:.78rem;margin-right:6px}}
+</style>
+</head>
+<body>
+<h1>M52 - Luttinger Liquid &amp; Bosonization (XXZ Chain)</h1>
+<p class="subtitle">
+  <span class="badge">L = {L_val}</span>
+  <span class="badge">J = {J_val}</span>
+  <span class="badge">Delta = {Delta_v}</span>
+  {'<span class="badge">K = ' + f'{Ka:.3f}' + '</span>' if has_sq else ''}
+</p>
+<div class="panels">
+  {'<div class="panel"><h2>Spin structure factor S(q) at Delta=' + str(Delta_v) + '</h2><canvas id="cvSq"></canvas></div>' if has_sq else ''}
+  {'<div class="panel"><h2>Luttinger K(Delta) and S(pi) vs anisotropy</h2><canvas id="cvDelta"></canvas></div>' if has_d else ''}
+  {'<div class="panel"><h2>Ground state energy and gap vs Delta</h2><canvas id="cvGap"></canvas></div>' if has_d else ''}
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function mkCtx(id){{
+  const cv=document.getElementById(id);if(!cv)return null;
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.offsetWidth*dpr||640*dpr;cv.height=280*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.W=cv.offsetWidth||640;ctx.H=280;return ctx;
+}}
+function drawAxes(ctx,xMin,xMax,yMin,yMax,xLabel,yLabel){{
+  const W=ctx.W,H=ctx.H,pad=44,padR=18,padT=18,padB=40;
+  const pw=W-pad-padR,ph=H-padT-padB;
+  function px(v){{return pad+(v-xMin)/(xMax-xMin)*pw;}}
+  function py(v){{return padT+ph-(v-yMin)/(yMax-yMin)*ph;}}
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;ctx.strokeRect(pad,padT,pw,ph);
+  ctx.fillStyle='#8b949e';ctx.font='11px sans-serif';
+  for(let i=0;i<=5;i++){{
+    const xv=xMin+(xMax-xMin)*i/5,xp=px(xv);
+    ctx.beginPath();ctx.moveTo(xp,padT+ph);ctx.lineTo(xp,padT+ph+4);ctx.stroke();
+    ctx.textAlign='center';ctx.fillText(xv.toFixed(2),xp,padT+ph+16);
+  }}
+  for(let i=0;i<=4;i++){{
+    const yv=yMin+(yMax-yMin)*i/4,yp=py(yv);
+    ctx.beginPath();ctx.moveTo(pad-4,yp);ctx.lineTo(pad,yp);ctx.stroke();
+    ctx.textAlign='right';ctx.fillText(yv.toFixed(3),pad-6,yp+4);
+  }}
+  ctx.textAlign='center';ctx.fillStyle='#8b949e';ctx.font='12px sans-serif';
+  ctx.fillText(xLabel,W/2,H-4);
+  ctx.save();ctx.translate(12,H/2);ctx.rotate(-Math.PI/2);ctx.fillText(yLabel,0,0);ctx.restore();
+  return {{px,py,pad,padT,pw,ph}};
+}}
+
+function drawSq(){{
+  const ctx=mkCtx('cvSq');if(!ctx)return;
+  const qv=DATA.q_vals||[],Sv=DATA.Sq||[];if(!qv.length)return;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,ctx.W,ctx.H);
+  const yMax=Math.max(...Sv)*1.2||0.1;
+  const ax=drawAxes(ctx,0,Math.PI,0,yMax,'q','S(q)');
+  ctx.strokeStyle='#58a6ff';ctx.lineWidth=2;
+  ctx.beginPath();
+  qv.forEach((q,i)=>{{const xp=ax.px(q),yp=ax.py(Sv[i]);i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  ctx.stroke();
+  ctx.fillStyle='#58a6ff';
+  qv.forEach((q,i)=>{{ctx.beginPath();ctx.arc(ax.px(q),ax.py(Sv[i]),3,0,2*Math.PI);ctx.fill();}});
+  // Mark q=pi
+  ctx.strokeStyle='#da3633';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(ax.px(Math.PI),ax.padT);ctx.lineTo(ax.px(Math.PI),ax.padT+ax.ph);ctx.stroke();
+  ctx.setLineDash([]);ctx.fillStyle='#da3633';ctx.font='11px sans-serif';ctx.textAlign='right';
+  ctx.fillText('q=pi',ax.px(Math.PI)-4,ax.padT+14);
+}}
+
+function drawDelta(){{
+  const ctx=mkCtx('cvDelta');if(!ctx)return;
+  const dv=DATA.delta_vals||[],Kd=DATA.K_delta||[],Sq_pi=DATA.Sq_pi_delta||[];
+  if(!dv.length)return;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,ctx.W,ctx.H);
+  const KMax=Math.min(Math.max(...Kd)*1.1,5),KMin=0;
+  const ax=drawAxes(ctx,dv[0],dv[dv.length-1],KMin,KMax,'Delta','K(Delta)');
+  // K=1 reference
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(ax.px(dv[0]),ax.py(1));ctx.lineTo(ax.px(dv[dv.length-1]),ax.py(1));ctx.stroke();
+  ctx.setLineDash([]);
+  // K curve
+  ctx.strokeStyle='#3fb950';ctx.lineWidth=2;
+  ctx.beginPath();
+  dv.forEach((d,i)=>{{const xp=ax.px(d),yp=ax.py(Math.min(Kd[i],KMax));i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  ctx.stroke();
+  // Labels
+  ctx.fillStyle='#3fb950';ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('K(Delta) [Bethe ansatz]',ax.pad+6,ax.padT+14);
+  ctx.fillStyle='#8b949e';ctx.fillText('K=1 (free fermion)',ax.pad+6,ax.padT+28);
+}}
+
+function drawGap(){{
+  const ctx=mkCtx('cvGap');if(!ctx)return;
+  const dv=DATA.delta_vals||[],E0d=DATA.E0_delta||[],Gd=DATA.gap_delta||[];
+  if(!dv.length)return;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,ctx.W,ctx.H);
+  const yMax=Math.max(...Gd)*1.2||0.1;
+  const yMin=Math.min(...E0d)*1.1||0;
+  // Two y-axes: gap on top half, E0 on bottom half — use gap only for simplicity
+  const ax=drawAxes(ctx,dv[0],dv[dv.length-1],0,yMax,'Delta','excitation gap');
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=2;
+  ctx.beginPath();
+  dv.forEach((d,i)=>{{const xp=ax.px(d),yp=ax.py(Gd[i]);i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  ctx.stroke();
+  ctx.fillStyle='#f0883e';ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('excitation gap (TLL phase: gap -> 0 as L -> inf)',ax.pad+6,ax.padT+14);
+}}
+
+drawSq();drawDelta();drawGap();
+window.addEventListener('resize',()=>{{drawSq();drawDelta();drawGap();}});
+}})();
+</script>
+</body>
+</html>"""
+
+
 # ── M51: Measurement-Induced Phase Transitions (MIPT) ────────────────────────
 
 def _mipt_frames(
@@ -5464,8 +5715,10 @@ def _ent_frames(
         out["S_l"] = Sl
 
         # CFT fit curve: S(l) = (1/3) ln(sin(π l / L)) + const
+        # Guard: L//4 is 0 when L=2 → log(sin(0)) = -inf; clamp anchor to >= 1
+        anchor_l = max(L // 4, 1)
         cft_fit = [
-            Sl[L // 4 - 1] - (1.0 / 3.0) * math.log(math.sin(math.pi * (L // 4) / L))
+            Sl[anchor_l - 1] - (1.0 / 3.0) * math.log(math.sin(math.pi * anchor_l / L))
             + (1.0 / 3.0) * math.log(math.sin(math.pi * lv / L))
             for lv in l_vals
         ]
