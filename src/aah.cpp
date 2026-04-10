@@ -222,17 +222,29 @@ AAHResult run_aah(const AAHOptions& opts) {
     if (sc == "spectrum" || sc == "both") compute_spectrum(opts, res);
     if (sc == "phase"    || sc == "both") compute_phase(opts, res);
 
-    // Ensure phase_label set even when sc=="phase"
+    // Ensure phase_label and lyapunov are set.
+    // For "phase"-only runs the dataset spans V in [0, V_max] and contains all
+    // three regimes, so using a single-point opts.V label would be misleading.
+    // Use a neutral summary label instead; single-point diagnostics only make
+    // sense when the spectrum at a fixed V was actually computed.
     if (res.phase_label.empty()) {
-        const double ratio = opts.V / opts.t;
-        const double eps   = 0.05;
-        if (std::abs(ratio - 1.0) < eps)
-            res.phase_label = "Critical (V=t)";
-        else if (ratio < 1.0)
-            res.phase_label = "Metal (V<t)";
-        else
-            res.phase_label = "Insulator (V>t)";
-        res.lyapunov = (ratio > 1.0) ? std::log(ratio) : 0.0;
+        if (sc == "phase") {
+            res.phase_label = "Phase diagram (V: 0 -> " +
+                              std::to_string(opts.V_max) + ")";
+            res.lyapunov = 0.0;  // not meaningful for the full sweep
+        } else {
+            // sc == "both" with compute_spectrum having already set phase_label
+            // (this branch should not normally be reached)
+            const double ratio = opts.V / opts.t;
+            const double eps   = 0.05;
+            if (std::abs(ratio - 1.0) < eps)
+                res.phase_label = "Critical (V=t)";
+            else if (ratio < 1.0)
+                res.phase_label = "Metal (V<t)";
+            else
+                res.phase_label = "Insulator (V>t)";
+            res.lyapunov = (ratio > 1.0) ? std::log(ratio) : 0.0;
+        }
     }
 
     auto t1 = std::chrono::steady_clock::now();
