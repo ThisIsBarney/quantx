@@ -315,7 +315,8 @@ RGResult run_rg(const RGOptions& opts) {
             std::vector<double> nk_dummy; double cond;
             gs_observables(evecs, idx[0], dim, states, lut, N, Np, nk_dummy, cond);
             res.condensate_g[gi] = cond;
-    }
+        }  // for gi
+    }  // if pairing/both
 
     auto t1 = std::chrono::steady_clock::now();
     res.elapsed_ms = std::chrono::duration<double,std::milli>(t1-t0).count();
