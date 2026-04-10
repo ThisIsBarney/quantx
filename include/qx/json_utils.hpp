@@ -157,6 +157,10 @@ std::string   kondo_result_to_json(const KondoResult& result);
 ToricOptions  toric_options_from_json(const std::string& json);
 // Serialize toric code result to JSON string.
 std::string   toric_result_to_json(const ToricResult& result);
+// Parse measurement-induced phase transition options from JSON string.
+MIPTOptions   mipt_options_from_json(const std::string& json);
+// Serialize measurement-induced phase transition result to JSON string.
+std::string   mipt_result_to_json(const MIPTResult& result);
 // Parse Richardson-Gaudin/BCS options from JSON string.
 RGOptions   rg_options_from_json(const std::string& json);
 // Serialize Richardson-Gaudin/BCS result to JSON string.
