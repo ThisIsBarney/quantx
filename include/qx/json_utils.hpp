@@ -153,5 +153,9 @@ std::string syk_result_to_json(const SYKResult& result);
 KondoOptions  kondo_options_from_json(const std::string& json);
 // Serialize Kondo/SIAM result to JSON string.
 std::string   kondo_result_to_json(const KondoResult& result);
+// Parse Luttinger liquid (XXZ chain) options from JSON string.
+LLOptions     ll_options_from_json(const std::string& json);
+// Serialize Luttinger liquid result to JSON string.
+std::string   ll_result_to_json(const LLResult& result);
 
 }  // namespace qx

@@ -2225,4 +2225,40 @@ std::string kondo_result_to_json(const KondoResult& r) {
   return j.dump();
 }
 
+LLOptions ll_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  LLOptions o;
+  if (j.contains("L"))          o.L          = j["L"].get<int>();
+  if (j.contains("J"))          o.J          = j["J"].get<double>();
+  if (j.contains("Delta"))      o.Delta      = j["Delta"].get<double>();
+  if (j.contains("n_delta"))    o.n_delta    = j["n_delta"].get<int>();
+  if (j.contains("delta_min"))  o.delta_min  = j["delta_min"].get<double>();
+  if (j.contains("delta_max"))  o.delta_max  = j["delta_max"].get<double>();
+  if (j.contains("scenario"))   o.scenario   = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string ll_result_to_json(const LLResult& r) {
+  json j;
+  j["ok"]             = r.ok;
+  j["scenario"]       = r.scenario;
+  j["L"]              = r.L;
+  j["J"]              = r.J;
+  j["Delta"]          = r.Delta;
+  j["E0"]             = r.E0;
+  j["E_gap"]          = r.E_gap;
+  j["K_analytic"]     = r.K_analytic;
+  j["q_vals"]         = r.q_vals;
+  j["Sq"]             = r.Sq;
+  j["delta_vals"]     = r.delta_vals;
+  j["E0_delta"]       = r.E0_delta;
+  j["gap_delta"]      = r.gap_delta;
+  j["K_delta"]        = r.K_delta;
+  j["Sq_pi_delta"]    = r.Sq_pi_delta;
+  j["elapsed_ms"]     = r.elapsed_ms;
+  j["message"]        = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx

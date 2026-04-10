@@ -91,5 +91,7 @@ AAHResult run_aah(const AAHOptions& opts);
 SYKResult run_syk(const SYKOptions& opts);
 // Run Kondo/SIAM model — impurity screening, singlet-doublet gap, Kondo cloud.
 KondoResult run_kondo(const KondoOptions& opts);
+// Run Luttinger liquid (XXZ chain) — structure factor, Luttinger K, bosonization.
+LLResult run_luttinger(const LLOptions& opts);
 
 }  // namespace qx

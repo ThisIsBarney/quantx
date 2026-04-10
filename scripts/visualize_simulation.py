@@ -74,6 +74,7 @@ from viz.topology import (
     _aah_frames, _aah_page,
     _syk_frames, _syk_page,
     _kondo_frames, _kondo_page,
+    _ll_frames, _ll_page,
 )
 
 
@@ -90,7 +91,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "ll", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -372,6 +373,13 @@ def main() -> int:
   parser.add_argument("--kondo-nV",     type=int,   default=30,   help="Kondo V sweep points")
   parser.add_argument("--kondo-Vmax",   type=float, default=0.8,  help="Kondo max V")
   parser.add_argument("--kondo-neps",   type=int,   default=40,   help="Kondo eps_d sweep points")
+  # ── M52: Luttinger liquid ────────────────────────────────────────────────
+  parser.add_argument("--ll-L",         type=int,   default=10,   help="XXZ chain length (even, <=14)")
+  parser.add_argument("--ll-J",         type=float, default=1.0,  help="XXZ exchange coupling J")
+  parser.add_argument("--ll-Delta",     type=float, default=0.0,  help="XXZ anisotropy Delta")
+  parser.add_argument("--ll-ndelta",    type=int,   default=20,   help="XXZ Delta sweep points")
+  parser.add_argument("--ll-dmin",      type=float, default=-0.9, help="XXZ min Delta for sweep")
+  parser.add_argument("--ll-dmax",      type=float, default=0.9,  help="XXZ max Delta for sweep")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1575,6 +1583,26 @@ def main() -> int:
       path.write_text(_kondo_page(kondo_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"ll", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("ll skipped: numpy not available", file=sys.stderr)
+    else:
+      ll_data = _ll_frames(
+          L=args.ll_L,
+          J=args.ll_J,
+          Delta=args.ll_Delta,
+          n_delta=args.ll_ndelta,
+          delta_min=args.ll_dmin,
+          delta_max=args.ll_dmax,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_ll.html"
+      path.write_text(_ll_page(ll_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1639,6 +1667,7 @@ def main() -> int:
         "aah":                "quantum_aah",
         "syk":                "quantum_syk",
         "kondo":              "quantum_kondo",
+        "ll":                 "quantum_ll",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

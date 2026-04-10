@@ -1993,4 +1993,42 @@ struct SYKResult {
   std::string message;
 };
 
+// ── M52: Luttinger Liquid & Bosonization ─────────────────────────────────────
+//
+// XXZ spin-1/2 chain (S_z=0 sector, PBC) via exact diagonalisation.
+// Luttinger parameter: K(Δ) = π / (2 arccos(-Δ))  for |Δ| < 1.
+//   K > 1 (Δ < 0): dominant SF correlations
+//   K = 1 (Δ = 0): free-fermion XX point
+//   K < 1 (Δ > 0): dominant CDW / Néel correlations
+//
+// Scenarios: "delta" | "structure" | "both"
+
+struct LLOptions {
+  int    L{10};            // chain length (even, 4 ≤ L ≤ 14)
+  double J{1.0};           // hopping / exchange coupling
+  double Delta{0.0};       // XXZ anisotropy (structure factor computed here)
+  int    n_delta{20};      // points in Δ sweep
+  double delta_min{-0.9};  // min Δ for sweep
+  double delta_max{0.9};   // max Δ for sweep
+  std::string scenario{"both"};  // "delta"|"structure"|"both"
+};
+
+struct LLResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double J{0}, Delta{0};
+  // Fixed-Δ observables (scenario="structure" or "both")
+  double E0{0}, E_gap{0};
+  double K_analytic{0};          // K = π / (2 arccos(-Δ))
+  std::vector<double> q_vals;    // momentum grid 0..π
+  std::vector<double> Sq;        // S(q) at fixed Δ
+  // Δ sweep (scenario="delta" or "both")
+  std::vector<double> delta_vals, E0_delta, gap_delta;
+  std::vector<double> K_delta;       // analytic K(Δ)
+  std::vector<double> Sq_pi_delta;   // S(q=π) vs Δ
+  double elapsed_ms{0};
+  std::string message;
+};
+
 }  // namespace qx
