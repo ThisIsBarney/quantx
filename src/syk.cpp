@@ -48,6 +48,13 @@ namespace qx {
 
 using cx = std::complex<double>;
 
+// Portable popcount (replaces __builtin_popcount which is unavailable on MSVC).
+static int popcount_bits(unsigned v) {
+    v = v - ((v >> 1) & 0x55555555u);
+    v = (v & 0x33333333u) + ((v >> 2) & 0x33333333u);
+    return static_cast<int>(((v + (v >> 4)) & 0x0f0f0f0fu) * 0x01010101u >> 24);
+}
+
 // ── Jordan-Wigner phase helper ────────────────────────────────────────────────
 // Apply Majorana γ_j to Fock state alpha; return {phase, new_state}.
 // j = Majorana index (0-indexed), M = number of complex modes.
@@ -56,7 +63,7 @@ static std::pair<cx, int> apply_gamma(int j, int alpha, int /*M*/) {
     const bool odd = (j & 1);
     // Jordan-Wigner string: (-1)^popcount(alpha & mask_m)
     const int mask_m = (1 << m) - 1;
-    const double sign = (__builtin_popcount(alpha & mask_m) & 1) ? -1.0 : 1.0;
+    const double sign = (popcount_bits(static_cast<unsigned>(alpha & mask_m)) & 1) ? -1.0 : 1.0;
     const int new_state = alpha ^ (1 << m);
     cx phase;
     if (!odd) {
@@ -236,6 +243,8 @@ SYKResult run_syk(const SYKOptions& opts) {
         throw std::runtime_error("SYK: J must be positive");
     if (opts.n_samples < 1)
         throw std::runtime_error("SYK: n_samples must be >= 1");
+    if (opts.n_t < 1)
+        throw std::runtime_error("SYK: n_t must be >= 1");
 
     const std::string& sc = opts.scenario;
     if (sc != "spectrum" && sc != "sff" && sc != "both")
