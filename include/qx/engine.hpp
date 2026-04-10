@@ -91,5 +91,7 @@ AAHResult run_aah(const AAHOptions& opts);
 SYKResult run_syk(const SYKOptions& opts);
 // Run Kondo/SIAM model — impurity screening, singlet-doublet gap, Kondo cloud.
 KondoResult run_kondo(const KondoOptions& opts);
+// Run measurement-induced phase transition — volume-law vs area-law entanglement.
+MIPTResult run_mipt(const MIPTOptions& opts);
 
 }  // namespace qx

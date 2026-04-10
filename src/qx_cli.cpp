@@ -76,6 +76,7 @@ int main(int argc, char** argv) {
     std::string aah_path;
     std::string syk_path;
     std::string kondo_path;
+    std::string mipt_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -124,6 +125,7 @@ int main(int argc, char** argv) {
     app.add_option("--aah", aah_path, "aah options json path (run Aubry-Andre-Harper quasicrystal / metal-insulator transition)");
     app.add_option("--syk", syk_path, "syk options json path (run Sachdev-Ye-Kitaev model / quantum chaos + spectral form factor)");
     app.add_option("--kondo", kondo_path, "kondo options json path (run Kondo/SIAM model / impurity screening + Kondo cloud)");
+    app.add_option("--mipt", mipt_path, "mipt options json path (run measurement-induced phase transition / volume-law vs area-law)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -182,7 +184,8 @@ int main(int argc, char** argv) {
         non_herm_path.empty() &&
         aah_path.empty() &&
         syk_path.empty() &&
-        kondo_path.empty()) {
+        kondo_path.empty() &&
+        mipt_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
@@ -223,7 +226,8 @@ int main(int argc, char** argv) {
                   (!non_herm_path.empty()     ? 1 : 0) +
                   (!aah_path.empty()          ? 1 : 0) +
                   (!syk_path.empty()          ? 1 : 0) +
-                  (!kondo_path.empty()        ? 1 : 0);
+                  (!kondo_path.empty()        ? 1 : 0) +
+                  (!mipt_path.empty()         ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
@@ -527,6 +531,14 @@ int main(int argc, char** argv) {
       const qx::KondoOptions kondo_opts = qx::kondo_options_from_json(kondo_json);
       qx::log::info("loaded kondo options file: " + kondo_path);
       output_json = qx::kondo_result_to_json(qx::run_kondo(kondo_opts));
+    } else if (!mipt_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --mipt mode");
+      }
+      const std::string mipt_json = read_text_file(mipt_path);
+      const qx::MIPTOptions mipt_opts = qx::mipt_options_from_json(mipt_json);
+      qx::log::info("loaded mipt options file: " + mipt_path);
+      output_json = qx::mipt_result_to_json(qx::run_mipt(mipt_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {
