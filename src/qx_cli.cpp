@@ -77,6 +77,8 @@ int main(int argc, char** argv) {
     std::string syk_path;
     std::string kondo_path;
     std::string ll_path;
+    std::string rg_path;
+    std::string ent_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -126,6 +128,8 @@ int main(int argc, char** argv) {
     app.add_option("--syk", syk_path, "syk options json path (run Sachdev-Ye-Kitaev model / quantum chaos + spectral form factor)");
     app.add_option("--kondo", kondo_path, "kondo options json path (run Kondo/SIAM model / impurity screening + Kondo cloud)");
     app.add_option("--ll", ll_path, "ll options json path (run Luttinger liquid XXZ chain / structure factor + Luttinger K)");
+    app.add_option("--rg", rg_path, "rg options json path (run Richardson-Gaudin/BCS pairing model)");
+    app.add_option("--ent", ent_path, "ent options json path (run bipartite entanglement entropy / area law + CFT central charge)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -185,7 +189,9 @@ int main(int argc, char** argv) {
         aah_path.empty() &&
         syk_path.empty() &&
         kondo_path.empty() &&
-        ll_path.empty()) {
+        ll_path.empty() &&
+        rg_path.empty() &&
+        ent_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
@@ -227,7 +233,9 @@ int main(int argc, char** argv) {
                   (!aah_path.empty()          ? 1 : 0) +
                   (!syk_path.empty()          ? 1 : 0) +
                   (!kondo_path.empty()        ? 1 : 0) +
-                  (!ll_path.empty()           ? 1 : 0);
+                  (!ll_path.empty()           ? 1 : 0) +
+                  (!rg_path.empty()           ? 1 : 0) +
+                  (!ent_path.empty()          ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
@@ -539,6 +547,21 @@ int main(int argc, char** argv) {
       const qx::LLOptions ll_opts = qx::ll_options_from_json(ll_json);
       qx::log::info("loaded ll options file: " + ll_path);
       output_json = qx::ll_result_to_json(qx::run_luttinger(ll_opts));
+    } else if (!rg_path.empty()) {
+      if (explain || validate_only)
+        throw std::runtime_error("--explain and --validate-only are not supported in --rg mode");
+      const std::string rg_json = read_text_file(rg_path);
+      const qx::RGOptions rg_opts = qx::rg_options_from_json(rg_json);
+      qx::log::info("loaded rg options file: " + rg_path);
+      output_json = qx::rg_result_to_json(qx::run_rg(rg_opts));
+    } else if (!ent_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --ent mode");
+      }
+      const std::string ent_json = read_text_file(ent_path);
+      const qx::EntOptions ent_opts = qx::ent_options_from_json(ent_json);
+      qx::log::info("loaded ent options file: " + ent_path);
+      output_json = qx::ent_result_to_json(qx::run_entanglement(ent_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

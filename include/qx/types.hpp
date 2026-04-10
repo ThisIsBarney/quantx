@@ -1929,6 +1929,34 @@ struct AAHResult {
 // Scenarios: "spectrum" | "sff" | "both"
 
 // ── M48: Kondo Effect / Single-Impurity Anderson Model ──────────────────────
+// ── M49: Richardson-Gaudin / BCS pairing ────────────────────────────────────
+struct RGOptions {
+  int    N_levels{8};       // number of pair levels (must be even)
+  double g{0.4};            // pairing coupling strength
+  double bandwidth{2.0};    // total single-particle bandwidth
+  int    n_g{40};           // g sweep points (scenario="pairing")
+  double g_max{1.0};        // maximum g for sweep
+  std::string scenario{"both"};  // "pairing"|"spectrum"|"both"
+};
+
+struct RGResult {
+  bool ok{false};
+  std::string scenario;
+  int N_levels{0}, N_pairs{0}, dim{0};
+  double g{0}, bandwidth{0};
+  // Fixed-g observables
+  double E_ground{0};         // ground-state energy
+  double E_gap_ed{0};         // exact excitation gap (E_1-E_0)
+  double condensate{0};       // condensate fraction (dominant eigenval of pair DM / N_pairs)
+  double gap_bcs{0};          // BCS mean-field gap Δ
+  std::vector<double> n_k;    // pair occupation per level
+  std::vector<double> eigenvalues;  // all sector eigenvalues (scenario=spectrum/both)
+  // g sweep
+  std::vector<double> g_vals, E0_g, condensate_g, gap_bcs_g;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 struct KondoOptions {
   int    N_bath{5};          // bath levels (must be odd so N_sites=N_bath+1 is even)
   double eps_d{-1.5};        // impurity level energy (Kondo regime: -U < eps_d < 0)
@@ -2026,7 +2054,46 @@ struct LLResult {
   // Δ sweep (scenario="delta" or "both")
   std::vector<double> delta_vals, E0_delta, gap_delta;
   std::vector<double> K_delta;       // analytic K(Δ)
-  std::vector<double> Sq_pi_delta;   // S(q=π) vs Δ
+  std::vector<double> Sq_pi_delta;   // S(q=π) vs Δ// ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
+//
+// Two complementary models:
+//
+// 1. XX free-fermion chain (correlation-matrix, O(L³), any L):
+//    H = -J Σ_i (c†_i c_{i+1} + h.c.)  PBC, half-filling.
+//    S(l) = entanglement entropy of subsystem [0,l).
+//    CFT prediction (c=1): S(l) = (1/3) ln(sin(πl/L)) + const.
+//    Scaling: S(L/2) ~ (c/3) ln(L)  →  fit gives central charge.
+//
+// 2. Transverse-field Ising chain (full ED, L ≤ 14):
+//    H = -J Σ_i σ^z_i σ^z_{i+1} - h Σ_i σ^x_i  OBC.
+//    Critical: h=J=1, c=1/2.  Area law: h≠1.
+//
+// Scenarios: "xx" | "tfi" | "both"
+
+struct EntOptions {
+  int    L{20};            // chain length (even, >= 2)
+  double J{1.0};           // hopping / ZZ coupling
+  double h{1.0};           // TFI transverse field (critical at h=J=1)
+  int    n_h{30};          // points in h sweep for TFI
+  double h_max{3.0};       // max h for TFI sweep
+  int    L_max{40};        // max L for XX scaling study
+  std::string scenario{"both"};  // "xx"|"tfi"|"both"
+};
+
+struct EntResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double J{0}, h{0};
+  // XX profile: S(l) for l=1..L/2
+  std::vector<int>    l_vals;
+  std::vector<double> S_l;
+  // XX scaling: S(L/2) vs ln(L)
+  std::vector<int>    L_vals;
+  std::vector<double> S_Lhalf, ln_L;
+  double c_fit{0};          // fitted central charge from slope = c/3
+  // TFI h sweep: S(Ltfi/2, h) for h=0..h_max
+  std::vector<double> h_vals, S_h;
   double elapsed_ms{0};
   std::string message;
 };

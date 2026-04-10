@@ -93,5 +93,9 @@ SYKResult run_syk(const SYKOptions& opts);
 KondoResult run_kondo(const KondoOptions& opts);
 // Run Luttinger liquid (XXZ chain) — structure factor, Luttinger K, bosonization.
 LLResult run_luttinger(const LLOptions& opts);
+// Run Richardson-Gaudin/BCS pairing — Cooper pairs, condensate fraction, gap equation.
+RGResult run_rg(const RGOptions& opts);
+// Run bipartite entanglement entropy — XX chain area law, TFI critical point, CFT central charge.
+EntResult run_entanglement(const EntOptions& opts);
 
 }  // namespace qx
