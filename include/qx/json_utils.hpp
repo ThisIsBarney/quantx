@@ -153,5 +153,9 @@ std::string syk_result_to_json(const SYKResult& result);
 KondoOptions  kondo_options_from_json(const std::string& json);
 // Serialize Kondo/SIAM result to JSON string.
 std::string   kondo_result_to_json(const KondoResult& result);
+// Parse bipartite entanglement entropy options from JSON string.
+EntOptions    ent_options_from_json(const std::string& json);
+// Serialize bipartite entanglement entropy result to JSON string.
+std::string   ent_result_to_json(const EntResult& result);
 
 }  // namespace qx

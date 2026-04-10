@@ -91,5 +91,7 @@ AAHResult run_aah(const AAHOptions& opts);
 SYKResult run_syk(const SYKOptions& opts);
 // Run Kondo/SIAM model — impurity screening, singlet-doublet gap, Kondo cloud.
 KondoResult run_kondo(const KondoOptions& opts);
+// Run bipartite entanglement entropy — XX chain area law, TFI critical point, CFT central charge.
+EntResult run_entanglement(const EntOptions& opts);
 
 }  // namespace qx
