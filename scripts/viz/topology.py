@@ -4797,3 +4797,264 @@ window.addEventListener('resize',()=>{{drawKondo();drawOcc();drawCloud();}});
 </script>
 </body>
 </html>"""
+
+
+def _rg_frames(
+    N_levels: int = 8,
+    g: float = 0.4,
+    bandwidth: float = 2.0,
+    n_g: int = 40,
+    g_max: float = 1.0,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Richardson-Gaudin / BCS pairing model."""
+    import numpy as np  # noqa: PLC0415
+    from itertools import combinations  # noqa: PLC0415
+
+    N, Np = N_levels, N_levels // 2
+    dW = bandwidth / (N - 1) if N > 1 else 0.0
+    eps = [(k - (N - 1) * 0.5) * dW for k in range(N)]
+
+    # Enumerate pair-sector states (bitmasks with Np bits set)
+    states = [sum(1 << b for b in c) for c in combinations(range(N), Np)]
+    lut = {s: i for i, s in enumerate(states)}
+    dim = len(states)
+
+    def build_H(gv: float) -> np.ndarray:
+        H = np.zeros((dim, dim))
+        for i, s in enumerate(states):
+            H[i, i] = 2.0 * sum(eps[k] for k in range(N) if (s >> k) & 1)
+            for k in range(N):
+                if not ((s >> k) & 1): continue
+                for kp in range(N):
+                    if kp == k or ((s >> kp) & 1): continue
+                    s2 = (s ^ (1 << k)) | (1 << kp)
+                    j = lut.get(s2, -1)
+                    if j >= 0:
+                        H[i, j] -= gv
+        return H
+
+    def bcs_gap_mf(gv: float) -> float:
+        if gv <= 0: return 0.0
+        sum0 = sum(1.0 / (2.0 * abs(e)) for e in eps if abs(e) > 1e-10)
+        if gv * sum0 < 1.0: return 0.0
+        D = bandwidth * 0.1
+        for _ in range(200):
+            f = -1.0 / gv + sum(1.0 / (2.0 * math.sqrt(e**2 + D**2)) for e in eps)
+            df = -sum(D / (2.0 * (e**2 + D**2)**1.5) for e in eps)
+            if abs(f) < 1e-12: break
+            dD = -f / df if abs(df) > 1e-14 else 0.0
+            D = max(D + dD, 1e-9)
+        return float(D)
+
+    def condensate_frac(evec: np.ndarray) -> float:
+        rho = np.zeros((N, N))
+        for i, si in enumerate(states):
+            ci = evec[i]
+            for k in range(N):
+                if (si >> k) & 1:
+                    rho[k, k] += ci * ci
+                    continue
+                for kp in range(N):
+                    if kp == k or not ((si >> kp) & 1): continue
+                    sj = (si ^ (1 << kp)) | (1 << k)
+                    j = lut.get(sj, -1)
+                    if j >= 0:
+                        rho[k, kp] += ci * evec[j]
+        lam = float(np.linalg.eigvalsh(rho).max())
+        return lam / Np if Np > 0 else 0.0
+
+    out: dict = {"source": source, "N_levels": N, "N_pairs": Np,
+                 "dim": dim, "g": g, "bandwidth": bandwidth,
+                 "gap_bcs": bcs_gap_mf(g)}
+
+    # Fixed-g diagonalisation
+    H0 = build_H(g)
+    ev, evecs = np.linalg.eigh(H0)
+    i0 = int(np.argmin(ev))
+    out.update({
+        "E_ground": float(ev[i0]),
+        "E_gap_ed": float(ev[i0+1] - ev[i0]) if len(ev) > i0+1 else 0.0,
+        "n_k": [float(sum(evecs[s_idx, i0]**2 for s_idx, st in enumerate(states) if (st >> k) & 1))
+                for k in range(N)],
+        "condensate": condensate_frac(evecs[:, i0]),
+    })
+    if scenario in ("spectrum", "both"):
+        out["eigenvalues"] = ev.tolist()
+
+    if scenario in ("pairing", "both"):
+        g_vals, E0_g, cond_g, gap_g = [], [], [], []
+        for gi in range(n_g):
+            gv = g_max * gi / (n_g - 1) if n_g > 1 else g_max
+            Hv = build_H(gv)
+            ev_v, evecs_v = np.linalg.eigh(Hv)
+            i0v = int(np.argmin(ev_v))
+            g_vals.append(float(gv))
+            E0_g.append(float(ev_v[i0v]))
+            cond_g.append(condensate_frac(evecs_v[:, i0v]))
+            gap_g.append(bcs_gap_mf(gv))
+        out.update({"g_vals": g_vals, "E0_g": E0_g,
+                    "condensate_g": cond_g, "gap_bcs_g": gap_g})
+
+    return out
+
+
+def _rg_page(data: dict) -> str:
+    """Render Richardson-Gaudin/BCS pairing results as a self-contained HTML page."""
+    payload    = json.dumps(data, separators=(",", ":"))
+    N_val      = data.get("N_levels", 8)
+    Np_val     = data.get("N_pairs", 4)
+    g_val      = data.get("g", 0.4)
+    bw_val     = data.get("bandwidth", 2.0)
+    gap_val    = data.get("gap_bcs", 0.0)
+    cond_val   = data.get("condensate", 0.0)
+    E0_val     = data.get("E_ground", 0.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Richardson-Gaudin BCS Pairing \u2014 QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Richardson-Gaudin Model: BCS Pairing &amp; Superconductivity</h2>
+<div class="info">
+  <span><b>N</b>={N_val}</span>
+  <span><b>N_pairs</b>={Np_val}</span>
+  <span><b>g</b>={g_val:.3f}</span>
+  <span><b>W</b>={bw_val:.2f}</span>
+  <span><b>&#916;_BCS</b>={gap_val:.4g}</span>
+  <span><b>f_c</b>={cond_val:.3f}</span>
+  <span><b>E&#x2080;</b>={E0_val:.4f}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">E&#x2080;(g) &amp; Condensate Fraction vs Coupling</div>
+    <canvas id="cPair" width="400" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">BCS Gap &#916;(g) vs Coupling</div>
+    <canvas id="cGap" width="340" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Pair Occupation n_k vs Level (at fixed g)</div>
+    <canvas id="cNk" width="340" height="340"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function drawPair(){{
+  const cv=document.getElementById('cPair');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=48;
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,W,H);
+  const gv=DATA.g_vals||[],E0=DATA.E0_g||[],cg=DATA.condensate_g||[];
+  if(!gv.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(sweep not computed)',pad,H/2);return;}}
+  const n=gv.length,gmax=gv[n-1]||1;
+  const emin=Math.min(...E0),emax=Math.max(...E0),er=emax-emin||1;
+  const toX=g=>(pad+g/gmax*(W-2*pad));
+  const toYe=e=>(H-pad-(e-emin)/er*(H-2*pad));
+  const toYc=c=>(H-pad-c*(H-2*pad));
+  // E0 line
+  ctx.strokeStyle='#388bfd';ctx.lineWidth=1.5;
+  ctx.beginPath();for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(gv[i]),toYe(E0[i]));else ctx.lineTo(toX(gv[i]),toYe(E0[i]));}}ctx.stroke();
+  // Condensate line (right scale 0-1)
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;
+  ctx.beginPath();for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(gv[i]),toYc(cg[i]));else ctx.lineTo(toX(gv[i]),toYc(cg[i]));}}ctx.stroke();
+  // Axes
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('g',W/2-4,H-8);ctx.fillText('0',pad-8,H-pad+12);ctx.fillText(gmax.toFixed(2),W-pad-12,H-pad+12);
+  ctx.fillStyle='#388bfd';ctx.fillText('E\u2080(g)',pad+4,pad+12);
+  ctx.fillStyle='#f0883e';ctx.fillText('f_c (cond.)',pad+4,pad+22);
+}}
+
+function drawGap(){{
+  const cv=document.getElementById('cGap');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=48;
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,W,H);
+  const gv=DATA.g_vals||[],bg=DATA.gap_bcs_g||[];
+  if(!gv.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(sweep not computed)',pad,H/2);return;}}
+  const n=gv.length,gmax=gv[n-1]||1;
+  const dmax=Math.max(...bg,1e-9);
+  const toX=g=>(pad+g/gmax*(W-2*pad));
+  const toY=d=>(H-pad-d/dmax*(H-2*pad));
+  // BCS gap curve
+  ctx.strokeStyle='#3fb950';ctx.lineWidth=2;
+  ctx.beginPath();for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(gv[i]),toY(bg[i]));else ctx.lineTo(toX(gv[i]),toY(bg[i]));}}ctx.stroke();
+  // Critical coupling marker: g_c where gap opens
+  let gc=0;for(let i=0;i<n;i++){{if(bg[i]>1e-6){{gc=gv[i];break;}}}}
+  if(gc>0){{
+    const xc=toX(gc);
+    ctx.strokeStyle='#e3b341';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(xc,pad);ctx.lineTo(xc,H-pad);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#e3b341';ctx.font='9px monospace';ctx.fillText('g_c',xc+2,pad+10);
+  }}
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('\u0394_BCS',4,pad+4);ctx.fillText('g',W/2-4,H-8);
+  ctx.fillStyle='#3fb950';ctx.fillText('BCS gap',pad+4,pad+12);
+}}
+
+function drawNk(){{
+  const cv=document.getElementById('cNk');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,W,H);
+  const nk=DATA.n_k||[];
+  if(!nk.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(n_k not computed)',pad,H/2);return;}}
+  const n=nk.length,bw=(W-2*pad)/n-2;
+  const toX=k=>(pad+k/n*(W-2*pad));
+  const toY=v=>(H-pad-v*(H-2*pad));
+  // BCS occupancy reference (v_k^2)
+  const g_cur=DATA.g||0,bcs=DATA.gap_bcs||0,bwv=DATA.bandwidth||2;
+  const dW_v=n>1?bwv/(n-1):0;
+  for(let k=0;k<n;k++){{
+    const x=toX(k);
+    // Exact n_k bar
+    ctx.fillStyle='rgba(56,139,253,0.8)';
+    ctx.fillRect(x,toY(nk[k]),bw,H-pad-toY(nk[k]));
+    // BCS reference
+    if(bcs>1e-6){{
+      const ek=(k-(n-1)*0.5)*dW_v;
+      const Ek=Math.sqrt(ek*ek+bcs*bcs);
+      const vk2=0.5*(1-ek/Ek);
+      ctx.fillStyle='rgba(240,136,62,0.5)';
+      ctx.fillRect(x+bw/2,toY(vk2),2,H-pad-toY(vk2));
+    }}
+  }}
+  // Half-filling reference
+  ctx.strokeStyle='#e3b341';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(pad,toY(0.5));ctx.lineTo(W-pad,toY(0.5));ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('n_k',4,pad+4);ctx.fillText('level k',W/2-16,H-8);
+  ctx.fillStyle='#388bfd';ctx.fillText('exact',pad+4,pad+12);
+  ctx.fillStyle='#f0883e';ctx.fillText('BCS v_k\u00b2',pad+4,pad+22);
+}}
+
+drawPair();drawGap();drawNk();
+window.addEventListener('resize',()=>{{drawPair();drawGap();drawNk();}});
+}})();
+</script>
+</body>
+</html>"""
