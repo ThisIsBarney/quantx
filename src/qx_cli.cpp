@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
     std::string floquet_topo_path;
     std::string non_herm_path;
     std::string aah_path;
+    std::string syk_path;
     std::string options_path;
     std::string out_path;
     std::string log_level{"warn"};
@@ -120,6 +121,7 @@ int main(int argc, char** argv) {
     app.add_option("--floquet-topo", floquet_topo_path, "floquet-topo options json path (run Floquet topological insulator / anomalous edge modes)");
     app.add_option("--non-herm", non_herm_path, "non-herm options json path (run non-Hermitian topology / skin effect + exceptional points)");
     app.add_option("--aah", aah_path, "aah options json path (run Aubry-Andre-Harper quasicrystal / metal-insulator transition)");
+    app.add_option("--syk", syk_path, "syk options json path (run Sachdev-Ye-Kitaev model / quantum chaos + spectral form factor)");
     app.add_option("--options", options_path, "options json path");
     app.add_option("--out", out_path, "output json path");
     app.add_option("--log-level", log_level, "trace|debug|info|warn|error|off")
@@ -176,7 +178,8 @@ int main(int argc, char** argv) {
         bbh_path.empty() &&
         floquet_topo_path.empty() &&
         non_herm_path.empty() &&
-        aah_path.empty()) {
+        aah_path.empty() &&
+        syk_path.empty()) {
       throw std::runtime_error(
           "missing required --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
           "--hubbard, --floquet, --heisenberg, --bose-hubbard, --tfi, --ssh, --kitaev, "
@@ -215,7 +218,8 @@ int main(int argc, char** argv) {
                   (!bbh_path.empty()          ? 1 : 0) +
                   (!floquet_topo_path.empty() ? 1 : 0) +
                   (!non_herm_path.empty()     ? 1 : 0) +
-                  (!aah_path.empty()          ? 1 : 0);
+                  (!aah_path.empty()          ? 1 : 0) +
+                  (!syk_path.empty()          ? 1 : 0);
       if (modes > 1) {
         throw std::runtime_error(
             "use exactly one of --problem, --circuit, --vqe, --qpe, --qec, --qfield, --phi4, "
@@ -503,6 +507,14 @@ int main(int argc, char** argv) {
       const qx::AAHOptions aah_opts = qx::aah_options_from_json(aah_json);
       qx::log::info("loaded aah options file: " + aah_path);
       output_json = qx::aah_result_to_json(qx::run_aah(aah_opts));
+    } else if (!syk_path.empty()) {
+      if (explain || validate_only) {
+        throw std::runtime_error("--explain and --validate-only are not supported in --syk mode");
+      }
+      const std::string syk_json = read_text_file(syk_path);
+      const qx::SYKOptions syk_opts = qx::syk_options_from_json(syk_json);
+      qx::log::info("loaded syk options file: " + syk_path);
+      output_json = qx::syk_result_to_json(qx::run_syk(syk_opts));
     } else {
       // QEC mode.
       if (explain || validate_only) {

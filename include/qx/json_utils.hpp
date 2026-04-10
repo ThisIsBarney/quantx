@@ -145,5 +145,9 @@ std::string     non_herm_result_to_json(const NonHermResult& result);
 AAHOptions  aah_options_from_json(const std::string& json);
 // Serialize Aubry-Andre-Harper quasicrystal result to JSON string.
 std::string aah_result_to_json(const AAHResult& result);
+// Parse Sachdev-Ye-Kitaev model options from JSON string.
+SYKOptions  syk_options_from_json(const std::string& json);
+// Serialize Sachdev-Ye-Kitaev model result to JSON string.
+std::string syk_result_to_json(const SYKResult& result);
 
 }  // namespace qx

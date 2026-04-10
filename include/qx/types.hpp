@@ -1907,4 +1907,54 @@ struct AAHResult {
   std::string message;
 };
 
+// ── M47: Sachdev-Ye-Kitaev (SYK) Model ───────────────────────────────────────
+//
+// N Majorana fermions with all-to-all random 4-body interactions:
+//   H = Σ_{i<j<k<l} J_{ijkl} γ_i γ_j γ_k γ_l
+//   J_{ijkl} ~ N(0, 6J²/N³)   (self-averaging normalisation)
+//
+// Majorana modes represented via M = N/2 complex fermion modes:
+//   γ_{2m}   = c_m + c_m†          (real combination)
+//   γ_{2m+1} = i(c_m† − c_m)       (imaginary combination)
+// Hilbert space dimension: dim = 2^M.
+//
+// Key observables:
+//   Ground state energy / N  → E₀/N ≈ −0.2 * J  (large-N conformal value)
+//   Level-spacing ratio ⟨r⟩ → 0.60 (GUE) for large N (quantum chaos)
+//   Spectral form factor K(t) = ⟨|Z(β,t)|²⟩ / ⟨Z(β)⟩²
+//     shows  dip → ramp (slope 1) → plateau  (hallmark of quantum chaos)
+//
+// Constraint: N must be even, 4 ≤ N ≤ 16 (dim = 2^(N/2) ≤ 256).
+//
+// Scenarios: "spectrum" | "sff" | "both"
+
+struct SYKOptions {
+  int    N{12};          // number of Majorana modes (even, 4 <= N <= 16)
+  double J{1.0};         // coupling strength (sets energy scale)
+  double beta{1.0};      // inverse temperature for SFF thermal weight
+  int    n_samples{40};  // disorder realisations for SFF averaging
+  int    n_t{200};       // time-grid points for SFF
+  double t_max{30.0};    // maximum time for SFF
+  int    seed{42};       // RNG seed (reproducible disorder)
+  std::string scenario{"both"};  // "spectrum"|"sff"|"both"
+};
+
+struct SYKResult {
+  bool ok{false};
+  std::string scenario;
+  int N{0};
+  int dim{0};              // Hilbert space dimension = 2^(N/2)
+  double J{0}, beta{0};
+  // Single-realization spectrum (at seed)
+  std::vector<double> eigenvalues;   // dim sorted energies
+  double E0_per_N{0.0};             // ground-state energy per Majorana mode
+  double r_mean{0.0};               // mean level-spacing ratio
+  std::vector<double> r_vals;       // per-gap r values (dim-2 entries)
+  // Disorder-averaged spectral form factor
+  std::vector<double> t_sff;        // time grid (n_t points)
+  std::vector<double> K_sff;        // disorder-averaged K(t)
+  double elapsed_ms{0.0};
+  std::string message;
+};
+
 }  // namespace qx
