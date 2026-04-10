@@ -74,6 +74,7 @@ from viz.topology import (
     _aah_frames, _aah_page,
     _syk_frames, _syk_page,
     _kondo_frames, _kondo_page,
+    _mipt_frames, _mipt_page,
     _rg_frames, _rg_page,
     _ent_frames, _ent_page,
 )
@@ -92,7 +93,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "rg", "ent", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "mipt", "rg", "ent", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -374,6 +375,14 @@ def main() -> int:
   parser.add_argument("--kondo-nV",     type=int,   default=30,   help="Kondo V sweep points")
   parser.add_argument("--kondo-Vmax",   type=float, default=0.8,  help="Kondo max V")
   parser.add_argument("--kondo-neps",   type=int,   default=40,   help="Kondo eps_d sweep points")
+  # ── M51: MIPT ───────────────────────────────────────────────────────────────
+  parser.add_argument("--mipt-L",        type=int,   default=8,    help="MIPT chain length (even, <=12)")
+  parser.add_argument("--mipt-p",        type=float, default=0.16, help="MIPT measurement rate for scaling")
+  parser.add_argument("--mipt-np",       type=int,   default=20,   help="MIPT p sweep points")
+  parser.add_argument("--mipt-pmax",     type=float, default=0.5,  help="MIPT max p for sweep")
+  parser.add_argument("--mipt-nsamples", type=int,   default=10,   help="MIPT disorder realizations")
+  parser.add_argument("--mipt-Lmax",     type=int,   default=10,   help="MIPT max L for scaling")
+  parser.add_argument("--mipt-seed",     type=int,   default=42,   help="MIPT RNG seed")
   # ── M49: Richardson-Gaudin / BCS ──────────────────────────────────────────
   parser.add_argument("--rg-N",     type=int,   default=8,   help="RG number of pair levels (even)")
   parser.add_argument("--rg-g",     type=float, default=0.4, help="RG coupling constant g")
@@ -1589,6 +1598,27 @@ def main() -> int:
       path.write_text(_kondo_page(kondo_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"mipt", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("mipt skipped: numpy not available", file=sys.stderr)
+    else:
+      mipt_data = _mipt_frames(
+          L=args.mipt_L,
+          p=args.mipt_p,
+          n_p=args.mipt_np,
+          p_max=args.mipt_pmax,
+          n_samples=args.mipt_nsamples,
+          L_max=args.mipt_Lmax,
+          seed=args.mipt_seed,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_mipt.html"
+      path.write_text(_mipt_page(mipt_data), encoding="utf-8")
+      generated.append(path)
+
   if args.scenario in {"rg", "all"}:
     try:
       import numpy as np  # noqa: PLC0415, F401
@@ -1692,6 +1722,7 @@ def main() -> int:
         "aah":                "quantum_aah",
         "syk":                "quantum_syk",
         "kondo":              "quantum_kondo",
+        "mipt":               "quantum_mipt",
         "rg":                 "quantum_rg",
         "ent":                "quantum_ent",
     }

@@ -2225,6 +2225,41 @@ std::string kondo_result_to_json(const KondoResult& r) {
   return j.dump();
 }
 
+// ── M51: Measurement-Induced Phase Transitions (MIPT) ───────────────────────
+
+MIPTOptions mipt_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  MIPTOptions o;
+  if (j.contains("L"))         o.L         = j["L"].get<int>();
+  if (j.contains("p"))         o.p         = j["p"].get<double>();
+  if (j.contains("T_steps"))   o.T_steps   = j["T_steps"].get<int>();
+  if (j.contains("n_p"))       o.n_p       = j["n_p"].get<int>();
+  if (j.contains("p_max"))     o.p_max     = j["p_max"].get<double>();
+  if (j.contains("n_samples")) o.n_samples = j["n_samples"].get<int>();
+  if (j.contains("L_max"))     o.L_max     = j["L_max"].get<int>();
+  if (j.contains("seed"))      o.seed      = j["seed"].get<int>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string mipt_result_to_json(const MIPTResult& r) {
+  json j;
+  j["ok"]         = r.ok;
+  j["scenario"]   = r.scenario;
+  j["L"]          = r.L;
+  j["p"]          = r.p;
+  j["p_vals"]     = r.p_vals;
+  j["S_mean"]     = r.S_mean;
+  j["S_std"]      = r.S_std;
+  j["p_c_est"]    = r.p_c_est;
+  j["L_vals_sc"]  = r.L_vals_sc;
+  j["S_at_pc"]    = r.S_at_pc;
+  j["elapsed_ms"] = r.elapsed_ms;
+  j["message"]    = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 // ── M49: Richardson-Gaudin / BCS ────────────────────────────────────────────
 
 RGOptions rg_options_from_json(const std::string& json_str) {

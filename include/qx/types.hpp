@@ -2021,6 +2021,46 @@ struct SYKResult {
   std::string message;
 };
 
+// ── M51: Measurement-Induced Phase Transitions (MIPT) ────────────────────────
+//
+// 1D random quantum circuit: brickwork Haar-random 2-qubit gates +
+// single-qubit projective measurements at rate p.
+// State vector simulation: L ≤ 12 qubits (dim = 4096).
+//
+// Phases:
+//   p < p_c ≈ 0.16:  volume law  S ~ (L/2) ln 2
+//   p > p_c:          area law    S ~ const
+//   p ≈ p_c:          critical    S ~ (c/3) ln L
+//
+// Scenarios: "sweep" | "scaling" | "both"
+
+struct MIPTOptions {
+  int    L{10};           // chain length (even, 2 ≤ L ≤ 12)
+  double p{0.16};         // measurement rate (used for scaling scenario)
+  int    T_steps{0};      // circuit depth (0 = auto: max(4L, 40))
+  int    n_p{25};         // points in p sweep
+  double p_max{0.5};      // max measurement rate for sweep
+  int    n_samples{20};   // disorder realizations per data point
+  int    L_max{12};       // max L for scaling study (capped at 12)
+  int    seed{42};        // RNG seed
+  std::string scenario{"both"};  // "sweep"|"scaling"|"both"
+};
+
+struct MIPTResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double p{0};
+  // p sweep at fixed L: mean S and std dev
+  std::vector<double> p_vals, S_mean, S_std;
+  double p_c_est{0};          // estimated critical point (max |dS/dp|)
+  // Scaling at p_c: S(L/2) vs L
+  std::vector<int>    L_vals_sc;
+  std::vector<double> S_at_pc;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 // ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
 //
 // Two complementary models:
