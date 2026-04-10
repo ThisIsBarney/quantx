@@ -87,6 +87,7 @@ def _dashboard_page(pages: dict) -> str:  # noqa: PLR0912
           ("non_herm",           "Non-Hermitian Skin Effect EP"),
           ("aah",                "Aubry-Andre-Harper Quasicrystal MIT"),
           ("syk",                "Sachdev-Ye-Kitaev Quantum Chaos SFF"),
+          ("kondo",              "Kondo Effect SIAM Impurity Screening"),
           ("schwinger_string",   "Schwinger 弦张力"),
           ("schwinger_dynamics", "Schwinger 对产生"),
       ]),

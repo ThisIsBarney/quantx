@@ -4477,3 +4477,323 @@ window.addEventListener('resize',()=>{{drawSpec();drawHist();drawSFF();}});
 </script>
 </body>
 </html>"""
+
+
+def _kondo_frames(
+    N_bath: int = 5,
+    eps_d: float = -1.5,
+    U: float = 3.0,
+    V: float = 0.3,
+    bandwidth: float = 4.0,
+    n_V: int = 30,
+    V_max: float = 0.8,
+    n_eps: int = 40,
+    eps_min: float = -5.0,
+    eps_max: float = 2.0,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Single-Impurity Anderson Model (SIAM) / Kondo effect."""
+    import numpy as np  # noqa: PLC0415
+    from itertools import combinations  # noqa: PLC0415
+
+    n_sites = N_bath + 1
+    n_half = n_sites // 2  # half-filling: n_up = n_dn
+
+    # Enumerate n_occ-particle states in n_sites-site space
+    def enum_sector(n_occ: int) -> list[int]:
+        return [sum(1 << b for b in combo)
+                for combo in combinations(range(n_sites), n_occ)]
+
+    # Jordan-Wigner sign for hopping c†_i c_j (0 < j, i = 0)
+    def hopping_sign(state: int, i: int, j: int) -> int:
+        lo, hi = min(i, j), max(i, j)
+        mask = ((1 << hi) - (1 << (lo + 1)))
+        return -1 if bin(state & mask).count("1") & 1 else 1
+
+    def build_H(eps_d_v: float, V_v: float) -> np.ndarray:
+        up_s = enum_sector(n_half)
+        dn_s = enum_sector(n_half)
+        up_lut = {s: i for i, s in enumerate(up_s)}
+        dn_lut = {s: i for i, s in enumerate(dn_s)}
+        du, dd = len(up_s), len(dn_s)
+        dim = du * dd
+        H = np.zeros((dim, dim))
+        dW = bandwidth / (N_bath - 1) if N_bath > 1 else 0.0
+        bath_eps = [(k - (N_bath - 1) * 0.5) * dW for k in range(N_bath)]
+
+        for iu, au in enumerate(up_s):
+            for id_, ad in enumerate(dn_s):
+                row = iu * dd + id_
+                # Diagonal
+                nu0, nd0 = (au >> 0) & 1, (ad >> 0) & 1
+                diag = eps_d_v * (nu0 + nd0) + U * nu0 * nd0
+                for k in range(N_bath):
+                    s = k + 1
+                    diag += bath_eps[k] * (((au >> s) & 1) + ((ad >> s) & 1))
+                H[row, row] = diag
+                # Hybridisation: c†_0 c_s (spin-up)
+                for k in range(N_bath):
+                    s = k + 1
+                    # spin-up
+                    if ((au >> s) & 1) and not ((au >> 0) & 1):
+                        sgn = hopping_sign(au, 0, s)
+                        au2 = (au ^ (1 << s)) | 1
+                        if au2 in up_lut:
+                            col = up_lut[au2] * dd + id_
+                            H[row, col] += V_v * sgn
+                            H[col, row] += V_v * sgn
+                    # spin-dn
+                    if ((ad >> s) & 1) and not ((ad >> 0) & 1):
+                        sgn = hopping_sign(ad, 0, s)
+                        ad2 = (ad ^ (1 << s)) | 1
+                        if ad2 in dn_lut:
+                            col = iu * dd + dn_lut[ad2]
+                            H[row, col] += V_v * sgn
+                            H[col, row] += V_v * sgn
+        return H, up_s, dn_s, du, dd
+
+    def gs_obs(ev, evecs, up_s, dn_s, dd):
+        idx0 = int(np.argmin(ev))
+        gs = evecs[:, idx0]
+        du = len(up_s)
+        n_imp = m2_imp = 0.0
+        spin_corr = [0.0] * N_bath
+        for iu, au in enumerate(up_s):
+            for id_, ad in enumerate(dn_s):
+                c2 = gs[iu * dd + id_] ** 2
+                if c2 < 1e-20:
+                    continue
+                nu0 = (au >> 0) & 1
+                nd0 = (ad >> 0) & 1
+                n_imp += c2 * (nu0 + nd0)
+                sz_imp = (nu0 - nd0) * 0.5
+                m2_imp += c2 * sz_imp ** 2
+                for k in range(N_bath):
+                    s = k + 1
+                    sz_b = ((au >> s) & 1) - ((ad >> s) & 1)
+                    spin_corr[k] += c2 * sz_imp * sz_b * 0.5
+        return n_imp, m2_imp, spin_corr
+
+    # Analytical Kondo temperature
+    rho0 = N_bath / bandwidth if bandwidth > 0 else 0.0
+    Gamma = math.pi * rho0 * V ** 2
+    if Gamma > 1e-12 and U > 0:
+        ed_abs = abs(eps_d)
+        exp_arg = -math.pi * ed_abs * (ed_abs + U) / (Gamma * U)
+        TK = math.sqrt(Gamma * U * 0.5) * math.exp(max(exp_arg, -100.0))
+    else:
+        TK = 0.0
+
+    out: dict = {
+        "source": source, "N_bath": N_bath, "eps_d": eps_d,
+        "U": U, "V": V, "bandwidth": bandwidth, "TK_analytic": TK,
+    }
+
+    # Fixed-parameter ground state
+    H, up_s, dn_s, du, dd = build_H(eps_d, V)
+    ev, evecs = np.linalg.eigh(H)
+    idx0 = int(np.argmin(ev))
+    E_ground = float(ev[idx0])
+    E_gap = float(ev[idx0 + 1] - ev[idx0]) if len(ev) > idx0 + 1 else 0.0
+    n_imp, m2_imp, spin_corr = gs_obs(ev, evecs, up_s, dn_s, dd)
+    out.update({
+        "E_ground": E_ground, "E_gap": E_gap,
+        "n_imp": n_imp, "m2_imp": m2_imp, "spin_corr": spin_corr,
+    })
+
+    if scenario in ("kondo", "both"):
+        V_vals, gap_V, m2_V = [], [], []
+        for vi in range(n_V):
+            Vv = V_max * vi / (n_V - 1) if n_V > 1 else V_max
+            H_v, up_sv, dn_sv, _, dd_v = build_H(eps_d, Vv)
+            ev_v, evecs_v = np.linalg.eigh(H_v)
+            i0 = int(np.argmin(ev_v))
+            gap_v = float(ev_v[i0 + 1] - ev_v[i0]) if len(ev_v) > i0 + 1 else 0.0
+            _, m2_v, _ = gs_obs(ev_v, evecs_v, up_sv, dn_sv, dd_v)
+            V_vals.append(float(Vv))
+            gap_V.append(gap_v)
+            m2_V.append(float(m2_v))
+        out.update({"V_vals": V_vals, "gap_V": gap_V, "m2_V": m2_V})
+
+    if scenario in ("occupancy", "both"):
+        eps_vals, n_d_eps, m2_eps = [], [], []
+        for ei in range(n_eps):
+            ed = eps_min + (eps_max - eps_min) * ei / (n_eps - 1 if n_eps > 1 else 1)
+            H_e, up_se, dn_se, _, dd_e = build_H(ed, V)
+            ev_e, evecs_e = np.linalg.eigh(H_e)
+            n_e, m2_e, _ = gs_obs(ev_e, evecs_e, up_se, dn_se, dd_e)
+            eps_vals.append(float(ed))
+            n_d_eps.append(float(n_e))
+            m2_eps.append(float(m2_e))
+        out.update({"eps_vals": eps_vals, "n_d_eps": n_d_eps, "m2_eps": m2_eps})
+
+    return out
+
+
+def _kondo_page(data: dict) -> str:
+    """Render Kondo/SIAM results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    N_bath  = data.get("N_bath", 5)
+    eps_d   = data.get("eps_d", -1.5)
+    U_val   = data.get("U", 3.0)
+    V_val   = data.get("V", 0.3)
+    TK      = data.get("TK_analytic", 0.0)
+    n_imp   = data.get("n_imp", 0.0)
+    m2_imp  = data.get("m2_imp", 0.0)
+    E_gap   = data.get("E_gap", 0.0)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Kondo Effect / SIAM \u2014 QuantX</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{background:#0d1117;color:#c9d1d9;font-family:monospace;padding:16px}}
+  h2{{color:#e6edf3;font-size:1.1rem;margin-bottom:12px}}
+  .info{{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;font-size:.82rem;color:#8b949e}}
+  .info span b{{color:#c9d1d9}}
+  .panels{{display:flex;gap:16px;flex-wrap:wrap}}
+  .panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px}}
+  canvas{{display:block}}
+</style>
+</head>
+<body>
+<h2>Kondo Effect \u2014 Single-Impurity Anderson Model</h2>
+<div class="info">
+  <span><b>N_bath</b>={N_bath}</span>
+  <span><b>&#949;_d</b>={eps_d:.2f}</span>
+  <span><b>U</b>={U_val:.2f}</span>
+  <span><b>V</b>={V_val:.3f}</span>
+  <span><b>T_K</b>={TK:.4g}</span>
+  <span><b>n_imp</b>={n_imp:.3f}</span>
+  <span><b>&#60;S_z&#178;&#62;</b>={m2_imp:.4f}</span>
+  <span><b>&#916;E</b>={E_gap:.4g}</span>
+</div>
+<div class="panels">
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">&#60;S_z&#178;&#62; &amp; Gap vs V (Kondo screening)</div>
+    <canvas id="cKondo" width="380" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Impurity Occupation n_d vs &#949;_d</div>
+    <canvas id="cOcc" width="360" height="340"></canvas>
+  </div>
+  <div class="panel">
+    <div style="color:#8b949e;font-size:.78rem;margin-bottom:6px">Kondo Cloud: &#60;S_z&#94;imp&#183;S_z&#94;k&#62; per bath site</div>
+    <canvas id="cCloud" width="320" height="340"></canvas>
+  </div>
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function drawKondo(){{
+  const cv=document.getElementById('cKondo');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=48;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const Vv=DATA.V_vals||[],gV=DATA.gap_V||[],m2V=DATA.m2_V||[];
+  if(!Vv.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(kondo sweep not computed)',pad,H/2);return;}}
+  const n=Vv.length,vmax=Vv[n-1]||1;
+  const gmax=Math.max(...gV,1e-9);
+  const toX=v=>(pad+v/vmax*(W-2*pad));
+  const toYg=g=>(H-pad-(g/gmax)*(H-2*pad));
+  const toYm=m=>(H-pad-(m/0.25)*(H-2*pad));
+  // Gap line (blue)
+  ctx.strokeStyle='#388bfd';ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(Vv[i]),toYg(gV[i]));else ctx.lineTo(toX(Vv[i]),toYg(gV[i]));}}
+  ctx.stroke();
+  // m2 line (orange)
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(Vv[i]),toYm(m2V[i]));else ctx.lineTo(toX(Vv[i]),toYm(m2V[i]));}}
+  ctx.stroke();
+  // Axes
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('0',pad-8,H-pad+12);ctx.fillText(vmax.toFixed(2),W-pad-18,H-pad+12);
+  ctx.fillText('V',W/2-4,H-8);
+  ctx.fillStyle='#388bfd';ctx.fillText('\u0394E (gap)',pad+4,pad+12);
+  ctx.fillStyle='#f0883e';ctx.fillText('\u27e8S_z\u00b2\u27e9 (moment)',pad+4,pad+22);
+  ctx.fillStyle='#3fb950';ctx.font='8px monospace';
+  const TK=DATA.TK_analytic||0;
+  ctx.fillText('T_K\u2248'+TK.toFixed(4),pad+4,pad+32);
+}}
+
+function drawOcc(){{
+  const cv=document.getElementById('cOcc');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=48;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const ev=DATA.eps_vals||[],nd=DATA.n_d_eps||[],m2=DATA.m2_eps||[];
+  if(!ev.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(occupancy sweep not computed)',pad,H/2);return;}}
+  const n=ev.length,emin=ev[0],emax=ev[n-1],er=emax-emin||1;
+  const toX=e=>(pad+(e-emin)/er*(W-2*pad));
+  const toY=v=>(H-pad-v/2*(H-2*pad));
+  const toYm=m=>(H-pad-m/0.25*(H-2*pad));
+  // n_d curve (blue)
+  ctx.strokeStyle='#388bfd';ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(ev[i]),toY(nd[i]));else ctx.lineTo(toX(ev[i]),toY(nd[i]));}}
+  ctx.stroke();
+  // m2 curve (orange)
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;
+  ctx.beginPath();
+  for(let i=0;i<n;i++){{if(i===0)ctx.moveTo(toX(ev[i]),toYm(m2[i]));else ctx.lineTo(toX(ev[i]),toYm(m2[i]));}}
+  ctx.stroke();
+  // Kondo plateau at n_d=1 (dashed)
+  ctx.strokeStyle='#e3b341';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(pad,toY(1));ctx.lineTo(W-pad,toY(1));ctx.stroke();
+  ctx.setLineDash([]);
+  // Axes
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('\u03b5_d',W/2-8,H-8);
+  ctx.fillText(emin.toFixed(1),pad-4,H-pad+12);ctx.fillText(emax.toFixed(1),W-pad-12,H-pad+12);
+  ctx.fillStyle='#388bfd';ctx.fillText('n_d',pad+4,pad+12);
+  ctx.fillStyle='#f0883e';ctx.fillText('\u27e8S_z\u00b2\u27e9',pad+4,pad+22);
+  ctx.fillStyle='#e3b341';ctx.fillText('n_d=1 (Kondo)',pad+4,toY(1)-4);
+}}
+
+function drawCloud(){{
+  const cv=document.getElementById('cCloud');
+  if(!cv)return;
+  const W=cv.width,H=cv.height,pad=44;
+  const ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,H);
+  const sc=DATA.spin_corr||[];
+  if(!sc.length){{ctx.fillStyle='#8b949e';ctx.font='11px monospace';ctx.fillText('(spin corr not computed)',pad,H/2);return;}}
+  const n=sc.length;
+  const vmax=Math.max(Math.max(...sc.map(Math.abs)),1e-9);
+  const bw=(W-2*pad)/n-2;
+  const toX=i=>(pad+i/n*(W-2*pad));
+  const midY=H/2;
+  const scale=(H/2-pad-4)/vmax;
+  // Zero line
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,midY);ctx.lineTo(W-pad,midY);ctx.stroke();
+  for(let i=0;i<n;i++){{
+    const x=toX(i),h=Math.abs(sc[i])*scale;
+    ctx.fillStyle=sc[i]<0?'rgba(56,139,253,0.8)':'rgba(240,136,62,0.8)';
+    if(sc[i]<0)ctx.fillRect(x,midY,bw,h);
+    else ctx.fillRect(x,midY-h,bw,h);
+  }}
+  // Axes
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad,pad);ctx.lineTo(pad,H-pad);ctx.lineTo(W-pad,H-pad);ctx.stroke();
+  ctx.fillStyle='#8b949e';ctx.font='9px monospace';
+  ctx.fillText('\u27e8S_z^imp\u00b7S_z^k\u27e9',4,pad+4);
+  ctx.fillText('bath site k',W/2-24,H-8);
+  ctx.fillStyle='#388bfd';ctx.fillText('neg=antiferro',pad+2,H-pad-6);
+}}
+
+drawKondo();drawOcc();drawCloud();
+window.addEventListener('resize',()=>{{drawKondo();drawOcc();drawCloud();}});
+}})();
+</script>
+</body>
+</html>"""

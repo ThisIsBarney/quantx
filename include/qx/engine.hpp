@@ -89,5 +89,7 @@ NonHermResult run_non_herm(const NonHermOptions& opts);
 AAHResult run_aah(const AAHOptions& opts);
 // Run Sachdev-Ye-Kitaev model — quantum chaos, level statistics, spectral form factor.
 SYKResult run_syk(const SYKOptions& opts);
+// Run Kondo/SIAM model — impurity screening, singlet-doublet gap, Kondo cloud.
+KondoResult run_kondo(const KondoOptions& opts);
 
 }  // namespace qx

@@ -1928,6 +1928,42 @@ struct AAHResult {
 //
 // Scenarios: "spectrum" | "sff" | "both"
 
+// ── M48: Kondo Effect / Single-Impurity Anderson Model ──────────────────────
+struct KondoOptions {
+  int    N_bath{5};          // bath levels (must be odd so N_sites=N_bath+1 is even)
+  double eps_d{-1.5};        // impurity level energy (Kondo regime: -U < eps_d < 0)
+  double U{3.0};             // Coulomb repulsion on impurity
+  double V{0.3};             // hybridisation amplitude
+  double bandwidth{4.0};     // total bath bandwidth
+  int    n_V{30};            // points in V sweep (scenario="kondo")
+  double V_max{0.8};         // maximum V for sweep
+  int    n_eps{40};          // points in eps_d sweep (scenario="occupancy")
+  double eps_min{-5.0};      // min eps_d for occupancy scan
+  double eps_max{2.0};       // max eps_d for occupancy scan
+  std::string scenario{"both"};  // "kondo"|"occupancy"|"both"
+};
+
+struct KondoResult {
+  bool ok{false};
+  std::string scenario;
+  int N_bath{0};
+  int dim{0};                  // Hilbert space sector dimension
+  double eps_d{0}, U{0}, V{0}, bandwidth{0};
+  // Fixed-parameter observables (at opts.V, opts.eps_d)
+  double E_ground{0};          // ground-state energy
+  double E_gap{0};             // excitation gap E_1-E_0 (proxy for T_K)
+  double n_imp{0};             // impurity occupation ⟨n↑+n↓⟩
+  double m2_imp{0};            // local moment ⟨S_z²⟩  (0=screened, 1/4=free spin)
+  double TK_analytic{0};       // Haldane analytical T_K estimate
+  std::vector<double> spin_corr;  // ⟨S_z^imp·S_z^k⟩ for k=1..N_bath
+  // Kondo sweep (V varies): gap and local moment vs V
+  std::vector<double> V_vals, gap_V, m2_V;
+  // Occupancy sweep (eps_d varies): n_d and moment vs eps_d
+  std::vector<double> eps_vals, n_d_eps, m2_eps;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 struct SYKOptions {
   int    N{12};          // number of Majorana modes (even, 4 <= N <= 16)
   double J{1.0};         // coupling strength (sets energy scale)
