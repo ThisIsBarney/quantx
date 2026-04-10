@@ -2225,6 +2225,45 @@ std::string kondo_result_to_json(const KondoResult& r) {
   return j.dump();
 }
 
+// ── M49: Richardson-Gaudin / BCS ────────────────────────────────────────────
+
+RGOptions rg_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  RGOptions o;
+  if (j.contains("N_levels"))  o.N_levels  = j["N_levels"].get<int>();
+  if (j.contains("g"))         o.g         = j["g"].get<double>();
+  if (j.contains("bandwidth")) o.bandwidth = j["bandwidth"].get<double>();
+  if (j.contains("n_g"))       o.n_g       = j["n_g"].get<int>();
+  if (j.contains("g_max"))     o.g_max     = j["g_max"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string rg_result_to_json(const RGResult& r) {
+  json j;
+  j["ok"]            = r.ok;
+  j["scenario"]      = r.scenario;
+  j["N_levels"]      = r.N_levels;
+  j["N_pairs"]       = r.N_pairs;
+  j["dim"]           = r.dim;
+  j["g"]             = r.g;
+  j["bandwidth"]     = r.bandwidth;
+  j["E_ground"]      = r.E_ground;
+  j["E_gap_ed"]      = r.E_gap_ed;
+  j["condensate"]    = r.condensate;
+  j["gap_bcs"]       = r.gap_bcs;
+  j["n_k"]           = r.n_k;
+  j["eigenvalues"]   = r.eigenvalues;
+  j["g_vals"]        = r.g_vals;
+  j["E0_g"]          = r.E0_g;
+  j["condensate_g"]  = r.condensate_g;
+  j["gap_bcs_g"]     = r.gap_bcs_g;
+  j["elapsed_ms"]    = r.elapsed_ms;
+  j["message"]       = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 EntOptions ent_options_from_json(const std::string& json_str) {
   const json j = json::parse(json_str);
   EntOptions o;

@@ -1929,6 +1929,34 @@ struct AAHResult {
 // Scenarios: "spectrum" | "sff" | "both"
 
 // ── M48: Kondo Effect / Single-Impurity Anderson Model ──────────────────────
+// ── M49: Richardson-Gaudin / BCS pairing ────────────────────────────────────
+struct RGOptions {
+  int    N_levels{8};       // number of pair levels (must be even)
+  double g{0.4};            // pairing coupling strength
+  double bandwidth{2.0};    // total single-particle bandwidth
+  int    n_g{40};           // g sweep points (scenario="pairing")
+  double g_max{1.0};        // maximum g for sweep
+  std::string scenario{"both"};  // "pairing"|"spectrum"|"both"
+};
+
+struct RGResult {
+  bool ok{false};
+  std::string scenario;
+  int N_levels{0}, N_pairs{0}, dim{0};
+  double g{0}, bandwidth{0};
+  // Fixed-g observables
+  double E_ground{0};         // ground-state energy
+  double E_gap_ed{0};         // exact excitation gap (E_1-E_0)
+  double condensate{0};       // condensate fraction (dominant eigenval of pair DM / N_pairs)
+  double gap_bcs{0};          // BCS mean-field gap Δ
+  std::vector<double> n_k;    // pair occupation per level
+  std::vector<double> eigenvalues;  // all sector eigenvalues (scenario=spectrum/both)
+  // g sweep
+  std::vector<double> g_vals, E0_g, condensate_g, gap_bcs_g;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 struct KondoOptions {
   int    N_bath{5};          // bath levels (must be odd so N_sites=N_bath+1 is even)
   double eps_d{-1.5};        // impurity level energy (Kondo regime: -U < eps_d < 0)
