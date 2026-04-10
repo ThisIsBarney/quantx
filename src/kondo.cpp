@@ -30,7 +30,13 @@
 
 #include <algorithm>
 #include <chrono>
+#ifndef _USE_MATH_DEFINES
+#  define _USE_MATH_DEFINES  // MSVC: expose M_PI in <cmath>
+#endif
 #include <cmath>
+#ifndef M_PI
+#  define M_PI 3.14159265358979323846
+#endif
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -295,8 +301,9 @@ KondoResult run_kondo(const KondoOptions& opts) {
     // Validation
     if (opts.N_bath < 1 || opts.N_bath % 2 == 0)
         throw std::runtime_error("Kondo: N_bath must be a positive odd integer (for even N_sites = N_bath+1)");
-    if (opts.N_bath > 9)
-        throw std::runtime_error("Kondo: N_bath > 9 makes dim > C(10,5)^2 = 63504; use N_bath <= 9");
+    if (opts.N_bath > 7)
+        throw std::runtime_error("Kondo: N_bath > 7 makes dim > C(8,4)^2 = 4900 "
+                                 "and the dense dim*dim matrices would exceed available memory; use N_bath <= 7");
     if (opts.U < 0.0)
         throw std::runtime_error("Kondo: U must be >= 0");
     if (opts.bandwidth <= 0.0)

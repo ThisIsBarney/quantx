@@ -4606,11 +4606,11 @@ def _kondo_frames(
         V_vals, gap_V, m2_V = [], [], []
         for vi in range(n_V):
             Vv = V_max * vi / (n_V - 1) if n_V > 1 else V_max
-            H_v, *rest = build_H(eps_d, Vv)
+            H_v, up_sv, dn_sv, _, dd_v = build_H(eps_d, Vv)
             ev_v, evecs_v = np.linalg.eigh(H_v)
             i0 = int(np.argmin(ev_v))
             gap_v = float(ev_v[i0 + 1] - ev_v[i0]) if len(ev_v) > i0 + 1 else 0.0
-            _, m2_v, _ = gs_obs(ev_v, evecs_v, *rest[1:])
+            _, m2_v, _ = gs_obs(ev_v, evecs_v, up_sv, dn_sv, dd_v)
             V_vals.append(float(Vv))
             gap_V.append(gap_v)
             m2_V.append(float(m2_v))
@@ -4620,9 +4620,9 @@ def _kondo_frames(
         eps_vals, n_d_eps, m2_eps = [], [], []
         for ei in range(n_eps):
             ed = eps_min + (eps_max - eps_min) * ei / (n_eps - 1 if n_eps > 1 else 1)
-            H_e, *rest = build_H(ed, V)
+            H_e, up_se, dn_se, _, dd_e = build_H(ed, V)
             ev_e, evecs_e = np.linalg.eigh(H_e)
-            n_e, m2_e, _ = gs_obs(ev_e, evecs_e, *rest[1:])
+            n_e, m2_e, _ = gs_obs(ev_e, evecs_e, up_se, dn_se, dd_e)
             eps_vals.append(float(ed))
             n_d_eps.append(float(n_e))
             m2_eps.append(float(m2_e))
