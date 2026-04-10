@@ -244,7 +244,7 @@ EntResult run_entanglement(const EntOptions& opts) {
 
     // ── TFI h sweep ───────────────────────────────────────────────────────────
     if (sc == "tfi" || sc == "both") {
-        const int Ltfi = std::min(opts.L, 10);  // cap at L=10 for Jacobi speed
+        const int Ltfi = std::min(opts.L, 8);   // cap at L=8 (2^8=256) for Jacobi speed
         const int nh = opts.n_h;
         res.h_vals.resize(nh); res.S_h.resize(nh);
         for (int hi = 0; hi < nh; ++hi) {

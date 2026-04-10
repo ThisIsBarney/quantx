@@ -245,8 +245,8 @@ static void gs_observables(
 RGResult run_rg(const RGOptions& opts) {
     if (opts.N_levels < 2 || opts.N_levels % 2 != 0)
         throw std::runtime_error("RG: N_levels must be a positive even integer >= 2");
-    if (opts.N_levels > 16)
-        throw std::runtime_error("RG: N_levels > 16 makes dim > C(16,8)=12870; use N_levels <= 16");
+    if (opts.N_levels > 14)
+        throw std::runtime_error("RG: N_levels > 14 makes dim > C(14,7)=3432; use N_levels <= 14");
     if (opts.bandwidth <= 0.0)
         throw std::runtime_error("RG: bandwidth must be positive");
     if (opts.n_g < 1)
@@ -304,30 +304,17 @@ RGResult run_rg(const RGOptions& opts) {
             res.g_vals[gi]     = gv;
             res.gap_bcs_g[gi]  = bcs_gap(gv, N, opts.bandwidth);
             auto H = build_rg(states, lut, N, gv, opts.bandwidth);
-            if (gi == 0 || gi == ng-1) {
-                // Full diag for endpoints (condensate fraction)
-                std::vector<double> evecs;
-                jacobi_full(H, evecs, dim);
-                std::vector<double> evals(dim);
-                for (int i=0;i<dim;++i) evals[i]=H[static_cast<size_t>(i)*dim+i];
-                std::vector<int> idx(dim); std::iota(idx.begin(),idx.end(),0);
-                std::sort(idx.begin(),idx.end(),[&](int a,int b){return evals[a]<evals[b];});
-                res.E0_g[gi] = evals[idx[0]];
-                std::vector<double> nk_dummy; double cond;
-                gs_observables(evecs, idx[0], dim, states, lut, N, Np, nk_dummy, cond);
-                res.condensate_g[gi] = cond;
-            } else {
-                jacobi_evals(H, dim);
-                std::vector<double> evals(dim);
-                for (int i=0;i<dim;++i) evals[i]=H[static_cast<size_t>(i)*dim+i];
-                res.E0_g[gi] = *std::min_element(evals.begin(), evals.end());
-                res.condensate_g[gi] = -1.0;  // not computed for interior points
-            }
-        }
-        // Fill condensate_g with linear interp for interior (cheap)
-        const double c0=res.condensate_g[0], c1=res.condensate_g[ng-1];
-        for (int gi=1; gi<ng-1; ++gi)
-            res.condensate_g[gi] = c0 + (c1-c0)*gi/(ng-1);
+            // Full diag for all points to get correct condensate fraction
+            std::vector<double> evecs;
+            jacobi_full(H, evecs, dim);
+            std::vector<double> evals(dim);
+            for (int i=0;i<dim;++i) evals[i]=H[static_cast<size_t>(i)*dim+i];
+            std::vector<int> idx(dim); std::iota(idx.begin(),idx.end(),0);
+            std::sort(idx.begin(),idx.end(),[&](int a,int b){return evals[a]<evals[b];});
+            res.E0_g[gi] = evals[idx[0]];
+            std::vector<double> nk_dummy; double cond;
+            gs_observables(evecs, idx[0], dim, states, lut, N, Np, nk_dummy, cond);
+            res.condensate_g[gi] = cond;
     }
 
     auto t1 = std::chrono::steady_clock::now();

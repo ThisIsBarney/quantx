@@ -191,8 +191,8 @@ static std::vector<double> structure_factor(
 LLResult run_luttinger(const LLOptions& opts) {
     if (opts.L < 4 || opts.L % 2 != 0)
         throw std::runtime_error("LL: L must be an even integer >= 4");
-    if (opts.L > 16)
-        throw std::runtime_error("LL: L must be <= 16");
+    if (opts.L > 14)
+        throw std::runtime_error("LL: L must be <= 14 (dim=C(14,7)=3432 is the safe dense-ED limit)");
     if (opts.n_delta < 1)
         throw std::runtime_error("LL: n_delta must be >= 1");
     const std::string& sc = opts.scenario;
@@ -237,9 +237,9 @@ LLResult run_luttinger(const LLOptions& opts) {
         res.Sq = structure_factor(psi, states, opts.L, res.q_vals);
         // Analytic K
         const double acos_arg = std::max(-1.0, std::min(1.0, -opts.Delta));
-        res.K_analytic = (std::abs(opts.Delta) < 1.0)
+        res.K_analytic = (std::abs(opts.Delta) < 0.999)
             ? M_PI / (2.0 * std::acos(acos_arg))
-            : (opts.Delta > 0 ? 0.5 : 1e6);  // saturate at phase boundaries
+            : (opts.Delta > 0 ? 0.5 : 5.0);  // saturate: FM→0.5, AFM→5.0 (matches sweep)
     }
 
     // ── Delta sweep ──────────────────────────────────────────────────────────

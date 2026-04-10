@@ -5715,8 +5715,10 @@ def _ent_frames(
         out["S_l"] = Sl
 
         # CFT fit curve: S(l) = (1/3) ln(sin(π l / L)) + const
+        # Guard: L//4 is 0 when L=2 → log(sin(0)) = -inf; clamp anchor to >= 1
+        anchor_l = max(L // 4, 1)
         cft_fit = [
-            Sl[L // 4 - 1] - (1.0 / 3.0) * math.log(math.sin(math.pi * (L // 4) / L))
+            Sl[anchor_l - 1] - (1.0 / 3.0) * math.log(math.sin(math.pi * anchor_l / L))
             + (1.0 / 3.0) * math.log(math.sin(math.pi * lv / L))
             for lv in l_vals
         ]
