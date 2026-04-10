@@ -149,5 +149,9 @@ std::string aah_result_to_json(const AAHResult& result);
 SYKOptions  syk_options_from_json(const std::string& json);
 // Serialize Sachdev-Ye-Kitaev model result to JSON string.
 std::string syk_result_to_json(const SYKResult& result);
+// Parse Kondo/SIAM options from JSON string.
+KondoOptions  kondo_options_from_json(const std::string& json);
+// Serialize Kondo/SIAM result to JSON string.
+std::string   kondo_result_to_json(const KondoResult& result);
 
 }  // namespace qx

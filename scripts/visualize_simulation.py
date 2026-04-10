@@ -73,6 +73,7 @@ from viz.topology import (
     _non_herm_frames, _non_herm_page,
     _aah_frames, _aah_page,
     _syk_frames, _syk_page,
+    _kondo_frames, _kondo_page,
 )
 
 
@@ -89,7 +90,7 @@ def main() -> int:
       formatter_class=argparse.RawDescriptionHelpFormatter,
       epilog=CLI_EXAMPLES,
   )
-  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "all"], default="all")
+  parser.add_argument("--scenario", choices=["rabi", "mps", "mps_ising", "mps_xx", "spatial", "spatial2d", "spatial3d", "dirac2d", "driven_barrier", "bloch", "gaussian_pulse", "lindblad", "wigner_free", "wigner_barrier", "entanglement_rabi", "entanglement_decay", "vqe_ising", "vqe_qaoa", "qpe_phase", "qpe_hamiltonian", "qec_bit_flip", "qec_phase_flip", "qec_shor", "schwinger_vacuum", "schwinger_string", "schwinger_dynamics", "phi4_symmetric", "phi4_broken", "phi4_sweep", "phi4_dynamics", "hubbard", "floquet", "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson", "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern", "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane", "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo", "non_herm", "aah", "syk", "kondo", "all"], default="all")
   parser.add_argument(
       "--solver-mode",
       choices=["auto", "engine", "python"],
@@ -362,6 +363,15 @@ def main() -> int:
   parser.add_argument("--syk-samples",  type=int,   default=20,   help="SYK disorder samples for SFF")
   parser.add_argument("--syk-nt",       type=int,   default=100,  help="SYK number of time points for SFF")
   parser.add_argument("--syk-tmax",     type=float, default=30.0, help="SYK max time for SFF")
+  # ── M48: Kondo / SIAM ─────────────────────────────────────────────────────
+  parser.add_argument("--kondo-Nbath",  type=int,   default=5,    help="Kondo bath levels (odd)")
+  parser.add_argument("--kondo-epsd",   type=float, default=-1.5, help="Kondo impurity level eps_d")
+  parser.add_argument("--kondo-U",      type=float, default=3.0,  help="Kondo Coulomb U")
+  parser.add_argument("--kondo-V",      type=float, default=0.3,  help="Kondo hybridisation V")
+  parser.add_argument("--kondo-bw",     type=float, default=4.0,  help="Kondo bath bandwidth")
+  parser.add_argument("--kondo-nV",     type=int,   default=30,   help="Kondo V sweep points")
+  parser.add_argument("--kondo-Vmax",   type=float, default=0.8,  help="Kondo max V")
+  parser.add_argument("--kondo-neps",   type=int,   default=40,   help="Kondo eps_d sweep points")
   parser.add_argument("--out-dir", default="out/visualizations")
   parser.add_argument(
       "--dashboard", action="store_true", default=True,
@@ -1543,6 +1553,28 @@ def main() -> int:
       path.write_text(_syk_page(syk_data), encoding="utf-8")
       generated.append(path)
 
+  if args.scenario in {"kondo", "all"}:
+    try:
+      import numpy as np  # noqa: PLC0415, F401
+    except ImportError:
+      print("kondo skipped: numpy not available", file=sys.stderr)
+    else:
+      kondo_data = _kondo_frames(
+          N_bath=args.kondo_Nbath,
+          eps_d=args.kondo_epsd,
+          U=args.kondo_U,
+          V=args.kondo_V,
+          bandwidth=args.kondo_bw,
+          n_V=args.kondo_nV,
+          V_max=args.kondo_Vmax,
+          n_eps=args.kondo_neps,
+          scenario="both",
+          source="python-reference",
+      )
+      path = out_dir / "quantum_kondo.html"
+      path.write_text(_kondo_page(kondo_data), encoding="utf-8")
+      generated.append(path)
+
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # ── M25: Unified Dashboard ─────────────────────────────────────────────────
   # When all scenarios were generated and --dashboard is active, build a single
@@ -1606,6 +1638,7 @@ def main() -> int:
         "non_herm":           "quantum_non_herm",
         "aah":                "quantum_aah",
         "syk":                "quantum_syk",
+        "kondo":              "quantum_kondo",
     }
     dash_pages: dict = {}
     for key, stem in _DASH_STEM_MAP.items():

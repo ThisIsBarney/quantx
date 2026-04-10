@@ -2178,4 +2178,51 @@ std::string syk_result_to_json(const SYKResult& r) {
   return j.dump();
 }
 
+// ── M48: Kondo / SIAM ───────────────────────────────────────────────────────
+
+KondoOptions kondo_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  KondoOptions o;
+  if (j.contains("N_bath"))    o.N_bath    = j["N_bath"].get<int>();
+  if (j.contains("eps_d"))     o.eps_d     = j["eps_d"].get<double>();
+  if (j.contains("U"))         o.U         = j["U"].get<double>();
+  if (j.contains("V"))         o.V         = j["V"].get<double>();
+  if (j.contains("bandwidth")) o.bandwidth = j["bandwidth"].get<double>();
+  if (j.contains("n_V"))       o.n_V       = j["n_V"].get<int>();
+  if (j.contains("V_max"))     o.V_max     = j["V_max"].get<double>();
+  if (j.contains("n_eps"))     o.n_eps     = j["n_eps"].get<int>();
+  if (j.contains("eps_min"))   o.eps_min   = j["eps_min"].get<double>();
+  if (j.contains("eps_max"))   o.eps_max   = j["eps_max"].get<double>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string kondo_result_to_json(const KondoResult& r) {
+  json j;
+  j["ok"]           = r.ok;
+  j["scenario"]     = r.scenario;
+  j["N_bath"]       = r.N_bath;
+  j["dim"]          = r.dim;
+  j["eps_d"]        = r.eps_d;
+  j["U"]            = r.U;
+  j["V"]            = r.V;
+  j["bandwidth"]    = r.bandwidth;
+  j["E_ground"]     = r.E_ground;
+  j["E_gap"]        = r.E_gap;
+  j["n_imp"]        = r.n_imp;
+  j["m2_imp"]       = r.m2_imp;
+  j["TK_analytic"]  = r.TK_analytic;
+  j["spin_corr"]    = r.spin_corr;
+  j["V_vals"]       = r.V_vals;
+  j["gap_V"]        = r.gap_V;
+  j["m2_V"]         = r.m2_V;
+  j["eps_vals"]     = r.eps_vals;
+  j["n_d_eps"]      = r.n_d_eps;
+  j["m2_eps"]       = r.m2_eps;
+  j["elapsed_ms"]   = r.elapsed_ms;
+  j["message"]      = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
 }  // namespace qx
