@@ -4797,3 +4797,321 @@ window.addEventListener('resize',()=>{{drawKondo();drawOcc();drawCloud();}});
 </script>
 </body>
 </html>"""
+
+
+# ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
+
+def _ent_frames(
+    L: int = 20,
+    J: float = 1.0,
+    h: float = 1.0,
+    n_h: int = 30,
+    h_max: float = 3.0,
+    L_max: int = 40,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: bipartite entanglement entropy (XX chain + TFI chain)."""
+    import numpy as np  # noqa: PLC0415
+
+    if L < 2 or L % 2 != 0:
+        raise ValueError("L must be a positive even integer >= 2")
+
+    out: dict = {"source": source, "L": L, "J": J, "h": h, "scenario": scenario}
+
+    # ── helper: von Neumann entropy from density-matrix eigenvalues ──────────
+    def _vn(evals: np.ndarray) -> float:
+        eps = 1e-14
+        ev = np.clip(evals, eps, 1.0 - eps)
+        return float(-np.sum(ev * np.log(ev) + (1.0 - ev) * np.log(1.0 - ev)))
+
+    # ── XX chain: correlation-matrix method ──────────────────────────────────
+    if scenario in ("xx", "both"):
+        def xx_profile(Lv: int) -> list:
+            # Sort k by ascending E_k = -2J cos(2πk/Lv)
+            ks = np.arange(Lv)
+            energy = -2.0 * J * np.cos(2 * math.pi * ks / Lv)
+            filled = ks[np.argsort(energy)[:Lv // 2]]
+            # Correlation matrix C_{ij} = (1/Lv) Σ_{k filled} cos(2π k (i-j)/Lv)
+            i_idx, j_idx = np.meshgrid(np.arange(Lv), np.arange(Lv), indexing="ij")
+            phases = 2 * math.pi / Lv * np.outer(filled, (i_idx - j_idx).ravel())
+            C = np.cos(phases).sum(axis=0).reshape(Lv, Lv) / Lv
+            # Entropy for each cut l
+            sl = []
+            for l in range(1, Lv // 2 + 1):
+                ev_l = np.clip(np.linalg.eigvalsh(C[:l, :l]), 0.0, 1.0)
+                sl.append(_vn(ev_l))
+            return sl
+
+        # Profile at fixed L
+        Sl = xx_profile(L)
+        l_vals = list(range(1, L // 2 + 1))
+        out["l_vals"] = l_vals
+        out["S_l"] = Sl
+
+        # CFT fit curve: S(l) = (1/3) ln(sin(π l / L)) + const
+        cft_fit = [
+            Sl[L // 4 - 1] - (1.0 / 3.0) * math.log(math.sin(math.pi * (L // 4) / L))
+            + (1.0 / 3.0) * math.log(math.sin(math.pi * lv / L))
+            for lv in l_vals
+        ]
+        out["S_l_cft"] = cft_fit
+
+        # Scaling: S(L/2) vs ln(L) for L = 4, 6, …, L_max
+        L_vals_list: list = []
+        ln_L_list: list = []
+        S_Lhalf_list: list = []
+        for Lv in range(4, L_max + 1, 2):
+            slv = xx_profile(Lv)
+            L_vals_list.append(Lv)
+            ln_L_list.append(math.log(Lv))
+            S_Lhalf_list.append(slv[-1])
+        out["L_vals"] = L_vals_list
+        out["ln_L"] = ln_L_list
+        out["S_Lhalf"] = S_Lhalf_list
+
+        # Linear fit c_fit: S = (c/3) ln(L) + const
+        if len(ln_L_list) >= 2:
+            x = np.array(ln_L_list)
+            y = np.array(S_Lhalf_list)
+            sx, sy = x.sum(), y.sum()
+            sxx = (x * x).sum()
+            sxy = (x * y).sum()
+            n = len(x)
+            denom = n * sxx - sx * sx
+            slope = (n * sxy - sx * sy) / denom if abs(denom) > 1e-14 else 0.0
+            out["c_fit"] = float(3.0 * slope)
+
+    # ── TFI chain: full diagonalisation + bipartite SVD ──────────────────────
+    if scenario in ("tfi", "both"):
+        Ltfi = min(L, 10)  # cap for feasibility
+        out["L_tfi"] = Ltfi
+
+        def tfi_entropy_at(hv: float) -> float:
+            dim = 1 << Ltfi
+            # Build Hamiltonian in sigma_z basis
+            H_tfi = np.zeros((dim, dim))
+            for s in range(dim):
+                diag = 0.0
+                for i in range(Ltfi - 1):
+                    zi = 1 - 2 * ((s >> i) & 1)
+                    zi1 = 1 - 2 * ((s >> (i + 1)) & 1)
+                    diag += -J * zi * zi1
+                H_tfi[s, s] = diag
+                for i in range(Ltfi):
+                    sp = s ^ (1 << i)
+                    H_tfi[s, sp] -= hv
+            ev, evecs = np.linalg.eigh(H_tfi)
+            psi = evecs[:, 0]  # ground state
+            cut = Ltfi // 2
+            dA = 1 << cut
+            dB = 1 << (Ltfi - cut)
+            M_mat = psi.reshape(dA, dB)
+            sv2 = np.linalg.svd(M_mat, compute_uv=False) ** 2
+            sv2 = sv2[sv2 > 1e-14]
+            return float(-np.sum(sv2 * np.log(sv2)))
+
+        h_vals_list = (
+            [h_max * hi / (n_h - 1) for hi in range(n_h)] if n_h > 1 else [h_max]
+        )
+        S_h_list = [tfi_entropy_at(hv) for hv in h_vals_list]
+        out["h_vals"] = h_vals_list
+        out["S_h"] = S_h_list
+
+    return out
+
+
+def _ent_page(data: dict) -> str:
+    """Render bipartite entanglement entropy results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    L_val    = data.get("L", 20)
+    J_val    = data.get("J", 1.0)
+    h_val    = data.get("h", 1.0)
+    c_fit    = data.get("c_fit", 0.0)
+    scenario = data.get("scenario", "both")
+
+    has_xx  = scenario in ("xx", "both")
+    has_tfi = scenario in ("tfi", "both")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M50 Bipartite Entanglement Entropy — L={L_val}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h1{{font-size:1.25rem;color:#58a6ff;margin-bottom:4px}}
+.subtitle{{font-size:.85rem;color:#8b949e;margin-bottom:20px}}
+.panels{{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:18px;max-width:1400px}}
+.panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+.panel h2{{font-size:.95rem;color:#e6edf3;margin-bottom:10px}}
+canvas{{width:100%;height:280px;display:block}}
+.badge{{display:inline-block;background:#1f6feb33;border:1px solid #1f6feb;color:#58a6ff;
+        border-radius:12px;padding:2px 10px;font-size:.78rem;margin-right:6px}}
+</style>
+</head>
+<body>
+<h1>M50 · Bipartite Entanglement Entropy &amp; Area Law</h1>
+<p class="subtitle">
+  <span class="badge">L = {L_val}</span>
+  <span class="badge">J = {J_val}</span>
+  <span class="badge">h = {h_val}</span>
+  {'<span class="badge">c_fit = ' + f'{c_fit:.3f}' + '</span>' if has_xx else ''}
+</p>
+<div class="panels">
+  {'<div class="panel"><h2>XX Chain — S(l) entropy profile &amp; CFT fit (L=' + str(L_val) + ')</h2><canvas id="cvProfile"></canvas></div>' if has_xx else ''}
+  {'<div class="panel"><h2>XX Chain — S(L/2) scaling vs ln L  →  central charge c</h2><canvas id="cvScaling"></canvas></div>' if has_xx else ''}
+  {'<div class="panel"><h2>TFI Chain — entropy vs transverse field h  (area law vs log divergence)</h2><canvas id="cvTFI"></canvas></div>' if has_tfi else ''}
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function mkCtx(id){{
+  const cv=document.getElementById(id);
+  if(!cv)return null;
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.offsetWidth*dpr||640*dpr;
+  cv.height=280*dpr;
+  const ctx=cv.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.W=cv.offsetWidth||640;
+  ctx.H=280;
+  return ctx;
+}}
+
+function drawAxes(ctx,xMin,xMax,yMin,yMax,xLabel,yLabel){{
+  const W=ctx.W,H=ctx.H,pad=44,padR=18,padT=18,padB=40;
+  const pw=W-pad-padR, ph=H-padT-padB;
+  function px(v){{return pad+(v-xMin)/(xMax-xMin)*pw;}}
+  function py(v){{return padT+ph-(v-yMin)/(yMax-yMin)*ph;}}
+  ctx.strokeStyle='#30363d'; ctx.lineWidth=1;
+  ctx.strokeRect(pad,padT,pw,ph);
+  ctx.fillStyle='#8b949e'; ctx.font='11px sans-serif';
+  // x ticks
+  const nx=5;
+  for(let i=0;i<=nx;i++){{
+    const xv=xMin+(xMax-xMin)*i/nx;
+    const xp=px(xv);
+    ctx.beginPath();ctx.moveTo(xp,padT+ph);ctx.lineTo(xp,padT+ph+4);ctx.stroke();
+    ctx.fillText(xv.toFixed(2),xp-14,padT+ph+16);
+  }}
+  // y ticks
+  const ny=4;
+  for(let i=0;i<=ny;i++){{
+    const yv=yMin+(yMax-yMin)*i/ny;
+    const yp=py(yv);
+    ctx.beginPath();ctx.moveTo(pad-4,yp);ctx.lineTo(pad,yp);ctx.stroke();
+    ctx.textAlign='right';ctx.fillText(yv.toFixed(2),pad-6,yp+4);
+    ctx.textAlign='left';
+  }}
+  ctx.fillStyle='#8b949e';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText(xLabel,W/2,H-4);
+  ctx.save();ctx.translate(12,H/2);ctx.rotate(-Math.PI/2);
+  ctx.fillText(yLabel,0,0);ctx.restore();
+  return {{px,py,pad,padT,pw,ph}};
+}}
+
+/* ── Panel 1: XX entropy profile ── */
+function drawProfile(){{
+  const ctx=mkCtx('cvProfile'); if(!ctx)return;
+  const l=DATA.l_vals||[], S=DATA.S_l||[], Sc=DATA.S_l_cft||[];
+  if(!l.length)return;
+  const W=ctx.W,H=ctx.H;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const yMax=Math.max(...S)*1.15;
+  const ax=drawAxes(ctx,l[0],l[l.length-1],0,yMax,'subsystem size l','S(l)');
+  // CFT fit dashed
+  if(Sc.length){{
+    ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    Sc.forEach((sv,i)=>{{
+      const xp=ax.px(l[i]),yp=ax.py(sv);
+      i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);
+    }});
+    ctx.stroke();ctx.setLineDash([]);
+  }}
+  // Exact
+  ctx.strokeStyle='#58a6ff';ctx.lineWidth=2;
+  ctx.beginPath();
+  S.forEach((sv,i)=>{{
+    const xp=ax.px(l[i]),yp=ax.py(sv);
+    i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);
+  }});
+  ctx.stroke();
+  // dots
+  ctx.fillStyle='#58a6ff';
+  S.forEach((sv,i)=>{{
+    ctx.beginPath();ctx.arc(ax.px(l[i]),ax.py(sv),3,0,2*Math.PI);ctx.fill();
+  }});
+  // legend
+  ctx.font='11px sans-serif';ctx.fillStyle='#58a6ff';
+  ctx.fillText('Exact S(l)',ax.pad+6,ax.padT+14);
+  ctx.fillStyle='#f0883e';ctx.fillText('CFT c=1 fit',ax.pad+80,ax.padT+14);
+}}
+
+/* ── Panel 2: scaling S(L/2) vs ln(L) ── */
+function drawScaling(){{
+  const ctx=mkCtx('cvScaling'); if(!ctx)return;
+  const lnL=DATA.ln_L||[], Sh=DATA.S_Lhalf||[];
+  if(!lnL.length)return;
+  const W=ctx.W,H=ctx.H;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const yMin=Math.min(...Sh)*0.9, yMax=Math.max(...Sh)*1.1;
+  const xMin=lnL[0]*0.97, xMax=lnL[lnL.length-1]*1.03;
+  const ax=drawAxes(ctx,xMin,xMax,yMin,yMax,'ln L','S(L/2)');
+  // linear fit line
+  const c_fit=DATA.c_fit||0;
+  const n=lnL.length;
+  const xbar=lnL.reduce((a,b)=>a+b,0)/n;
+  const ybar=Sh.reduce((a,b)=>a+b,0)/n;
+  const intercept=ybar - (c_fit/3)*xbar;
+  const xl0=lnL[0], xl1=lnL[lnL.length-1];
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+  ctx.beginPath();
+  ctx.moveTo(ax.px(xl0), ax.py((c_fit/3)*xl0+intercept));
+  ctx.lineTo(ax.px(xl1), ax.py((c_fit/3)*xl1+intercept));
+  ctx.stroke();ctx.setLineDash([]);
+  // data
+  ctx.fillStyle='#3fb950';
+  lnL.forEach((lv,i)=>{{
+    const xp=ax.px(lv), yp=ax.py(Sh[i]);
+    ctx.beginPath();ctx.arc(xp,yp,4,0,2*Math.PI);ctx.fill();
+  }});
+  ctx.font='11px sans-serif';ctx.fillStyle='#e6edf3';
+  ctx.fillText('slope = c/3 = '+(c_fit/3).toFixed(3)+'  →  c = '+c_fit.toFixed(3),ax.pad+6,ax.padT+16);
+}}
+
+/* ── Panel 3: TFI h sweep ── */
+function drawTFI(){{
+  const ctx=mkCtx('cvTFI'); if(!ctx)return;
+  const hv=DATA.h_vals||[], Sh=DATA.S_h||[];
+  if(!hv.length)return;
+  const W=ctx.W,H=ctx.H;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const yMax=Math.max(...Sh)*1.15;
+  const ax=drawAxes(ctx,0,hv[hv.length-1],0,yMax,'transverse field h / J','S(L/2)');
+  // vertical line at h=J=1
+  const J={J_val};
+  ctx.strokeStyle='#da3633';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+  ctx.beginPath();ctx.moveTo(ax.px(J),ax.padT);ctx.lineTo(ax.px(J),ax.padT+ax.ph);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#da3633';ctx.font='11px sans-serif';ctx.fillText('h=J (critical)',ax.px(J)+4,ax.padT+14);
+  // curve
+  ctx.strokeStyle='#bc8cff';ctx.lineWidth=2;
+  ctx.beginPath();
+  hv.forEach((hval,i)=>{{
+    const xp=ax.px(hval),yp=ax.py(Sh[i]);
+    i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);
+  }});
+  ctx.stroke();
+}}
+
+drawProfile();drawScaling();drawTFI();
+window.addEventListener('resize',()=>{{drawProfile();drawScaling();drawTFI();}});
+}})();
+</script>
+</body>
+</html>"""
