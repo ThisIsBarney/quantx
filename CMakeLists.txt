@@ -120,6 +120,8 @@ add_library(qx_core
   src/syk.cpp
   src/kondo.cpp
   src/luttinger.cpp
+  src/toric.cpp
+  src/mipt.cpp
   src/richardson_gaudin.cpp
   src/entanglement.cpp
   src/json_utils.cpp

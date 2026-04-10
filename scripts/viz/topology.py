@@ -4799,6 +4799,111 @@ window.addEventListener('resize',()=>{{drawKondo();drawOcc();drawCloud();}});
 </html>"""
 
 
+# ── M53: Toric Code / Surface Code ───────────────────────────────────────────
+
+def _toric_frames(
+    L: int = 2,
+    JA: float = 1.0,
+    JB: float = 1.0,
+    h: float = 0.0,
+    g: float = 0.0,
+    n_h: int = 20,
+    h_max: float = 1.0,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: Kitaev toric code on L×L torus."""
+    import numpy as np  # noqa: PLC0415
+
+    if L < 2 or L > 3:
+        raise ValueError("L must be 2 or 3")
+
+    Nq = 2 * L * L
+    dim = 1 << Nq
+
+    def hq(r: int, c: int) -> int:
+        return r * L + c
+
+    def vq(r: int, c: int) -> int:
+        return L * L + r * L + c
+
+    def build_H(JA_: float, JB_: float, h_: float, g_: float) -> np.ndarray:
+        H = np.zeros((dim, dim))
+        # Star A_v = X⊗X⊗X⊗X
+        for r in range(L):
+            for c in range(L):
+                q0 = hq(r, c)
+                q1 = hq(r, (c - 1) % L)
+                q2 = vq(r, c)
+                q3 = vq((r - 1) % L, c)
+                flip = (1 << q0) | (1 << q1) | (1 << q2) | (1 << q3)
+                for s in range(dim):
+                    H[s, s ^ flip] -= JA_
+        # Plaquette B_p = Z⊗Z⊗Z⊗Z (diagonal)
+        for r in range(L):
+            for c in range(L):
+                q0 = hq(r, c)
+                q1 = hq((r + 1) % L, c)
+                q2 = vq(r, c)
+                q3 = vq(r, (c + 1) % L)
+                for s in range(dim):
+                    bits = ((s >> q0) & 1) + ((s >> q1) & 1) + ((s >> q2) & 1) + ((s >> q3) & 1)
+                    H[s, s] -= JB_ * (1.0 if bits % 2 == 0 else -1.0)
+        # Transverse field X
+        if abs(h_) > 1e-14:
+            for i in range(Nq):
+                for s in range(dim):
+                    H[s, s ^ (1 << i)] -= h_
+        # Longitudinal field Z
+        if abs(g_) > 1e-14:
+            for i in range(Nq):
+                for s in range(dim):
+                    H[s, s] -= g_ * (-1.0 if (s >> i) & 1 else 1.0)
+        return H
+
+    def half_entropy(psi_: np.ndarray) -> float:
+        dA = 1 << (Nq // 2)
+        dB = 1 << (Nq - Nq // 2)
+        M = psi_.reshape(dB, dA)
+        sv = np.linalg.svd(M, compute_uv=False) ** 2
+        sv = sv[sv > 1e-14]
+        return float(-np.sum(sv * np.log(sv)))
+
+    out: dict = {"source": source, "L": L, "JA": JA, "JB": JB, "scenario": scenario}
+
+    if scenario in ("spectrum", "both"):
+        H0 = build_H(JA, JB, h, g)
+        ev, evecs = np.linalg.eigh(H0)
+        out["eigenvalues"] = ev[:min(20, len(ev))].tolist()
+        out["E0"] = float(ev[0])
+        tol = 1e-8
+        degen = int(np.sum(np.abs(ev - ev[0]) < tol))
+        out["gs_degeneracy"] = degen
+        out["anyonic_gap"] = float(ev[degen] - ev[0]) if len(ev) > degen else 0.0
+        psi0 = evecs[:, 0]
+        out["entropy_gs"] = half_entropy(psi0)
+
+    if scenario in ("perturb", "both"):
+        h_vals: list = []
+        gap_h: list = []
+        entropy_h: list = []
+        for hi in range(n_h):
+            hv = h_max * hi / (n_h - 1) if n_h > 1 else h_max
+            h_vals.append(hv)
+            Hh = build_H(JA, JB, hv, 0.0)
+            ev_h, evecs_h = np.linalg.eigh(Hh)
+            degen_h = int(np.sum(np.abs(ev_h - ev_h[0]) < 1e-8))
+            gap_h.append(float(ev_h[degen_h] - ev_h[0]) if len(ev_h) > degen_h else 0.0)
+            entropy_h.append(half_entropy(evecs_h[:, 0]))
+        out["h_vals"] = h_vals
+        out["gap_h"] = gap_h
+        out["entropy_h"] = entropy_h
+
+    return out
+
+
+# ── M52: Luttinger Liquid / Bosonization (XXZ Chain) ─────────────────────────
+
 def _ll_frames(
     L: int = 10,
     J: float = 1.0,
@@ -5048,6 +5153,137 @@ window.addEventListener('resize',()=>{{drawSq();drawDelta();drawGap();}});
 </html>"""
 
 
+# ── M51: Measurement-Induced Phase Transitions (MIPT) ────────────────────────
+
+def _mipt_frames(
+    L: int = 8,
+    p: float = 0.16,
+    T_steps: int = 0,
+    n_p: int = 20,
+    p_max: float = 0.5,
+    n_samples: int = 10,
+    L_max: int = 10,
+    seed: int = 42,
+    scenario: str = "both",
+    source: str = "python-reference",
+) -> dict:
+    """NumPy reference: measurement-induced phase transition (random circuit model)."""
+    import numpy as np  # noqa: PLC0415
+
+    if L < 2 or L % 2 != 0:
+        raise ValueError("L must be a positive even integer >= 2")
+    if L > 12:
+        raise ValueError("L must be <= 12 for state-vector simulation")
+
+    T = T_steps if T_steps > 0 else max(4 * L, 40)
+
+    def haar_u4_np(rng_local: np.random.Generator) -> np.ndarray:
+        """Haar random 4x4 unitary via QR of random complex matrix."""
+        Z = rng_local.standard_normal((4, 4)) + 1j * rng_local.standard_normal((4, 4))
+        Q, R = np.linalg.qr(Z)
+        ph = np.diag(R) / np.abs(np.diag(R))
+        return Q * ph[np.newaxis, :]
+
+    def apply_u4_np(psi: np.ndarray, q0: int, U: np.ndarray, L_: int) -> np.ndarray:
+        """Apply 4x4 unitary U to qubits (q0, q0+1)."""
+        dim = 1 << L_
+        lo_mask = (1 << q0) - 1
+        new_psi = psi.copy()
+        for rest in range(dim >> 2):
+            lo = rest & lo_mask
+            hi = rest >> q0
+            base = lo | (hi << (q0 + 2))
+            idx = [base | (k << q0) for k in range(4)]
+            v = psi[idx]
+            new_psi[idx] = U @ v
+        return new_psi
+
+    def measure_qubit(psi: np.ndarray, q: int, p_meas: float,
+                      rng_local: np.random.Generator) -> np.ndarray:
+        """Project qubit q onto |0> or |1> with probability p_meas."""
+        if rng_local.random() >= p_meas:
+            return psi
+        p1 = float(sum(abs(psi[s]) ** 2 for s in range(len(psi)) if (s >> q) & 1))
+        outcome = int(rng_local.random() < p1)
+        new_psi = psi.copy()
+        nrm = math.sqrt(p1 if outcome else max(1.0 - p1, 1e-14))
+        for s in range(len(psi)):
+            if ((s >> q) & 1) != outcome:
+                new_psi[s] = 0.0
+            else:
+                new_psi[s] /= nrm
+        return new_psi
+
+    def half_entropy_np(psi: np.ndarray, L_: int) -> float:
+        dA = 1 << (L_ // 2)
+        dB = 1 << (L_ - L_ // 2)
+        M = psi.reshape(dB, dA)
+        sv = np.linalg.svd(M, compute_uv=False) ** 2
+        sv = sv[sv > 1e-14]
+        return float(-np.sum(sv * np.log(sv)))
+
+    def run_circuit(L_: int, p_meas: float, T_: int, seed_: int) -> float:
+        rng_c = np.random.default_rng(seed_)
+        s0 = sum(1 << i for i in range(1, L_, 2))
+        psi = np.zeros(1 << L_, dtype=complex)
+        psi[s0] = 1.0
+        for _t in range(T_):
+            for q in range(0, L_ - 1, 2):
+                psi = apply_u4_np(psi, q, haar_u4_np(rng_c), L_)
+            for q in range(1, L_ - 1, 2):
+                psi = apply_u4_np(psi, q, haar_u4_np(rng_c), L_)
+            for q in range(L_):
+                psi = measure_qubit(psi, q, p_meas, rng_c)
+        return half_entropy_np(psi, L_)
+
+    out: dict = {"source": source, "L": L, "p": p, "scenario": scenario}
+
+    if scenario in ("sweep", "both"):
+        p_vals: list = []
+        S_mean: list = []
+        S_std: list = []
+        for pi in range(n_p):
+            pv = p_max * pi / (n_p - 1) if n_p > 1 else p_max
+            p_vals.append(pv)
+            samples = [
+                run_circuit(L, pv, T, seed + s * 997 + pi * 7)
+                for s in range(n_samples)
+            ]
+            mn = float(sum(samples) / len(samples))
+            var = sum((x - mn) ** 2 for x in samples) / max(len(samples) - 1, 1)
+            S_mean.append(mn)
+            S_std.append(var ** 0.5)
+        out["p_vals"] = p_vals
+        out["S_mean"] = S_mean
+        out["S_std"] = S_std
+        if n_p >= 3:
+            slopes = [abs(S_mean[i+1] - S_mean[i-1]) for i in range(1, n_p - 1)]
+            best = slopes.index(max(slopes)) + 1
+            out["p_c_est"] = p_vals[best]
+        else:
+            out["p_c_est"] = p
+
+    if scenario in ("scaling", "both"):
+        p_scale = out.get("p_c_est", p)
+        L_sc: list = []
+        S_sc: list = []
+        for Lv in range(4, min(L_max, 12) + 1, 2):
+            Tv = max(4 * Lv, 40)
+            samples = [
+                run_circuit(Lv, p_scale, Tv, seed + s * 997 + 10000 + Lv)
+                for s in range(n_samples)
+            ]
+            L_sc.append(Lv)
+            S_sc.append(float(sum(samples) / len(samples)))
+        out["L_vals_sc"] = L_sc
+        out["S_at_pc"] = S_sc
+
+    return out
+
+
+
+# ── M49: Richardson-Gaudin / BCS ─────────────────────────────────────────────
+
 def _rg_frames(
     N_levels: int = 8,
     g: float = 0.4,
@@ -5147,6 +5383,285 @@ def _rg_frames(
                     "condensate_g": cond_g, "gap_bcs_g": gap_g})
 
     return out
+
+
+
+
+def _toric_page(data: dict) -> str:
+    """Render toric code results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    L_val    = data.get("L", 2)
+    JA_v     = data.get("JA", 1.0)
+    JB_v     = data.get("JB", 1.0)
+    degen    = data.get("gs_degeneracy", 4)
+    gap      = data.get("anyonic_gap", 2.0)
+    scenario = data.get("scenario", "both")
+    has_spec = scenario in ("spectrum", "both")
+    has_pert = scenario in ("perturb", "both")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M53 Toric Code - L={L_val}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h1{{font-size:1.25rem;color:#58a6ff;margin-bottom:4px}}
+.subtitle{{font-size:.85rem;color:#8b949e;margin-bottom:20px}}
+.panels{{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:18px;max-width:1200px}}
+.panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+.panel h2{{font-size:.95rem;color:#e6edf3;margin-bottom:10px}}
+canvas{{width:100%;height:280px;display:block}}
+.badge{{display:inline-block;background:#1f6feb33;border:1px solid #1f6feb;color:#58a6ff;
+        border-radius:12px;padding:2px 10px;font-size:.78rem;margin-right:6px}}
+</style>
+</head>
+<body>
+<h1>M53 - Toric Code (L={L_val} torus, {2*L_val*L_val} qubits)</h1>
+<p class="subtitle">
+  <span class="badge">JA = {JA_v}</span>
+  <span class="badge">JB = {JB_v}</span>
+  <span class="badge">GS degeneracy = {degen}</span>
+  <span class="badge">Anyonic gap = {gap:.4f}</span>
+</p>
+<div class="panels">
+  {'<div class="panel"><h2>Energy spectrum (lowest 20 levels, 4-fold GS degeneracy)</h2><canvas id="cvSpec"></canvas></div>' if has_spec else ''}
+  {'<div class="panel"><h2>Topological gap and entanglement entropy vs X-field h</h2><canvas id="cvPerturb"></canvas></div>' if has_pert else ''}
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function mkCtx(id){{
+  const cv=document.getElementById(id);if(!cv)return null;
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.offsetWidth*dpr||640*dpr;cv.height=280*dpr;
+  const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+  ctx.W=cv.offsetWidth||640;ctx.H=280;return ctx;
+}}
+
+function drawSpec(){{
+  const ctx=mkCtx('cvSpec');if(!ctx)return;
+  const ev=DATA.eigenvalues||[];if(!ev.length)return;
+  const W=ctx.W,H=ctx.H,pad=44,padR=18,padT=18,padB=40;
+  const pw=W-pad-padR,ph=H-padT-padB;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const e0=ev[0],eMax=ev[ev.length-1];
+  const de=Math.max(eMax-e0,0.01);
+  function py(v){{return padT+ph-(v-e0)/de*ph;}}
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;ctx.strokeRect(pad,padT,pw,ph);
+  // Energy levels as horizontal lines
+  const E0=DATA.E0||e0,gap=DATA.anyonic_gap||0,degen=DATA.gs_degeneracy||4;
+  ev.forEach((e,i)=>{{
+    const y=py(e);
+    if(Math.abs(e-E0)<1e-6){{ctx.strokeStyle='#58a6ff';ctx.lineWidth=2;}}
+    else if(i>=degen&&Math.abs(e-E0-gap)<1e-6){{ctx.strokeStyle='#f0883e';ctx.lineWidth=2;}}
+    else{{ctx.strokeStyle='#30363d';ctx.lineWidth=1;}}
+    ctx.beginPath();
+    const x=pad+(i/Math.max(ev.length-1,1))*pw;
+    ctx.moveTo(x-8,y);ctx.lineTo(x+8,y);ctx.stroke();
+  }});
+  // GS degeneracy label
+  ctx.fillStyle='#58a6ff';ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('GS x'+degen+' (deg)',pad+6,padT+16);
+  // Gap arrow
+  if(gap>0){{
+    const y0=py(E0),y1=py(E0+gap);
+    ctx.strokeStyle='#da3633';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.moveTo(W-padR-20,y0);ctx.lineTo(W-padR-20,y1);ctx.stroke();
+    ctx.fillStyle='#da3633';ctx.textAlign='right';
+    ctx.fillText('gap='+gap.toFixed(3),W-padR-22,y0-(y0-y1)/2);
+  }}
+  // Y axis label
+  ctx.fillStyle='#8b949e';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('energy level index',W/2,H-4);
+  ctx.save();ctx.translate(12,H/2);ctx.rotate(-Math.PI/2);ctx.fillText('E',0,0);ctx.restore();
+}}
+
+function drawPerturb(){{
+  const ctx=mkCtx('cvPerturb');if(!ctx)return;
+  const hv=DATA.h_vals||[],gp=DATA.gap_h||[],en=DATA.entropy_h||[];
+  if(!hv.length)return;
+  const W=ctx.W,H=ctx.H,pad=44,padR=44,padT=18,padB=40;
+  const pw=W-pad-padR,ph=H-padT-padB;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const gMax=Math.max(...gp)*1.1||1,eMax=Math.max(...en)*1.2||1;
+  function px(v){{return pad+(v-hv[0])/(hv[hv.length-1]-hv[0]||1)*pw;}}
+  function pyG(v){{return padT+ph-v/gMax*ph;}}
+  function pyE(v){{return padT+ph-v/eMax*ph;}}
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;ctx.strokeRect(pad,padT,pw,ph);
+  // Gap curve (left axis)
+  ctx.strokeStyle='#f0883e';ctx.lineWidth=2;
+  ctx.beginPath();
+  hv.forEach((v,i)=>{{const xp=px(v),yp=pyG(gp[i]);i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  ctx.stroke();
+  // Entropy curve (right axis)
+  ctx.strokeStyle='#bc8cff';ctx.lineWidth=2;
+  ctx.beginPath();
+  hv.forEach((v,i)=>{{const xp=px(v),yp=pyE(en[i]);i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  ctx.stroke();
+  // Axes labels
+  ctx.fillStyle='#f0883e';ctx.font='11px sans-serif';ctx.textAlign='left';
+  ctx.fillText('anyonic gap',pad+4,padT+14);
+  ctx.fillStyle='#bc8cff';ctx.fillText('entropy S',pad+4,padT+28);
+  ctx.fillStyle='#8b949e';ctx.font='12px sans-serif';ctx.textAlign='center';
+  ctx.fillText('perturbation h',W/2,H-4);
+}}
+
+drawSpec();drawPerturb();
+window.addEventListener('resize',()=>{{drawSpec();drawPerturb();}});
+}})();
+</script>
+</body>
+</html>"""
+
+
+def _mipt_page(data: dict) -> str:
+    """Render MIPT results as a self-contained HTML page."""
+    payload = json.dumps(data, separators=(",", ":"))
+    L_val    = data.get("L", 8)
+    p_c_est  = data.get("p_c_est", 0.16)
+    scenario = data.get("scenario", "both")
+    has_sweep   = scenario in ("sweep", "both")
+    has_scaling = scenario in ("scaling", "both")
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>M51 Measurement-Induced Phase Transition - L={L_val}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#0d1117;color:#c9d1d9;font-family:'Segoe UI',system-ui,sans-serif;padding:20px}}
+h1{{font-size:1.25rem;color:#58a6ff;margin-bottom:4px}}
+.subtitle{{font-size:.85rem;color:#8b949e;margin-bottom:20px}}
+.panels{{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:18px;max-width:1200px}}
+.panel{{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}}
+.panel h2{{font-size:.95rem;color:#e6edf3;margin-bottom:10px}}
+canvas{{width:100%;height:280px;display:block}}
+.badge{{display:inline-block;background:#1f6feb33;border:1px solid #1f6feb;color:#58a6ff;
+        border-radius:12px;padding:2px 10px;font-size:.78rem;margin-right:6px}}
+</style>
+</head>
+<body>
+<h1>M51 - Measurement-Induced Phase Transition</h1>
+<p class="subtitle">
+  <span class="badge">L = {L_val}</span>
+  <span class="badge">p_c approx {p_c_est:.3f}</span>
+  <span class="badge">Volume-law to Area-law transition</span>
+</p>
+<div class="panels">
+  {'<div class="panel"><h2>Entanglement entropy S(L/2) vs measurement rate p</h2><canvas id="cvSweep"></canvas></div>' if has_sweep else ''}
+  {'<div class="panel"><h2>Scaling: S(L/2) at p_c vs system size L</h2><canvas id="cvScaling"></canvas></div>' if has_scaling else ''}
+</div>
+<script>
+(function(){{
+const DATA={payload};
+
+function mkCtx(id){{
+  const cv=document.getElementById(id);
+  if(!cv)return null;
+  const dpr=window.devicePixelRatio||1;
+  cv.width=cv.offsetWidth*dpr||640*dpr;
+  cv.height=280*dpr;
+  const ctx=cv.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.W=cv.offsetWidth||640;
+  ctx.H=280;
+  return ctx;
+}}
+
+function drawAxes(ctx,xMin,xMax,yMin,yMax,xLabel,yLabel){{
+  const W=ctx.W,H=ctx.H,pad=44,padR=18,padT=18,padB=40;
+  const pw=W-pad-padR,ph=H-padT-padB;
+  function px(v){{return pad+(v-xMin)/(xMax-xMin)*pw;}}
+  function py(v){{return padT+ph-(v-yMin)/(yMax-yMin)*ph;}}
+  ctx.strokeStyle='#30363d';ctx.lineWidth=1;
+  ctx.strokeRect(pad,padT,pw,ph);
+  ctx.fillStyle='#8b949e';ctx.font='11px sans-serif';
+  for(let i=0;i<=5;i++){{
+    const xv=xMin+(xMax-xMin)*i/5,xp=px(xv);
+    ctx.beginPath();ctx.moveTo(xp,padT+ph);ctx.lineTo(xp,padT+ph+4);ctx.stroke();
+    ctx.textAlign='center';ctx.fillText(xv.toFixed(2),xp,padT+ph+16);
+  }}
+  for(let i=0;i<=4;i++){{
+    const yv=yMin+(yMax-yMin)*i/4,yp=py(yv);
+    ctx.beginPath();ctx.moveTo(pad-4,yp);ctx.lineTo(pad,yp);ctx.stroke();
+    ctx.textAlign='right';ctx.fillText(yv.toFixed(2),pad-6,yp+4);
+  }}
+  ctx.textAlign='center';ctx.fillStyle='#8b949e';ctx.font='12px sans-serif';
+  ctx.fillText(xLabel,W/2,H-4);
+  ctx.save();ctx.translate(12,H/2);ctx.rotate(-Math.PI/2);ctx.fillText(yLabel,0,0);ctx.restore();
+  return {{px,py,pad,padT,pw,ph}};
+}}
+
+function drawSweep(){{
+  const ctx=mkCtx('cvSweep');if(!ctx)return;
+  const pv=DATA.p_vals||[],Sm=DATA.S_mean||[],Ss=DATA.S_std||[];
+  if(!pv.length)return;
+  const W=ctx.W,H=ctx.H;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const yMax=Math.max(...Sm.map((v,i)=>v+(Ss[i]||0)))*1.15||1;
+  const ax=drawAxes(ctx,0,pv[pv.length-1],0,yMax,'measurement rate p','S(L/2)');
+  ctx.fillStyle='rgba(88,166,255,0.12)';
+  ctx.beginPath();
+  pv.forEach((val,i)=>{{const xp=ax.px(val),yp=ax.py(Sm[i]+(Ss[i]||0));i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  for(let i=pv.length-1;i>=0;i--)ctx.lineTo(ax.px(pv[i]),ax.py(Sm[i]-(Ss[i]||0)));
+  ctx.closePath();ctx.fill();
+  ctx.strokeStyle='#58a6ff';ctx.lineWidth=2;
+  ctx.beginPath();
+  pv.forEach((val,i)=>{{const xp=ax.px(val),yp=ax.py(Sm[i]);i===0?ctx.moveTo(xp,yp):ctx.lineTo(xp,yp);}});
+  ctx.stroke();
+  const pc=DATA.p_c_est||0;
+  if(pc>0){{
+    ctx.strokeStyle='#da3633';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(ax.px(pc),ax.padT);ctx.lineTo(ax.px(pc),ax.padT+ax.ph);ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle='#da3633';ctx.font='11px sans-serif';ctx.textAlign='left';
+    ctx.fillText('p_c~'+pc.toFixed(3),ax.px(pc)+4,ax.padT+14);
+  }}
+  ctx.fillStyle='#3fb950';ctx.font='11px sans-serif';ctx.textAlign='center';
+  if(pc>0)ctx.fillText('volume law',ax.px(pc*0.4),ax.padT+30);
+  ctx.fillStyle='#f0883e';
+  if(pc>0&&pc<pv[pv.length-1])ctx.fillText('area law',ax.px((pc+pv[pv.length-1])/2),ax.padT+30);
+}}
+
+function drawScaling(){{
+  const ctx=mkCtx('cvScaling');if(!ctx)return;
+  const Lv=DATA.L_vals_sc||[],Sv=DATA.S_at_pc||[];
+  if(!Lv.length)return;
+  const W=ctx.W,H=ctx.H;
+  ctx.fillStyle='#161b22';ctx.fillRect(0,0,W,H);
+  const lnL=Lv.map(v=>Math.log(v));
+  const yMin=Math.min(...Sv)*0.9||0,yMax=Math.max(...Sv)*1.1||1;
+  const xMin=lnL[0]*0.97,xMax=lnL[lnL.length-1]*1.03;
+  const ax=drawAxes(ctx,xMin,xMax,yMin,yMax,'ln L','S(L/2) at p_c');
+  ctx.fillStyle='#bc8cff';
+  lnL.forEach((lv,i)=>{{ctx.beginPath();ctx.arc(ax.px(lv),ax.py(Sv[i]),4,0,2*Math.PI);ctx.fill();}});
+  if(lnL.length>=2){{
+    const n=lnL.length;let sx=0,sy=0,sxx=0,sxy=0;
+    lnL.forEach((lv,i)=>{{sx+=lv;sy+=Sv[i];sxx+=lv*lv;sxy+=lv*Sv[i];}});
+    const d=n*sxx-sx*sx,slope=Math.abs(d)>1e-10?(n*sxy-sx*sy)/d:0;
+    const ic=(sy-slope*sx)/n;
+    ctx.strokeStyle='#f0883e';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.beginPath();
+    ctx.moveTo(ax.px(lnL[0]),ax.py(slope*lnL[0]+ic));
+    ctx.lineTo(ax.px(lnL[lnL.length-1]),ax.py(slope*lnL[lnL.length-1]+ic));
+    ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#e6edf3';ctx.font='11px sans-serif';ctx.textAlign='left';
+    ctx.fillText('c/3~'+slope.toFixed(3)+'  c~'+(3*slope).toFixed(2),ax.pad+6,ax.padT+16);
+  }}
+}}
+
+drawSweep();drawScaling();
+window.addEventListener('resize',()=>{{drawSweep();drawScaling();}});
+}})();
+</script>
+</body>
+</html>"""
 
 
 # ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────

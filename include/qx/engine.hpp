@@ -93,6 +93,10 @@ SYKResult run_syk(const SYKOptions& opts);
 KondoResult run_kondo(const KondoOptions& opts);
 // Run Luttinger liquid (XXZ chain) — structure factor, Luttinger K, bosonization.
 LLResult run_luttinger(const LLOptions& opts);
+// Run toric code — topological order, anyonic excitations, GS degeneracy.
+ToricResult run_toric(const ToricOptions& opts);
+// Run measurement-induced phase transition — volume-law vs area-law entanglement.
+MIPTResult run_mipt(const MIPTOptions& opts);
 // Run Richardson-Gaudin/BCS pairing — Cooper pairs, condensate fraction, gap equation.
 RGResult run_rg(const RGOptions& opts);
 // Run bipartite entanglement entropy — XX chain area law, TFI critical point, CFT central charge.

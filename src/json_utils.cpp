@@ -2225,6 +2225,8 @@ std::string kondo_result_to_json(const KondoResult& r) {
   return j.dump();
 }
 
+// ── M52: Luttinger Liquid & Bosonization ────────────────────────────────────
+
 LLOptions ll_options_from_json(const std::string& json_str) {
   const json j = json::parse(json_str);
   LLOptions o;
@@ -2257,6 +2259,79 @@ std::string ll_result_to_json(const LLResult& r) {
   j["Sq_pi_delta"]    = r.Sq_pi_delta;
   j["elapsed_ms"]     = r.elapsed_ms;
   j["message"]        = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
+// ── M53: Toric Code / Surface Code ───────────────────────────────────────────
+
+ToricOptions toric_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  ToricOptions o;
+  if (j.contains("L"))        o.L        = j["L"].get<int>();
+  if (j.contains("JA"))       o.JA       = j["JA"].get<double>();
+  if (j.contains("JB"))       o.JB       = j["JB"].get<double>();
+  if (j.contains("h"))        o.h        = j["h"].get<double>();
+  if (j.contains("g"))        o.g        = j["g"].get<double>();
+  if (j.contains("n_h"))      o.n_h      = j["n_h"].get<int>();
+  if (j.contains("h_max"))    o.h_max    = j["h_max"].get<double>();
+  if (j.contains("scenario")) o.scenario = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string toric_result_to_json(const ToricResult& r) {
+  json j;
+  j["ok"]             = r.ok;
+  j["scenario"]       = r.scenario;
+  j["L"]              = r.L;
+  j["JA"]             = r.JA;
+  j["JB"]             = r.JB;
+  j["eigenvalues"]    = r.eigenvalues;
+  j["E0"]             = r.E0;
+  j["gs_degeneracy"]  = r.gs_degeneracy;
+  j["anyonic_gap"]    = r.anyonic_gap;
+  j["entropy_gs"]     = r.entropy_gs;
+  j["h_vals"]         = r.h_vals;
+  j["gap_h"]          = r.gap_h;
+  j["entropy_h"]      = r.entropy_h;
+  j["elapsed_ms"]     = r.elapsed_ms;
+  j["message"]        = r.message;
+  j["engine_version"] = version_string();
+  return j.dump();
+}
+
+// ── M51: Measurement-Induced Phase Transitions (MIPT) ───────────────────────
+
+MIPTOptions mipt_options_from_json(const std::string& json_str) {
+  const json j = json::parse(json_str);
+  MIPTOptions o;
+  if (j.contains("L"))         o.L         = j["L"].get<int>();
+  if (j.contains("p"))         o.p         = j["p"].get<double>();
+  if (j.contains("T_steps"))   o.T_steps   = j["T_steps"].get<int>();
+  if (j.contains("n_p"))       o.n_p       = j["n_p"].get<int>();
+  if (j.contains("p_max"))     o.p_max     = j["p_max"].get<double>();
+  if (j.contains("n_samples")) o.n_samples = j["n_samples"].get<int>();
+  if (j.contains("L_max"))     o.L_max     = j["L_max"].get<int>();
+  if (j.contains("seed"))      o.seed      = j["seed"].get<int>();
+  if (j.contains("scenario"))  o.scenario  = j["scenario"].get<std::string>();
+  return o;
+}
+
+std::string mipt_result_to_json(const MIPTResult& r) {
+  json j;
+  j["ok"]         = r.ok;
+  j["scenario"]   = r.scenario;
+  j["L"]          = r.L;
+  j["p"]          = r.p;
+  j["p_vals"]     = r.p_vals;
+  j["S_mean"]     = r.S_mean;
+  j["S_std"]      = r.S_std;
+  j["p_c_est"]    = r.p_c_est;
+  j["L_vals_sc"]  = r.L_vals_sc;
+  j["S_at_pc"]    = r.S_at_pc;
+  j["elapsed_ms"] = r.elapsed_ms;
+  j["message"]    = r.message;
+  j["engine_version"] = version_string();
   return j.dump();
 }
 

@@ -2059,6 +2059,86 @@ struct LLResult {
   std::string message;
 };
 
+// ── M53: Toric Code / Surface Code ───────────────────────────────────────────
+//
+// Kitaev's toric code on an L×L torus (L=2 or 3, 2L² qubits).
+//   H = -J_A Σ_v A_v  -  J_B Σ_p B_p  -  h Σ X_i  -  g Σ Z_i
+//
+// Topological phase (h=g=0):
+//   Ground state degeneracy = 4 on torus.
+//   Anyonic gap: Δ_e = 2J_A,  Δ_m = 2J_B.
+//   Topological entanglement entropy S_topo = -2 ln 2 (from TEE formula).
+//
+// Scenarios: "spectrum" | "perturb" | "both"
+
+struct ToricOptions {
+  int    L{2};             // torus size L (2 or 3; N_qubits = 2*L²)
+  double JA{1.0};          // vertex stabilizer coupling
+  double JB{1.0};          // plaquette stabilizer coupling
+  double h{0.0};           // transverse X perturbation
+  double g{0.0};           // longitudinal Z perturbation
+  int    n_h{20};          // perturbation sweep points
+  double h_max{1.0};       // max h for sweep (h_c ≈ 0.33 for L=inf)
+  std::string scenario{"both"};  // "spectrum"|"perturb"|"both"
+};
+
+struct ToricResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double JA{0}, JB{0};
+  // Fixed-parameter spectrum (first 20 eigenvalues)
+  std::vector<double> eigenvalues;
+  double E0{0};
+  int    gs_degeneracy{0};
+  double anyonic_gap{0};
+  double entropy_gs{0};      // half-chain entanglement entropy of GS
+  // Perturbation sweep: gap and entropy vs h
+  std::vector<double> h_vals, gap_h, entropy_h;
+  double elapsed_ms{0};
+  std::string message;
+};
+
+// ── M51: Measurement-Induced Phase Transitions (MIPT) ────────────────────────
+//
+// 1D random quantum circuit: brickwork Haar-random 2-qubit gates +
+// single-qubit projective measurements at rate p.
+// State vector simulation: L ≤ 12 qubits (dim = 4096).
+//
+// Phases:
+//   p < p_c ≈ 0.16:  volume law  S ~ (L/2) ln 2
+//   p > p_c:          area law    S ~ const
+//   p ≈ p_c:          critical    S ~ (c/3) ln L
+//
+// Scenarios: "sweep" | "scaling" | "both"
+
+struct MIPTOptions {
+  int    L{10};           // chain length (even, 2 ≤ L ≤ 12)
+  double p{0.16};         // measurement rate (used for scaling scenario)
+  int    T_steps{0};      // circuit depth (0 = auto: max(4L, 40))
+  int    n_p{25};         // points in p sweep
+  double p_max{0.5};      // max measurement rate for sweep
+  int    n_samples{20};   // disorder realizations per data point
+  int    L_max{12};       // max L for scaling study (capped at 12)
+  int    seed{42};        // RNG seed
+  std::string scenario{"both"};  // "sweep"|"scaling"|"both"
+};
+
+struct MIPTResult {
+  bool ok{false};
+  std::string scenario;
+  int    L{0};
+  double p{0};
+  // p sweep at fixed L: mean S and std dev
+  std::vector<double> p_vals, S_mean, S_std;
+  double p_c_est{0};          // estimated critical point (max |dS/dp|)
+  // Scaling at p_c: S(L/2) vs L
+  std::vector<int>    L_vals_sc;
+  std::vector<double> S_at_pc;
+  double elapsed_ms{0};
+  std::string message;
+};
+
 // ── M50: Bipartite Entanglement Entropy & Area Law ───────────────────────────
 //
 // Two complementary models:
