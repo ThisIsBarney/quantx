@@ -229,13 +229,22 @@ class IBMQuantumBackend:
             isa_circuit = pm.run(qc)
             sampler = Sampler(mode=self._backend)
             job = sampler.run([isa_circuit], shots=n_shots)
+            # Capture job_id before blocking on result() so it's always available
+            job_id: str = getattr(job, "job_id", None) or ""
+            if callable(job_id):  # some versions return a method
+                try:
+                    job_id = job.job_id()
+                except Exception:
+                    job_id = ""
             ibm_result = job.result()
         except Exception as exc:
             raise IBMConnectorError(f"IBM Quantum job failed: {exc}") from exc
 
-        return self._convert_result(ibm_result, n_shots)
+        return self._convert_result(ibm_result, n_shots, job_id=job_id)
 
-    def _convert_result(self, ibm_result: Any, shots: int) -> dict[str, Any]:
+    def _convert_result(
+        self, ibm_result: Any, shots: int, job_id: str = ""
+    ) -> dict[str, Any]:
         """Convert a Qiskit SamplerV2 result to a QuantX-compatible dict."""
         try:
             pub_result = ibm_result[0]
@@ -252,14 +261,29 @@ class IBMQuantumBackend:
             total = sum(counts_raw.values()) or shots
             probabilities = {k: v / total for k, v in counts_raw.items()}
 
+            # Build a machine-readable metadata dict from the IBM result object
+            # rather than stringifying it, so callers can extract fields reliably.
+            raw_metadata: dict[str, Any] = {}
+            for attr in ("metadata", "header", "status", "date", "backend_name",
+                         "backend_version", "qobj_id", "job_id", "time_taken"):
+                val = getattr(ibm_result, attr, None)
+                if val is not None:
+                    try:
+                        # Only include JSON-serialisable scalar/dict values
+                        import json as _json
+                        _json.dumps(val)
+                        raw_metadata[attr] = val
+                    except (TypeError, ValueError):
+                        raw_metadata[attr] = str(val)
+
             return {
                 "ok": True,
                 "shots": shots,
                 "counts": counts_raw,
                 "probabilities": probabilities,
                 "backend": self._backend_name,
-                "ibm_job_id": getattr(ibm_result, "job_id", ""),
-                "raw_ibm_result": str(ibm_result),
+                "ibm_job_id": job_id,
+                "raw_ibm_result": raw_metadata,
             }
         except Exception as exc:
             raise IBMConnectorError(f"failed to parse IBM result: {exc}") from exc
