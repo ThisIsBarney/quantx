@@ -76,6 +76,11 @@ async def run_solver(solver: str, request: Request) -> Any:
         raise HTTPException(status_code=400, detail={"ok": False, "error_code": exc.code, "error": str(exc)})
     except Exception as exc:
         raise HTTPException(status_code=500, detail={"ok": False, "error": str(exc)})
+    # P1: engine wraps failures into {"ok": false, ...} without raising — translate to 4xx/5xx
+    if isinstance(result, dict) and result.get("ok") is False:
+        error_kind = result.get("error_kind", "")
+        status = 400 if error_kind in ("circuit", "validation") else 422
+        raise HTTPException(status_code=status, detail=result)
     return result
 
 
@@ -86,6 +91,8 @@ async def run_simulation(request: Request) -> Any:
         body = await request.json()
     except Exception:
         body = {}
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail={"ok": False, "error": "request body must be a JSON object"})
     problem = body.get("problem", body)
     options = body.get("options", {})
     try:

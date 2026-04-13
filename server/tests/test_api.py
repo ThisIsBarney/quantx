@@ -46,12 +46,25 @@ def test_solve_known_solver():
     assert r.json()["ok"] is True
 
 
-def test_solve_unknown_solver_returns_500():
-    _mock_engine.run_solver.side_effect = Exception("unknown solver: bad_solver")
+def test_solve_exception_returns_500():
+    _mock_engine.run_solver.side_effect = Exception("unexpected internal error")
     r = client.post("/solve/bad_solver", json={})
     assert r.status_code == 500
     _mock_engine.run_solver.side_effect = None
     _mock_engine.run_solver.return_value = {"ok": True, "E0": -1.0}
+
+
+def test_solve_engine_error_json_returns_4xx():
+    """Engine ok=False result (e.g. unknown solver path) must not return 200."""
+    _mock_engine.run_solver.return_value = {"ok": False, "error_kind": "runtime", "error": "unknown solver: bad"}
+    r = client.post("/solve/bad_solver", json={})
+    assert r.status_code in (400, 422)
+    _mock_engine.run_solver.return_value = {"ok": True, "E0": -1.0}
+
+
+def test_run_simulation_non_object_body_returns_400():
+    r = client.post("/run", content=b"[]", headers={"content-type": "application/json"})
+    assert r.status_code == 400
 
 
 def test_run_simulation():
