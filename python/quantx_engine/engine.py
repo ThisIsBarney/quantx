@@ -469,7 +469,7 @@ class Engine:
     import asyncio
     return await asyncio.to_thread(self.run_solver, solver, options)
 
-  # --- Typed convenience methods for all 38 solvers ---
+  # --- Typed convenience methods for all 37 solvers ---
 
   def run_vqe(self, options: dict | None = None) -> dict:
     """Run variational eigensolver (VQE) / QAOA optimization."""
@@ -619,7 +619,7 @@ class Engine:
     """Run bipartite entanglement entropy."""
     return self.run_solver("entanglement", options)
 
-  # --- Async variants for all 38 solvers ---
+  # --- Async variants for all 37 solvers ---
 
   async def run_vqe_async(self, options: dict | None = None) -> dict:
     """Async variant of run_vqe."""
