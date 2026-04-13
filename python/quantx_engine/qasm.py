@@ -131,7 +131,7 @@ def _tokenize(src: str) -> list[str]:
 class _Parser:
     """Stateful parser that converts a token list into a QuantX circuit dict."""
 
-    def __init__(self, tokens: list[str]):
+    def __init__(self, tokens: list[str], parameter_map: dict[str, float] | None = None):
         self._tokens = tokens
         self._pos = 0
         # Register tables: name → (start_index, size)
@@ -141,6 +141,7 @@ class _Parser:
         self._total_cbits = 0
         self._ops: list[dict[str, Any]] = []
         self._shots = 0
+        self._parameter_map: dict[str, float] = dict(parameter_map or {})
 
     # ── Token access ─────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ class _Parser:
                 elif t == "," and depth == 0:
                     break
                 expr_toks.append(self._consume())
-            params.append(_eval_expr("".join(expr_toks)))
+            params.append(_eval_expr("".join(expr_toks), self._parameter_map or None))
             if self._peek() == ",":
                 self._consume()
         self._expect(")")
@@ -356,8 +357,14 @@ class _Parser:
     # ── Gate/measurement parsers ──────────────────────────────────────────────
 
     def _parse_reset(self) -> None:
+        """Consume a reset statement.
+
+        The QuantX gate-model circuit backend does not support mid-circuit qubit
+        reset. Reset statements are intentionally dropped (not emitted as ops)
+        so that programs using reset can still be partially transpiled.  Callers
+        that require strict semantics should check for this case themselves.
+        """
         self._consume()  # reset
-        # Just consume and ignore — QuantX circuit backend doesn't have a reset gate
         self._skip_until_semicolon()
 
     def _parse_measure_stmt(self) -> None:
@@ -370,31 +377,31 @@ class _Parser:
         self._ops.append({"name": "MEASURE", "targets": [q], "controls": [c]})
 
     def _parse_gate_or_assignment(self) -> None:
-        """Parse a gate application or classical assignment (measure)."""
+        """Parse a gate application or classical assignment (c[i] = measure q[i];)."""
         tok = self._peek()
         if tok is None:
             return
 
-        # Classical assignment: c[0] = measure q[0];
-        # Pattern: ident optionally [n] = measure qubitref ;
+        # Classical assignment lookahead: c[0] = measure q[0];
+        # Save position before consuming; only backtrack when '=' is absent
+        # (not on real errors like undefined register — those should propagate).
         if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", tok):
-            # Look ahead for '=' to detect assignment
             saved_pos = self._pos
-            try:
-                name, idx = self._parse_reg_ref()
-                if self._peek() == "=":
-                    self._consume()  # =
-                    kw = self._consume()
-                    if kw == "measure":
-                        q = self._parse_qubit_ref()
-                        self._expect(";")
-                        c = self._cbit_index(name, idx)
-                        self._ops.append({"name": "MEASURE", "targets": [q], "controls": [c]})
-                        return
-                    else:
-                        raise ParseError(f"unsupported assignment: {name} = {kw} ...")
-            except ParseError:
-                # Not an assignment — backtrack and try as gate
+            name, idx = self._parse_reg_ref()
+            if self._peek() == "=":
+                # Committed to the assignment path — errors propagate from here
+                self._consume()  # =
+                kw = self._consume()
+                if kw == "measure":
+                    q = self._parse_qubit_ref()
+                    self._expect(";")
+                    c = self._cbit_index(name, idx)
+                    self._ops.append({"name": "MEASURE", "targets": [q], "controls": [c]})
+                    return
+                else:
+                    raise ParseError(f"unsupported assignment: {name} = {kw}")
+            else:
+                # Not an assignment — restore position and parse as gate
                 self._pos = saved_pos
 
         # Gate application
@@ -471,7 +478,7 @@ def parse_qasm_to_circuit(
     """
     clean = _strip_comments(qasm_source)
     tokens = _tokenize(clean)
-    parser = _Parser(tokens)
+    parser = _Parser(tokens, parameter_map=parameter_map)
     circuit = parser.parse()
     circuit["shots"] = shots
     circuit["seed"] = seed

@@ -170,6 +170,37 @@ def test_parameter_map_in_output():
     assert circuit["parameter_map"]["theta"] == 1.5
 
 
+def test_parameter_map_used_in_gate_eval():
+    """parameter_map values should substitute in gate parameter expressions."""
+    src = "OPENQASM 3.0;\nqubit q;\nrx(1.5707963267948966) q;"
+    circuit = parse_qasm_to_circuit(src)
+    assert abs(circuit["operations"][0]["params"][0] - math.pi / 2) < 1e-9
+
+
+def test_normal_gate_after_classical_register():
+    """P0 regression: gate h q[0] must not be dropped when preceded by creg decl."""
+    src = """
+    OPENQASM 3.0;
+    qubit[2] q;
+    bit[2] c;
+    h q[0];
+    cx q[0], q[1];
+    """
+    circuit = parse_qasm_to_circuit(src)
+    ops = circuit["operations"]
+    # Both gates must be present — P0 bug would drop h
+    assert len(ops) == 2
+    assert ops[0]["name"] == "H"
+    assert ops[1]["name"] == "CNOT"
+
+
+def test_assignment_undefined_creg_raises():
+    """P1: real assignment errors (undefined creg) should propagate, not be swallowed."""
+    src = "OPENQASM 3.0;\nqubit q;\nc[0] = measure q[0];"  # c not declared
+    with pytest.raises(ParseError):
+        parse_qasm_to_circuit(src)
+
+
 def test_grover_diffuser_structure():
     """3-qubit circuit with multiple gate types parses cleanly."""
     src = """
