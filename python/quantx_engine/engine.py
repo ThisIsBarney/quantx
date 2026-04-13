@@ -127,6 +127,28 @@ class Engine:
     """
     return self.run_circuit(self._from_cirq_like(request), options)
 
+  def parse_qasm(self, qasm_source: str, shots: int = 0, seed: int = 42,
+                 parameter_map: dict | None = None) -> dict:
+    """Parse an OpenQASM 3.0 string and return a QuantX native circuit dict.
+
+    Pure-Python transpiler — no native library call. The returned dict can be
+    passed directly to run_circuit().
+    """
+    from quantx_engine.qasm import parse_qasm_to_circuit
+    return parse_qasm_to_circuit(qasm_source, shots=shots, seed=seed,
+                                  parameter_map=parameter_map)
+
+  def run_qasm(self, qasm_source: str, options: dict | None = None,
+               shots: int = 0, seed: int = 42,
+               parameter_map: dict | None = None) -> dict:
+    """Parse an OpenQASM 3.0 string and execute it through the native circuit backend.
+
+    Equivalent to engine.run_circuit(engine.parse_qasm(qasm_source, ...), options).
+    """
+    circuit = self.parse_qasm(qasm_source, shots=shots, seed=seed,
+                               parameter_map=parameter_map)
+    return self.run_circuit(circuit, options)
+
   def run_circuit_checked(self, circuit: dict, options: dict | None = None) -> dict:
     """Run a circuit request and raise CircuitError on an unsupported result."""
     result = self.run_circuit(circuit, options)
