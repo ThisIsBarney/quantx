@@ -11,6 +11,7 @@ from .noise import (
     CompositeNoise,
     NoiseModelError,
 )
+from .ibm import IBMQuantumBackend, IBMConnectorError, circuit_to_qasm3
 
 __all__ = [
     "CircuitError",
@@ -24,4 +25,7 @@ __all__ = [
     "ReadoutNoise",
     "CompositeNoise",
     "NoiseModelError",
+    "IBMQuantumBackend",
+    "IBMConnectorError",
+    "circuit_to_qasm3",
 ]
