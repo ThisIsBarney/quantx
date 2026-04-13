@@ -56,11 +56,17 @@ def test_thermal_relaxation_gamma_lambda():
     expected_gamma = 1.0 - math.exp(-t / T1)
     expected_lambda = 1.0 - math.exp(-t / T2)
     d = n.to_dict()
-    assert abs(d["amplitude_damping_gamma"] - expected_gamma) < 1e-12
-    assert abs(d["dephasing_lambda"] - expected_lambda) < 1e-12
-    assert d["T1_ns"] == T1
-    assert d["T2_ns"] == T2
-    assert d["t_gate_ns"] == t
+    # Active backend key: t1_decay via noise sub-dict
+    assert d["noise"]["kind"] == "t1_decay"
+    assert d["noise"]["T1"] == T1
+    assert d["noise"]["dt"] == t
+    # Metadata for informational use
+    meta = d["noise_metadata"]
+    assert abs(meta["gamma"] - expected_gamma) < 1e-12
+    assert abs(meta["lambda_dephasing"] - expected_lambda) < 1e-12
+    assert meta["T1_ns"] == T1
+    assert meta["T2_ns"] == T2
+    assert meta["t_gate_ns"] == t
 
 
 def test_thermal_relaxation_t2_equals_2t1():
@@ -87,12 +93,13 @@ def test_thermal_relaxation_invalid_times():
 
 def test_readout_valid():
     n = ReadoutNoise(0.02)
-    assert n.to_dict() == {"readout_error_prob": 0.02}
+    d = n.to_dict()
+    assert d == {"noise": {"kind": "bit_flip", "prob": 0.02}}
 
 
 def test_readout_boundary():
-    assert ReadoutNoise(0.0).to_dict()["readout_error_prob"] == 0.0
-    assert ReadoutNoise(0.5).to_dict()["readout_error_prob"] == 0.5
+    assert ReadoutNoise(0.0).to_dict()["noise"]["prob"] == 0.0
+    assert ReadoutNoise(0.5).to_dict()["noise"]["prob"] == 0.5
 
 
 def test_readout_invalid():
@@ -116,14 +123,18 @@ def test_composite_plus_operator():
     assert isinstance(n, CompositeNoise)
     d = n.to_dict()
     assert "depolarizing_prob" in d
-    assert "readout_error_prob" in d
+    # ReadoutNoise emits {"noise": {"kind": "bit_flip", ...}}
+    assert "noise" in d
+    assert d["noise"]["kind"] == "bit_flip"
 
 
 def test_composite_chaining():
     n = DepolarizingNoise(0.01) + AmplitudeDampingNoise(0.05) + ReadoutNoise(0.02)
     assert isinstance(n, CompositeNoise)
     d = n.to_dict()
-    assert len(d) == 3
+    assert "depolarizing_prob" in d
+    assert "amplitude_damping_gamma" in d
+    assert "noise" in d  # ReadoutNoise wins (last one)
 
 
 def test_composite_empty_raises():
@@ -138,8 +149,8 @@ def test_composite_invalid_model_raises():
 
 # ── Integration: to_dict used as circuit options ──────────────────────────────
 
-def test_noise_dict_suitable_for_circuit_options():
-    """Ensure to_dict() output has only JSON-serialisable values."""
+def test_noise_dict_json_serialisable():
+    """Ensure to_dict() output is fully JSON-serialisable (including nested dicts)."""
     import json
     models = [
         DepolarizingNoise(0.01),
@@ -150,6 +161,4 @@ def test_noise_dict_suitable_for_circuit_options():
     ]
     for m in models:
         d = m.to_dict()
-        json.dumps(d)  # must not raise
-        for v in d.values():
-            assert isinstance(v, (int, float, str, bool))
+        json.dumps(d)  # must not raise — verifies full serializability

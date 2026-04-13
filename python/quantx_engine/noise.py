@@ -4,16 +4,22 @@ Noise model library for the QuantX engine.
 Provides structured noise configuration objects that generate the JSON noise
 payloads accepted by Engine.run_circuit() and Engine.run_qasm().
 
-Supported noise models:
-- DepolarizingNoise     — uniform depolarizing channel p on all qubits
-- AmplitudeDampingNoise — T1 amplitude damping γ on all qubits
-- ThermalRelaxationNoise— combined T1/T2 relaxation (converts to γ/λ fields)
-- CompositeNoise        — combine multiple noise models (fields merged)
-- ReadoutNoise          — symmetric readout bit-flip error on measurement
+Noise fields are placed **on the circuit dict** (not in options):
 
-Usage:
     from quantx_engine.noise import DepolarizingNoise
-    engine.run_circuit(circuit, options={"noise": DepolarizingNoise(0.01).to_dict()})
+    circuit = engine.parse_qasm(src, shots=1000)
+    circuit.update(DepolarizingNoise(0.01).to_dict())   # add noise to circuit
+    engine.run_circuit(circuit)
+
+Supported noise models and their native backend mapping:
+- DepolarizingNoise     — emits top-level ``depolarizing_prob`` (fully supported)
+- AmplitudeDampingNoise — emits top-level ``amplitude_damping_gamma`` (fully supported)
+- ThermalRelaxationNoise— emits ``noise={kind:t1_decay,...}`` for T1; T2 dephasing
+                          is stored in ``noise_metadata`` (informational only — native
+                          backend does not yet apply T2 dephasing)
+- ReadoutNoise          — emits ``noise={kind:bit_flip,prob:p}`` (supported as
+                          bit-flip channel, not measurement-specific readout)
+- CompositeNoise        — combine multiple noise models (fields merged)
 """
 from __future__ import annotations
 
@@ -103,9 +109,15 @@ class AmplitudeDampingNoise(NoiseModel):
 class ThermalRelaxationNoise(NoiseModel):
     """Combined T1/T2 thermal relaxation noise model.
 
-    Computes amplitude damping γ = 1 − exp(−t_gate / T1) and dephasing
-    λ = 1 − exp(−t_gate / T2) from physical relaxation times T1, T2
-    and the gate duration t_gate.
+    Computes amplitude damping γ = 1 − exp(−t_gate / T1) from the longitudinal
+    relaxation time T1 and gate duration t_gate.  The T2 dephasing parameter
+    λ = 1 − exp(−t_gate / T2) is computed and stored in the output dict under
+    ``noise_metadata`` for informational purposes, but is **not** currently
+    consumed by the native circuit backend (which supports T1 amplitude damping
+    only via the ``t1_decay`` noise kind).
+
+    ``to_dict()`` emits ``{"noise": {"kind": "t1_decay", "T1": T1, "dt": t_gate},
+    "noise_metadata": {...}}`` — only the ``noise`` sub-dict is executed.
 
     The constraint T2 ≤ 2·T1 (Lindblad bound) is enforced.
 
@@ -158,24 +170,34 @@ class ThermalRelaxationNoise(NoiseModel):
         return 1.0 - math.exp(-self._t_gate / self._T2)
 
     def to_dict(self) -> dict[str, Any]:
+        # "noise" sub-dict is parsed by the native backend (t1_decay kind is supported)
+        # "noise_metadata" carries T2 info for user reference — not executed by backend
         return {
-            "amplitude_damping_gamma": self.gamma,
-            "dephasing_lambda": self.lambda_dephasing,
-            "T1_ns": self._T1,
-            "T2_ns": self._T2,
-            "t_gate_ns": self._t_gate,
+            "noise": {"kind": "t1_decay", "T1": self._T1, "dt": self._t_gate},
+            "noise_metadata": {
+                "T1_ns": self._T1,
+                "T2_ns": self._T2,
+                "t_gate_ns": self._t_gate,
+                "gamma": self.gamma,
+                "lambda_dephasing": self.lambda_dephasing,
+                "note": "T2 dephasing not yet applied by native backend",
+            },
         }
 
 
 class ReadoutNoise(NoiseModel):
-    """Symmetric readout bit-flip noise applied during measurement.
+    """Symmetric bit-flip noise modelling readout errors.
 
-    Each measured bit is flipped with probability p_readout independently.
+    The native circuit backend implements this as a ``bit_flip`` channel
+    (``noise = {"kind": "bit_flip", "prob": p}``), which applies a bit-flip
+    with probability p after each measurement gate.  This is an approximation:
+    a true readout error model would be measurement-specific, but ``bit_flip``
+    is the closest currently-supported mechanism.
 
     Parameters
     ----------
     prob:
-        Readout error probability per measurement bit, in [0, 0.5].
+        Bit-flip (readout error) probability per measurement, in [0, 0.5].
         Values above 0.5 are anti-correlated and should be modeled differently.
     """
 
@@ -192,7 +214,8 @@ class ReadoutNoise(NoiseModel):
         return self._prob
 
     def to_dict(self) -> dict[str, Any]:
-        return {"readout_error_prob": self._prob}
+        # "bit_flip" is the supported noise kind in the native backend
+        return {"noise": {"kind": "bit_flip", "prob": self._prob}}
 
 
 class CompositeNoise(NoiseModel):
