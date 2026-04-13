@@ -47,6 +47,10 @@ class Engine:
     self._lib.qx_version.restype = c_char_p
     self._lib.qx_free_string.argtypes = [c_void_p]
     self._lib.qx_free_string.restype = None
+    self._lib.qx_run_solver.argtypes = [c_char_p, c_char_p]
+    self._lib.qx_run_solver.restype = c_void_p
+    self._lib.qx_list_solvers.argtypes = []
+    self._lib.qx_list_solvers.restype = c_void_p
 
   def run(self, problem: dict, options: dict | None = None) -> dict:
     """Run a Hamiltonian simulation request and return the decoded JSON result."""
@@ -434,6 +438,373 @@ class Engine:
     if "clbits" in request:
       out["clbits"] = int(request["clbits"])
     return out
+
+  def run_solver(self, solver: str, options: dict | None = None) -> dict:
+    """Run a named physics solver by key with optional JSON-serializable options dict."""
+    opts = options or {}
+    s = solver.encode("utf-8")
+    o = json.dumps(opts).encode("utf-8")
+    ptr = self._lib.qx_run_solver(s, o)
+    if not ptr:
+      raise RuntimeError("native call returned null pointer")
+    try:
+      raw = ctypes.cast(ptr, c_char_p).value.decode("utf-8")
+      return json.loads(raw)
+    finally:
+      self._lib.qx_free_string(ptr)
+
+  def list_solvers(self) -> list[str]:
+    """Return the list of all available solver names supported by the native engine."""
+    ptr = self._lib.qx_list_solvers()
+    if not ptr:
+      raise RuntimeError("native call returned null pointer")
+    try:
+      raw = ctypes.cast(ptr, c_char_p).value.decode("utf-8")
+      return json.loads(raw)
+    finally:
+      self._lib.qx_free_string(ptr)
+
+  async def run_solver_async(self, solver: str, options: dict | None = None) -> dict:
+    """Async variant of run_solver — runs in a thread pool to avoid blocking the event loop."""
+    import asyncio
+    return await asyncio.to_thread(self.run_solver, solver, options)
+
+  # --- Typed convenience methods for all 37 solvers ---
+
+  def run_vqe(self, options: dict | None = None) -> dict:
+    """Run variational eigensolver (VQE) / QAOA optimization."""
+    return self.run_solver("vqe", options)
+
+  def run_qpe(self, options: dict | None = None) -> dict:
+    """Run Quantum Phase Estimation."""
+    return self.run_solver("qpe", options)
+
+  def run_qec(self, options: dict | None = None) -> dict:
+    """Run Quantum Error Correction Monte Carlo."""
+    return self.run_solver("qec", options)
+
+  def run_qfield(self, options: dict | None = None) -> dict:
+    """Run Schwinger model (1+1D QED)."""
+    return self.run_solver("qfield", options)
+
+  def run_phi4(self, options: dict | None = None) -> dict:
+    """Run phi4 scalar quantum field theory."""
+    return self.run_solver("phi4", options)
+
+  def run_hubbard(self, options: dict | None = None) -> dict:
+    """Run 1D Hubbard model (Mott insulator)."""
+    return self.run_solver("hubbard", options)
+
+  def run_floquet(self, options: dict | None = None) -> dict:
+    """Run Floquet kicked-Ising model."""
+    return self.run_solver("floquet", options)
+
+  def run_heisenberg(self, options: dict | None = None) -> dict:
+    """Run 1D XXZ Heisenberg spin chain."""
+    return self.run_solver("heisenberg", options)
+
+  def run_bose_hubbard(self, options: dict | None = None) -> dict:
+    """Run Bose-Hubbard model."""
+    return self.run_solver("bose_hubbard", options)
+
+  def run_tfi(self, options: dict | None = None) -> dict:
+    """Run Transverse-Field Ising model."""
+    return self.run_solver("tfi", options)
+
+  def run_ssh(self, options: dict | None = None) -> dict:
+    """Run SSH topological insulator."""
+    return self.run_solver("ssh", options)
+
+  def run_kitaev(self, options: dict | None = None) -> dict:
+    """Run Kitaev chain (p-wave topological superconductor)."""
+    return self.run_solver("kitaev", options)
+
+  def run_anderson(self, options: dict | None = None) -> dict:
+    """Run Anderson localization."""
+    return self.run_solver("anderson", options)
+
+  def run_chern(self, options: dict | None = None) -> dict:
+    """Run 2D Chern insulator (Qi-Wu-Zhang)."""
+    return self.run_solver("chern", options)
+
+  def run_hofstadter(self, options: dict | None = None) -> dict:
+    """Run Hofstadter butterfly."""
+    return self.run_solver("hofstadter", options)
+
+  def run_mbl(self, options: dict | None = None) -> dict:
+    """Run Many-Body Localization."""
+    return self.run_solver("mbl", options)
+
+  def run_spectral(self, options: dict | None = None) -> dict:
+    """Run spectral function / dynamical structure factor."""
+    return self.run_solver("spectral", options)
+
+  def run_tenfold(self, options: dict | None = None) -> dict:
+    """Run 10-fold way topological classification."""
+    return self.run_solver("tenfold", options)
+
+  def run_second_chern(self, options: dict | None = None) -> dict:
+    """Run second Chern number (4D Quantum Hall)."""
+    return self.run_solver("second_chern", options)
+
+  def run_wilson_loop(self, options: dict | None = None) -> dict:
+    """Run Wilson loop / Wannier Charge Center."""
+    return self.run_solver("wilson_loop", options)
+
+  def run_edge_states(self, options: dict | None = None) -> dict:
+    """Run edge states / surface spectrum."""
+    return self.run_solver("edge_states", options)
+
+  def run_haldane(self, options: dict | None = None) -> dict:
+    """Run Haldane model (Quantum Anomalous Hall)."""
+    return self.run_solver("haldane", options)
+
+  def run_weyl(self, options: dict | None = None) -> dict:
+    """Run Weyl semimetal / Surface Fermi Arcs."""
+    return self.run_solver("weyl", options)
+
+  def run_fu_kane(self, options: dict | None = None) -> dict:
+    """Run Fu-Kane superconductor."""
+    return self.run_solver("fu_kane", options)
+
+  def run_lutchyn_oreg(self, options: dict | None = None) -> dict:
+    """Run Lutchyn-Oreg Majorana nanowire."""
+    return self.run_solver("lutchyn_oreg", options)
+
+  def run_kitaev_honeycomb(self, options: dict | None = None) -> dict:
+    """Run Kitaev honeycomb model."""
+    return self.run_solver("kitaev_honeycomb", options)
+
+  def run_bbh(self, options: dict | None = None) -> dict:
+    """Run BBH quadrupole insulator."""
+    return self.run_solver("bbh", options)
+
+  def run_floquet_topo(self, options: dict | None = None) -> dict:
+    """Run Floquet topological insulator."""
+    return self.run_solver("floquet_topo", options)
+
+  def run_non_herm(self, options: dict | None = None) -> dict:
+    """Run non-Hermitian topology."""
+    return self.run_solver("non_herm", options)
+
+  def run_aah(self, options: dict | None = None) -> dict:
+    """Run Aubry-Andre-Harper quasicrystal."""
+    return self.run_solver("aah", options)
+
+  def run_syk(self, options: dict | None = None) -> dict:
+    """Run Sachdev-Ye-Kitaev model."""
+    return self.run_solver("syk", options)
+
+  def run_kondo(self, options: dict | None = None) -> dict:
+    """Run Kondo/SIAM model."""
+    return self.run_solver("kondo", options)
+
+  def run_luttinger(self, options: dict | None = None) -> dict:
+    """Run Luttinger liquid (XXZ chain)."""
+    return self.run_solver("luttinger", options)
+
+  def run_toric(self, options: dict | None = None) -> dict:
+    """Run toric code / surface code."""
+    return self.run_solver("toric", options)
+
+  def run_mipt(self, options: dict | None = None) -> dict:
+    """Run measurement-induced phase transition."""
+    return self.run_solver("mipt", options)
+
+  def run_rg(self, options: dict | None = None) -> dict:
+    """Run Richardson-Gaudin/BCS pairing."""
+    return self.run_solver("rg", options)
+
+  def run_entanglement(self, options: dict | None = None) -> dict:
+    """Run bipartite entanglement entropy."""
+    return self.run_solver("entanglement", options)
+
+  # --- Async variants for all 37 solvers ---
+
+  async def run_vqe_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_vqe."""
+    import asyncio
+    return await asyncio.to_thread(self.run_vqe, options)
+
+  async def run_qpe_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_qpe."""
+    import asyncio
+    return await asyncio.to_thread(self.run_qpe, options)
+
+  async def run_qec_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_qec."""
+    import asyncio
+    return await asyncio.to_thread(self.run_qec, options)
+
+  async def run_qfield_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_qfield."""
+    import asyncio
+    return await asyncio.to_thread(self.run_qfield, options)
+
+  async def run_phi4_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_phi4."""
+    import asyncio
+    return await asyncio.to_thread(self.run_phi4, options)
+
+  async def run_hubbard_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_hubbard."""
+    import asyncio
+    return await asyncio.to_thread(self.run_hubbard, options)
+
+  async def run_floquet_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_floquet."""
+    import asyncio
+    return await asyncio.to_thread(self.run_floquet, options)
+
+  async def run_heisenberg_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_heisenberg."""
+    import asyncio
+    return await asyncio.to_thread(self.run_heisenberg, options)
+
+  async def run_bose_hubbard_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_bose_hubbard."""
+    import asyncio
+    return await asyncio.to_thread(self.run_bose_hubbard, options)
+
+  async def run_tfi_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_tfi."""
+    import asyncio
+    return await asyncio.to_thread(self.run_tfi, options)
+
+  async def run_ssh_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_ssh."""
+    import asyncio
+    return await asyncio.to_thread(self.run_ssh, options)
+
+  async def run_kitaev_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_kitaev."""
+    import asyncio
+    return await asyncio.to_thread(self.run_kitaev, options)
+
+  async def run_anderson_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_anderson."""
+    import asyncio
+    return await asyncio.to_thread(self.run_anderson, options)
+
+  async def run_chern_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_chern."""
+    import asyncio
+    return await asyncio.to_thread(self.run_chern, options)
+
+  async def run_hofstadter_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_hofstadter."""
+    import asyncio
+    return await asyncio.to_thread(self.run_hofstadter, options)
+
+  async def run_mbl_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_mbl."""
+    import asyncio
+    return await asyncio.to_thread(self.run_mbl, options)
+
+  async def run_spectral_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_spectral."""
+    import asyncio
+    return await asyncio.to_thread(self.run_spectral, options)
+
+  async def run_tenfold_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_tenfold."""
+    import asyncio
+    return await asyncio.to_thread(self.run_tenfold, options)
+
+  async def run_second_chern_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_second_chern."""
+    import asyncio
+    return await asyncio.to_thread(self.run_second_chern, options)
+
+  async def run_wilson_loop_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_wilson_loop."""
+    import asyncio
+    return await asyncio.to_thread(self.run_wilson_loop, options)
+
+  async def run_edge_states_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_edge_states."""
+    import asyncio
+    return await asyncio.to_thread(self.run_edge_states, options)
+
+  async def run_haldane_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_haldane."""
+    import asyncio
+    return await asyncio.to_thread(self.run_haldane, options)
+
+  async def run_weyl_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_weyl."""
+    import asyncio
+    return await asyncio.to_thread(self.run_weyl, options)
+
+  async def run_fu_kane_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_fu_kane."""
+    import asyncio
+    return await asyncio.to_thread(self.run_fu_kane, options)
+
+  async def run_lutchyn_oreg_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_lutchyn_oreg."""
+    import asyncio
+    return await asyncio.to_thread(self.run_lutchyn_oreg, options)
+
+  async def run_kitaev_honeycomb_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_kitaev_honeycomb."""
+    import asyncio
+    return await asyncio.to_thread(self.run_kitaev_honeycomb, options)
+
+  async def run_bbh_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_bbh."""
+    import asyncio
+    return await asyncio.to_thread(self.run_bbh, options)
+
+  async def run_floquet_topo_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_floquet_topo."""
+    import asyncio
+    return await asyncio.to_thread(self.run_floquet_topo, options)
+
+  async def run_non_herm_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_non_herm."""
+    import asyncio
+    return await asyncio.to_thread(self.run_non_herm, options)
+
+  async def run_aah_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_aah."""
+    import asyncio
+    return await asyncio.to_thread(self.run_aah, options)
+
+  async def run_syk_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_syk."""
+    import asyncio
+    return await asyncio.to_thread(self.run_syk, options)
+
+  async def run_kondo_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_kondo."""
+    import asyncio
+    return await asyncio.to_thread(self.run_kondo, options)
+
+  async def run_luttinger_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_luttinger."""
+    import asyncio
+    return await asyncio.to_thread(self.run_luttinger, options)
+
+  async def run_toric_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_toric."""
+    import asyncio
+    return await asyncio.to_thread(self.run_toric, options)
+
+  async def run_mipt_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_mipt."""
+    import asyncio
+    return await asyncio.to_thread(self.run_mipt, options)
+
+  async def run_rg_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_rg."""
+    import asyncio
+    return await asyncio.to_thread(self.run_rg, options)
+
+  async def run_entanglement_async(self, options: dict | None = None) -> dict:
+    """Async variant of run_entanglement."""
+    import asyncio
+    return await asyncio.to_thread(self.run_entanglement, options)
 
   @staticmethod
   def _default_library_path():

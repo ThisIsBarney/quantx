@@ -5,8 +5,28 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "quantx-engine"
 version = "0.1.0"
-description = "Python SDK for QuantX quantum simulation engine"
+description = "Python SDK for the QuantX quantum simulation engine — 37 physics solvers exposed via a ctypes C ABI bridge"
+readme = "../README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "QuantX Contributors"},
+]
+keywords = ["quantum", "simulation", "physics", "hamiltonian", "topological"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: Physics",
+  "Intended Audience :: Science/Research",
+]
+
+[project.optional-dependencies]
+numpy = ["numpy>=1.24"]
+dev = ["pytest>=7.0", "numpy>=1.24"]
 
 [tool.setuptools]
 packages = ["quantx_engine"]

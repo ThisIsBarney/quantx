@@ -34,6 +34,11 @@ QX_API const char* qx_validate_circuit(const char* circuit_json);
 QX_API void qx_free_string(const char* ptr);
 // Return engine semantic version string (no ownership transfer required).
 QX_API const char* qx_version(void);
+// Run a named specialized physics solver from JSON options and return heap-allocated JSON output.
+// solver: solver name (e.g., "vqe", "toric", "hubbard", ...).  Use qx_list_solvers() for full list.
+QX_API const char* qx_run_solver(const char* solver, const char* opts_json);
+// Return a heap-allocated JSON array of all available solver names.
+QX_API const char* qx_list_solvers(void);
 
 #ifdef __cplusplus
 }
