@@ -12,6 +12,9 @@ from .noise import (
     NoiseModelError,
 )
 from .ibm import IBMQuantumBackend, IBMConnectorError, circuit_to_qasm3
+from .chemistry import (
+    PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
+)
 
 __all__ = [
     "CircuitError",
@@ -28,4 +31,9 @@ __all__ = [
     "IBMQuantumBackend",
     "IBMConnectorError",
     "circuit_to_qasm3",
+    "PauliTerm",
+    "PauliHamiltonian",
+    "jordan_wigner",
+    "MolecularVQE",
+    "ChemistryError",
 ]
