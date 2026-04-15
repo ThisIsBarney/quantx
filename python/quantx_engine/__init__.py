@@ -18,6 +18,7 @@ from .chemistry import (
 from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
 from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError
 from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
+from .qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
 
 __all__ = [
     "CircuitError",
@@ -53,4 +54,8 @@ __all__ = [
     "DMRGResult",
     "DMRG",
     "TensorNetworkError",
+    "RBM",
+    "QuantumBoltzmannMachine",
+    "BoltzmannSampler",
+    "QBMError",
 ]
