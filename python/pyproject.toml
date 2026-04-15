@@ -23,6 +23,9 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Physics",
   "Intended Audience :: Science/Research",
 ]
+dependencies = [
+    "numpy>=2.2.6",
+]
 
 [project.optional-dependencies]
 numpy = ["numpy>=1.24"]
@@ -30,3 +33,8 @@ dev = ["pytest>=7.0", "numpy>=1.24"]
 
 [tool.setuptools]
 packages = ["quantx_engine"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
