@@ -1,99 +1,159 @@
-# QuantX Engine (v1 Scaffold)
+# QuantX Engine
 
-QuantX is a C++20-first quantum simulation engine scaffold with:
+QuantX is a C++20 quantum simulation engine with 37 physics solvers, a Python SDK, a REST API server, and cloud-hardware connectors.
 
-- C++ core runtime
-- plugin-like backend registry
-- statevector + MPS built-in backends
-- scheduler/explain API
-- C ABI (`qx_run`, `qx_explain_backend_choice`)
-- Python SDK wrapper (ctypes)
+[![CI](https://github.com/ThisIsBarney/quantx/actions/workflows/benchmark-gate.yml/badge.svg)](https://github.com/ThisIsBarney/quantx/actions/workflows/benchmark-gate.yml)
+[![PyPI](https://img.shields.io/pypi/v/quantx-engine)](https://pypi.org/project/quantx-engine/)
 
-## Product Goals
+## Features
 
-- quantum many-body and dynamics simulation engine
-- core execution backend for quantum computing frameworks
+| Layer | What's included |
+|---|---|
+| **C++ Core** | Statevector, MPS, continuous-space (1D/2D/3D) and field-theory backends; Trotter + Arnoldi-Krylov evolution; noise channels |
+| **37 Solvers** | VQE, QPE, QEC, Schwinger QFT, φ⁴, Hubbard, Floquet, Heisenberg, Bose-Hubbard, TFI, SSH, Kitaev chain, Anderson, Chern insulator, Hofstadter, MBL, spectral function, ten-fold way classifier, 2nd Chern, Wilson loop, edge states, Haldane, Weyl, Fu-Kane, Lutchyn-Oreg, Kitaev honeycomb, BBH, Floquet topo, non-Hermitian, AAH, SYK, Kondo, Luttinger, toric code, MIPT, RG flow, entanglement |
+| **Python SDK** | `pip install quantx-engine`; ctypes bridge; 37 typed sync + async solver methods; OpenQASM 3.0 parser; noise model library; IBM Quantum connector; quantum chemistry (Jordan-Wigner + VQE) |
+| **REST API** | FastAPI server with 37 solver endpoints; Docker image; OpenAPI docs at `/docs` |
+| **Hardware** | IBM Quantum connector — circuit transpiler → QASM 3.0 → Qiskit Runtime Sampler |
+| **Chemistry** | Jordan-Wigner transform; pre-built H₂, LiH, BeH₂ Hamiltonians; `MolecularVQE.to_vqe_options()` |
+| **Visualization** | 1D SVG animations, 2D/3D heatmaps, standalone Three.js 3D point-cloud player |
 
 ## Quick Start
+
+### Build (Windows / Visual Studio 2022)
 
 ```powershell
 .\scripts\build.ps1
 .\scripts\test.ps1
-.\scripts\demo.ps1
-.\scripts\run_cli.ps1
-.\scripts\run_benchmark.ps1
-.\scripts\benchmark_all.ps1 -NoiseSweep
-.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate
-.\scripts\run_verification_matrix.ps1
-.\scripts\run_benchmark_and_gate.ps1 -Suite benchmarks/suites/circuit_accuracy_smoke.json
-.\scripts\run_visualization.ps1 -SolverMode engine
-.\scripts\run_visualization.ps1 -SolverMode auto
 ```
 
-Build probe (toolchain check only, no compile):
+### Python SDK
+
+```bash
+pip install quantx-engine
+```
+
+```python
+from quantx_engine import Engine
+
+engine = Engine()
+result = engine.run_vqe({
+    "cost_hamiltonian": [
+        {"label": "Z0", "coefficient": -0.5},
+        {"label": "Z1", "coefficient": -0.5},
+        {"label": "Z0Z1", "coefficient": 0.25},
+    ],
+    "ansatz_type": "uccsd",
+    "max_iterations": 200,
+})
+```
+
+### Quantum Chemistry
+
+```python
+from quantx_engine.chemistry import MolecularVQE
+
+problem = MolecularVQE.h2(bond_length=0.735)
+opts = problem.to_vqe_options(ansatz="uccsd")
+result = engine.run_vqe(opts)
+print(f"Ground state energy: {result['energy']:.6f} Ha (FCI ref: {problem.fci_energy:.6f} Ha)")
+```
+
+### OpenQASM 3.0
+
+```python
+from quantx_engine.qasm import parse_qasm_to_circuit
+
+circuit = parse_qasm_to_circuit("""
+OPENQASM 3.0;
+qubit[2] q;
+bit[2] c;
+h q[0];
+cx q[0], q[1];
+c = measure q;
+""")
+result = engine.run_circuit(circuit)
+```
+
+### Noise Models
+
+```python
+from quantx_engine.noise import DepolarizingNoise, ThermalRelaxationNoise, NoiseModel
+
+model = NoiseModel()
+model.add(DepolarizingNoise(prob=0.01))
+model.add(ThermalRelaxationNoise(T1=50e-6, T2=30e-6, t_gate=50e-9))
+circuit.update(model.to_dict())
+result = engine.run_circuit(circuit)
+```
+
+### REST API Server
+
+```bash
+# Docker
+docker run -p 8000:8000 quantx-engine-server
+
+# Or directly
+uvicorn server.main:app --port 8000
+```
+
+```bash
+curl -X POST http://localhost:8000/run \
+  -H 'Content-Type: application/json' \
+  -d '{"solver": "vqe", "options": {"cost_hamiltonian": [...], "ansatz_type": "uccsd"}}'
+```
+
+## CLI
 
 ```powershell
-powershell -Command "$ErrorActionPreference='Stop'; $vswhere='C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'; if (Test-Path $vswhere) { $install=& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -format value | Select-Object -First 1; if (-not $install) { throw 'vswhere did not return a Visual Studio installation path' }; $dev=Join-Path $install 'Common7\Tools\VsDevCmd.bat'; if (-not (Test-Path $dev)) { throw \"VsDevCmd not found: $dev\" }; cmd /c \"`\"$dev`\" -arch=x64 -host_arch=x64 >nul && where cl\" } else { throw 'vswhere.exe not found' }"
+.\build-vs\Debug\qx_cli.exe --vqe .\examples\vqe_ising.json --options .\examples\options_default.json
+.\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell.json --options .\examples\options_default.json
 ```
-
-If the probe fails, fix the toolchain path first; this probe only validates discovery and does not invoke `cmake -S` or `cmake --build`.
-
-## Architecture
-
-- `IR`: `QuantumProblem`, `RunOptions`, `OperatorGraph`, `EquationType`
-- `Scheduler`: backend auto-selection + explanation reasons
-- `Backend`: unified interface `initialize/evolve/measure/checkpoint/restore`
-- `Runtime`: events and resource metadata
-- `API`:
-  - C++: `qx::run`, `qx::run_circuit`, `qx::explain_backend_choice`
-  - C ABI: `qx_run`, `qx_run_circuit`, `qx_explain_backend_choice`
-  - Python: `Engine.run`, `Engine.run_circuit`, `Engine.explain`
 
 ## Repository Layout
 
-- `include/qx/` public headers
-- `src/` core implementation
-- `schemas/` v1 JSON input schema
-- `python/` SDK package
-- `bindings/python/` optional pybind11 module
-- `tests/` smoke tests
-- `examples/` runnable demos
-- `scripts/` convenience scripts for build/test/demo
-- `docs/USAGE.md` quick usage cookbook (CLI/Python/C ABI)
-- `docs/ML_LLM_INTEGRATION.md` P2 ML/LLM roadmap and guardrails
+```
+include/qx/       Public C++ headers + C ABI (qx_run_solver, qx_list_solvers)
+src/              Core solvers, backends, noise channels, JSON utilities
+python/           Python SDK (quantx_engine package)
+  quantx_engine/
+    engine.py     ctypes bridge — 37 sync/async solver methods
+    qasm.py       OpenQASM 3.0 parser → QuantX circuit JSON
+    noise.py      Noise model library
+    ibm.py        IBM Quantum connector
+    chemistry.py  Jordan-Wigner transform + molecular VQE
+server/           FastAPI REST server (37 endpoints, Docker)
+schemas/          JSON input/output schemas
+tests/            C++ smoke + integration tests
+scripts/          Build, test, benchmark, visualization scripts
+docs/             Architecture, usage cookbook, roadmap
+```
 
-## Simulation Modes
+## Architecture
 
-| CLI flag | Model | Scenario |
-|---|---|---|
-| `--problem` | Generic Hamiltonian (statevector / MPS / continuous) | Rabi, Ising, wavepacket, … |
-| `--circuit` | Gate-model circuit | Bell, QFT, noisy gates |
-| `--vqe` | VQE / QAOA variational optimizer | Ising energy, MaxCut |
-| `--qpe` | Quantum Phase Estimation | Phase readout, Hamiltonian spectrum |
-| `--qec` | QEC Monte Carlo | Bit-flip, phase-flip, Shor code |
-| `--qfield` | Schwinger model (1+1D QED) | Vacuum, string tension, pair creation |
-| `--phi4` | φ⁴ scalar QFT | Symmetric/broken phase, phase-transition sweep, quantum quench |
-| `--hubbard` | 1D Hubbard model | Half-filling ground state, Mott-insulator U/t sweep |
-| `--floquet` | Floquet kicked-Ising | Stroboscopic dynamics, quasi-energy spectrum, ergodic/MBL phase |
+- **IR**: `QuantumProblem`, `RunOptions`, `OperatorGraph`, `EquationType`
+- **Scheduler**: backend auto-selection with explanation reasons
+- **Backend**: unified interface `initialize / evolve / measure / checkpoint / restore`
+- **C ABI**: `qx_run_solver(solver, opts_json)` — single entry point for all 37 solvers
+- **Python**: ctypes bridge with typed methods + async variants for all solvers
+
+## Benchmarks & CI
+
+Every push runs the full benchmark gate on Windows/Visual Studio 2022:
+
+```powershell
+.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild
+```
+
+Reports are uploaded as CI artifacts. See `benchmarks/reports/INDEX.md` for trends.
 
 ## Notes
 
-- Statevector supports Trotter and Arnoldi-Krylov evolution (configurable `krylov_dim`) with one-body and two-body Pauli-string terms.
-- MPI/CUDA/pybind11 flags are prepared at CMake level; full HPC kernels are next milestone.
-- Optional CUDA/cuFFT acceleration path can be enabled with `-DQX_ENABLE_CUDA=ON` when CUDA Toolkit is installed.
-- Quantum-computing backend roadmap is tracked in `docs/ROADMAP.md` and `docs/QUANTUM_COMPUTING_BACKEND.md`.
-- `scripts/benchmark_all.ps1` is the unified benchmark entrypoint for circuit accuracy/noise sweep plus continuous 2D/3D smoke and 3D accuracy suites.
-- `scripts/run_verification_matrix.ps1` is the one-shot pre-commit flow: smoke, adapters, visualization, and the selected benchmark gate.
-- `scripts/run_visualization.ps1 -SolverMode engine` is the strict continuous-export path; `-SolverMode auto` is the fallback-friendly path.
-- circuit capability introspection is available through `qx_circuit_capabilities()` / `Engine.circuit_capabilities()`, and unsupported circuit inputs return `error_code` plus `error_message` so callers can branch cleanly.
-- a minimal circuit sanity run is `.\build-vs\Debug\qx_cli.exe --circuit .\examples\circuit_bell.json --options .\examples\options_default.json`; unsupported-gate repros should assert on `QX_UNSUPPORTED_GATE` instead of scraping free-form text.
-- Subagent workflow, branch isolation, and code-quality guardrails are documented in `docs/ENGINEERING_STANDARDS.md`.
-- Smoke tests are expected to report failures on stderr/stdout instead of opening modal debug dialogs on Windows.
+- CUDA/cuFFT acceleration: `-DQX_ENABLE_CUDA=ON` (requires CUDA Toolkit)
+- MPI support: prepared at CMake level; full HPC kernels in roadmap
+- OpenQASM parser supports 30+ gate types including parametric gates (`rx`, `ry`, `rz`, `p`, `crz`, etc.) and classical control flow
+- IBM connector transpiles QuantX circuits → QASM 3.0 → Qiskit ISA circuits for hardware execution
+- Noise backend: depolarizing, amplitude damping, thermal relaxation (T1/T2), readout error, bit-flip, phase-flip
 
-## v1.1-rc Checklist
+## License
 
-- Run `.\scripts\test.ps1` before release tagging.
-- Run `.\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate` for the reproducible benchmark gate.
-- Inspect `benchmarks/reports/INDEX.md` and the latest `*_TREND.md` files for regressions.
-- Generate the visualization artifacts with `.\scripts\run_visualization.ps1`.
-- Re-check `docs/DEPENDENCIES.md` before adding any new third-party package.
+MIT
