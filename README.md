@@ -97,9 +97,10 @@ uvicorn server.main:app --port 8000
 ```
 
 ```bash
-curl -X POST http://localhost:8000/run \
+# Run a named solver — body is the solver options JSON directly
+curl -X POST http://localhost:8000/solve/vqe \
   -H 'Content-Type: application/json' \
-  -d '{"solver": "vqe", "options": {"cost_hamiltonian": [...], "ansatz_type": "uccsd"}}'
+  -d '{"cost_hamiltonian": [{"label": "Z0", "coefficient": -0.5}], "ansatz_type": "uccsd"}'
 ```
 
 ## CLI

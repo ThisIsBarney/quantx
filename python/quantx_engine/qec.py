@@ -167,6 +167,12 @@ def _surface_z_stabilizers(d: int) -> list[list[int]]:
 
     Each stabilizer is a list of data qubit indices (row-major order).
     Z stabilizers are weight-4 in the bulk, weight-2 at top/bottom boundaries.
+
+    Boundary assignment (matching the rotated-code checkerboard convention):
+    - Top boundary half-plaquettes: odd column offsets (c=1, 3, ...)
+    - Bottom boundary half-plaquettes: even column offsets (c=0, 2, ...)
+    This ensures no boundary stabilizer overlaps a bulk stabilizer, guaranteeing
+    distinct syndromes for all single-qubit X errors.
     """
     stabilizers = []
     for r in range(d - 1):
@@ -180,12 +186,11 @@ def _surface_z_stabilizers(d: int) -> list[list[int]]:
                     (r + 1) * d + c + 1,
                 ]
                 stabilizers.append(qubits)
-    # Top and bottom boundary half-plaquettes
-    for c in range(0, d - 1, 2):
-        # top boundary (row -1 to row 0)
-        stabilizers.append([c, c + 1])
+    # Top boundary (odd c): half-plaquettes between virtual row -1 and row 0
     for c in range(1, d - 1, 2):
-        # bottom boundary
+        stabilizers.append([c, c + 1])
+    # Bottom boundary (even c): half-plaquettes between row d-1 and virtual row d
+    for c in range(0, d - 1, 2):
         stabilizers.append([(d - 1) * d + c, (d - 1) * d + c + 1])
     return stabilizers
 
@@ -262,7 +267,44 @@ class SurfaceCode:
             for stab in self.x_stabs
         ]
 
-    # ── Decoder (greedy MWPM) ─────────────────────────────────────────────────
+    # ── Decoder (greedy MWPM with BFS correction paths) ──────────────────────
+
+    def _bfs_path(self, sources: set, targets: set) -> list[int]:
+        """BFS minimum-weight path of data qubits from any source to any target.
+
+        Returns the path as a list of qubit indices (source included, target included).
+        An X correction on this path anticommutes with exactly the stabilizers
+        that contain an odd number of path qubits (the endpoints), satisfying
+        the syndrome-fixing requirement.
+        """
+        from collections import deque
+        visited: dict[int, int | None] = {}
+        queue: deque[int] = deque()
+        for q in sources:
+            visited[q] = None
+            queue.append(q)
+        found = None
+        while queue and found is None:
+            curr = queue.popleft()
+            if curr in targets:
+                found = curr
+                break
+            r, c = self._positions[curr]
+            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < self.d and 0 <= nc < self.d:
+                    nq = nr * self.d + nc
+                    if nq not in visited:
+                        visited[nq] = curr
+                        queue.append(nq)
+        if found is None:
+            return []
+        path: list[int] = []
+        curr: int | None = found
+        while curr is not None:
+            path.append(curr)
+            curr = visited[curr]
+        return path
 
     def _greedy_match(
         self,
@@ -272,102 +314,94 @@ class SurfaceCode:
     ) -> list[int]:
         """Greedy minimum-weight syndrome matching decoder.
 
-        Pairs up syndrome defects (violated stabilizers) by minimum Manhattan
-        distance on the syndrome graph and returns a correction operator.
+        Pairs syndrome defects by centroid distance, then uses BFS to find the
+        minimum-weight data-qubit path connecting each pair. The path correctly
+        anticommutes with exactly the two paired stabilizers and commutes with
+        all others, satisfying the syndrome-correction property.
 
         Parameters
         ----------
         syndrome:
-            Binary syndrome vector.
+            Binary syndrome vector indexed against `stabs`.
         stabs:
             List of stabilizers (each a list of qubit indices).
         error_type:
-            'X' or 'Z' — type of correction to generate.
+            'X' (X correction) or 'Z' (Z correction) — used for boundary routing.
 
         Returns
         -------
-        Correction: binary array of length n (1 = apply error_type on qubit i).
+        Correction: binary array of length n.
         """
-        # Identify violated stabilizers (defects)
         defects = [i for i, s in enumerate(syndrome) if s]
         correction = [0] * self.n
 
         if not defects:
             return correction
 
-        # Compute stabilizer centers for distance estimation
-        def center(stab_idx: int):
+        def centroid(stab_idx: int) -> tuple[float, float]:
             qubits = stabs[stab_idx]
             r = sum(self._positions[q][0] for q in qubits) / len(qubits)
             c = sum(self._positions[q][1] for q in qubits) / len(qubits)
             return r, c
 
-        # Greedy: repeatedly pair the nearest unpaired defects
         remaining = list(defects)
         while len(remaining) >= 2:
-            # Find pair with minimum distance
+            # Find nearest pair by centroid distance
             best_i, best_j, best_dist = 0, 1, float("inf")
             for i in range(len(remaining)):
                 for j in range(i + 1, len(remaining)):
-                    ri, ci = center(remaining[i])
-                    rj, cj = center(remaining[j])
+                    ri, ci = centroid(remaining[i])
+                    rj, cj = centroid(remaining[j])
                     dist = abs(ri - rj) + abs(ci - cj)
                     if dist < best_dist:
                         best_i, best_j, best_dist = i, j, dist
 
-            # Connect the pair by flipping qubits along a path
             si, sj = remaining[best_i], remaining[best_j]
-            qi = stabs[si][0]  # representative qubit from each stabilizer
-            qj = stabs[sj][0]
-            ri, ci = self._positions[qi]
-            rj, cj = self._positions[qj]
-
-            # Walk from (ri,ci) to (rj,cj) flipping corrections
-            r, c = ri, ci
-            while (r, c) != (rj, cj):
-                if r != rj:
-                    r += 1 if rj > r else -1
-                elif c != cj:
-                    c += 1 if cj > c else -1
-                idx = r * self.d + c
-                if 0 <= idx < self.n:
-                    correction[idx] ^= 1
+            # BFS: minimum-weight qubit path from stabs[si] to stabs[sj]
+            path = self._bfs_path(set(stabs[si]), set(stabs[sj]))
+            for q in path:
+                correction[q] ^= 1
 
             remaining.pop(best_j)
             remaining.pop(best_i)
 
-        # Unpaired defect (odd number): connect to nearest boundary
+        # Unpaired defect: connect to nearest boundary via BFS
         if remaining:
             si = remaining[0]
-            qi = stabs[si][0]
-            ri, ci = self._positions[qi]
-            # Walk to nearest boundary (row 0 or row d-1 for Z errors)
+            # Boundary qubits differ by error type:
+            # X correction (Z syndrome) → walk to top/bottom row boundary
+            # Z correction (X syndrome) → walk to left/right col boundary
             if error_type == "X":
-                target_r = 0 if ri < self.d // 2 else self.d - 1
-                r = ri
-                while r != target_r:
-                    r += 1 if target_r > r else -1
-                    idx = r * self.d + ci
-                    if 0 <= idx < self.n:
-                        correction[idx] ^= 1
+                boundary = {
+                    r * self.d + c
+                    for r in (0, self.d - 1)
+                    for c in range(self.d)
+                }
             else:
-                target_c = 0 if ci < self.d // 2 else self.d - 1
-                c = ci
-                while c != target_c:
-                    c += 1 if target_c > c else -1
-                    idx = ri * self.d + c
-                    if 0 <= idx < self.n:
-                        correction[idx] ^= 1
+                boundary = {
+                    r * self.d + c
+                    for r in range(self.d)
+                    for c in (0, self.d - 1)
+                }
+            path = self._bfs_path(set(stabs[si]), boundary)
+            for q in path:
+                correction[q] ^= 1
 
         return correction
 
     def decode_x(self, z_syndrome: list[int]) -> list[int]:
-        """Decode X-stabilizer syndrome → X correction operator."""
-        return self._greedy_match(z_syndrome, self.x_stabs, "X")
+        """Decode Z-stabilizer syndrome (caused by X errors) → X correction operator.
+
+        The z_syndrome is indexed against z_stabs (Z stabilizers detect X errors).
+        """
+        return self._greedy_match(z_syndrome, self.z_stabs, "X")
 
     def decode_z(self, x_syndrome: list[int]) -> list[int]:
-        """Decode Z-stabilizer syndrome → Z correction operator."""
-        return self._greedy_match(x_syndrome, self.z_stabs, "Z")
+        """Decode X-stabilizer syndrome (caused by Z errors) → Z correction operator.
+
+        The x_syndrome is indexed against x_stabs (X stabilizers detect Z errors).
+        """
+        return self._greedy_match(x_syndrome, self.x_stabs, "Z")
 
     # ── Logical operators ─────────────────────────────────────────────────────
 

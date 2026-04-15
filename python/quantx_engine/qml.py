@@ -313,8 +313,13 @@ class QuantumClassifier:
     params_: "np.ndarray | None" = field(default=None, repr=False)
     classes_: list = field(default_factory=list, repr=False)
     history_: list[dict] = field(default_factory=list, repr=False)
+    x_scale_: float = field(default=1.0, repr=False)  # feature scale from training
 
     def __post_init__(self) -> None:
+        if self.optimizer not in ("adam", "gd"):
+            raise QMLError(
+                f"Unknown optimizer {self.optimizer!r}; choose 'adam' or 'gd'."
+            )
         if self.n_qubits == 0:
             self.n_qubits = self.n_features
         self._qnn = QuantumNeuralNetwork(
@@ -374,10 +379,11 @@ class QuantumClassifier:
         else:
             y_enc = np.where(y == pos_cls, 1.0, 0.0)
 
-        # Normalize features to [-π, π] if needed
-        x_max = np.abs(X).max()
-        if x_max > math.pi:
-            X = X / x_max * math.pi
+        # Normalize features to [-π, π] if needed; persist scale for inference
+        x_max = float(np.abs(X).max())
+        self.x_scale_ = x_max / math.pi if x_max > math.pi else 1.0
+        if self.x_scale_ != 1.0:
+            X = X / self.x_scale_
 
         params = self._qnn.random_params(seed=self.seed)
         n = len(X)
@@ -427,13 +433,13 @@ class QuantumClassifier:
         """Predict class probabilities, shape (n_samples, 2).
 
         Converts ⟨Z_0⟩ ∈ [-1, 1] to probability via σ(4 · ⟨Z_0⟩).
+        Uses the same feature scaling determined during training.
         """
         if self.params_ is None:
             raise QMLError("Classifier has not been fitted. Call fit() first.")
         X = np.asarray(X, dtype=float)
-        x_max = np.abs(X).max()
-        if x_max > math.pi:
-            X = X / x_max * math.pi
+        if self.x_scale_ != 1.0:
+            X = X / self.x_scale_
 
         probs = []
         for xi in X:

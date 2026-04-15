@@ -187,3 +187,19 @@ def test_classifier_adam_vs_gd():
     assert clf_gd.params_ is not None
     # Parameters should differ (different update rules)
     assert not np.allclose(clf_adam.params_, clf_gd.params_)
+
+
+def test_classifier_invalid_optimizer_raises():
+    with pytest.raises(QMLError, match="optimizer"):
+        QuantumClassifier(n_features=2, optimizer="sgd")
+
+
+def test_classifier_consistent_inference_scale():
+    """Inference with a single sample should give the same result as batch inference."""
+    X, y = _make_xor_dataset()
+    clf = QuantumClassifier(n_features=2, n_layers=1, seed=0)
+    clf.fit(X, y, n_epochs=5)
+    # Single sample vs batch — probabilities must be identical
+    single = clf.predict_proba(X[0:1])
+    batch = clf.predict_proba(X[:5])
+    np.testing.assert_allclose(single[0], batch[0], atol=1e-8)
