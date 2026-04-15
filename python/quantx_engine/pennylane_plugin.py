@@ -297,6 +297,11 @@ if _HAS_PENNYLANE and _HAS_NUMPY:
             )
             for ax in axes_to_sum:
                 sv2 = sv2.sum(axis=ax)
+            # After summing, remaining axes are in device-wire order.
+            # Transpose to match the requested wires order.
+            remaining_device_axes = sorted(wire_indices)
+            perm = [remaining_device_axes.index(wi) for wi in wire_indices]
+            sv2 = np.transpose(sv2, perm)
             return sv2.ravel()
 
 else:

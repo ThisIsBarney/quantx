@@ -265,3 +265,17 @@ def test_state_property():
 def test_stub_without_pennylane():
     """QuantXPluginError is a subclass of RuntimeError."""
     assert issubclass(QuantXPluginError, RuntimeError)
+
+
+def test_probs_reversed_wire_order():
+    """probs(wires=[1,0]) should be in [1,0] index order, not [0,1]."""
+    dev = QuantXDevice(wires=2)
+
+    @qml.qnode(dev)
+    def circuit():
+        qml.PauliX(wires=0)   # |10⟩
+        return qml.probs(wires=[1, 0])  # reversed: inner bit is wire-0
+
+    probs = circuit()
+    # With wires=[1,0]: outcome "01" (wire1=0, wire0=1) → index 1 → prob=1
+    assert abs(float(probs[1]) - 1.0) < 1e-10, f"Expected probs[1]=1, got {probs}"
