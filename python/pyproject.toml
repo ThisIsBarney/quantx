@@ -30,6 +30,10 @@ dependencies = [
 [project.optional-dependencies]
 numpy = ["numpy>=1.24"]
 dev = ["pytest>=7.0", "numpy>=1.24"]
+pennylane = ["pennylane>=0.30.0"]
+
+[project.entry-points."pennylane.plugins"]
+"quantx.statevector" = "quantx_engine.pennylane_plugin:QuantXDevice"
 
 [tool.setuptools]
 packages = ["quantx_engine"]
