@@ -170,11 +170,17 @@ class GateSequence:
         if not self.gates:
             dim = 2 if self.n_qubits == 1 else (2 ** self.n_qubits)
             return np.eye(dim, dtype=complex)
+        expected_dim = 2 ** self.n_qubits
         result = None
         for name in self.gates:
             mat = gmap.get(name)
             if mat is None:
                 raise CliffordTError(f"Unknown gate: {name!r}")
+            if mat.shape != (expected_dim, expected_dim):
+                raise CliffordTError(
+                    f"Gate {name!r} has shape {mat.shape}, expected "
+                    f"({expected_dim}, {expected_dim}) for n_qubits={self.n_qubits}"
+                )
             if result is None:
                 result = mat.copy()
             else:
@@ -272,6 +278,9 @@ class CliffordGroup:
         """
         if not _HAS_NUMPY:  # pragma: no cover
             raise CliffordTError("numpy is required for CliffordGroup.identify()")
+        U = np.asarray(U, dtype=complex)
+        if U.ndim != 2 or U.shape != (2, 2):
+            return None
         elements = cls.generate()
         for seq in elements:
             mat = seq.to_matrix()

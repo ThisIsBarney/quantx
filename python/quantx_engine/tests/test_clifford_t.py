@@ -252,3 +252,33 @@ class TestTCountOptimizer:
         result = opt.optimize(GateSequence(["T†", "T†"]))
         assert result.t_count() == 0
         assert result.gates == ["S†"]
+
+
+class TestCodexFixes:
+    """Tests for Codex P1/P2 fixes."""
+
+    def test_to_matrix_wrong_n_qubits_raises(self):
+        """P1: gate matrix dimension must match n_qubits."""
+        # I gate is 2x2 but n_qubits=2 expects 4x4 — should raise
+        seq = GateSequence(["I"], n_qubits=2)
+        with pytest.raises(CliffordTError, match="shape"):
+            seq.to_matrix()
+
+    def test_to_matrix_cnot_correct_n_qubits(self):
+        """CNOT with n_qubits=2 should succeed."""
+        from quantx_engine.clifford_t import CNOT_GATE
+        seq = GateSequence(["CNOT"], n_qubits=2)
+        mat = seq.to_matrix()
+        np.testing.assert_allclose(mat, CNOT_GATE, atol=1e-10)
+
+    def test_identify_non_square_returns_none(self):
+        """P2: identify should return None for non-2x2 input."""
+        from quantx_engine.clifford_t import CNOT_GATE
+        result = CliffordGroup.identify(CNOT_GATE)
+        assert result is None
+
+    def test_identify_wrong_shape_returns_none(self):
+        """P2: identify with 3x3 matrix returns None, not an error."""
+        U = np.eye(3, dtype=complex)
+        result = CliffordGroup.identify(U)
+        assert result is None
