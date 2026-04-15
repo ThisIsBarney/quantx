@@ -16,6 +16,7 @@ from .chemistry import (
     PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
 )
 from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
+from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError
 
 __all__ = [
     "CircuitError",
@@ -40,4 +41,9 @@ __all__ = [
     "QuantumNeuralNetwork",
     "QuantumClassifier",
     "QMLError",
+    "RepetitionCode",
+    "SurfaceCode",
+    "LogicalErrorSimulator",
+    "ThresholdResult",
+    "QECError",
 ]
