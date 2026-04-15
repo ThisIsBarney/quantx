@@ -15,6 +15,7 @@ from .ibm import IBMQuantumBackend, IBMConnectorError, circuit_to_qasm3
 from .chemistry import (
     PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
 )
+from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
 
 __all__ = [
     "CircuitError",
@@ -36,4 +37,7 @@ __all__ = [
     "jordan_wigner",
     "MolecularVQE",
     "ChemistryError",
+    "QuantumNeuralNetwork",
+    "QuantumClassifier",
+    "QMLError",
 ]
