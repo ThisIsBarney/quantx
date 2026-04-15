@@ -272,12 +272,18 @@ class SurfaceCode:
     def _bfs_path(self, sources: set, targets: set) -> list[int]:
         """BFS minimum-weight path of data qubits from any source to any target.
 
-        Returns the path as a list of qubit indices (source included, target included).
-        An X correction on this path anticommutes with exactly the stabilizers
-        that contain an odd number of path qubits (the endpoints), satisfying
-        the syndrome-fixing requirement.
+        `targets` may contain the special virtual-boundary node index ``self.n``.
+        Virtual boundary nodes are used so that BFS always exits the code rather
+        than terminating prematurely on a source qubit that is already adjacent
+        to the boundary. The virtual node is never included in the returned path.
+
+        Returns the path as a list of physical qubit indices (source to last
+        physical qubit before the target). An X correction on this path
+        anticommutes with exactly the stabilizers whose qubit sets have an odd
+        intersection with the path, satisfying the syndrome-fixing requirement.
         """
         from collections import deque
+        _VIRTUAL = self.n  # sentinel — never a real qubit index
         visited: dict[int, int | None] = {}
         queue: deque[int] = deque()
         for q in sources:
@@ -289,6 +295,8 @@ class SurfaceCode:
             if curr in targets:
                 found = curr
                 break
+            if curr == _VIRTUAL:
+                continue
             r, c = self._positions[curr]
             for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
                 nr, nc = r + dr, c + dc
@@ -297,12 +305,18 @@ class SurfaceCode:
                     if nq not in visited:
                         visited[nq] = curr
                         queue.append(nq)
+                else:
+                    # Out-of-bounds step → virtual boundary node
+                    if _VIRTUAL not in visited:
+                        visited[_VIRTUAL] = curr
+                        queue.append(_VIRTUAL)
         if found is None:
             return []
         path: list[int] = []
         curr: int | None = found
         while curr is not None:
-            path.append(curr)
+            if curr != _VIRTUAL:
+                path.append(curr)
             curr = visited[curr]
         return path
 
@@ -365,25 +379,14 @@ class SurfaceCode:
             remaining.pop(best_j)
             remaining.pop(best_i)
 
-        # Unpaired defect: connect to nearest boundary via BFS
+        # Unpaired defect: connect to the virtual boundary node (self.n).
+        # _bfs_path reaches self.n whenever a BFS step would leave the grid,
+        # so the path is the minimum-weight chain from the stabilizer qubits
+        # to the nearest code boundary. The virtual node is excluded from the
+        # correction, so only real data qubits are flipped.
         if remaining:
             si = remaining[0]
-            # Boundary qubits differ by error type:
-            # X correction (Z syndrome) → walk to top/bottom row boundary
-            # Z correction (X syndrome) → walk to left/right col boundary
-            if error_type == "X":
-                boundary = {
-                    r * self.d + c
-                    for r in (0, self.d - 1)
-                    for c in range(self.d)
-                }
-            else:
-                boundary = {
-                    r * self.d + c
-                    for r in range(self.d)
-                    for c in (0, self.d - 1)
-                }
-            path = self._bfs_path(set(stabs[si]), boundary)
+            path = self._bfs_path(set(stabs[si]), {self.n})
             for q in path:
                 correction[q] ^= 1
 
