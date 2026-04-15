@@ -660,6 +660,10 @@ class DMRG:
         N = self.mpo.n_sites
         d = self.mpo.d
 
+        if initial_mps is not None and initial_mps.n_sites != N:
+            raise TensorNetworkError(
+                f"initial_mps has {initial_mps.n_sites} sites but MPO has {N} sites"
+            )
         if initial_mps is None:
             mps = MPS.random(N, d=d, max_chi=2, seed=self.seed)
         else:

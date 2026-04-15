@@ -342,3 +342,11 @@ class TestDMRG:
         result = dmrg.run(initial_mps=initial)
         assert isinstance(result.mps, MPS)
         assert result.mps.n_sites == n
+
+    def test_dmrg_initial_mps_wrong_size_raises(self):
+        """DMRG raises TensorNetworkError if initial_mps has wrong number of sites."""
+        mpo = MPO.ising(n=4, J=1.0, h=0.5)
+        wrong_size = MPS.product_state([0, 0, 0])  # 3 sites, MPO has 4
+        dmrg = DMRG(mpo=mpo, max_chi=4, n_sweeps=1)
+        with pytest.raises(TensorNetworkError, match="sites"):
+            dmrg.run(initial_mps=wrong_size)
