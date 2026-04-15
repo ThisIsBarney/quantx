@@ -52,12 +52,15 @@ __all__ = [
     "DMRG",
 ]
 
-# ── Pauli matrices ─────────────────────────────────────────────────────────────
+# ── Pauli matrices (lazy; safe to import without numpy) ──────────────────────
 
-_I2 = np.eye(2, dtype=complex)
-_X = np.array([[0, 1], [1, 0]], dtype=complex)
-_Y = np.array([[0, -1j], [1j, 0]], dtype=complex)
-_Z = np.diag([1.0, -1.0]).astype(complex)
+if _HAS_NUMPY:
+    _I2 = np.eye(2, dtype=complex)
+    _X = np.array([[0, 1], [1, 0]], dtype=complex)
+    _Y = np.array([[0, -1j], [1j, 0]], dtype=complex)
+    _Z = np.diag([1.0, -1.0]).astype(complex)
+else:  # pragma: no cover
+    _I2 = _X = _Y = _Z = None  # type: ignore[assignment]
 
 
 # ── Custom exception ───────────────────────────────────────────────────────────
