@@ -144,21 +144,21 @@ def test_surface_decode_no_error():
 
 
 def test_surface_decode_single_x_error():
-    """Single X error should be correctable."""
+    """Single X error on any qubit must not cause a logical error (distance-3 code)."""
     code = SurfaceCode(d=3)
     zeros = [0] * 9
-    x_err = [0] * 9
-    x_err[0] = 1  # error on qubit 0 (corner)
     z_err = [0] * 9
-
-    syn_x = code.x_syndrome(z_err)
-    syn_z = code.z_syndrome(x_err)
-    corr_x = code.decode_x(syn_z)
-    corr_z = code.decode_z(syn_x)
-    lx, lz = code.logical_error(x_err, z_err, corr_x, corr_z)
-    # Not guaranteed to be perfect but should not cause a logical error on a corner qubit
-    # (this tests the decoder doesn't crash and returns valid output)
-    assert isinstance(lx, bool) and isinstance(lz, bool)
+    for q in range(9):
+        x_err = [0] * 9
+        x_err[q] = 1
+        syn_z = code.z_syndrome(x_err)
+        syn_x = code.x_syndrome(z_err)
+        corr_x = code.decode_x(syn_z)
+        corr_z = code.decode_z(syn_x)
+        lx, lz = code.logical_error(x_err, z_err, corr_x, corr_z)
+        assert not lx and not lz, (
+            f"Single X error on qubit {q} caused a logical error after correction"
+        )
 
 
 def test_surface_requires_d_ge_3():

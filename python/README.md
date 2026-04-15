@@ -70,11 +70,13 @@ result = engine.run_circuit(circuit)
 ## Noise Models
 
 ```python
-from quantx_engine.noise import DepolarizingNoise, ThermalRelaxationNoise, NoiseModel
+from quantx_engine.noise import DepolarizingNoise, ThermalRelaxationNoise, CompositeNoise
 
-model = NoiseModel()
-model.add(DepolarizingNoise(prob=0.01))
-model.add(ThermalRelaxationNoise(T1=50e-6, T2=30e-6, t_gate=50e-9))
+# Compose multiple noise channels
+model = CompositeNoise([
+    DepolarizingNoise(prob=0.01),
+    ThermalRelaxationNoise(T1=50e-6, T2=30e-6, t_gate=50e-9),
+])
 
 circuit = {"gates": [...]}
 circuit.update(model.to_dict())
