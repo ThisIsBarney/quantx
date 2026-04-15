@@ -267,57 +267,88 @@ class SurfaceCode:
             for stab in self.x_stabs
         ]
 
-    # ── Decoder (greedy MWPM with BFS correction paths) ──────────────────────
+    # ── Syndrome graph + greedy decoder ──────────────────────────────────────
 
-    def _bfs_path(self, sources: set, targets: set) -> list[int]:
-        """BFS minimum-weight path of data qubits from any source to any target.
+    def _build_syndrome_graph(
+        self, stabs: list[list[int]]
+    ) -> tuple[dict[int, list[tuple[int, int]]], set[int]]:
+        """Build adjacency list for the syndrome graph.
 
-        `targets` may contain the special virtual-boundary node index ``self.n``.
-        Virtual boundary nodes are used so that BFS always exits the code rather
-        than terminating prematurely on a source qubit that is already adjacent
-        to the boundary. The virtual node is never included in the returned path.
+        Nodes are stabilizer indices 0..len(stabs)-1 plus one virtual boundary
+        node BOUNDARY = len(stabs).
 
-        Returns the path as a list of physical qubit indices (source to last
-        physical qubit before the target). An X correction on this path
-        anticommutes with exactly the stabilizers whose qubit sets have an odd
-        intersection with the path, satisfying the syndrome-fixing requirement.
+        Each data qubit q that appears in exactly one stabilizer s is a
+        boundary edge: (s, BOUNDARY) with label q.  Each qubit q shared by
+        exactly two stabilizers s_i, s_j is an interior edge: (s_i, s_j)
+        with label q.  Qubits shared by more than two stabilizers are split
+        across the first two containing stabilizers (degenerate, but never
+        occurs in the rotated surface code).
+
+        Returns (adj, boundary_qubits) where adj maps each node to a list of
+        (neighbour_node, qubit_label) and boundary_qubits is the set of data
+        qubits that are boundary edges.
+        """
+        BOUNDARY = len(stabs)
+        # Map qubit → list of stabilizer indices that contain it
+        stab_of: dict[int, list[int]] = {}
+        for idx, stab in enumerate(stabs):
+            for q in stab:
+                stab_of.setdefault(q, []).append(idx)
+
+        adj: dict[int, list[tuple[int, int]]] = {i: [] for i in range(BOUNDARY + 1)}
+        boundary_qubits: set[int] = set()
+
+        for q, containing in stab_of.items():
+            if len(containing) == 1:
+                # Boundary qubit: connects this stabilizer to the virtual node
+                s = containing[0]
+                adj[s].append((BOUNDARY, q))
+                adj[BOUNDARY].append((s, q))
+                boundary_qubits.add(q)
+            elif len(containing) >= 2:
+                # Interior qubit: connects two stabilizers
+                si, sj = containing[0], containing[1]
+                adj[si].append((sj, q))
+                adj[sj].append((si, q))
+
+        return adj, boundary_qubits
+
+    def _syndrome_graph_bfs(
+        self,
+        start: int,
+        goal: int,
+        adj: dict[int, list[tuple[int, int]]],
+    ) -> list[int]:
+        """BFS shortest path in the syndrome graph from `start` to `goal`.
+
+        Returns the list of data-qubit labels (edge labels) along the path.
+        Each returned qubit, when added to the correction operator, anticommutes
+        with exactly the two syndrome nodes it connects (start and goal, through
+        possibly intermediate nodes).
         """
         from collections import deque
-        _VIRTUAL = self.n  # sentinel — never a real qubit index
-        visited: dict[int, int | None] = {}
-        queue: deque[int] = deque()
-        for q in sources:
-            visited[q] = None
-            queue.append(q)
-        found = None
-        while queue and found is None:
+        # visited: node -> (parent_node, edge_qubit_to_parent)
+        visited: dict[int, tuple[int | None, int | None]] = {start: (None, None)}
+        queue: deque[int] = deque([start])
+        while queue:
             curr = queue.popleft()
-            if curr in targets:
-                found = curr
+            if curr == goal:
                 break
-            if curr == _VIRTUAL:
-                continue
-            r, c = self._positions[curr]
-            for dr, dc in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < self.d and 0 <= nc < self.d:
-                    nq = nr * self.d + nc
-                    if nq not in visited:
-                        visited[nq] = curr
-                        queue.append(nq)
-                else:
-                    # Out-of-bounds step → virtual boundary node
-                    if _VIRTUAL not in visited:
-                        visited[_VIRTUAL] = curr
-                        queue.append(_VIRTUAL)
-        if found is None:
+            for nb, q in adj.get(curr, []):
+                if nb not in visited:
+                    visited[nb] = (curr, q)
+                    queue.append(nb)
+
+        if goal not in visited:
             return []
+        # Reconstruct path (collect edge qubits, skip virtual node's edge label)
         path: list[int] = []
-        curr: int | None = found
-        while curr is not None:
-            if curr != _VIRTUAL:
-                path.append(curr)
-            curr = visited[curr]
+        curr = goal
+        while visited[curr][0] is not None:
+            parent, q = visited[curr]
+            if q is not None:
+                path.append(q)
+            curr = parent
         return path
 
     def _greedy_match(
@@ -326,21 +357,25 @@ class SurfaceCode:
         stabs: list[list[int]],
         error_type: str,
     ) -> list[int]:
-        """Greedy minimum-weight syndrome matching decoder.
+        """Greedy minimum-weight syndrome matching decoder via syndrome graph.
 
-        Pairs syndrome defects by centroid distance, then uses BFS to find the
-        minimum-weight data-qubit path connecting each pair. The path correctly
-        anticommutes with exactly the two paired stabilizers and commutes with
-        all others, satisfying the syndrome-correction property.
+        Builds the syndrome graph (stabilizers as nodes, data qubits as edges,
+        virtual boundary node for open boundary conditions), then greedily pairs
+        defects by centroid distance and routes corrections along BFS shortest
+        paths in the syndrome graph.  Routing in the syndrome graph guarantees
+        that the correction anticommutes with exactly the paired stabilizers and
+        commutes with all others, regardless of which source qubit is dequeued
+        first.
 
         Parameters
         ----------
         syndrome:
             Binary syndrome vector indexed against `stabs`.
         stabs:
-            List of stabilizers (each a list of qubit indices).
+            List of stabilizers.
         error_type:
-            'X' (X correction) or 'Z' (Z correction) — used for boundary routing.
+            Unused (kept for API compatibility; routing is handled by the
+            syndrome graph structure, which is inherently boundary-aware).
 
         Returns
         -------
@@ -352,6 +387,9 @@ class SurfaceCode:
         if not defects:
             return correction
 
+        BOUNDARY = len(stabs)
+        adj, _ = self._build_syndrome_graph(stabs)
+
         def centroid(stab_idx: int) -> tuple[float, float]:
             qubits = stabs[stab_idx]
             r = sum(self._positions[q][0] for q in qubits) / len(qubits)
@@ -360,7 +398,7 @@ class SurfaceCode:
 
         remaining = list(defects)
         while len(remaining) >= 2:
-            # Find nearest pair by centroid distance
+            # Pair nearest defects by centroid distance
             best_i, best_j, best_dist = 0, 1, float("inf")
             for i in range(len(remaining)):
                 for j in range(i + 1, len(remaining)):
@@ -371,22 +409,20 @@ class SurfaceCode:
                         best_i, best_j, best_dist = i, j, dist
 
             si, sj = remaining[best_i], remaining[best_j]
-            # BFS: minimum-weight qubit path from stabs[si] to stabs[sj]
-            path = self._bfs_path(set(stabs[si]), set(stabs[sj]))
+            path = self._syndrome_graph_bfs(si, sj, adj)
             for q in path:
                 correction[q] ^= 1
 
             remaining.pop(best_j)
             remaining.pop(best_i)
 
-        # Unpaired defect: connect to the virtual boundary node (self.n).
-        # _bfs_path reaches self.n whenever a BFS step would leave the grid,
-        # so the path is the minimum-weight chain from the stabilizer qubits
-        # to the nearest code boundary. The virtual node is excluded from the
-        # correction, so only real data qubits are flipped.
+        # Unpaired defect: route to virtual BOUNDARY node in syndrome graph.
+        # The syndrome graph ensures exactly the correct boundary qubit is chosen
+        # (the one connecting this stabilizer to the virtual boundary node),
+        # eliminating the first-source-bias of the previous qubit-grid BFS.
         if remaining:
             si = remaining[0]
-            path = self._bfs_path(set(stabs[si]), {self.n})
+            path = self._syndrome_graph_bfs(si, BOUNDARY, adj)
             for q in path:
                 correction[q] ^= 1
 
