@@ -74,18 +74,18 @@ def test_jw_number_operator():
 
 
 def test_jw_hopping_term():
-    """a†_0 a_1 + h.c. → X0 X1 + Y0 Y1 (up to coefficients)"""
+    """a†_0 a_1 + h.c. → X0 X1 + Y0 Y1 with coefficient 1.0 each (not cancelling)."""
     ham = jordan_wigner(
         one_body=[(0, 1, 1.0)],
         two_body=[],
         n_orbitals=2,
         constant=0.0,
     )
-    op_types = set()
-    for t in ham.terms:
-        paulis = tuple(sorted(t.ops.values()))
-        op_types.add(paulis)
-    assert ("X", "X") in op_types or ("Y", "Y") in op_types
+    xx_coeff = sum(t.coeff.real for t in ham.terms if t.ops.get(0) == "X" and t.ops.get(1) == "X")
+    yy_coeff = sum(t.coeff.real for t in ham.terms if t.ops.get(0) == "Y" and t.ops.get(1) == "Y")
+    # Hermitian sum h_pq a†_p a_q + h_qp a†_q a_p with h=1 → coefficients of 1.0 each
+    assert abs(xx_coeff - 1.0) < 1e-10, f"XX coeff should be 1.0, got {xx_coeff}"
+    assert abs(yy_coeff - 1.0) < 1e-10, f"YY coeff should be 1.0, got {yy_coeff}"
 
 
 def test_jw_constant_term():
@@ -141,18 +141,23 @@ def test_to_vqe_options_keys():
     m = MolecularVQE.h2()
     opts = m.to_vqe_options()
     required_keys = {"molecule", "bond_length", "n_qubits", "n_electrons",
-                     "hamiltonian", "ansatz", "shots", "max_iter", "optimizer"}
+                     "cost_hamiltonian", "ansatz_type", "shots", "max_iterations", "optimizer"}
     assert required_keys.issubset(opts.keys())
     assert opts["n_qubits"] == 4
-    assert opts["ansatz"] == "uccsd"
+    assert opts["ansatz_type"] == "uccsd"
+    # cost_hamiltonian must be a list of {label, coefficient} dicts
+    assert isinstance(opts["cost_hamiltonian"], list)
+    assert all({"label", "coefficient"}.issubset(t.keys()) for t in opts["cost_hamiltonian"])
+    assert all(isinstance(t["label"], str) for t in opts["cost_hamiltonian"])
+    assert all(isinstance(t["coefficient"], float) for t in opts["cost_hamiltonian"])
 
 
 def test_to_vqe_options_custom():
     m = MolecularVQE.h2()
-    opts = m.to_vqe_options(ansatz="hardware_efficient", shots=512, max_iter=100)
-    assert opts["ansatz"] == "hardware_efficient"
+    opts = m.to_vqe_options(ansatz="hardware_efficient", shots=512, max_iterations=100)
+    assert opts["ansatz_type"] == "hardware_efficient"
     assert opts["shots"] == 512
-    assert opts["max_iter"] == 100
+    assert opts["max_iterations"] == 100
 
 
 def test_fci_energy_boundary():

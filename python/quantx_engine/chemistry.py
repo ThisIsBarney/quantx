@@ -166,13 +166,19 @@ def jordan_wigner(
         ham.add(PauliTerm(coeff=coeff * sign * 0.5, ops=xops))
         ham.add(PauliTerm(coeff=coeff * sign * 0.5, ops=yops))
 
-    # One-body terms: h_pq a†_p a_q
+    # One-body terms: h_pq a†_p a_q + h_qp a†_q a_p
+    # For real integrals h_pq = h_qp (hermitian), both directions contribute the same
+    # Pauli structure with the same sign, so we add once with coefficient 2*h for p≠q.
+    # Adding both add_creation_annihilation(p,q) and add_creation_annihilation(q,p)
+    # would cancel because the sign flips for the reversed pair.
     for p, q, h in one_body:
         if abs(h) < 1e-12:
             continue
-        add_creation_annihilation(p, q, complex(h))
-        if p != q:
-            add_creation_annihilation(q, p, complex(h).conjugate())
+        if p == q:
+            add_creation_annihilation(p, q, complex(h))
+        else:
+            lo, hi = (p, q) if p < q else (q, p)
+            add_creation_annihilation(lo, hi, 2.0 * complex(h))
 
     # Two-body terms: ½ g_pqrs a†_p a†_q a_r a_s (simplified JW for real integrals)
     for p, q, r, s, g in two_body:
@@ -267,6 +273,16 @@ _BEH2_DATA = {
 }
 
 
+def _pauli_label(ops: dict[int, str]) -> str:
+    """Convert a PauliTerm ops dict to a compact label string like 'X0Z1Y3'.
+
+    An empty ops dict (all-identity term) returns 'I'.
+    """
+    if not ops:
+        return "I"
+    return "".join(f"{v}{k}" for k, v in sorted(ops.items()))
+
+
 @dataclass
 class MolecularVQE:
     """A molecular VQE problem instance ready for submission to Engine.run_vqe().
@@ -294,10 +310,19 @@ class MolecularVQE:
         self,
         ansatz: str = "uccsd",
         shots: int = 0,
-        max_iter: int = 200,
+        max_iterations: int = 200,
         optimizer: str = "cobyla",
     ) -> dict[str, Any]:
         """Build a VQE options dict suitable for Engine.run_vqe().
+
+        The returned dict uses keys expected by the QuantX VQE parser:
+        ``cost_hamiltonian`` (list of ``{label, coefficient}``), ``ansatz_type``,
+        and ``max_iterations``.
+
+        Note: the Hamiltonian integrals are pre-computed at equilibrium geometry
+        (fixed STO-3G integrals). Changing ``bond_length`` only affects the
+        FCI reference energy used for benchmark comparison, not the qubit
+        Hamiltonian itself.
 
         Parameters
         ----------
@@ -305,24 +330,29 @@ class MolecularVQE:
             Ansatz type: 'uccsd' or 'hardware_efficient'.
         shots:
             Number of shots per circuit evaluation (0 = statevector).
-        max_iter:
+        max_iterations:
             Maximum optimizer iterations.
         optimizer:
             Classical optimizer: 'cobyla', 'spsa', or 'l_bfgs_b'.
 
         Returns
         -------
-        dict compatible with Engine.run_vqe().
+        dict compatible with Engine.run_vqe() / Engine.run_solver('vqe', ...).
         """
+        cost_hamiltonian = [
+            {"label": _pauli_label(t.ops), "coefficient": float(t.coeff.real)}
+            for t in self.hamiltonian.terms
+            if abs(t.coeff) > 1e-14
+        ]
         return {
             "molecule": self.name,
             "bond_length": self.bond_length,
             "n_qubits": self.hamiltonian.n_qubits,
             "n_electrons": self.n_electrons,
-            "hamiltonian": self.hamiltonian.to_dict(),
-            "ansatz": ansatz,
+            "cost_hamiltonian": cost_hamiltonian,
+            "ansatz_type": ansatz,
             "shots": shots,
-            "max_iter": max_iter,
+            "max_iterations": max_iterations,
             "optimizer": optimizer,
             "fci_energy": self.fci_energy,
         }
