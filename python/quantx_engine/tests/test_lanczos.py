@@ -217,3 +217,21 @@ def test_arnoldi_result_type():
     H = np.diag([3.0, 1.0, 2.0])
     result = ArnoldiSolver(k=2, seed=0).solve(H)
     assert isinstance(result, EigenResult)
+
+
+def test_arnoldi_complex_eigenvalues_preserved():
+    """Arnoldi returns complex eigenpairs for non-symmetric matrix (Codex P1)."""
+    # Non-symmetric rotation-like matrix has complex eigenvalues
+    H = np.array([[0.0, -1.0], [1.0, 0.0]])  # eigenvalues: ±i
+    solver = ArnoldiSolver(k=2, seed=0)
+    result = solver.solve(H)
+    # Check eigenvalues are complex (imaginary part non-zero)
+    assert np.iscomplexobj(result.eigenvalues)
+
+
+def test_arnoldi_v0_near_zero_raises():
+    """Arnoldi raises LanczosError for near-zero initial vector (Codex P2)."""
+    H = np.eye(4)
+    solver = ArnoldiSolver(k=2, seed=0)
+    with pytest.raises(LanczosError, match="near-zero"):
+        solver.solve(H, v0=np.zeros(4))

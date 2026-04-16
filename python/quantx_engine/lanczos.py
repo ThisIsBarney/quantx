@@ -238,18 +238,19 @@ class LanczosSolver:
                 b = float(np.linalg.norm(w))
                 if b < 1e-14:
                     break  # truly exhausted the space
-            beta.append(b)
             v_new = w / b
 
             # Full re-orthogonalization (Modified Gram-Schmidt)
             for vi in V:
                 v_new = v_new - np.dot(vi.conj(), v_new) * vi
-            norm = np.linalg.norm(v_new)
+            norm = float(np.linalg.norm(v_new))
             if norm < 1e-14:
                 V.append(v_new)
                 alpha.append(0.0)
                 break
             v_new /= norm
+            # Effective recurrence coeff after re-orthogonalization
+            beta.append(b * norm)
             V.append(v_new)
 
             w = matvec(v_new)
@@ -360,7 +361,10 @@ class ArnoldiSolver:
         Q = []                                      # Arnoldi basis
         H_mat = np.zeros((m + 1, m), dtype=complex)  # upper Hessenberg
 
-        q = v0 / np.linalg.norm(v0)
+        _norm_v0 = np.linalg.norm(v0)
+        if _norm_v0 < 1e-14:
+            raise LanczosError("Initial vector v0 has near-zero norm")
+        q = v0 / _norm_v0
         Q.append(q)
 
         converged = False
@@ -408,8 +412,8 @@ class ArnoldiSolver:
                 residuals[i] = float(np.linalg.norm(Hev - evals_k[i] * ev_n))
 
         return EigenResult(
-            eigenvalues=evals_k.real,
-            eigenvectors=full_evecs.real,
+            eigenvalues=evals_k,
+            eigenvectors=full_evecs,
             n_iter=j_final,
             converged=converged,
             residuals=residuals,
