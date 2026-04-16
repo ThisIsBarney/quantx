@@ -26,6 +26,40 @@ class SweepError(RuntimeError):
     """Raised for invalid sweep configuration or unrecoverable job failures."""
 
 
+# ---------------------------------------------------------------------------
+# Module-level worker functions — required for ProcessPoolExecutor pickling
+# ---------------------------------------------------------------------------
+
+def _grid_worker(args):
+    """Picklable worker for grid combos: args = (fn, keys, combo, catch_errors)."""
+    fn, keys, combo, catch_errors = args
+    kwargs = dict(zip(keys, combo))
+    try:
+        result = fn(**kwargs)
+        if not isinstance(result, dict):
+            result = {"result": result}
+        return {**kwargs, **result}
+    except Exception as e:
+        if catch_errors:
+            return {**kwargs, "__error__": str(e), "__error_type__": type(e).__name__}
+        raise
+
+
+def _list_worker(args):
+    """Picklable worker for list items: args = (fn, kwargs, catch_errors)."""
+    fn, kwargs, catch_errors = args
+    try:
+        result = fn(**kwargs)
+        if not isinstance(result, dict):
+            result = {"result": result}
+        return {**kwargs, **result}
+    except Exception as e:
+        if catch_errors:
+            return {**kwargs, "__error__": str(e), "__error_type__": type(e).__name__}
+        raise
+
+
+
 @dataclass
 class SweepResult:
     records: list[dict]       # each record = params + result dict merged
@@ -105,31 +139,25 @@ class ParameterSweep:
         records = []
         start = time.perf_counter()
 
-        def _run_one(combo):
-            kwargs = dict(zip(keys, combo))
-            try:
-                result = self.fn(**kwargs)
-                if not isinstance(result, dict):
-                    result = {"result": result}
-                return {**kwargs, **result}
-            except Exception as e:
-                if self.catch_errors:
-                    return {**kwargs, "__error__": str(e), "__error_type__": type(e).__name__}
-                raise
-
         if self.n_workers == 1:
             for combo in combos:
-                records.append(_run_one(combo))
+                records.append(_grid_worker((self.fn, keys, combo, self.catch_errors)))
         else:
             ExecutorClass = (
                 ThreadPoolExecutor if self.executor_type == "thread" else ProcessPoolExecutor
             )
-            with ExecutorClass(max_workers=self.n_workers) as executor:
-                futures = {executor.submit(_run_one, combo): combo for combo in combos}
+            executor = ExecutorClass(max_workers=self.n_workers)
+            try:
+                futures = {
+                    executor.submit(_grid_worker, (self.fn, keys, combo, self.catch_errors)): combo
+                    for combo in combos
+                }
+                timed_out = False
                 for future, combo in futures.items():
                     try:
                         records.append(future.result(timeout=self.timeout))
                     except FuturesTimeout:
+                        timed_out = True
                         kwargs = dict(zip(keys, combo))
                         if self.catch_errors:
                             records.append(
@@ -145,6 +173,13 @@ class ParameterSweep:
                             )
                         else:
                             raise
+            finally:
+                # Cancel pending futures and shut down without blocking on timed-out tasks
+                _wait = not timed_out
+                try:
+                    executor.shutdown(wait=_wait, cancel_futures=True)
+                except TypeError:  # Python < 3.9 does not have cancel_futures
+                    executor.shutdown(wait=False)
 
         elapsed = time.perf_counter() - start
         n_failed = sum(1 for r in records if "__error__" in r)
@@ -170,36 +205,40 @@ class ParameterSweep:
         records = []
         start = time.perf_counter()
 
-        def _run_one_dict(kwargs):
-            try:
-                result = self.fn(**kwargs)
-                if not isinstance(result, dict):
-                    result = {"result": result}
-                return {**kwargs, **result}
-            except Exception as e:
-                if self.catch_errors:
-                    return {**kwargs, "__error__": str(e), "__error_type__": type(e).__name__}
-                raise
-
         if self.n_workers == 1:
             for kwargs in param_list:
-                records.append(_run_one_dict(kwargs))
+                records.append(_list_worker((self.fn, kwargs, self.catch_errors)))
         else:
             ExecutorClass = (
                 ThreadPoolExecutor if self.executor_type == "thread" else ProcessPoolExecutor
             )
-            with ExecutorClass(max_workers=self.n_workers) as executor:
-                futures = {executor.submit(_run_one_dict, kw): kw for kw in param_list}
+            executor = ExecutorClass(max_workers=self.n_workers)
+            timed_out = False
+            try:
+                futures = {
+                    executor.submit(_list_worker, (self.fn, kw, self.catch_errors)): kw
+                    for kw in param_list
+                }
                 for future, kw in futures.items():
                     try:
                         records.append(future.result(timeout=self.timeout))
+                    except FuturesTimeout:
+                        timed_out = True
+                        if self.catch_errors:
+                            records.append({**kw, "__error__": "timeout", "__error_type__": "TimeoutError"})
+                        else:
+                            raise SweepError(f"Job timed out for {kw}")
                     except Exception as e:
                         if self.catch_errors:
-                            records.append(
-                                {**kw, "__error__": str(e), "__error_type__": type(e).__name__}
-                            )
+                            records.append({**kw, "__error__": str(e), "__error_type__": type(e).__name__})
                         else:
                             raise
+            finally:
+                _wait = not timed_out
+                try:
+                    executor.shutdown(wait=_wait, cancel_futures=True)
+                except TypeError:
+                    executor.shutdown(wait=False)
 
         elapsed = time.perf_counter() - start
         n_failed = sum(1 for r in records if "__error__" in r)
