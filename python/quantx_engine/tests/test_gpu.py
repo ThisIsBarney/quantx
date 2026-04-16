@@ -271,3 +271,36 @@ def test_to_cpu_returns_numpy():
     arr = np.array([1.0, 2.0, 3.0])
     result = to_cpu(arr)
     assert isinstance(result, np.ndarray)
+
+
+# ── Codex fix tests ───────────────────────────────────────────────────────────
+
+def test_batched_scalar_rx_param():
+    """P1: scalar RX param should apply same angle to all circuits."""
+    bc = GpuBatchedCircuit(n_qubits=1, n_circuits=3, backend="numpy")
+    bc.apply_gate("RX", 0, params=math.pi)   # scalar param, not a list
+    expvals = bc.expectation_z(0)
+    np.testing.assert_allclose(expvals, [-1.0, -1.0, -1.0], atol=1e-8)
+
+
+def test_batched_single_element_list_rx():
+    """P1: single-element list should broadcast to all circuits."""
+    bc = GpuBatchedCircuit(n_qubits=1, n_circuits=3, backend="numpy")
+    bc.apply_gate("RX", 0, params=[math.pi])  # singleton list
+    expvals = bc.expectation_z(0)
+    np.testing.assert_allclose(expvals, [-1.0, -1.0, -1.0], atol=1e-8)
+
+
+def test_gpu_lanczos_callable_raises_helpful_error():
+    """P2: bare callable raises GpuError with helpful message."""
+    solver = GpuLanczos(k=2, backend="numpy", seed=0)
+    with pytest.raises(GpuError, match="solve_matvec"):
+        solver.solve(lambda v: v)
+
+
+def test_gpu_lanczos_solve_matvec():
+    """P2: solve_matvec with identity gives eigenvalues ~1.0."""
+    diag = np.array([1.0, 2.0, 3.0, 4.0])
+    solver = GpuLanczos(k=4, backend="numpy", seed=0)
+    result = solver.solve_matvec(lambda v: diag * v, n=4)
+    np.testing.assert_allclose(np.sort(result.eigenvalues), diag, atol=1e-8)

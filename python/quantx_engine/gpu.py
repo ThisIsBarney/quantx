@@ -320,6 +320,11 @@ class GpuLanczos:
                     return cp.asarray(w_cpu)
             else:
                 matvec = H.matvec
+        elif callable(H):
+            raise GpuError(
+                "GpuLanczos does not support a bare callable. "
+                "Use solve_matvec(fn, n) to provide the dimension explicitly."
+            )
         else:
             raise GpuError(f"Unsupported H type: {type(H)}")
 
@@ -417,6 +422,21 @@ class GpuLanczos:
             T[i + 1, i] = b
         return T
 
+    def solve_matvec(self, fn, n: int) -> "EigenResult":
+        """Solve with a callable matvec function and explicit dimension n.
+
+        Addresses P2: supports matrix-free operators on GPU.
+        """
+
+        class _Wrap:
+            def __init__(self_inner):
+                self_inner.n = n
+
+            def matvec(self_inner, v):
+                return fn(v)
+
+        return self.solve(_Wrap())
+
     def to_dict(self) -> dict:
         return {"k": self.k, "backend": self._backend.name, "max_iter": self.max_iter}
 
@@ -454,17 +474,31 @@ class GpuBatchedCircuit:
         n = self.n_qubits
         B = self.n_circuits
 
-        # Check if params is a per-circuit array (sequence with length > 0)
-        is_per_circuit = hasattr(params, '__len__') and len(params) > 0
+        # Determine if params is per-circuit (one angle per circuit) or scalar (same for all).
+        # Per-circuit: a sequence whose length == n_circuits (and n_circuits > 1).
+        # Scalar: a float/int, an empty tuple, or a 1-element sequence.
+        if hasattr(params, '__len__'):
+            _plen = len(params)
+        else:
+            _plen = -1  # scalar number
+
+        is_per_circuit = (_plen == B and B > 1)
 
         if not is_per_circuit:
-            # Same gate for all circuits — apply uniformly via a temporary GpuStatevector
+            # Same gate for all circuits — normalise params to a 1-element tuple if scalar
+            if _plen == -1:
+                scalar_params = (params,)  # e.g. 0.3 -> (0.3,)
+            elif _plen == 1:
+                scalar_params = (params[0],)  # [0.3] -> (0.3,)
+            else:
+                scalar_params = params  # empty tuple or other
+            # Apply uniformly via a temporary GpuStatevector
             sv_obj = GpuStatevector.__new__(GpuStatevector)
             sv_obj.n_qubits = n
             sv_obj._backend = self._backend
             for i in range(B):
                 sv_obj._sv = self._sv[i]
-                sv_obj.apply_gate(name, qubit, params)
+                sv_obj.apply_gate(name, qubit, scalar_params)
                 self._sv[i] = sv_obj._sv
         else:
             # Different angle per circuit: batched single-qubit rotation
