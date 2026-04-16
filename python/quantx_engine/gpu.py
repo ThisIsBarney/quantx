@@ -313,11 +313,36 @@ class GpuLanczos:
         elif hasattr(H, 'n') and hasattr(H, 'matvec'):
             N = H.n
             if self._backend.is_gpu():
-                # Wrap: move v to CPU, call H.matvec, move result to GPU
-                def matvec(v_gpu):
-                    v_cpu = cp.asnumpy(v_gpu)
-                    w_cpu = H.matvec(v_cpu)
-                    return cp.asarray(w_cpu)
+                # Try cupy.sparse (cuSPARSE), fall back to dense GPU
+                _gpu_matvec = None
+                try:
+                    import cupyx.scipy.sparse as csp
+                    rows = [e[0] for e in H.entries]
+                    cols = [e[1] for e in H.entries]
+                    vals = [e[2] for e in H.entries]
+                    if rows:
+                        H_csr = csp.csr_matrix(
+                            (cp.array(vals, dtype=complex),
+                             (cp.array(rows, dtype=np.int32),
+                              cp.array(cols, dtype=np.int32))),
+                            shape=(N, N)
+                        )
+                        _gpu_matvec = lambda v: H_csr @ v
+                except (ImportError, AttributeError):
+                    pass
+                if _gpu_matvec is None:
+                    # Fall back: dense GPU matrix if available, else CPU roundtrip
+                    if hasattr(H, 'to_dense'):
+                        H_dense = cp.array(H.to_dense())
+                        _gpu_matvec = lambda v: H_dense @ v
+                    else:
+                        # Operator only implements matvec — CPU roundtrip (no entries/to_dense)
+                        def _cpu_roundtrip(v_gpu, _H=H):
+                            v_cpu = cp.asnumpy(v_gpu)
+                            w_cpu = _H.matvec(v_cpu)
+                            return cp.asarray(w_cpu)
+                        _gpu_matvec = _cpu_roundtrip
+                matvec = _gpu_matvec
             else:
                 matvec = H.matvec
         elif callable(H):
@@ -443,11 +468,7 @@ class GpuLanczos:
 
 @dataclass
 class GpuBatchedCircuit:
-    """Run multiple circuits with different parameters simultaneously on GPU.
-
-    Each circuit has the same gate sequence but different rotation angles.
-    The state tensor has shape (n_circuits, 2**n_qubits).
-    """
+    """Run multiple circuits simultaneously on GPU — fully vectorized, no Python loops over B."""
     n_qubits: int
     n_circuits: int
     backend: str = "auto"
@@ -458,126 +479,159 @@ class GpuBatchedCircuit:
         if self.n_qubits < 1 or self.n_circuits < 1:
             raise GpuError("n_qubits and n_circuits must be >= 1")
         self._backend = GpuBackend(self.backend)
-        xp = self._backend.xp
-        sv = xp.zeros((self.n_circuits, 2 ** self.n_qubits), dtype=complex)
-        sv[:, 0] = 1.0 + 0j
-        self._sv = sv
+        self.reset()
 
     def reset(self):
         xp = self._backend.xp
-        self._sv = xp.zeros((self.n_circuits, 2 ** self.n_qubits), dtype=complex)
-        self._sv[:, 0] = 1.0 + 0j
+        sv = xp.zeros((self.n_circuits, 2**self.n_qubits), dtype=complex)
+        sv[:, 0] = 1.0 + 0j
+        self._sv = sv
+
+    def _build_rotation_matrices(self, name: str, params_dev) -> Any:
+        """Build (B, 2, 2) rotation matrices for per-circuit angles."""
+        xp = self._backend.xp
+        half = params_dev / 2.0
+        c = xp.cos(half)  # (B,)
+        s = xp.sin(half)  # (B,)
+        z = xp.zeros_like(c)
+        if name == "RX":
+            row0 = xp.stack([c, -1j * s], axis=-1)    # (B, 2)
+            row1 = xp.stack([-1j * s, c], axis=-1)
+        elif name == "RY":
+            row0 = xp.stack([c, -s], axis=-1)
+            row1 = xp.stack([s,  c], axis=-1)
+            row0 = row0.astype(complex)
+            row1 = row1.astype(complex)
+        elif name == "RZ":
+            row0 = xp.stack([xp.exp(-1j * half), z], axis=-1)
+            row1 = xp.stack([z, xp.exp(1j * half)], axis=-1)
+        elif name == "PhaseShift":
+            row0 = xp.stack([xp.ones_like(c), z], axis=-1)
+            row1 = xp.stack([z, xp.exp(1j * params_dev)], axis=-1)
+        else:
+            raise GpuError(f"Per-circuit batched rotation not supported for gate {name!r}")
+        return xp.stack([row0, row1], axis=1).astype(complex)  # (B, 2, 2)
+
+    def _apply_1q_same(self, mat_2x2, qubit: int):
+        """Apply same (2,2) matrix to qubit in all B circuits — vectorized."""
+        xp = self._backend.xp
+        B, n = self.n_circuits, self.n_qubits
+        q = qubit
+        sv = self._sv.reshape([B] + [2]*n)
+        result = xp.tensordot(mat_2x2, sv, axes=[[1], [q + 1]])
+        result = xp.moveaxis(result, 0, q + 1)
+        self._sv = result.reshape(B, 2**n)
+
+    def _apply_1q_batched(self, mat_B22, qubit: int):
+        """Apply per-circuit (B,2,2) matrices to qubit — vectorized."""
+        xp = self._backend.xp
+        B, n = self.n_circuits, self.n_qubits
+        q = qubit
+        sv = self._sv.reshape([B] + [2]*n)      # (B, 2, ..., 2)
+        sv = xp.moveaxis(sv, q + 1, -1)          # qubit axis to last
+        sv = sv.reshape(B, -1, 2)                 # (B, D, 2)
+        sv = xp.matmul(mat_B22, sv.swapaxes(-1, -2)).swapaxes(-1, -2)  # (B, D, 2)
+        sv = sv.reshape([B] + [2]*n)
+        sv = xp.moveaxis(sv, -1, q + 1)
+        self._sv = sv.reshape(B, 2**n)
+
+    def _apply_2q_same(self, mat_4x4, q0: int, q1: int):
+        """Apply same (4,4) two-qubit matrix to (q0,q1) in all B circuits — vectorized."""
+        xp = self._backend.xp
+        B, n = self.n_circuits, self.n_qubits
+        mat = xp.array(mat_4x4).reshape(2, 2, 2, 2)
+        sv = self._sv.reshape([B] + [2]*n)
+        result = xp.tensordot(mat, sv, axes=[[2, 3], [q0 + 1, q1 + 1]])
+        # result: (out0, out1, B, remaining_axes...)
+        result = xp.moveaxis(result, 2, 0)  # → (B, out0, out1, remaining...)
+        remaining = sorted(i for i in range(n) if i != q0 and i != q1)
+        cur = [q0, q1] + remaining
+        perm_q = [cur.index(i) for i in range(n)]
+        perm = [0] + [p + 1 for p in perm_q]
+        result = xp.transpose(result, perm)
+        self._sv = result.reshape(B, 2**n)
 
     def apply_gate(self, name: str, qubit: int, params=()):
-        """Apply the same gate to all circuits. params: scalar or array of length n_circuits."""
+        """Apply gate to all B circuits.
+
+        params: () for non-rotation gates, scalar/1-element for same angle,
+                or array of length n_circuits for per-circuit angles.
+        """
         xp = self._backend.xp
-        n = self.n_qubits
         B = self.n_circuits
 
-        # Determine if params is per-circuit (one angle per circuit) or scalar (same for all).
-        # Per-circuit: a sequence whose length == n_circuits (and n_circuits > 1).
-        # Scalar: a float/int, an empty tuple, or a 1-element sequence.
+        # Determine per-circuit vs broadcast
         if hasattr(params, '__len__'):
-            _plen = len(params)
+            n_p = len(params)
         else:
-            _plen = -1  # scalar number
+            n_p = -1  # bare scalar
 
-        is_per_circuit = (_plen == B and B > 1)
+        is_per_circuit = (n_p == B and B > 1)
 
-        if not is_per_circuit:
-            # Same gate for all circuits — normalise params to a 1-element tuple if scalar
-            if _plen == -1:
-                scalar_params = (params,)  # e.g. 0.3 -> (0.3,)
-            elif _plen == 1:
-                scalar_params = (params[0],)  # [0.3] -> (0.3,)
-            else:
-                scalar_params = params  # empty tuple or other
-            # Apply uniformly via a temporary GpuStatevector
-            sv_obj = GpuStatevector.__new__(GpuStatevector)
-            sv_obj.n_qubits = n
-            sv_obj._backend = self._backend
-            for i in range(B):
-                sv_obj._sv = self._sv[i]
-                sv_obj.apply_gate(name, qubit, scalar_params)
-                self._sv[i] = sv_obj._sv
+        if is_per_circuit:
+            params_dev = xp.asarray(params, dtype=float)
+            mat = self._build_rotation_matrices(name, params_dev)  # (B, 2, 2)
+            self._apply_1q_batched(mat, qubit)
         else:
-            # Different angle per circuit: batched single-qubit rotation
-            params_arr = xp.array(params, dtype=float)
-            if name == "RX":
-                cos_half = xp.cos(params_arr / 2)  # (B,)
-                sin_half = xp.sin(params_arr / 2)  # (B,)
-                mat = xp.stack([
-                    xp.stack([cos_half, -1j * sin_half], axis=-1),
-                    xp.stack([-1j * sin_half, cos_half], axis=-1),
-                ], axis=1)  # (B, 2, 2)
-            elif name == "RY":
-                cos_half = xp.cos(params_arr / 2)
-                sin_half = xp.sin(params_arr / 2)
-                mat = xp.stack([
-                    xp.stack([cos_half, -sin_half], axis=-1),
-                    xp.stack([sin_half, cos_half], axis=-1),
-                ], axis=1).astype(complex)
-            elif name == "RZ":
-                cos_half = xp.cos(params_arr / 2)
-                sin_half = xp.sin(params_arr / 2)
-                zeros = xp.zeros_like(cos_half)
-                mat = xp.stack([
-                    xp.stack([cos_half - 1j * sin_half, zeros], axis=-1),
-                    xp.stack([zeros, cos_half + 1j * sin_half], axis=-1),
-                ], axis=1)  # (B, 2, 2)
+            # Normalise scalar params to tuple for GpuStatevector._gate_matrix
+            if n_p == -1:
+                scalar = (float(params),)
+            elif n_p == 1:
+                scalar = (float(params[0]),)
             else:
-                raise GpuError(
-                    f"Batched gate {name} with per-circuit params not supported; use scalar params"
-                )
-
-            # Apply: sv shape (B, 2**n); reshape to (B, *[2]*n)
-            sv = self._sv.reshape([B] + [2] * n)  # (B, 2, 2, ..., 2)
-            for i in range(B):
-                sv_i = sv[i]  # (2, 2, ..., 2)
-                m_i = mat[i]  # (2, 2)
-                sv_i = xp.tensordot(m_i, sv_i, axes=[[1], [qubit]])
-                sv_i = xp.moveaxis(sv_i, 0, qubit)
-                sv[i] = sv_i
-            self._sv = sv.reshape(B, 2 ** n)
+                scalar = tuple(params)
+            sv_tmp = GpuStatevector.__new__(GpuStatevector)
+            sv_tmp.n_qubits = self.n_qubits
+            sv_tmp._backend = self._backend
+            mat_np = sv_tmp._gate_matrix(name, scalar)
+            mat_dev = xp.array(mat_np)
+            self._apply_1q_same(mat_dev, qubit)
 
     def apply_gate_all(self, name: str, qubit: int, params=()):
         """Alias for apply_gate — same gate applied to all circuits."""
         self.apply_gate(name, qubit, params)
 
     def apply_cnot(self, control: int, target: int):
-        """Apply CNOT to all circuits."""
-        B = self.n_circuits
-        sv_obj = GpuStatevector.__new__(GpuStatevector)
-        sv_obj.n_qubits = self.n_qubits
-        sv_obj._backend = self._backend
-        for i in range(B):
-            sv_obj._sv = self._sv[i]
-            sv_obj.apply_gate("CNOT", [control, target])
-            self._sv[i] = sv_obj._sv
+        cnot = np.array([[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]], dtype=complex)
+        self._apply_2q_same(cnot, control, target)
+
+    def apply_cz(self, q0: int, q1: int):
+        cz = np.diag([1.0+0j, 1, 1, -1])
+        self._apply_2q_same(cz, q0, q1)
+
+    def apply_swap(self, q0: int, q1: int):
+        swap = np.array([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]], dtype=complex)
+        self._apply_2q_same(swap, q0, q1)
 
     def probabilities(self) -> "np.ndarray":
         """Return probability arrays for all circuits. Shape (n_circuits, 2**n_qubits)."""
         xp = self._backend.xp
-        probs = xp.abs(self._sv) ** 2
-        return self._backend.to_numpy(probs)
+        probs = xp.abs(self._sv)**2
+        return self._backend.to_numpy(probs)  # (B, 2**n)
 
     def expectation_z(self, qubit: int) -> "np.ndarray":
         """Return ⟨Z_qubit⟩ for all circuits. Shape (n_circuits,)."""
         xp = self._backend.xp
-        B, D = self._sv.shape
-        n = self.n_qubits
-        probs = (xp.abs(self._sv) ** 2).reshape(B, *([2] * n))
-        axes = tuple(i + 1 for i in range(n) if i != qubit)
-        p01 = probs.sum(axis=axes)  # (B, 2)
+        B, n = self.n_circuits, self.n_qubits
+        probs = (xp.abs(self._sv)**2).reshape([B] + [2]*n)
+        sum_axes = tuple(i + 1 for i in range(n) if i != qubit)
+        p01 = probs.sum(axis=sum_axes)   # (B, 2)
         expvals = p01[:, 0] - p01[:, 1]  # (B,)
         return self._backend.to_numpy(expvals)
 
+    def norms(self) -> "np.ndarray":
+        """Return ||psi_b|| for each circuit b. Shape (B,)."""
+        xp = self._backend.xp
+        norms = xp.sqrt(xp.sum(xp.abs(self._sv)**2, axis=1))
+        return self._backend.to_numpy(norms)
+
+    def states(self) -> "np.ndarray":
+        """Return all B statevectors as numpy array. Shape (B, 2**n)."""
+        return self._backend.to_numpy(self._sv)
+
     def to_dict(self) -> dict:
-        return {
-            "n_qubits": self.n_qubits,
-            "n_circuits": self.n_circuits,
-            "backend": self._backend.name,
-        }
+        return {"n_qubits": self.n_qubits, "n_circuits": self.n_circuits,
+                "backend": self._backend.name}
 
 
 def gpu_info() -> dict:
