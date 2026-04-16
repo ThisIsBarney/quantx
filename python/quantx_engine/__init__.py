@@ -21,6 +21,7 @@ from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
 from .qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
 from .clifford_t import GateSequence, CliffordGroup, SolovayKitaev, TCountOptimizer, CliffordTError
 from .pennylane_plugin import QuantXDevice, QuantXPluginError
+from .lanczos import LanczosSolver, ArnoldiSolver, SparseHamiltonian, EigenResult, LanczosError
 
 __all__ = [
     "CircuitError",
@@ -67,4 +68,9 @@ __all__ = [
     "CliffordTError",
     "QuantXDevice",
     "QuantXPluginError",
+    "LanczosSolver",
+    "ArnoldiSolver",
+    "SparseHamiltonian",
+    "EigenResult",
+    "LanczosError",
 ]
