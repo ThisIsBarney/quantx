@@ -203,3 +203,69 @@ def test_classifier_consistent_inference_scale():
     single = clf.predict_proba(X[0:1])
     batch = clf.predict_proba(X[:5])
     np.testing.assert_allclose(single[0], batch[0], atol=1e-8)
+
+
+# ── GpuStatevector delegation tests ──────────────────────────────────────────
+
+def test_qnn_uses_gpu_statevector_not_hand_rolled():
+    """_run_circuit_sv must return a GpuStatevector, not a raw numpy array."""
+    from quantx_engine.gpu import GpuStatevector
+    from quantx_engine.qml import _run_circuit_sv
+    sv = _run_circuit_sv(np.zeros(2), np.zeros(2), n_qubits=2, n_layers=1)
+    assert isinstance(sv, GpuStatevector)
+
+
+def test_qnn_no_private_apply_single():
+    """The old hand-rolled helpers must no longer exist in the module."""
+    import quantx_engine.qml as qml_mod
+    for name in ("_ry", "_apply_single", "_apply_cnot", "_run_circuit", "_expectation_z"):
+        assert not hasattr(qml_mod, name), f"{name!r} still present in qml module"
+
+
+def test_qnn_backend_default_is_numpy():
+    """Default backend is 'numpy'."""
+    qnn = QuantumNeuralNetwork(n_qubits=2, n_layers=1)
+    assert qnn.backend == "numpy"
+
+
+def test_qnn_backend_numpy_matches_forward():
+    """Explicit backend='numpy' gives same result as default."""
+    qnn1 = QuantumNeuralNetwork(n_qubits=2, n_layers=1)
+    qnn2 = QuantumNeuralNetwork(n_qubits=2, n_layers=1, backend="numpy")
+    x = np.array([0.3, -0.1])
+    params = np.array([0.5, 0.8])
+    np.testing.assert_allclose(qnn1.forward(x, params), qnn2.forward(x, params), atol=1e-12)
+
+
+def test_qnn_to_dict_includes_backend():
+    """to_dict() must include the backend key."""
+    qnn = QuantumNeuralNetwork(n_qubits=2, n_layers=1, backend="numpy")
+    d = qnn.to_dict()
+    assert "backend" in d
+    assert d["backend"] == "numpy"
+
+
+def test_classifier_backend_propagated_to_qnn():
+    """QuantumClassifier propagates backend to its internal QNN."""
+    clf = QuantumClassifier(n_features=2, backend="numpy")
+    assert clf._qnn.backend == "numpy"
+
+
+def test_classifier_circuit_spec_includes_backend():
+    """circuit_spec() must include the backend key."""
+    clf = QuantumClassifier(n_features=2, n_layers=1, seed=0)
+    spec = clf.circuit_spec()
+    assert "backend" in spec
+
+
+def test_qnn_gpu_statevector_agrees_with_cpu():
+    """numpy and (numpy-fallback) 'auto' backends produce the same output."""
+    x = np.array([0.4, 0.7])
+    params = np.array([1.1, 0.3])
+    qnn_np = QuantumNeuralNetwork(n_qubits=2, n_layers=1, backend="numpy")
+    qnn_auto = QuantumNeuralNetwork(n_qubits=2, n_layers=1, backend="auto")
+    np.testing.assert_allclose(
+        qnn_np.forward(x, params),
+        qnn_auto.forward(x, params),
+        atol=1e-10,
+    )

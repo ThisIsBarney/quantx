@@ -1,8 +1,10 @@
 """
 Quantum Machine Learning module for the QuantX engine.
 
-Implements variational quantum circuits for supervised learning tasks using
-pure-Python / NumPy statevector simulation with exact parameter-shift gradients.
+Implements variational quantum circuits for supervised learning tasks.
+State evolution is delegated to :class:`~quantx_engine.gpu.GpuStatevector`,
+which supports both NumPy (CPU) and CuPy (GPU) backends — pass
+``backend="cupy"`` to run on GPU with no other changes.
 
 Classes:
     QuantumNeuralNetwork  — parameterized circuit (forward pass + gradients)
@@ -25,6 +27,9 @@ Usage:
     history = clf.fit(X_train, y_train, n_epochs=100, learning_rate=0.05)
     predictions = clf.predict(X_test)
     probabilities = clf.predict_proba(X_test)
+
+    # GPU-accelerated (requires CuPy):
+    clf_gpu = QuantumClassifier(n_features=4, n_layers=2, backend="cupy")
 """
 from __future__ import annotations
 
@@ -51,100 +56,63 @@ class QMLError(ValueError):
     """Raised for invalid QML inputs or configuration."""
 
 
-# ── Gate primitives (NumPy) ───────────────────────────────────────────────────
+# ── Core circuit evaluation via GpuStatevector ───────────────────────────────
 
-def _ry(theta: float):
-    """2×2 Ry rotation matrix."""
-    c, s = math.cos(theta / 2), math.sin(theta / 2)
-    return np.array([[c, -s], [s, c]], dtype=complex)
-
-
-def _apply_single(state: "np.ndarray", gate, qubit: int, n_qubits: int) -> "np.ndarray":
-    """Apply a 2×2 gate to `qubit` in an n-qubit statevector (shape 2^n)."""
-    # Reshape to (..., 2, ...) with qubit axis at position `qubit`
-    axes = list(range(n_qubits))
-    state = state.reshape([2] * n_qubits)
-    state = np.tensordot(gate, state, axes=([1], [qubit]))
-    # tensordot puts the contracted axis first; move it back
-    state = np.moveaxis(state, 0, qubit)
-    return state.reshape(2 ** n_qubits)
-
-
-def _apply_cnot(state: "np.ndarray", control: int, target: int, n_qubits: int) -> "np.ndarray":
-    """Apply CNOT(control, target) to a statevector."""
-    state = state.reshape([2] * n_qubits)
-    # Flip target dimension where control == 1
-    idx_ctrl1 = [slice(None)] * n_qubits
-    idx_ctrl1[control] = 1
-    idx_ctrl1 = tuple(idx_ctrl1)
-    sliced = state[idx_ctrl1]
-    # After slicing out the control axis, the target axis shifts:
-    # if target > control, it moves to target-1 in the sliced array.
-    flip_axis = target if target < control else target - 1
-    sliced = np.flip(sliced, axis=flip_axis)
-    state[idx_ctrl1] = sliced
-    return state.reshape(2 ** n_qubits)
-
-
-# ── Core circuit evaluation ───────────────────────────────────────────────────
-
-def _run_circuit(
+def _run_circuit_sv(
     x: "np.ndarray",
     params: "np.ndarray",
     n_qubits: int,
     n_layers: int,
-) -> "np.ndarray":
-    """Evaluate the parameterized circuit and return the full statevector.
+    backend: str = "numpy",
+) -> Any:
+    """Evaluate the parameterized circuit and return a GpuStatevector.
 
     Parameters
     ----------
     x:
-        Input features, shape (n_features,). Features beyond n_qubits are ignored;
-        missing features (n_features < n_qubits) default to 0.
+        Input features, shape (n_features,). Features beyond n_qubits are
+        ignored; missing features (n_features < n_qubits) default to 0.
     params:
         Circuit parameters, shape (n_layers * n_qubits,).
     n_qubits:
         Number of qubits.
     n_layers:
         Number of ansatz layers.
+    backend:
+        ``"numpy"`` (default), ``"cupy"``, or ``"auto"``.
 
     Returns
     -------
-    Complex statevector, shape (2^n_qubits,).
+    GpuStatevector after circuit evaluation.
+    Call ``.expectation_z(qubit)`` or ``.state()`` on the result.
     """
-    if not _HAS_NUMPY:
-        raise QMLError("numpy is required for QuantumNeuralNetwork. Install with: pip install numpy")
+    from quantx_engine.gpu import GpuStatevector, GpuError  # lazy import
 
-    state = np.zeros(2 ** n_qubits, dtype=complex)
-    state[0] = 1.0  # |0...0⟩
+    try:
+        sv = GpuStatevector(n_qubits=n_qubits, backend=backend)
+    except GpuError as exc:
+        raise QMLError(str(exc)) from exc
 
     # Angle encoding: Ry(2 * x_i) on qubit i
     for i in range(n_qubits):
         xi = float(x[i]) if i < len(x) else 0.0
-        state = _apply_single(state, _ry(2.0 * xi), i, n_qubits)
+        sv.apply_gate("RY", i, (2.0 * xi,))
 
     # Ansatz layers
-    params = params.reshape(n_layers, n_qubits)
-    for layer in range(n_layers):
-        # Parameterized Ry rotations
-        for i in range(n_qubits):
-            state = _apply_single(state, _ry(params[layer, i]), i, n_qubits)
-        # CNOT entanglement ladder
-        for i in range(n_qubits - 1):
-            state = _apply_cnot(state, i, i + 1, n_qubits)
+    if n_layers > 0:
+        if not _HAS_NUMPY:
+            raise QMLError(
+                "numpy is required for QuantumNeuralNetwork. "
+                "Install with: pip install numpy"
+            )
+        p2d = np.asarray(params).reshape(n_layers, n_qubits)
+        for layer in range(n_layers):
+            for i in range(n_qubits):
+                sv.apply_gate("RY", i, (float(p2d[layer, i]),))
+            for i in range(n_qubits - 1):
+                sv.apply_gate("CNOT", [i, i + 1])
 
-    return state
-
-
-def _expectation_z(state: "np.ndarray", qubit: int, n_qubits: int) -> float:
-    """Compute ⟨Z_qubit⟩ for the given statevector."""
-    sv = state.reshape([2] * n_qubits)
-    # |0⟩ → +1, |1⟩ → -1
-    # P(0) on qubit = sum of |amplitudes|² where qubit index == 0
-    idx0 = [slice(None)] * n_qubits
-    idx0[qubit] = 0
-    p0 = float(np.sum(np.abs(sv[tuple(idx0)]) ** 2))
-    return 2.0 * p0 - 1.0  # ⟨Z⟩ = P(|0⟩) - P(|1⟩)
+    return sv
 
 
 # ── QuantumNeuralNetwork ──────────────────────────────────────────────────────
@@ -153,8 +121,10 @@ def _expectation_z(state: "np.ndarray", qubit: int, n_qubits: int) -> float:
 class QuantumNeuralNetwork:
     """Parameterized quantum circuit for supervised learning.
 
-    The circuit uses angle encoding followed by hardware-efficient ansatz layers.
-    Gradients are computed exactly via the parameter-shift rule.
+    The circuit uses angle encoding followed by hardware-efficient ansatz
+    layers.  Gradients are computed exactly via the parameter-shift rule.
+    State evolution is handled by :class:`~quantx_engine.gpu.GpuStatevector`,
+    so passing ``backend="cupy"`` transparently enables GPU acceleration.
 
     Parameters
     ----------
@@ -165,10 +135,13 @@ class QuantumNeuralNetwork:
         Number of ansatz repetitions (depth = n_layers * (n_qubits + n_qubits - 1)).
     n_outputs:
         Number of output nodes (qubits measured). 1 for binary classification.
+    backend:
+        Statevector backend: ``"numpy"`` (default), ``"cupy"``, or ``"auto"``.
     """
     n_qubits: int
     n_layers: int = 2
     n_outputs: int = 1
+    backend: str = "numpy"
 
     @property
     def n_params(self) -> int:
@@ -195,11 +168,8 @@ class QuantumNeuralNetwork:
         -------
         Expectation values ⟨Z_i⟩ for i in range(n_outputs), shape (n_outputs,).
         """
-        state = _run_circuit(x, params, self.n_qubits, self.n_layers)
-        return np.array([
-            _expectation_z(state, i, self.n_qubits)
-            for i in range(self.n_outputs)
-        ])
+        sv = _run_circuit_sv(x, params, self.n_qubits, self.n_layers, self.backend)
+        return np.array([sv.expectation_z(i) for i in range(self.n_outputs)])
 
     def gradient(self, x: "np.ndarray", params: "np.ndarray") -> "np.ndarray":
         """Compute parameter-shift gradients ∂⟨Z_0⟩/∂params.
@@ -276,6 +246,7 @@ class QuantumNeuralNetwork:
             "n_layers": self.n_layers,
             "n_outputs": self.n_outputs,
             "n_params": self.n_params,
+            "backend": self.backend,
         }
 
 
@@ -301,6 +272,8 @@ class QuantumClassifier:
         'mse' or 'bce'.
     seed:
         Random seed for parameter initialization.
+    backend:
+        Statevector backend: ``"numpy"`` (default), ``"cupy"``, or ``"auto"``.
     """
     n_features: int
     n_layers: int = 2
@@ -308,6 +281,7 @@ class QuantumClassifier:
     optimizer: str = "adam"
     loss: str = "mse"
     seed: int | None = 42
+    backend: str = "numpy"
 
     # Learned state (set after fit())
     params_: "np.ndarray | None" = field(default=None, repr=False)
@@ -326,6 +300,7 @@ class QuantumClassifier:
             n_qubits=self.n_qubits,
             n_layers=self.n_layers,
             n_outputs=1,
+            backend=self.backend,
         )
 
     def fit(
@@ -488,6 +463,7 @@ class QuantumClassifier:
             "gradient_method": "parameter-shift rule (exact)",
             "optimizer": self.optimizer,
             "loss": self.loss,
+            "backend": self.backend,
             "example_encoding": encoding,
         }
         if self.params_ is not None:
