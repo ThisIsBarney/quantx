@@ -341,10 +341,19 @@ def test_statevector_fp32_hadamard_probability():
 
 
 def test_statevector_fp32_state_output_is_complex128():
-    """state() always returns complex128 even when internal dtype is complex64."""
+    """state() returns complex128 when internal dtype is complex64 (upcast)."""
     sv = GpuStatevector(n_qubits=1, backend="numpy", dtype="complex64")
     s = sv.state()
     assert s.dtype == np.complex128
+
+
+def test_statevector_fp64_state_no_redundant_copy():
+    """state() returns the numpy array directly (no extra copy) when dtype=complex128."""
+    sv = GpuStatevector(n_qubits=2, backend="numpy", dtype="complex128")
+    s = sv.state()
+    assert s.dtype == np.complex128
+    # The returned array should share memory with (or be) the internal buffer — no copy
+    assert np.shares_memory(s, sv._sv)
 
 
 def test_statevector_fp32_reset_preserves_dtype():
@@ -412,10 +421,18 @@ def test_batched_fp32_per_circuit_rx():
 
 
 def test_batched_fp32_states_output_is_complex128():
-    """states() always returns complex128 even when internal dtype is complex64."""
+    """states() returns complex128 when internal dtype is complex64 (upcast)."""
     bc = GpuBatchedCircuit(n_qubits=1, n_circuits=2, backend="numpy", dtype="complex64")
     s = bc.states()
     assert s.dtype == np.complex128
+
+
+def test_batched_fp64_states_no_redundant_copy():
+    """states() returns the numpy array directly (no extra copy) when dtype=complex128."""
+    bc = GpuBatchedCircuit(n_qubits=1, n_circuits=2, backend="numpy", dtype="complex128")
+    s = bc.states()
+    assert s.dtype == np.complex128
+    assert np.shares_memory(s, bc._sv)
 
 
 def test_batched_fp32_to_dict():

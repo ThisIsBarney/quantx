@@ -240,8 +240,9 @@ class GpuStatevector:
         self._sv = sv.ravel()
 
     def state(self) -> "np.ndarray":
-        """Return statevector as complex128 numpy array (upcast if dtype=complex64)."""
-        return self._backend.to_numpy(self._sv).astype(np.complex128)
+        """Return statevector as complex128 numpy array (upcast only if internal dtype is complex64)."""
+        sv_cpu = self._backend.to_numpy(self._sv)
+        return sv_cpu if sv_cpu.dtype == np.complex128 else sv_cpu.astype(np.complex128)
 
     def probabilities(self, qubits: list[int] | None = None) -> "np.ndarray":
         """Return measurement probabilities, optionally marginalizing over qubits."""
@@ -641,8 +642,9 @@ class GpuBatchedCircuit:
         return self._backend.to_numpy(norms)
 
     def states(self) -> "np.ndarray":
-        """Return all B statevectors as complex128 numpy array (upcast if dtype=complex64)."""
-        return self._backend.to_numpy(self._sv).astype(np.complex128)
+        """Return all B statevectors as complex128 numpy array (upcast only if internal dtype is complex64)."""
+        sv_cpu = self._backend.to_numpy(self._sv)
+        return sv_cpu if sv_cpu.dtype == np.complex128 else sv_cpu.astype(np.complex128)
 
     def to_dict(self) -> dict:
         return {"n_qubits": self.n_qubits, "n_circuits": self.n_circuits,
