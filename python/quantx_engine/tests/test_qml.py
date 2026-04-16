@@ -269,3 +269,26 @@ def test_qnn_gpu_statevector_agrees_with_cpu():
         qnn_auto.forward(x, params),
         atol=1e-10,
     )
+
+
+def test_run_circuit_sv_wrong_param_size_raises():
+    """P2b: stale/mis-sized params raise QMLError even when n_layers=0."""
+    from quantx_engine.qml import _run_circuit_sv
+    # n_layers=0 expects 0 params — passing 2 should raise
+    with pytest.raises(QMLError, match="params has 2 elements"):
+        _run_circuit_sv(np.zeros(2), np.array([0.1, 0.2]), n_qubits=2, n_layers=0)
+
+
+def test_run_circuit_sv_wrong_param_size_nonzero_layers():
+    """P2b: mis-sized params also raise for n_layers > 0."""
+    from quantx_engine.qml import _run_circuit_sv
+    # 2 qubits × 1 layer = 2 params expected; passing 3 should raise
+    with pytest.raises(QMLError, match="params has 3 elements"):
+        _run_circuit_sv(np.zeros(2), np.array([0.1, 0.2, 0.3]), n_qubits=2, n_layers=1)
+
+
+def test_run_circuit_sv_zero_layers_empty_params_ok():
+    """P2b: n_layers=0 with empty params is valid (pure encoding circuit)."""
+    from quantx_engine.qml import _run_circuit_sv
+    sv = _run_circuit_sv(np.array([0.5, 0.3]), np.zeros(0), n_qubits=2, n_layers=0)
+    assert abs(sv.norm() - 1.0) < 1e-10

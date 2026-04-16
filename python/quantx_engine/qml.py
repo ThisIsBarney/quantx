@@ -86,6 +86,14 @@ def _run_circuit_sv(
     GpuStatevector after circuit evaluation.
     Call ``.expectation_z(qubit)`` or ``.state()`` on the result.
     """
+    # P2a: numpy check before any GPU/array operations so callers always
+    # see QMLError, never a raw NameError or ImportError from gpu.py.
+    if not _HAS_NUMPY:
+        raise QMLError(
+            "numpy is required for QuantumNeuralNetwork. "
+            "Install with: pip install numpy"
+        )
+
     from quantx_engine.gpu import GpuStatevector, GpuError  # lazy import
 
     try:
@@ -98,14 +106,19 @@ def _run_circuit_sv(
         xi = float(x[i]) if i < len(x) else 0.0
         sv.apply_gate("RY", i, (2.0 * xi,))
 
+    # P2b: always validate params shape — catches stale/mis-sized vectors even
+    # when n_layers=0 (previously those params were silently ignored).
+    params_arr = np.asarray(params)
+    expected_n = n_layers * n_qubits
+    if params_arr.size != expected_n:
+        raise QMLError(
+            f"params has {params_arr.size} elements; "
+            f"expected {expected_n} (n_layers={n_layers} × n_qubits={n_qubits})"
+        )
+
     # Ansatz layers
     if n_layers > 0:
-        if not _HAS_NUMPY:
-            raise QMLError(
-                "numpy is required for QuantumNeuralNetwork. "
-                "Install with: pip install numpy"
-            )
-        p2d = np.asarray(params).reshape(n_layers, n_qubits)
+        p2d = params_arr.reshape(n_layers, n_qubits)
         for layer in range(n_layers):
             for i in range(n_qubits):
                 sv.apply_gate("RY", i, (float(p2d[layer, i]),))
