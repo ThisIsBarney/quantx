@@ -23,6 +23,7 @@ from .clifford_t import GateSequence, CliffordGroup, SolovayKitaev, TCountOptimi
 from .pennylane_plugin import QuantXDevice, QuantXPluginError
 from .lanczos import LanczosSolver, ArnoldiSolver, SparseHamiltonian, EigenResult, LanczosError
 from .sweep import ParameterSweep, SweepResult, SweepError, grid_sweep, list_sweep
+from .gpu import GpuBackend, GpuStatevector, GpuLanczos, GpuBatchedCircuit, GpuError, gpu_info, to_gpu, to_cpu
 
 __all__ = [
     "CircuitError",
@@ -79,4 +80,12 @@ __all__ = [
     "SweepError",
     "grid_sweep",
     "list_sweep",
+    "GpuBackend",
+    "GpuStatevector",
+    "GpuLanczos",
+    "GpuBatchedCircuit",
+    "GpuError",
+    "gpu_info",
+    "to_gpu",
+    "to_cpu",
 ]
