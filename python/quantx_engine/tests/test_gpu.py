@@ -304,3 +304,136 @@ def test_gpu_lanczos_solve_matvec():
     solver = GpuLanczos(k=4, backend="numpy", seed=0)
     result = solver.solve_matvec(lambda v: diag * v, n=4)
     np.testing.assert_allclose(np.sort(result.eigenvalues), diag, atol=1e-8)
+
+
+# ---------------------------------------------------------------------------
+# dtype (fp32 / fp64) tests
+# ---------------------------------------------------------------------------
+
+def test_statevector_dtype_default_is_complex128():
+    """Default dtype is complex128."""
+    sv = GpuStatevector(n_qubits=2, backend="numpy")
+    assert sv.dtype == "complex128"
+    assert sv._dtype == np.complex128
+    assert sv._sv.dtype == np.complex128
+
+
+def test_statevector_dtype_complex64():
+    """complex64 dtype is accepted and used internally."""
+    sv = GpuStatevector(n_qubits=2, backend="numpy", dtype="complex64")
+    assert sv.dtype == "complex64"
+    assert sv._dtype == np.complex64
+    assert sv._sv.dtype == np.complex64
+
+
+def test_statevector_dtype_invalid():
+    """Invalid dtype raises GpuError."""
+    with pytest.raises(GpuError, match="dtype"):
+        GpuStatevector(n_qubits=2, backend="numpy", dtype="float32")
+
+
+def test_statevector_fp32_hadamard_probability():
+    """fp32 statevector gives correct probabilities for H|0⟩ (within fp32 tolerance)."""
+    sv = GpuStatevector(n_qubits=1, backend="numpy", dtype="complex64")
+    sv.apply_gate("H", 0)
+    probs = sv.probabilities()
+    np.testing.assert_allclose(probs, [0.5, 0.5], atol=1e-6)
+
+
+def test_statevector_fp32_state_output_is_complex128():
+    """state() always returns complex128 even when internal dtype is complex64."""
+    sv = GpuStatevector(n_qubits=1, backend="numpy", dtype="complex64")
+    s = sv.state()
+    assert s.dtype == np.complex128
+
+
+def test_statevector_fp32_reset_preserves_dtype():
+    """reset() preserves internal dtype."""
+    sv = GpuStatevector(n_qubits=2, backend="numpy", dtype="complex64")
+    sv.apply_gate("H", 0)
+    sv.reset()
+    assert sv._sv.dtype == np.complex64
+    np.testing.assert_allclose(sv.probabilities(), [1.0, 0.0, 0.0, 0.0], atol=1e-6)
+
+
+def test_statevector_fp32_to_dict():
+    """to_dict() includes dtype key."""
+    sv = GpuStatevector(n_qubits=2, backend="numpy", dtype="complex64")
+    d = sv.to_dict()
+    assert d["dtype"] == "complex64"
+
+
+def test_statevector_fp32_vs_fp64_agree():
+    """fp32 and fp64 agree on a Bell state to within fp32 precision."""
+    sv32 = GpuStatevector(n_qubits=2, backend="numpy", dtype="complex64")
+    sv64 = GpuStatevector(n_qubits=2, backend="numpy", dtype="complex128")
+    for sv in (sv32, sv64):
+        sv.apply_gate("H", 0)
+        sv.apply_gate("CNOT", [0, 1])
+    np.testing.assert_allclose(sv32.state(), sv64.state(), atol=1e-5)
+
+
+def test_batched_dtype_default_is_complex128():
+    """Default dtype is complex128."""
+    bc = GpuBatchedCircuit(n_qubits=2, n_circuits=3, backend="numpy")
+    assert bc.dtype == "complex128"
+    assert bc._sv.dtype == np.complex128
+
+
+def test_batched_dtype_complex64():
+    """complex64 dtype is accepted and used internally."""
+    bc = GpuBatchedCircuit(n_qubits=2, n_circuits=3, backend="numpy", dtype="complex64")
+    assert bc.dtype == "complex64"
+    assert bc._sv.dtype == np.complex64
+
+
+def test_batched_dtype_invalid():
+    """Invalid dtype raises GpuError."""
+    with pytest.raises(GpuError, match="dtype"):
+        GpuBatchedCircuit(n_qubits=2, n_circuits=3, backend="numpy", dtype="float64")
+
+
+def test_batched_fp32_probabilities():
+    """fp32 batched circuit gives correct probabilities for H|0⟩."""
+    bc = GpuBatchedCircuit(n_qubits=1, n_circuits=4, backend="numpy", dtype="complex64")
+    bc.apply_gate("H", 0)
+    probs = bc.probabilities()   # (4, 2)
+    np.testing.assert_allclose(probs, np.full((4, 2), 0.5), atol=1e-6)
+
+
+def test_batched_fp32_per_circuit_rx():
+    """fp32 per-circuit RX gate produces correct expectation values."""
+    angles = np.array([0.0, math.pi / 2, math.pi, 3 * math.pi / 2])
+    bc = GpuBatchedCircuit(n_qubits=1, n_circuits=4, backend="numpy", dtype="complex64")
+    bc.apply_gate("RX", 0, params=angles)
+    expvals = bc.expectation_z(0)
+    expected = np.cos(angles)
+    np.testing.assert_allclose(expvals, expected, atol=1e-5)
+
+
+def test_batched_fp32_states_output_is_complex128():
+    """states() always returns complex128 even when internal dtype is complex64."""
+    bc = GpuBatchedCircuit(n_qubits=1, n_circuits=2, backend="numpy", dtype="complex64")
+    s = bc.states()
+    assert s.dtype == np.complex128
+
+
+def test_batched_fp32_to_dict():
+    """to_dict() includes dtype key."""
+    bc = GpuBatchedCircuit(n_qubits=2, n_circuits=3, backend="numpy", dtype="complex64")
+    d = bc.to_dict()
+    assert d["dtype"] == "complex64"
+
+
+def test_batched_fp32_vs_fp64_agree():
+    """fp32 and fp64 batched circuits agree on Bell-state probabilities."""
+    for dtype in ("complex64", "complex128"):
+        bc = GpuBatchedCircuit(n_qubits=2, n_circuits=2, backend="numpy", dtype=dtype)
+        bc.apply_gate("H", 0)
+        bc.apply_cnot(0, 1)
+    bc32 = GpuBatchedCircuit(n_qubits=2, n_circuits=2, backend="numpy", dtype="complex64")
+    bc64 = GpuBatchedCircuit(n_qubits=2, n_circuits=2, backend="numpy", dtype="complex128")
+    for bc in (bc32, bc64):
+        bc.apply_gate("H", 0)
+        bc.apply_cnot(0, 1)
+    np.testing.assert_allclose(bc32.states(), bc64.states(), atol=1e-5)

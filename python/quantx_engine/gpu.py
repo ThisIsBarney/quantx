@@ -111,23 +111,30 @@ class GpuBackend:
 class GpuStatevector:
     n_qubits: int
     backend: str = "auto"
+    dtype: str = "complex128"   # "complex128" (fp64) or "complex64" (fp32)
     _backend: GpuBackend = field(init=False, repr=False)
-    _sv: Any = field(init=False, repr=False)   # shape (2**n_qubits,)
+    _sv: Any = field(init=False, repr=False)    # shape (2**n_qubits,)
+    _dtype: Any = field(init=False, repr=False) # resolved numpy dtype
 
     def __post_init__(self):
         if self.n_qubits < 1:
             raise GpuError("n_qubits must be >= 1")
+        if self.dtype not in ("complex64", "complex128"):
+            raise GpuError(
+                f"dtype must be 'complex64' or 'complex128', got {self.dtype!r}"
+            )
         self._backend = GpuBackend(self.backend)
+        self._dtype = np.complex64 if self.dtype == "complex64" else np.complex128
         xp = self._backend.xp
-        sv = xp.zeros(2**self.n_qubits, dtype=complex)
-        sv[0] = 1.0 + 0j
+        sv = xp.zeros(2**self.n_qubits, dtype=self._dtype)
+        sv[0] = 1.0
         self._sv = sv
 
     def reset(self):
         """Reset to |0...0⟩."""
         xp = self._backend.xp
-        self._sv = xp.zeros(2**self.n_qubits, dtype=complex)
-        self._sv[0] = 1.0 + 0j
+        self._sv = xp.zeros(2**self.n_qubits, dtype=self._dtype)
+        self._sv[0] = 1.0
 
     def _gate_matrix(self, name: str, params=()) -> "np.ndarray":
         """Return 2x2 gate matrix as a numpy array (converted to device in apply_gate)."""
@@ -182,7 +189,7 @@ class GpuStatevector:
 
         if len(qubits) == 1:
             mat_np = self._gate_matrix(name, params)
-            mat = xp.array(mat_np)
+            mat = xp.array(mat_np, dtype=self._dtype)
             q = qubits[0]
             sv = self._sv.reshape([2] * n)
             sv = xp.tensordot(mat, sv, axes=[[1], [q]])
@@ -190,7 +197,7 @@ class GpuStatevector:
             self._sv = sv.ravel()
         elif len(qubits) == 2:
             mat_np = self._gate_matrix_2q(name)
-            mat = xp.array(mat_np).reshape(2, 2, 2, 2)
+            mat = xp.array(mat_np, dtype=self._dtype).reshape(2, 2, 2, 2)
             q0, q1 = qubits[0], qubits[1]
             sv = self._sv.reshape([2] * n)
             sv = xp.tensordot(mat, sv, axes=[[2, 3], [q0, q1]])
@@ -217,7 +224,7 @@ class GpuStatevector:
         xp = self._backend.xp
         n = self.n_qubits
         k = len(qubits)
-        U_dev = xp.array(np.asarray(U, dtype=complex)).reshape([2] * k * 2)
+        U_dev = xp.array(np.asarray(U), dtype=self._dtype).reshape([2] * k * 2)
         sv = self._sv.reshape([2] * n)
         sv = xp.tensordot(U_dev, sv, axes=[list(range(k, 2 * k)), qubits])
         # move axes back
@@ -233,8 +240,8 @@ class GpuStatevector:
         self._sv = sv.ravel()
 
     def state(self) -> "np.ndarray":
-        """Return statevector as numpy array."""
-        return self._backend.to_numpy(self._sv)
+        """Return statevector as complex128 numpy array (upcast if dtype=complex64)."""
+        return self._backend.to_numpy(self._sv).astype(np.complex128)
 
     def probabilities(self, qubits: list[int] | None = None) -> "np.ndarray":
         """Return measurement probabilities, optionally marginalizing over qubits."""
@@ -275,6 +282,7 @@ class GpuStatevector:
         return {
             "n_qubits": self.n_qubits,
             "backend": self._backend.name,
+            "dtype": self.dtype,
             "hilbert_dim": 2 ** self.n_qubits,
             "norm": round(self.norm(), 8),
         }
@@ -472,19 +480,26 @@ class GpuBatchedCircuit:
     n_qubits: int
     n_circuits: int
     backend: str = "auto"
+    dtype: str = "complex128"   # "complex128" (fp64) or "complex64" (fp32)
     _backend: GpuBackend = field(init=False, repr=False)
-    _sv: Any = field(init=False, repr=False)   # shape (n_circuits, 2**n_qubits)
+    _sv: Any = field(init=False, repr=False)    # shape (n_circuits, 2**n_qubits)
+    _dtype: Any = field(init=False, repr=False) # resolved numpy dtype
 
     def __post_init__(self):
         if self.n_qubits < 1 or self.n_circuits < 1:
             raise GpuError("n_qubits and n_circuits must be >= 1")
+        if self.dtype not in ("complex64", "complex128"):
+            raise GpuError(
+                f"dtype must be 'complex64' or 'complex128', got {self.dtype!r}"
+            )
         self._backend = GpuBackend(self.backend)
+        self._dtype = np.complex64 if self.dtype == "complex64" else np.complex128
         self.reset()
 
     def reset(self):
         xp = self._backend.xp
-        sv = xp.zeros((self.n_circuits, 2**self.n_qubits), dtype=complex)
-        sv[:, 0] = 1.0 + 0j
+        sv = xp.zeros((self.n_circuits, 2**self.n_qubits), dtype=self._dtype)
+        sv[:, 0] = 1.0
         self._sv = sv
 
     def _build_rotation_matrices(self, name: str, params_dev) -> Any:
@@ -510,7 +525,7 @@ class GpuBatchedCircuit:
             row1 = xp.stack([z, xp.exp(1j * params_dev)], axis=-1)
         else:
             raise GpuError(f"Per-circuit batched rotation not supported for gate {name!r}")
-        return xp.stack([row0, row1], axis=1).astype(complex)  # (B, 2, 2)
+        return xp.stack([row0, row1], axis=1).astype(self._dtype)  # (B, 2, 2)
 
     def _apply_1q_same(self, mat_2x2, qubit: int):
         """Apply same (2,2) matrix to qubit in all B circuits — vectorized."""
@@ -539,7 +554,7 @@ class GpuBatchedCircuit:
         """Apply same (4,4) two-qubit matrix to (q0,q1) in all B circuits — vectorized."""
         xp = self._backend.xp
         B, n = self.n_circuits, self.n_qubits
-        mat = xp.array(mat_4x4).reshape(2, 2, 2, 2)
+        mat = xp.array(mat_4x4, dtype=self._dtype).reshape(2, 2, 2, 2)
         sv = self._sv.reshape([B] + [2]*n)
         result = xp.tensordot(mat, sv, axes=[[2, 3], [q0 + 1, q1 + 1]])
         # result: (out0, out1, B, remaining_axes...)
@@ -584,7 +599,7 @@ class GpuBatchedCircuit:
             sv_tmp.n_qubits = self.n_qubits
             sv_tmp._backend = self._backend
             mat_np = sv_tmp._gate_matrix(name, scalar)
-            mat_dev = xp.array(mat_np)
+            mat_dev = xp.array(mat_np, dtype=self._dtype)
             self._apply_1q_same(mat_dev, qubit)
 
     def apply_gate_all(self, name: str, qubit: int, params=()):
@@ -626,12 +641,12 @@ class GpuBatchedCircuit:
         return self._backend.to_numpy(norms)
 
     def states(self) -> "np.ndarray":
-        """Return all B statevectors as numpy array. Shape (B, 2**n)."""
-        return self._backend.to_numpy(self._sv)
+        """Return all B statevectors as complex128 numpy array (upcast if dtype=complex64)."""
+        return self._backend.to_numpy(self._sv).astype(np.complex128)
 
     def to_dict(self) -> dict:
         return {"n_qubits": self.n_qubits, "n_circuits": self.n_circuits,
-                "backend": self._backend.name}
+                "backend": self._backend.name, "dtype": self.dtype}
 
 
 def gpu_info() -> dict:
