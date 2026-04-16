@@ -331,9 +331,17 @@ class GpuLanczos:
                 except (ImportError, AttributeError):
                     pass
                 if _gpu_matvec is None:
-                    # Fall back: dense GPU matrix
-                    H_dense = cp.array(H.to_dense())
-                    _gpu_matvec = lambda v: H_dense @ v
+                    # Fall back: dense GPU matrix if available, else CPU roundtrip
+                    if hasattr(H, 'to_dense'):
+                        H_dense = cp.array(H.to_dense())
+                        _gpu_matvec = lambda v: H_dense @ v
+                    else:
+                        # Operator only implements matvec — CPU roundtrip (no entries/to_dense)
+                        def _cpu_roundtrip(v_gpu, _H=H):
+                            v_cpu = cp.asnumpy(v_gpu)
+                            w_cpu = _H.matvec(v_cpu)
+                            return cp.asarray(w_cpu)
+                        _gpu_matvec = _cpu_roundtrip
                 matvec = _gpu_matvec
             else:
                 matvec = H.matvec

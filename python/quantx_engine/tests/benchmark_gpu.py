@@ -19,7 +19,15 @@ def bench_statevector(n_qubits: int, n_gates: int = 50, backends=("numpy",)):
 
     results = {}
     gate_names = ["H", "X", "RX", "RY", "RZ"]
+
+    # Precompute a fixed gate sequence so every backend runs the same workload
     rng = random.Random(42)
+    gate_seq = []
+    for _ in range(n_gates):
+        name = rng.choice(gate_names)
+        q = rng.randrange(n_qubits)
+        params = (rng.uniform(0, 2 * math.pi),) if name in ("RX", "RY", "RZ") else ()
+        gate_seq.append((name, q, params))
 
     for backend in backends:
         try:
@@ -29,10 +37,7 @@ def bench_statevector(n_qubits: int, n_gates: int = 50, backends=("numpy",)):
             sv.reset()
 
             t0 = time.perf_counter()
-            for _ in range(n_gates):
-                name = rng.choice(gate_names)
-                q = rng.randrange(n_qubits)
-                params = (rng.uniform(0, 2 * math.pi),) if name in ("RX", "RY", "RZ") else ()
+            for name, q, params in gate_seq:
                 sv.apply_gate(name, q, params)
             # Force synchronization for GPU
             _ = sv.norm()
