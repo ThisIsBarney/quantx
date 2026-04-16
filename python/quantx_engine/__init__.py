@@ -22,6 +22,7 @@ from .qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
 from .clifford_t import GateSequence, CliffordGroup, SolovayKitaev, TCountOptimizer, CliffordTError
 from .pennylane_plugin import QuantXDevice, QuantXPluginError
 from .lanczos import LanczosSolver, ArnoldiSolver, SparseHamiltonian, EigenResult, LanczosError
+from .sweep import ParameterSweep, SweepResult, SweepError, grid_sweep, list_sweep
 
 __all__ = [
     "CircuitError",
@@ -73,4 +74,9 @@ __all__ = [
     "SparseHamiltonian",
     "EigenResult",
     "LanczosError",
+    "ParameterSweep",
+    "SweepResult",
+    "SweepError",
+    "grid_sweep",
+    "list_sweep",
 ]
