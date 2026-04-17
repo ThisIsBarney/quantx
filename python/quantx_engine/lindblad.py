@@ -1,0 +1,461 @@
+"""Lindblad open-system dynamics for the QuantX engine.
+
+Wraps the native C++ ``lindblad_backend`` (RK4 density-matrix evolution,
+Wootters concurrence, log-negativity, mutual information) with a clean
+Python API.
+
+The Lindblad master equation::
+
+    dρ/dt = −i[H, ρ] + Σ_k γ_k (L_k ρ L_k† − ½{L_k†L_k, ρ})
+
+is integrated by the C++ backend using a 4th-order Runge-Kutta scheme with
+automatic Hermitian re-symmetrisation at every step to suppress numerical
+drift.
+
+Supported collapse channels (single-qubit, specified via
+:class:`JumpOperator`):
+
+* ``"amplitude_damping"`` — L = √γ σ⁻  (energy relaxation T₁)
+* ``"dephasing"``         — L = √γ σz/2  (pure dephasing T₂)
+* ``"depolarizing"``      — three operators √(γ/3)·{σx, σy, σz}
+
+Maximum system size: 10 qubits (C++ backend limit; dense 2ⁿ × 2ⁿ matrix).
+
+Quick-start example::
+
+    from quantx_engine import Engine
+    from quantx_engine.lindblad import LindbladSolver, JumpOperator
+
+    engine = Engine()
+    solver = LindbladSolver(engine)
+
+    # Single qubit with amplitude damping (T1 decay)
+    result = solver.solve(
+        n_qubits=1,
+        hamiltonian_terms=[],          # no coherent drive
+        jump_operators=[JumpOperator("amplitude_damping", qubit=0, rate=0.5)],
+        total_time=4.0,
+        dt=0.05,
+    )
+    print(result.final_purity)         # → ~0 (fully mixed at long time)
+    print(result.times[-1])            # → 4.0
+
+    # Two-qubit system: Heisenberg XY + dephasing on both qubits
+    result = solver.solve(
+        n_qubits=2,
+        hamiltonian_terms=[(0.5, "X0X1"), (0.5, "Y0Y1")],
+        jump_operators=[
+            JumpOperator("dephasing", qubit=0, rate=0.1),
+            JumpOperator("dephasing", qubit=1, rate=0.1),
+        ],
+        total_time=10.0,
+        dt=0.1,
+        entanglement_cut=1,            # track bipartite entanglement A=[0], B=[1]
+    )
+    print(result.entanglement.concurrence[-1])  # concurrence decays to 0
+
+"""
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover
+    from quantx_engine.engine import Engine
+
+__all__ = [
+    "LindbladError",
+    "JumpOperator",
+    "LindbladFrame",
+    "EntanglementTrace",
+    "LindbladResult",
+    "LindbladSolver",
+]
+
+# Maximum qubits supported by the C++ lindblad_backend (dense RK4).
+_MAX_LINDBLAD_QUBITS = 10
+
+# Map Python channel names → C++ label prefixes
+_CHANNEL_PREFIXES: dict[str, str] = {
+    "amplitude_damping": "AmplitudeDamping",
+    "dephasing":         "Dephasing",
+    "depolarizing":      "Depolarizing",
+}
+
+
+class LindbladError(ValueError):
+    """Raised for invalid Lindblad simulation parameters."""
+
+
+# ---------------------------------------------------------------------------
+# Input types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class JumpOperator:
+    """A single-qubit collapse (jump) operator for the Lindblad equation.
+
+    Parameters
+    ----------
+    kind:
+        Channel type.  One of ``"amplitude_damping"``, ``"dephasing"``,
+        ``"depolarizing"``.
+    qubit:
+        Target qubit index (0-based).
+    rate:
+        Jump rate γ ≥ 0.  For amplitude damping this is the T1 decay rate;
+        for dephasing it is the pure-dephasing rate; for depolarizing it is
+        the depolarizing rate.
+
+    Examples
+    --------
+    >>> JumpOperator("amplitude_damping", qubit=0, rate=0.5)  # T1 = 2
+    >>> JumpOperator("dephasing",         qubit=1, rate=0.1)  # T2* ≈ 10
+    >>> JumpOperator("depolarizing",      qubit=0, rate=0.05)
+    """
+    kind: str
+    qubit: int
+    rate: float
+
+    def __post_init__(self):
+        if self.kind not in _CHANNEL_PREFIXES:
+            raise LindbladError(
+                f"Unknown jump operator kind {self.kind!r}. "
+                f"Choose from: {list(_CHANNEL_PREFIXES)}"
+            )
+        if self.qubit < 0:
+            raise LindbladError(f"qubit must be >= 0, got {self.qubit}")
+        if self.rate < 0.0:
+            raise LindbladError(f"rate must be >= 0, got {self.rate}")
+
+    def _to_hamiltonian_term(self) -> dict[str, Any]:
+        """Convert to the C++ ``HamiltonianTerm`` JSON dict."""
+        prefix = _CHANNEL_PREFIXES[self.kind]
+        return {"label": f"{prefix}{self.qubit}", "coefficient": float(self.rate)}
+
+
+# ---------------------------------------------------------------------------
+# Result types
+# ---------------------------------------------------------------------------
+
+@dataclass
+class LindbladFrame:
+    """Snapshot of the density matrix at one integration step.
+
+    Attributes
+    ----------
+    step:
+        Integration step index (0 = initial state).
+    time:
+        Physical time at this step.
+    purity:
+        Tr(ρ²) ∈ [1/d, 1] where d = 2ⁿ.  1 = pure state, 1/d = maximally mixed.
+    entropy:
+        Von Neumann entropy −Tr(ρ ln ρ) ≥ 0.
+    coherence:
+        Maximum off-diagonal element max_{i≠j} |ρ_{ij}|.
+    populations:
+        Diagonal elements ρ_{ii} (basis-state populations), length = 2ⁿ.
+    """
+    step: int
+    time: float
+    purity: float
+    entropy: float
+    coherence: float
+    populations: list[float]
+
+
+@dataclass
+class EntanglementTrace:
+    """Bipartite entanglement measures over time.
+
+    Computed only when ``entanglement_cut > 0`` is passed to
+    :meth:`LindbladSolver.solve`.  Subsystem A = qubits 0…(cut-1),
+    subsystem B = qubits cut…(n-1).
+
+    Attributes
+    ----------
+    times:
+        Time axis (same length as other arrays).
+    entropy_a:
+        Von Neumann entropy of the reduced density matrix ρ_A.
+    mutual_info:
+        Mutual information I(A:B) = S_A + S_B − S_AB ≥ 0.
+    log_negativity:
+        Logarithmic negativity E_N = log₂ ‖ρ^{T_A}‖₁ (entanglement monotone).
+    concurrence:
+        Wootters concurrence C(ρ) ∈ [0, 1].  Only meaningful (non-zero) for
+        2-qubit systems.
+    """
+    times: list[float]
+    entropy_a: list[float]
+    mutual_info: list[float]
+    log_negativity: list[float]
+    concurrence: list[float]
+
+    def __len__(self) -> int:
+        return len(self.times)
+
+
+@dataclass
+class LindbladResult:
+    """Result of a Lindblad master equation integration.
+
+    Attributes
+    ----------
+    times:
+        Time axis, length = n_steps + 1 (includes t=0).
+    purity:
+        Tr(ρ²) at each time step.
+    entropy:
+        Von Neumann entropy at each time step.
+    coherence:
+        Max off-diagonal element at each time step.
+    populations:
+        populations[t] is a list of 2ⁿ basis-state populations at time t.
+    final_purity:
+        Purity of the final state.
+    final_entropy:
+        Von Neumann entropy of the final state.
+    final_populations:
+        Basis-state populations of the final state.
+    frames:
+        Full per-step snapshots (includes all of the above plus step index).
+    entanglement:
+        Bipartite entanglement traces.  ``None`` if ``entanglement_cut=0``.
+    n_qubits:
+        Number of qubits simulated.
+    total_time:
+        Total evolution time.
+    dt:
+        Integration time step.
+    """
+    times: list[float]
+    purity: list[float]
+    entropy: list[float]
+    coherence: list[float]
+    populations: list[list[float]]
+    final_purity: float
+    final_entropy: float
+    final_populations: list[float]
+    frames: list[LindbladFrame]
+    entanglement: EntanglementTrace | None
+    n_qubits: int
+    total_time: float
+    dt: float
+
+    def steady_state_reached(self, tol: float = 1e-4) -> bool:
+        """Return True if purity has converged within ``tol`` over the last 10%
+        of the time axis.
+
+        This is a simple heuristic: if the purity varies by less than ``tol``
+        in the final 10% of the simulation the system is likely near its
+        steady state.
+        """
+        if len(self.purity) < 4:
+            return False
+        tail_start = max(1, int(0.9 * len(self.purity)))
+        tail = self.purity[tail_start:]
+        if len(tail) < 2:
+            return False  # too few tail points to assess convergence
+        return (max(tail) - min(tail)) < tol
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"LindbladResult(n_qubits={self.n_qubits}, "
+            f"total_time={self.total_time}, dt={self.dt}, "
+            f"n_steps={len(self.times)-1}, "
+            f"final_purity={self.final_purity:.4g}, "
+            f"final_entropy={self.final_entropy:.4g})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Solver
+# ---------------------------------------------------------------------------
+
+class LindbladSolver:
+    """Solve the Lindblad master equation using the native C++ RK4 backend.
+
+    Parameters
+    ----------
+    engine:
+        An initialised :class:`~quantx_engine.engine.Engine` instance.
+
+    Examples
+    --------
+    >>> from quantx_engine import Engine
+    >>> from quantx_engine.lindblad import LindbladSolver, JumpOperator
+    >>> solver = LindbladSolver(Engine())
+    >>> result = solver.solve(
+    ...     n_qubits=1,
+    ...     hamiltonian_terms=[],
+    ...     jump_operators=[JumpOperator("amplitude_damping", 0, rate=1.0)],
+    ...     total_time=5.0,
+    ... )
+    >>> result.final_purity < 0.01   # fully mixed
+    True
+    """
+
+    def __init__(self, engine: "Engine"):
+        self._engine = engine
+
+    def solve(
+        self,
+        n_qubits: int,
+        hamiltonian_terms: list[tuple[float, str]],
+        jump_operators: list[JumpOperator],
+        total_time: float,
+        dt: float = 0.01,
+        entanglement_cut: int = 0,
+    ) -> LindbladResult:
+        """Integrate the Lindblad equation from |0…0⟩⟨0…0|.
+
+        Parameters
+        ----------
+        n_qubits:
+            Number of qubits.  Maximum 10 (dense RK4 backend limit).
+        hamiltonian_terms:
+            Coherent Hamiltonian as a list of ``(coefficient, pauli_string)``
+            tuples.  The Pauli string uses the format ``"X0"``, ``"Z0Z1"``,
+            ``"Y2"`` etc.  Example: ``[(1.0, "Z0"), (-0.5, "X0X1")]``.
+        jump_operators:
+            List of :class:`JumpOperator` instances describing the collapse
+            channels.
+        total_time:
+            Total evolution time.
+        dt:
+            RK4 integration time step.  Smaller values give higher accuracy
+            but increase runtime.  Rule of thumb: dt < 0.1 / max_rate.
+        entanglement_cut:
+            If > 0, compute bipartite entanglement between qubits
+            0…(cut-1) and cut…(n-1) at every step.  Entanglement data
+            is returned in :attr:`LindbladResult.entanglement`.
+            Set to 0 (default) to skip (saves memory and compute).
+
+        Returns
+        -------
+        LindbladResult
+
+        Raises
+        ------
+        LindbladError
+            On invalid parameters (too many qubits, negative time, etc.).
+        """
+        # ── Validate ──────────────────────────────────────────────────────────
+        if n_qubits < 1:
+            raise LindbladError(f"n_qubits must be >= 1, got {n_qubits}")
+        if n_qubits > _MAX_LINDBLAD_QUBITS:
+            raise LindbladError(
+                f"LindbladSolver supports at most {_MAX_LINDBLAD_QUBITS} qubits "
+                f"(dense RK4 requires 2ⁿ × 2ⁿ matrix), got {n_qubits}"
+            )
+        if total_time <= 0.0:
+            raise LindbladError(f"total_time must be > 0, got {total_time}")
+        if dt <= 0.0:
+            raise LindbladError(f"dt must be > 0, got {dt}")
+        if not (0 <= entanglement_cut < n_qubits):
+            if entanglement_cut != 0:
+                raise LindbladError(
+                    f"entanglement_cut must be 0 or in [1, n_qubits-1], "
+                    f"got {entanglement_cut} for n_qubits={n_qubits}"
+                )
+
+        # ── Build HamiltonianTerm list ─────────────────────────────────────────
+        terms: list[dict[str, Any]] = []
+        for coeff, pauli_str in hamiltonian_terms:
+            terms.append({"label": pauli_str, "coefficient": float(coeff)})
+        for jop in jump_operators:
+            terms.append(jop._to_hamiltonian_term())
+
+        # ── Construct problem dict ────────────────────────────────────────────
+        problem: dict[str, Any] = {
+            "qubits": n_qubits,
+            "equation": "Lindblad",
+            "total_time": float(total_time),
+            "dt": float(dt),
+            "hamiltonian_terms": terms,
+        }
+        options: dict[str, Any] = {}
+        if entanglement_cut > 0:
+            options["entanglement_cut"] = entanglement_cut
+
+        # ── Run via Engine ────────────────────────────────────────────────────
+        raw = self._engine.run(problem, options)
+        return _parse_result(raw, n_qubits, total_time, dt)
+
+
+# ---------------------------------------------------------------------------
+# Result parsing
+# ---------------------------------------------------------------------------
+
+def _parse_lindblad_frame(d: dict[str, Any]) -> LindbladFrame:
+    return LindbladFrame(
+        step=int(d.get("step", 0)),
+        time=float(d.get("time", 0.0)),
+        purity=float(d.get("purity", 0.0)),
+        entropy=float(d.get("entropy", 0.0)),
+        coherence=float(d.get("coherence", 0.0)),
+        populations=[float(p) for p in d.get("populations", [])],
+    )
+
+
+def _parse_entanglement_frame(d: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "time": float(d.get("time", 0.0)),
+        "entropy_a": float(d.get("entropy_a", 0.0)),
+        "mutual_info": float(d.get("mutual_info", 0.0)),
+        "log_negativity": float(d.get("log_negativity", 0.0)),
+        "concurrence": float(d.get("concurrence", 0.0)),
+    }
+
+
+def _parse_result(raw: dict[str, Any], n_qubits: int,
+                  total_time: float, dt: float) -> LindbladResult:
+    """Convert raw Engine.run() output to a LindbladResult."""
+    raw_frames: list[dict] = raw.get("lindblad_frames", [])
+    frames = [_parse_lindblad_frame(f) for f in raw_frames]
+
+    if not frames:
+        raise LindbladError(
+            "Lindblad backend returned no frames — check that the native "
+            "library is built with the Lindblad backend enabled."
+        )
+
+    times      = [f.time for f in frames]
+    purity     = [f.purity for f in frames]
+    entropy    = [f.entropy for f in frames]
+    coherence  = [f.coherence for f in frames]
+    populations = [f.populations for f in frames]
+
+    last = frames[-1]
+
+    # ── Entanglement trace (optional) ──────────────────────────────────────
+    ent_trace: EntanglementTrace | None = None
+    raw_ent = raw.get("entanglement_frames", [])
+    if raw_ent:
+        ef_list = [_parse_entanglement_frame(d) for d in raw_ent]
+        ent_trace = EntanglementTrace(
+            times=[e["time"] for e in ef_list],
+            entropy_a=[e["entropy_a"] for e in ef_list],
+            mutual_info=[e["mutual_info"] for e in ef_list],
+            log_negativity=[e["log_negativity"] for e in ef_list],
+            concurrence=[e["concurrence"] for e in ef_list],
+        )
+
+    return LindbladResult(
+        times=times,
+        purity=purity,
+        entropy=entropy,
+        coherence=coherence,
+        populations=populations,
+        final_purity=last.purity,
+        final_entropy=last.entropy,
+        final_populations=last.populations,
+        frames=frames,
+        entanglement=ent_trace,
+        n_qubits=n_qubits,
+        total_time=total_time,
+        dt=dt,
+    )

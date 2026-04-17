@@ -828,6 +828,66 @@ class Engine:
     import asyncio
     return await asyncio.to_thread(self.run_entanglement, options)
 
+  # ── Lindblad open-system solver (M71) ────────────────────────────────────
+
+  def run_lindblad(
+      self,
+      n_qubits: int,
+      hamiltonian_terms: list[tuple[float, str]],
+      jump_operators: "list",
+      total_time: float,
+      dt: float = 0.01,
+      entanglement_cut: int = 0,
+  ) -> "dict":
+      """Run the Lindblad master equation and return a :class:`~quantx_engine.lindblad.LindbladResult`.
+
+      Convenience wrapper around :class:`~quantx_engine.lindblad.LindbladSolver`.
+
+      Parameters
+      ----------
+      n_qubits:
+          Number of qubits (max 10).
+      hamiltonian_terms:
+          Coherent Hamiltonian as ``[(coeff, "Z0Z1"), ...]``.
+      jump_operators:
+          List of :class:`~quantx_engine.lindblad.JumpOperator`.
+      total_time:
+          Total evolution time.
+      dt:
+          RK4 time step (default 0.01).
+      entanglement_cut:
+          Bipartite cut qubit index for entanglement tracking (0 = disabled).
+
+      Returns
+      -------
+      LindbladResult
+      """
+      from quantx_engine.lindblad import LindbladSolver
+      return LindbladSolver(self).solve(
+          n_qubits=n_qubits,
+          hamiltonian_terms=hamiltonian_terms,
+          jump_operators=jump_operators,
+          total_time=total_time,
+          dt=dt,
+          entanglement_cut=entanglement_cut,
+      )
+
+  async def run_lindblad_async(
+      self,
+      n_qubits: int,
+      hamiltonian_terms: list[tuple[float, str]],
+      jump_operators: "list",
+      total_time: float,
+      dt: float = 0.01,
+      entanglement_cut: int = 0,
+  ) -> "dict":
+      """Async variant of run_lindblad."""
+      import asyncio
+      return await asyncio.to_thread(
+          self.run_lindblad,
+          n_qubits, hamiltonian_terms, jump_operators, total_time, dt, entanglement_cut,
+      )
+
   @staticmethod
   def _default_library_path():
     """Pick the most likely native library path for the current platform."""
