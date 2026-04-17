@@ -24,6 +24,14 @@ from .pennylane_plugin import QuantXDevice, QuantXPluginError
 from .lanczos import LanczosSolver, ArnoldiSolver, SparseHamiltonian, EigenResult, LanczosError
 from .sweep import ParameterSweep, SweepResult, SweepError, grid_sweep, list_sweep
 from .gpu import GpuBackend, GpuStatevector, GpuLanczos, GpuBatchedCircuit, GpuError, gpu_info, to_gpu, to_cpu
+from .lindblad import (
+    LindbladError,
+    JumpOperator,
+    LindbladFrame,
+    EntanglementTrace,
+    LindbladResult,
+    LindbladSolver,
+)
 from .mitigation import (
     MitigationError,
     fold_gates,
@@ -102,6 +110,13 @@ __all__ = [
     "gpu_info",
     "to_gpu",
     "to_cpu",
+    # Lindblad open-system solver (M71)
+    "LindbladError",
+    "JumpOperator",
+    "LindbladFrame",
+    "EntanglementTrace",
+    "LindbladResult",
+    "LindbladSolver",
     # Error mitigation (M70)
     "MitigationError",
     "fold_gates",
