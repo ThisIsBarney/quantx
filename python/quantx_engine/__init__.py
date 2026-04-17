@@ -24,6 +24,20 @@ from .pennylane_plugin import QuantXDevice, QuantXPluginError
 from .lanczos import LanczosSolver, ArnoldiSolver, SparseHamiltonian, EigenResult, LanczosError
 from .sweep import ParameterSweep, SweepResult, SweepError, grid_sweep, list_sweep
 from .gpu import GpuBackend, GpuStatevector, GpuLanczos, GpuBatchedCircuit, GpuError, gpu_info, to_gpu, to_cpu
+from .mitigation import (
+    MitigationError,
+    fold_gates,
+    Extrapolator,
+    RichardsonExtrapolator,
+    PolyExtrapolator,
+    ExpExtrapolator,
+    ZNEResult,
+    zne_mitigate,
+    QuasiProbabilityDecomposition,
+    PECResult,
+    pec_mitigate,
+    make_sv_executor,
+)
 
 __all__ = [
     "CircuitError",
@@ -88,4 +102,17 @@ __all__ = [
     "gpu_info",
     "to_gpu",
     "to_cpu",
+    # Error mitigation (M70)
+    "MitigationError",
+    "fold_gates",
+    "Extrapolator",
+    "RichardsonExtrapolator",
+    "PolyExtrapolator",
+    "ExpExtrapolator",
+    "ZNEResult",
+    "zne_mitigate",
+    "QuasiProbabilityDecomposition",
+    "PECResult",
+    "pec_mitigate",
+    "make_sv_executor",
 ]
