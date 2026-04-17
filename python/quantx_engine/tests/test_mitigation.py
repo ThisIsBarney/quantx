@@ -78,17 +78,40 @@ class TestInvertOp:
         assert inv["name"] == "RZ"
         assert math.isclose(inv["params"][0], -2.0)
 
-    def test_s_gate_inverse_is_rz(self):
+    def test_s_gate_inverse_is_phase_shift(self):
+        # S = PhaseShift(π/2) = diag([1, i]).  S† = PhaseShift(-π/2) = diag([1, -i]).
+        # Using RZ(-π/2) would introduce a global phase; PhaseShift is exact.
         op = {"name": "S", "qubits": [0], "params": []}
         inv = _invert_op(op)
-        assert inv["name"] == "RZ"
+        assert inv["name"] == "PhaseShift"
         assert math.isclose(inv["params"][0], -math.pi / 2)
 
-    def test_t_gate_inverse_is_rz(self):
+    def test_t_gate_inverse_is_phase_shift(self):
+        # T = PhaseShift(π/4) = diag([1, exp(iπ/4)]).  T† = PhaseShift(-π/4).
         op = {"name": "T", "qubits": [0], "params": []}
         inv = _invert_op(op)
-        assert inv["name"] == "RZ"
+        assert inv["name"] == "PhaseShift"
         assert math.isclose(inv["params"][0], -math.pi / 4)
+
+    def test_s_inverse_gives_identity(self):
+        """S · PhaseShift(-π/2) = I (statevector test)."""
+        from quantx_engine.gpu import GpuStatevector
+        sv = GpuStatevector(n_qubits=1)
+        sv.apply_gate("H", 0)  # create superposition
+        state_before = sv.state().copy()
+        sv.apply_gate("S", 0)
+        sv.apply_gate("PhaseShift", 0, (-math.pi / 2,))
+        np.testing.assert_allclose(sv.state(), state_before, atol=1e-12)
+
+    def test_t_inverse_gives_identity(self):
+        """T · PhaseShift(-π/4) = I (statevector test)."""
+        from quantx_engine.gpu import GpuStatevector
+        sv = GpuStatevector(n_qubits=1)
+        sv.apply_gate("H", 0)
+        state_before = sv.state().copy()
+        sv.apply_gate("T", 0)
+        sv.apply_gate("PhaseShift", 0, (-math.pi / 4,))
+        np.testing.assert_allclose(sv.state(), state_before, atol=1e-12)
 
     def test_unknown_gate_raises(self):
         op = {"name": "BADGATE", "qubits": [0], "params": []}
@@ -202,6 +225,10 @@ class TestRichardsonExtrapolator:
     def test_mismatched_lengths_raise(self):
         with pytest.raises(MitigationError, match="same length"):
             RichardsonExtrapolator().extrapolate([1.0, 3.0], [0.5])
+
+    def test_duplicate_scale_factors_raise(self):
+        with pytest.raises(MitigationError, match="unique"):
+            RichardsonExtrapolator().extrapolate([1.0, 1.0], [0.8, 0.8])
 
 
 class TestPolyExtrapolator:
@@ -393,16 +420,32 @@ class TestQuasiProbabilityDecomposition:
         assert qpd.basis[0][1] == 1.0   # sign
 
     def test_gamma_formula(self):
-        """γ = (1 + p) / (1 - 4p/3) for single-qubit depolarizing."""
+        """γ = (1 + 2p/3) / (1 - 4p/3) for single-qubit depolarizing.
+
+        Derivation: q_I = (1-p/3)/denom, q_P = -(p/3)/denom,
+        γ = q_I + 3·|q_P| = (1-p/3+p)/denom = (1+2p/3)/denom.
+        """
         p = 0.05
         qpd = QuasiProbabilityDecomposition.from_depolarizing(p)
-        expected_gamma = (1 + p) / (1 - 4 * p / 3)
+        expected_gamma = (1 + 2 * p / 3) / (1 - 4 * p / 3)
         assert math.isclose(qpd.gamma, expected_gamma, rel_tol=1e-10)
 
     def test_sampling_probabilities_sum_to_one(self):
         qpd = QuasiProbabilityDecomposition.from_depolarizing(0.1)
         total = sum(b[2] for b in qpd.basis)
         assert math.isclose(total, 1.0, abs_tol=1e-12)
+
+    def test_quasi_probs_sum_to_one(self):
+        """Trace-preservation: Σ q_k = q_I + q_X + q_Y + q_Z = 1."""
+        p = 0.1
+        qpd = QuasiProbabilityDecomposition.from_depolarizing(p)
+        denom = 1 - 4 * p / 3
+        q_I = (1 - p / 3) / denom
+        q_P = -(p / 3) / denom
+        assert math.isclose(q_I + 3 * q_P, 1.0, abs_tol=1e-12)
+        # Also verify gamma = |q_I| + 3*|q_P|
+        gamma = q_I + 3 * abs(q_P)
+        assert math.isclose(qpd.gamma, gamma, rel_tol=1e-10)
 
     def test_basis_has_four_terms(self):
         qpd = QuasiProbabilityDecomposition.from_depolarizing(0.1)

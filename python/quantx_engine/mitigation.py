@@ -61,6 +61,7 @@ __all__ = [
     "fold_gates",
     # Extrapolators
     "Extrapolator",
+    "ExtrapolationResult",
     "RichardsonExtrapolator",
     "PolyExtrapolator",
     "ExpExtrapolator",
@@ -118,12 +119,13 @@ def _invert_op(op: dict) -> dict:
     if name in _SELF_INVERSE_1Q or name in _SELF_INVERSE_2Q:
         return {"name": name, "qubits": qubits, "params": params}
     if name == "S":
-        # S† = S·Z; simplest representation: apply Z then S (= SDG semantics)
-        # We approximate by returning "SDG" if available, else composite.
-        # Since GpuStatevector doesn't have SDG, represent as RZ(-π/2).
-        return {"name": "RZ", "qubits": qubits, "params": [-math.pi / 2]}
+        # S = PhaseShift(π/2) = diag([1, i]).  S† = diag([1, -i]) = PhaseShift(-π/2).
+        # Using RZ(-π/2) would introduce a global phase exp(-iπ/4), so S·RZ(-π/2) ≠ I.
+        # PhaseShift(φ) = diag([1, exp(iφ)]) has no global-phase issue: S·S† = I exactly.
+        return {"name": "PhaseShift", "qubits": qubits, "params": [-math.pi / 2]}
     if name == "T":
-        return {"name": "RZ", "qubits": qubits, "params": [-math.pi / 4]}
+        # T = PhaseShift(π/4) = diag([1, exp(iπ/4)]).  T† = PhaseShift(-π/4).
+        return {"name": "PhaseShift", "qubits": qubits, "params": [-math.pi / 4]}
     if name in ("RX", "RY", "RZ", "PhaseShift"):
         if not params:
             raise MitigationError(f"Gate {name!r} requires a parameter but params is empty")
@@ -236,6 +238,11 @@ class Extrapolator(ABC):
                 f"At least 2 data points are required for extrapolation, "
                 f"got {len(scale_factors)}"
             )
+        if len(set(scale_factors)) != len(scale_factors):
+            raise MitigationError(
+                "scale_factors must be unique; duplicate values cause division by zero "
+                f"in Richardson extrapolation. Got: {scale_factors}"
+            )
 
 
 class RichardsonExtrapolator(Extrapolator):
@@ -334,6 +341,8 @@ class ExpExtrapolator(Extrapolator):
         self.p0 = p0
 
     def extrapolate(self, scale_factors, noisy_values):
+        if not _HAS_NUMPY:  # pragma: no cover
+            raise MitigationError("ExpExtrapolator requires numpy")
         self._validate(scale_factors, noisy_values)
         if len(scale_factors) < 3:
             raise MitigationError(
@@ -509,9 +518,9 @@ class QuasiProbabilityDecomposition:
         and inverts it to recover the ideal gate.  The resulting quasi-probability
         weights are:
 
-        - q_I = 1 / (1 − 4p/3)   [positive]
+        - q_I = (1 − p/3) / (1 − 4p/3)   [positive]
         - q_X = q_Y = q_Z = −(p/3) / (1 − 4p/3)  [negative for p > 0]
-        - γ = (1 + p) / (1 − 4p/3)
+        - γ = (1 + 2p/3) / (1 − 4p/3)
 
         Parameters
         ----------
@@ -532,9 +541,12 @@ class QuasiProbabilityDecomposition:
             return cls(basis=[("I", 1.0, 1.0)], gamma=1.0)
 
         denom = 1.0 - 4.0 * p / 3.0   # > 0 for p < 3/4
-        q_I = 1.0 / denom
-        q_pauli = -(p / 3.0) / denom   # negative
-        gamma = q_I + 3.0 * abs(q_pauli)   # = (1 + p) / (1 - 4p/3)
+        # Derivation: require Σ q_k · (Λ_p ∘ T_k) = I and trace-preservation (Σ q_k = 1).
+        # Solution: q_I = (1 - p/3) / denom,  q_{X,Y,Z} = -(p/3) / denom.
+        # γ = |q_I| + 3·|q_pauli| = (1 - p/3 + p) / denom = (1 + 2p/3) / denom.
+        q_I = (1.0 - p / 3.0) / denom
+        q_pauli = -(p / 3.0) / denom   # negative for p > 0
+        gamma = q_I + 3.0 * abs(q_pauli)   # = (1 + 2p/3) / (1 - 4p/3)
 
         # Normalised sampling probabilities |q_i| / γ
         prob_I = q_I / gamma
@@ -602,11 +614,6 @@ class PECResult:
     n_samples: int
     gamma: float
     raw_estimates: list[float] = field(default_factory=list, repr=False)
-
-    @property
-    def gamma_per_gate(self) -> float:
-        """Per-gate QPD one-norm.  ``gamma = gamma_per_gate ** n_1q_gates``."""
-        return self.gamma  # alias kept for backward compatibility
 
     def __repr__(self) -> str:  # pragma: no cover
         return (
