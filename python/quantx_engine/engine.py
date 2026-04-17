@@ -2,6 +2,10 @@ import ctypes
 import json
 import os
 from ctypes import c_char_p, c_void_p
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from quantx_engine.lindblad import JumpOperator, LindbladResult
 
 
 class CircuitError(RuntimeError):
@@ -834,11 +838,11 @@ class Engine:
       self,
       n_qubits: int,
       hamiltonian_terms: list[tuple[float, str]],
-      jump_operators: "list",
+      jump_operators: "list[JumpOperator]",
       total_time: float,
       dt: float = 0.01,
       entanglement_cut: int = 0,
-  ) -> "dict":
+  ) -> "LindbladResult":
       """Run the Lindblad master equation and return a :class:`~quantx_engine.lindblad.LindbladResult`.
 
       Convenience wrapper around :class:`~quantx_engine.lindblad.LindbladSolver`.
@@ -876,11 +880,11 @@ class Engine:
       self,
       n_qubits: int,
       hamiltonian_terms: list[tuple[float, str]],
-      jump_operators: "list",
+      jump_operators: "list[JumpOperator]",
       total_time: float,
       dt: float = 0.01,
       entanglement_cut: int = 0,
-  ) -> "dict":
+  ) -> "LindbladResult":
       """Async variant of run_lindblad."""
       import asyncio
       return await asyncio.to_thread(

@@ -160,6 +160,21 @@ class TestLindbladSolverValidation:
             self._solver().solve(n_qubits=2, hamiltonian_terms=[], jump_operators=[],
                                  total_time=1.0, entanglement_cut=5)
 
+    def test_dt_greater_than_total_time_raises(self):
+        with pytest.raises(LindbladError, match="dt.*<=.*total_time"):
+            self._solver().solve(n_qubits=1, hamiltonian_terms=[], jump_operators=[],
+                                 total_time=0.001, dt=0.1)
+
+    def test_jump_operator_qubit_out_of_range_raises(self):
+        """JumpOperator with qubit >= n_qubits should raise before calling backend."""
+        with pytest.raises(LindbladError, match="qubit 5.*n_qubits=2"):
+            self._solver().solve(
+                n_qubits=2,
+                hamiltonian_terms=[],
+                jump_operators=[JumpOperator("dephasing", qubit=5, rate=0.1)],
+                total_time=1.0,
+            )
+
     def test_entanglement_cut_zero_valid(self):
         """entanglement_cut=0 means disabled — should not raise."""
         solver = LindbladSolver(_mock_engine_for(_make_decay_frames()))
@@ -436,6 +451,20 @@ class TestNoFramesError:
                 total_time=1.0,
             )
 
+    def test_backend_ok_false_raises(self):
+        """Backend reporting ok=False should raise LindbladError before parsing frames."""
+        engine = MagicMock()
+        engine.run.return_value = {
+            "ok": False,
+            "error": "invalid Hamiltonian term",
+            "lindblad_frames": [],
+        }
+        with pytest.raises(LindbladError, match="backend error.*invalid Hamiltonian"):
+            LindbladSolver(engine).solve(
+                n_qubits=1, hamiltonian_terms=[], jump_operators=[],
+                total_time=1.0,
+            )
+
 
 # ---------------------------------------------------------------------------
 # _parse_result utility
@@ -464,28 +493,48 @@ class TestParseResult:
 # ---------------------------------------------------------------------------
 
 class TestEngineRunLindblad:
-    def test_engine_run_lindblad_returns_result(self):
-        """Engine.run_lindblad() should return a LindbladResult."""
-        from quantx_engine.engine import Engine
-        engine = MagicMock(spec=Engine)
-        frames = _make_decay_frames(n_steps=5)
-        engine.run.return_value = {
+    def _make_raw_payload(self, n_steps=5):
+        return {
             "ok": True,
-            "lindblad_frames": frames,
+            "lindblad_frames": _make_decay_frames(n_steps=n_steps),
             "entanglement_frames": [],
             "observables": {},
         }
-        # Patch the Engine instance's run method directly
-        real_engine = object.__new__(Engine)
-        real_engine.run = engine.run
-        real_engine.run_lindblad = Engine.run_lindblad.__get__(real_engine, Engine)
 
-        result = real_engine.run_lindblad(
+    def test_engine_run_lindblad_returns_result(self):
+        """Engine.run_lindblad() delegates to LindbladSolver and returns LindbladResult."""
+        from quantx_engine.engine import Engine
+        engine = MagicMock()
+        engine.run.return_value = self._make_raw_payload()
+        # Call the real Engine.run_lindblad implementation with a mock self
+        result = Engine.run_lindblad(
+            engine,
             n_qubits=1,
             hamiltonian_terms=[],
             jump_operators=[JumpOperator("amplitude_damping", 0, 0.5)],
             total_time=0.5,
             dt=0.1,
         )
+        assert isinstance(result, LindbladResult)
+        assert result.n_qubits == 1
+
+    def test_engine_run_lindblad_async_returns_result(self):
+        """Engine.run_lindblad_async() returns a LindbladResult via asyncio.to_thread."""
+        import asyncio
+        from quantx_engine.engine import Engine
+        engine = MagicMock()
+        engine.run.return_value = self._make_raw_payload()
+        # run_lindblad_async calls self.run_lindblad via asyncio.to_thread;
+        # bind the real implementation on the mock so it delegates correctly.
+        engine.run_lindblad = lambda *a, **kw: Engine.run_lindblad(engine, *a, **kw)
+
+        result = asyncio.run(Engine.run_lindblad_async(
+            engine,
+            n_qubits=1,
+            hamiltonian_terms=[],
+            jump_operators=[JumpOperator("amplitude_damping", 0, 0.5)],
+            total_time=0.5,
+            dt=0.1,
+        ))
         assert isinstance(result, LindbladResult)
         assert result.n_qubits == 1

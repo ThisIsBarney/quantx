@@ -57,7 +57,6 @@ Quick-start example::
 """
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -252,6 +251,12 @@ class LindbladResult:
         This is a simple heuristic: if the purity varies by less than ``tol``
         in the final 10% of the simulation the system is likely near its
         steady state.
+
+        .. warning::
+            This heuristic can give **false positives** for coherently driven
+            systems whose purity is approximately constant (e.g. near-pure
+            Rabi oscillations).  It is most reliable for dissipative dynamics
+            where purity monotonically decays to a fixed-point value.
         """
         if len(self.purity) < 4:
             return False
@@ -355,11 +360,19 @@ class LindbladSolver:
             raise LindbladError(f"total_time must be > 0, got {total_time}")
         if dt <= 0.0:
             raise LindbladError(f"dt must be > 0, got {dt}")
-        if not (0 <= entanglement_cut < n_qubits):
-            if entanglement_cut != 0:
+        if dt > total_time:
+            raise LindbladError(
+                f"dt ({dt}) must be <= total_time ({total_time})"
+            )
+        if entanglement_cut != 0 and not (1 <= entanglement_cut <= n_qubits - 1):
+            raise LindbladError(
+                f"entanglement_cut must be 0 or in [1, n_qubits-1], "
+                f"got {entanglement_cut} for n_qubits={n_qubits}"
+            )
+        for jop in jump_operators:
+            if jop.qubit >= n_qubits:
                 raise LindbladError(
-                    f"entanglement_cut must be 0 or in [1, n_qubits-1], "
-                    f"got {entanglement_cut} for n_qubits={n_qubits}"
+                    f"JumpOperator targets qubit {jop.qubit} but n_qubits={n_qubits}"
                 )
 
         # ── Build HamiltonianTerm list ─────────────────────────────────────────
@@ -414,6 +427,10 @@ def _parse_entanglement_frame(d: dict[str, Any]) -> dict[str, Any]:
 def _parse_result(raw: dict[str, Any], n_qubits: int,
                   total_time: float, dt: float) -> LindbladResult:
     """Convert raw Engine.run() output to a LindbladResult."""
+    if not raw.get("ok", True):
+        msg = raw.get("error_message") or raw.get("error") or "backend reported failure"
+        raise LindbladError(f"Lindblad backend error: {msg}")
+
     raw_frames: list[dict] = raw.get("lindblad_frames", [])
     frames = [_parse_lindblad_frame(f) for f in raw_frames]
 
