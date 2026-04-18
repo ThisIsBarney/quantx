@@ -96,6 +96,20 @@ class TestBinderCumulant:
         u = binder_cumulant(samples)
         assert abs(u - 2.0 / 3.0) < 1e-10
 
+    def test_nonzero_mean_ordered_phase(self):
+        """Samples centred at +m0 (biased ordered): U ≈ 2/3.
+
+        The standard Binder cumulant uses raw moments, not centred moments.
+        For an ordered ferromagnet in an external field all samples are near
+        +m0; U should be close to 2/3 (fully ordered phase).
+        """
+        rng = np.random.default_rng(5)
+        m0 = 3.0
+        # Narrow Gaussian around m0 → nearly constant → U ≈ 2/3
+        samples = rng.normal(m0, 0.05, 50_000)
+        u = binder_cumulant(samples)
+        assert abs(u - 2.0 / 3.0) < 0.02
+
 
 # ===========================================================================
 # entanglement_scaling
@@ -197,12 +211,23 @@ class TestEntanglementScaling:
         result = entanglement_scaling(psi, L=4)
         assert result.max_entropy == pytest.approx(math.log(2), abs=1e-10)
 
-    def test_qutrit_d3(self):
+    def test_qutrit_d3_product_state(self):
         """d=3 local dimension: |0⟩⊗2 has zero entropy."""
         psi = np.zeros(9, dtype=complex)
         psi[0] = 1.0
         result = entanglement_scaling(psi, L=2, d=3)
         np.testing.assert_allclose(result.entropy, 0.0, atol=1e-10)
+
+    def test_qutrit_d3_maximally_entangled(self):
+        """Maximally entangled two-qutrit state → S(1) = ln(3)."""
+        # |Ψ⟩ = (|00⟩ + |11⟩ + |22⟩)/√3
+        # State vector indices for L=2, d=3: index = s0*3 + s1
+        psi = np.zeros(9, dtype=complex)
+        psi[0] = 1.0 / math.sqrt(3)   # |00⟩
+        psi[4] = 1.0 / math.sqrt(3)   # |11⟩
+        psi[8] = 1.0 / math.sqrt(3)   # |22⟩
+        result = entanglement_scaling(psi, L=2, d=3)
+        assert result.entropy[0] == pytest.approx(math.log(3), abs=1e-10)
 
     def test_heisenberg_central_charge_is_finite(self):
         """Heisenberg chain: entanglement_scaling runs and returns a finite c.
@@ -273,6 +298,22 @@ class TestFiniteSizeScalingConstruction:
         params = np.linspace(0, 2, 10)
         binder = np.array([0.1 * params, 0.2 * params])
         fss = FiniteSizeScaling([8, 16], params, binder)
+        assert fss.binder_crossings() == []
+
+    def test_crossing_exact_at_last_point_not_detected(self):
+        """Curves that only touch at the last grid point are not counted.
+
+        When diff[-1] = 0 with no segment after it, we cannot determine
+        whether this is a crossing or a tangential touch; it is conservatively
+        excluded.
+        """
+        params = np.array([0.5, 1.0, 1.5])
+        # u8 rising, u16 falling, they meet only at the last point
+        u8  = np.array([0.2, 0.3, 0.4])
+        u16 = np.array([0.6, 0.5, 0.4])   # diff = [-0.4, -0.2, 0.0]
+        binder = np.array([u8, u16])
+        fss = FiniteSizeScaling([8, 16], params, binder)
+        # The touch at params[-1]=1.5 cannot be confirmed as a crossing
         assert fss.binder_crossings() == []
 
     def test_fit_critical_point_basic(self):

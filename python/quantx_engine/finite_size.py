@@ -138,6 +138,13 @@ def binder_cumulant(samples: "np.ndarray") -> float:
     At the critical point, Binder cumulant curves for different system sizes
     *L* cross at a universal value U* ∈ (0, 2/3).
 
+    .. note::
+       This function uses **raw moments** ⟨m²⟩ and ⟨m⁴⟩ (the standard
+       definition in the condensed-matter literature).  These are *not*
+       centred cumulants.  Passing samples with a non-zero mean correctly
+       gives U ≈ 2/3 for a biased ordered phase (e.g. ferromagnet in an
+       external field), which is the physically correct result.
+
     Parameters
     ----------
     samples:
@@ -204,6 +211,15 @@ def entanglement_scaling(
     psi:
         State vector, shape (d^L,).  Must be exactly d^L elements.
         Need not be normalised (normalisation is applied internally).
+
+        **Storage convention**: the state is indexed in standard
+        tensor-product (row-major / C) order, i.e.
+        ``psi[i] = ⟨s_0 s_1 … s_{L-1}|ψ⟩`` where site 0 is the
+        most-significant index.  Equivalently,
+        ``index = s_0·d^{L-1} + s_1·d^{L-2} + … + s_{L-1}``.
+        This is the natural NumPy ordering and the convention used
+        throughout QuantX.
+
     L:
         Number of lattice sites.
     d:
@@ -353,12 +369,17 @@ class FiniteSizeScaling:
                 # Linear interpolation: 0 = d0 + t*(d1-d0)  →  t = -d0/(d1-d0)
                 t = -d0 / (d1 - d0)
                 return float(self.params[i] + t * (self.params[i + 1] - self.params[i]))
-            if d1 == 0.0 and i + 2 < len(diff):
-                # Curves meet exactly at grid point i+1.  Only a genuine crossing
-                # if the segment *after* i+1 continues with the opposite sign.
-                d2 = float(diff[i + 2])
-                if d0 * d2 < 0:
-                    return float(self.params[i + 1])
+            if d1 == 0.0:
+                # Curves meet exactly at grid point i+1.
+                if i + 2 < len(diff):
+                    # Only a genuine crossing if the segment *after* i+1 has
+                    # the opposite sign to the segment *before* i+1.
+                    d2 = float(diff[i + 2])
+                    if d0 * d2 < 0:
+                        return float(self.params[i + 1])
+                # If i+1 is the last point there is no segment after it, so
+                # we cannot determine whether this is a crossing or a touch;
+                # conservatively skip it.
         return None
 
     # ------------------------------------------------------------------
@@ -448,9 +469,13 @@ class FiniteSizeScaling:
         Returns
         -------
         float
-            Mean squared deviation between adjacent rescaled curves.
-            Lower is better.  Returns ``inf`` if no overlapping regions
-            are found.
+            Mean squared deviation averaged over **all N(N−1)/2 unique
+            pairs** of rescaled curves (not just adjacent pairs).  Using
+            all pairs makes the metric more robust when sizes span a wide
+            range.  Lower is better.  Returns ``float('inf')`` if no
+            pair has an overlapping rescaled-x region with at least 2
+            points; this can happen when ``jc`` is far outside the
+            supplied parameter range or ``nu`` is very small.
 
         Raises
         ------
