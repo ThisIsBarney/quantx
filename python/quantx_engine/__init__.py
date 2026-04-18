@@ -38,6 +38,14 @@ from .spectral import (
     KrylovResult,
     KrylovEvolver,
 )
+from .finite_size import (
+    FiniteSizeError,
+    ScalingResult,
+    EntanglementResult,
+    FiniteSizeScaling,
+    binder_cumulant,
+    entanglement_scaling,
+)
 from .mitigation import (
     MitigationError,
     fold_gates,
@@ -116,6 +124,13 @@ __all__ = [
     "gpu_info",
     "to_gpu",
     "to_cpu",
+    # Finite-size scaling + quantum phase transitions (M74)
+    "FiniteSizeError",
+    "ScalingResult",
+    "EntanglementResult",
+    "FiniteSizeScaling",
+    "binder_cumulant",
+    "entanglement_scaling",
     # Spectral functions + Krylov time evolution (M73)
     "SpectralError",
     "SpectralResult",
