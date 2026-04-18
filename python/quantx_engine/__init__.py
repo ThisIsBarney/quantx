@@ -38,6 +38,11 @@ from .spectral import (
     KrylovResult,
     KrylovEvolver,
 )
+from .quantum_channel import (
+    ChannelError,
+    QuantumChannel,
+    SteadyStateSolver,
+)
 from .finite_size import (
     FiniteSizeError,
     ScalingResult,
@@ -124,6 +129,10 @@ __all__ = [
     "gpu_info",
     "to_gpu",
     "to_cpu",
+    # Quantum channels + steady-state solver (M75)
+    "ChannelError",
+    "QuantumChannel",
+    "SteadyStateSolver",
     # Finite-size scaling + quantum phase transitions (M74)
     "FiniteSizeError",
     "ScalingResult",
