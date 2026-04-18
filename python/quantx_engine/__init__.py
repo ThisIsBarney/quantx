@@ -16,7 +16,7 @@ from .chemistry import (
     PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
 )
 from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
-from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError
+from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError, MWPMDecoder
 from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
 from .qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
 from .clifford_t import GateSequence, CliffordGroup, SolovayKitaev, TCountOptimizer, CliffordTError
@@ -108,6 +108,7 @@ __all__ = [
     "LogicalErrorSimulator",
     "ThresholdResult",
     "QECError",
+    "MWPMDecoder",
     "MPS",
     "MPO",
     "TEBD",
