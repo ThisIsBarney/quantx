@@ -65,6 +65,13 @@ from .mitigation import (
     pec_mitigate,
     make_sv_executor,
 )
+from .transpiler import (
+    TranspilerError,
+    GateOp,
+    CouplingMap,
+    TranspileResult,
+    HardwareTranspiler,
+)
 
 __all__ = [
     "CircuitError",
@@ -165,4 +172,10 @@ __all__ = [
     "PECResult",
     "pec_mitigate",
     "make_sv_executor",
+    # Hardware-aware transpilation (M76)
+    "TranspilerError",
+    "GateOp",
+    "CouplingMap",
+    "TranspileResult",
+    "HardwareTranspiler",
 ]
