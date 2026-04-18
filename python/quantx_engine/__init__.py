@@ -32,6 +32,12 @@ from .lindblad import (
     LindbladResult,
     LindbladSolver,
 )
+from .spectral import (
+    SpectralError,
+    SpectralResult,
+    KrylovResult,
+    KrylovEvolver,
+)
 from .mitigation import (
     MitigationError,
     fold_gates,
@@ -110,6 +116,11 @@ __all__ = [
     "gpu_info",
     "to_gpu",
     "to_cpu",
+    # Spectral functions + Krylov time evolution (M73)
+    "SpectralError",
+    "SpectralResult",
+    "KrylovResult",
+    "KrylovEvolver",
     # Lindblad open-system solver (M71)
     "LindbladError",
     "JumpOperator",
