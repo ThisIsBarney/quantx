@@ -44,6 +44,7 @@ __all__ = [
     "SurfaceCode",
     "LogicalErrorSimulator",
     "ThresholdResult",
+    "MWPMDecoder",
 ]
 
 
@@ -651,3 +652,267 @@ class LogicalErrorSimulator:
             threshold=threshold,
             code_distances=[self.code.d if hasattr(self.code, "d") else self.code.n],
         )
+
+
+# ── MWPMDecoder ───────────────────────────────────────────────────────────────
+
+def _mwpm_bitmask(
+    costs: "dict[tuple[int, int], float]",
+    n: int,
+) -> "tuple[float, list[tuple[int, int]]]":
+    """Bitmask DP minimum-weight perfect matching on *n* nodes (n must be even).
+
+    Parameters
+    ----------
+    costs:
+        Mapping (i, j) or (j, i) → edge weight for any pair of nodes.
+    n:
+        Total number of nodes.  All must be matched.
+
+    Returns
+    -------
+    (min_cost, matching)  where *matching* is a list of (i, j) pairs.
+
+    Complexity
+    ----------
+    O(2ⁿ · n) time and space.  Feasible for n ≤ 24 (≈ 12 actual defects).
+    """
+    if n == 0:
+        return 0.0, []
+
+    memo: "dict[int, tuple[float, int]]" = {}  # bitmask → (min_cost, first_node's partner)
+
+    def _dp(mask: int) -> "tuple[float, int]":
+        if mask == 0:
+            return 0.0, -1
+        if mask in memo:
+            return memo[mask]
+        # Lowest set bit = first unmatched node
+        lsb = mask & (-mask)
+        first = lsb.bit_length() - 1
+        remaining = mask ^ lsb
+        best_cost: float = float("inf")
+        best_partner: int = -1
+        tmp = remaining
+        while tmp:
+            j_lsb = tmp & (-tmp)
+            partner = j_lsb.bit_length() - 1
+            c = costs.get((first, partner), costs.get((partner, first), float("inf")))
+            sub_cost, _ = _dp(remaining ^ j_lsb)
+            total = c + sub_cost
+            if total < best_cost:
+                best_cost = total
+                best_partner = partner
+            tmp ^= j_lsb
+        memo[mask] = (best_cost, best_partner)
+        return best_cost, best_partner
+
+    full_mask = (1 << n) - 1
+    _dp(full_mask)
+
+    # Reconstruct matching
+    matching: "list[tuple[int, int]]" = []
+    mask = full_mask
+    while mask:
+        lsb = mask & (-mask)
+        first = lsb.bit_length() - 1
+        _, partner = memo[mask]
+        matching.append((first, partner))
+        mask ^= lsb
+        mask ^= (1 << partner)
+
+    return memo[full_mask][0], matching
+
+
+def _mwpm_greedy_fallback(
+    costs: "dict[tuple[int, int], float]",
+    nodes: "list[int]",
+) -> "tuple[float, list[tuple[int, int]]]":
+    """Greedy nearest-neighbour MWPM (fallback for large syndrome sizes)."""
+    remaining = list(nodes)
+    total = 0.0
+    matching: "list[tuple[int, int]]" = []
+    while len(remaining) >= 2:
+        bi, bj, bd = 0, 1, float("inf")
+        for ii in range(len(remaining)):
+            for jj in range(ii + 1, len(remaining)):
+                d = costs.get(
+                    (remaining[ii], remaining[jj]),
+                    costs.get((remaining[jj], remaining[ii]), float("inf")),
+                )
+                if d < bd:
+                    bi, bj, bd = ii, jj, d
+        matching.append((remaining[bi], remaining[bj]))
+        total += bd
+        remaining.pop(bj)
+        remaining.pop(bi)
+    return total, matching
+
+
+class MWPMDecoder:
+    """Minimum-Weight Perfect Matching decoder for stabilizer codes (M78).
+
+    Uses an exact bitmask-DP MWPM solver for small syndrome sizes and a
+    greedy nearest-neighbour fallback for larger ones.  The syndrome graph
+    infrastructure from :class:`SurfaceCode` is reused directly, so the
+    decoder is compatible with any code that exposes
+    ``_build_syndrome_graph``, ``_syndrome_graph_bfs``, ``z_stabs``,
+    ``x_stabs``, and ``n``.
+
+    Unlike the built-in greedy decoder in :class:`SurfaceCode`, MWPM finds
+    the globally optimal correction (minimum total edge weight), which
+    reduces the logical error rate — especially at low physical error rates.
+
+    Parameters
+    ----------
+    code:
+        A :class:`SurfaceCode` or :class:`RepetitionCode` instance.
+    max_exact:
+        Maximum number of *actual* defects for which the exact bitmask-DP
+        solver is used.  The DP operates on ``2 * n_defects`` nodes; the
+        default of 10 defects corresponds to 20 DP nodes, which runs in
+        ~20 ms.  For larger syndrome sizes the greedy fallback is used.
+
+    Examples
+    --------
+    >>> code = SurfaceCode(d=5)
+    >>> decoder = MWPMDecoder(code)
+    >>> x_errors = [0] * 25
+    >>> x_errors[3] = 1
+    >>> syn = code.z_syndrome(x_errors)
+    >>> correction = decoder.decode_x(syn)
+    """
+
+    def __init__(
+        self,
+        code: "SurfaceCode | RepetitionCode",
+        max_exact: int = 10,
+    ) -> None:
+        if max_exact < 1:
+            raise QECError(f"max_exact must be >= 1, got {max_exact}")
+        self.code = code
+        self.max_exact = max_exact
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _decode(
+        self,
+        syndrome: "list[int]",
+        stabs: "list[list[int]]",
+    ) -> "list[int]":
+        """Core MWPM decoding on any syndrome + stabilizer list."""
+        defects = [i for i, s in enumerate(syndrome) if s]
+        n_data = self.code.n
+        correction = [0] * n_data
+
+        if not defects:
+            return correction
+
+        BOUNDARY = len(stabs)
+        adj, _ = self.code._build_syndrome_graph(stabs)
+        n_d = len(defects)
+
+        # ── Precompute BFS paths & distances ──────────────────────────
+        # Node scheme (MWPM on 2*n_d nodes):
+        #   0 .. n_d-1        → actual defects
+        #   n_d .. 2*n_d-1    → boundary proxy for defect i (index n_d+i)
+        # Cost(i, n_d+i) = BFS dist from defect[i] to BOUNDARY
+        # Cost(n_d+i, n_d+j) = 0 (two boundary proxies cancel freely)
+        # Cost(i, j) for 0<=i<j<n_d = BFS dist between defects
+
+        costs: "dict[tuple[int, int], float]" = {}
+        paths: "dict[tuple[int, int], list[int]]" = {}
+
+        # Defect–defect edges
+        for i in range(n_d):
+            for j in range(i + 1, n_d):
+                p = self.code._syndrome_graph_bfs(defects[i], defects[j], adj)
+                d = float(len(p)) if p else float("inf")
+                costs[(i, j)] = costs[(j, i)] = d
+                paths[(i, j)] = paths[(j, i)] = p
+
+        # Defect–boundary proxy edges
+        for i in range(n_d):
+            p = self.code._syndrome_graph_bfs(defects[i], BOUNDARY, adj)
+            d = float(len(p)) if p else float("inf")
+            costs[(i, n_d + i)] = costs[(n_d + i, i)] = d
+            paths[(i, n_d + i)] = paths[(n_d + i, i)] = p
+
+        # Boundary proxy–proxy edges (cost 0, no correction)
+        for i in range(n_d):
+            for j in range(n_d):
+                if i != j:
+                    costs[(n_d + i, n_d + j)] = 0.0
+                    paths[(n_d + i, n_d + j)] = []
+
+        # ── Solve MWPM ────────────────────────────────────────────────
+        all_nodes = list(range(2 * n_d))
+        n_mwpm = 2 * n_d
+
+        if n_d <= self.max_exact:
+            _, matching = _mwpm_bitmask(costs, n_mwpm)
+        else:
+            _, matching = _mwpm_greedy_fallback(costs, all_nodes)
+
+        # ── Apply corrections ─────────────────────────────────────────
+        for u, v in matching:
+            p = paths.get((u, v), paths.get((v, u), []))
+            for q in p:
+                correction[q] ^= 1
+
+        return correction
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
+    def decode_x(self, z_syndrome: "list[int]") -> "list[int]":
+        """Decode Z-stabilizer syndrome (X errors) → X correction operator."""
+        return self._decode(z_syndrome, self.code.z_stabs)
+
+    def decode_z(self, x_syndrome: "list[int]") -> "list[int]":
+        """Decode X-stabilizer syndrome (Z errors) → Z correction operator."""
+        return self._decode(x_syndrome, self.code.x_stabs)
+
+    def logical_error_rate(
+        self,
+        p_phys: float,
+        n_trials: int = 5000,
+        seed: "int | None" = None,
+        error_model: str = "depolarizing",
+    ) -> float:
+        """Monte Carlo logical error rate using MWPM decoding.
+
+        Compatible with :meth:`LogicalErrorSimulator.logical_error_rate` but
+        uses this decoder instead of the built-in greedy one.
+        """
+        if not 0 < p_phys < 1:
+            raise QECError(f"p_phys must be in (0, 1), got {p_phys}")
+
+        code = self.code
+        if not isinstance(code, SurfaceCode):
+            raise QECError("MWPMDecoder.logical_error_rate only supports SurfaceCode")
+
+        rng = random.Random(seed)
+        n_logical_errors = 0
+        n = code.n
+
+        for _ in range(n_trials):
+            if error_model == "depolarizing":
+                x_err = [1 if rng.random() < p_phys else 0 for _ in range(n)]
+                z_err = [1 if rng.random() < p_phys else 0 for _ in range(n)]
+            else:
+                x_err = [1 if rng.random() < p_phys else 0 for _ in range(n)]
+                z_err = [0] * n
+
+            syn_z = code.z_syndrome(x_err)
+            syn_x = code.x_syndrome(z_err)
+            corr_x = self.decode_x(syn_z)
+            corr_z = self.decode_z(syn_x)
+            lx, lz = code.logical_error(x_err, z_err, corr_x, corr_z)
+            if lx or lz:
+                n_logical_errors += 1
+
+        return n_logical_errors / n_trials
