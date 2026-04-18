@@ -201,15 +201,20 @@ class SparseHamiltonian:
                     raise LanczosError(
                         f"Site index {site} out of range [0, {n_sites - 1}]"
                     )
+            if len(sites) != len(set(sites)):
+                raise LanczosError(
+                    f"Duplicate site indices in term: {sites}. "
+                    "Each site may appear at most once per term."
+                )
             for op in ops:
                 if op not in ("I", "X", "Y", "Z"):
                     raise LanczosError(
                         f"Unknown Pauli operator '{op}'. Choose from: I, X, Y, Z"
                     )
-            coeff = complex(coeff)
+            c = complex(coeff)   # avoid shadowing the loop variable
             for i in range(dim):
                 j = i
-                amplitude = coeff
+                amplitude = c
                 for op, site in zip(ops, sites):
                     bit = (i >> site) & 1  # bit value in original ket |i⟩
                     if op == "I":
@@ -226,36 +231,42 @@ class SparseHamiltonian:
 
     @staticmethod
     def xxz_chain(
-        n_sites: int, delta: float = 1.0, hz: float = 0.0
+        n_sites: int, J: float = 1.0, delta: float = 1.0, hz: float = 0.0
     ) -> "SparseHamiltonian":
         """1D XXZ spin chain (open BC).
 
         .. math::
 
-            H = \\sum_{i=0}^{n-2} \\left[
+            H = J \\sum_{i=0}^{n-2} \\left[
                 \\frac{1}{2}(\\sigma^+_i \\sigma^-_{i+1} + \\text{h.c.})
                 + \\Delta\\, Z_i Z_{i+1}
             \\right]
             + h_z \\sum_i Z_i
 
-        where :math:`\\sigma^+ = \\begin{pmatrix}0&1\\\\0&0\\end{pmatrix}` and
-        the exchange coupling in the XY plane is fixed at 1.
+        where :math:`\\sigma^+ = \\begin{pmatrix}0&1\\\\0&0\\end{pmatrix}`,
+        ``J`` is the overall exchange scale, and ``delta`` (Δ) is the
+        anisotropy ratio.
 
         Special cases:
 
-        * ``delta=1``:  isotropic Heisenberg antiferromagnet (= ``heisenberg_1d(J=1)``)
-        * ``delta=0``:  XX model (free-fermion)
+        * ``delta=1``:  isotropic Heisenberg antiferromagnet;
+          ``xxz_chain(n, J=J, delta=1)`` equals ``heisenberg_1d(n, J=J)``
+        * ``delta=0``:  XX model (free-fermion), no ZZ coupling
         * ``delta→∞``:  classical Ising limit
 
         Parameters
         ----------
         n_sites:
-            Number of spins.
+            Number of spins.  Must be >= 1.
+        J:
+            Overall exchange coupling (energy scale).
         delta:
-            Anisotropy parameter Δ.
+            Anisotropy Δ = J_z / J_xy.
         hz:
-            Longitudinal field.
+            Uniform longitudinal field.
         """
+        if n_sites < 1:
+            raise LanczosError("n_sites must be >= 1")
         dim = 1 << n_sites
         entries = []
         for state in range(dim):
@@ -265,13 +276,13 @@ class SparseHamiltonian:
                 sj = (state >> nxt) & 1
                 zi = 1 - 2 * si
                 zj = 1 - 2 * sj
-                # ZZ term
+                # ZZ term: J * delta * ZiZj
                 if delta != 0.0:
-                    entries.append((state, state, complex(delta * zi * zj)))
-                # XY flip
+                    entries.append((state, state, complex(J * delta * zi * zj)))
+                # XY flip: J * 0.5 * (σ+σ- + h.c.)
                 if si != sj:
                     flipped = state ^ (1 << site) ^ (1 << nxt)
-                    entries.append((state, flipped, 0.5 + 0j))
+                    entries.append((state, flipped, complex(J * 0.5)))
             # hz*Z term
             if hz != 0.0:
                 for site in range(n_sites):

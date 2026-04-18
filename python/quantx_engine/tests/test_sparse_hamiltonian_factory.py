@@ -29,7 +29,7 @@ from quantx_engine.lanczos import (
 
 def _evals(H: SparseHamiltonian) -> np.ndarray:
     """Return all eigenvalues of H via dense diagonalization (small H only)."""
-    return np.sort(np.linalg.eigvalsh(H.to_dense().real))
+    return np.sort(np.linalg.eigvalsh(H.to_dense()))  # eigvalsh handles complex Hermitian
 
 
 # ===========================================================================
@@ -139,6 +139,16 @@ class TestFromPauliTerms:
         with pytest.raises(LanczosError, match="Unknown Pauli"):
             SparseHamiltonian.from_pauli_terms(1, [(1.0, "A", [0])])
 
+    def test_duplicate_sites_raises(self):
+        """Duplicate site indices in a term raise LanczosError."""
+        with pytest.raises(LanczosError, match="Duplicate"):
+            SparseHamiltonian.from_pauli_terms(2, [(1.0, "ZZ", [0, 0])])
+
+    def test_n_sites_zero_raises(self):
+        """n_sites=0 raises LanczosError."""
+        with pytest.raises(LanczosError, match="n_sites must be >= 1"):
+            SparseHamiltonian.from_pauli_terms(0, [])
+
     def test_lanczos_works_with_from_pauli_terms(self):
         """LanczosSolver works on a from_pauli_terms Hamiltonian."""
         H = SparseHamiltonian.from_pauli_terms(3, [
@@ -166,20 +176,21 @@ class TestXXZChain:
         np.testing.assert_allclose(M, M.conj().T, atol=1e-12)
 
     def test_isotropic_matches_heisenberg_1d(self):
-        """xxz_chain(n, delta=1) spectrum == heisenberg_1d(n, J=1)."""
+        """xxz_chain(n, J=J, delta=1) spectrum == heisenberg_1d(n, J=J)."""
         for n in (2, 3, 4):
-            evals_xxz = _evals(SparseHamiltonian.xxz_chain(n, delta=1.0))
-            evals_heis = _evals(SparseHamiltonian.heisenberg_1d(n, J=1.0, hz=0.0))
-            np.testing.assert_allclose(evals_xxz, evals_heis, atol=1e-10,
-                                       err_msg=f"n={n} xxz(δ=1) != heisenberg_1d(J=1)")
+            for J in (1.0, 2.0):
+                evals_xxz = _evals(SparseHamiltonian.xxz_chain(n, J=J, delta=1.0))
+                evals_heis = _evals(SparseHamiltonian.heisenberg_1d(n, J=J, hz=0.0))
+                np.testing.assert_allclose(evals_xxz, evals_heis, atol=1e-10,
+                                           err_msg=f"n={n} J={J} xxz(δ=1) != heisenberg_1d")
 
     def test_ising_limit_diagonal(self):
-        """xxz_chain(2, delta=1, hz=0): for 2 sites, ZZ-diagonal is ±delta."""
-        H = SparseHamiltonian.xxz_chain(2, delta=2.0, hz=0.0)
+        """xxz_chain(2, J=1, delta=2, hz=0): ZZ-diagonal is ±J*delta."""
+        H = SparseHamiltonian.xxz_chain(2, J=1.0, delta=2.0, hz=0.0)
         M = H.to_dense()
-        # states |00>, |01>, |10>, |11>
-        # |00⟩: z0z1=1*1→ delta*1, no flip → diag=2
-        # |11⟩: z0z1=(-1)(-1)=1 → diag=2; |01⟩: -1 flip possible → diag=-2
+        # |00⟩: z0=+1, z1=+1, ZZ-diag = J*delta*1*1 = 2
+        # |11⟩: z0=-1, z1=-1, ZZ-diag = J*delta*1 = 2
+        # |01⟩, |10⟩: z0*z1=-1, ZZ-diag = -J*delta = -2 (plus XY off-diagonal)
         assert M[0, 0].real == pytest.approx(2.0, abs=1e-12)
         assert M[3, 3].real == pytest.approx(2.0, abs=1e-12)
 
@@ -194,6 +205,19 @@ class TestXXZChain:
         H = SparseHamiltonian.xxz_chain(3, delta=0.0)
         M = H.to_dense()
         np.testing.assert_allclose(M.imag, 0.0, atol=1e-12)
+
+    def test_single_site_no_bonds(self):
+        """xxz_chain(1) has no bonds; only hz field contributes."""
+        H = SparseHamiltonian.xxz_chain(1, J=1.0, delta=1.0, hz=0.5)
+        M = H.to_dense().real
+        # Z|0⟩=+1, Z|1⟩=-1; hz*(1-2*bit)
+        assert M[0, 0] == pytest.approx(0.5, abs=1e-12)
+        assert M[1, 1] == pytest.approx(-0.5, abs=1e-12)
+
+    def test_n_sites_zero_raises(self):
+        """xxz_chain(0) raises LanczosError."""
+        with pytest.raises(LanczosError, match="n_sites must be >= 1"):
+            SparseHamiltonian.xxz_chain(0)
 
     def test_ground_state_antiferromagnet(self):
         """4-site XXZ(delta=1) ground state energy matches dense diagonalization."""
@@ -251,6 +275,21 @@ class TestHeisenberg2D:
         H = SparseHamiltonian.heisenberg_2d(2, 2, J=1.0)
         M = H.to_dense()
         assert np.any(M != 0)
+
+    def test_column_chain_lx1_matches_heisenberg_1d(self):
+        """heisenberg_2d(1, n) (column chain) also matches heisenberg_1d."""
+        for n in (2, 3, 4):
+            evals_2d = _evals(SparseHamiltonian.heisenberg_2d(1, n, J=1.0))
+            evals_1d = _evals(SparseHamiltonian.heisenberg_1d(n, J=1.0))
+            np.testing.assert_allclose(evals_2d, evals_1d, atol=1e-10,
+                                       err_msg=f"Lx=1,Ly={n} column != 1D chain")
+
+    def test_single_site_2d(self):
+        """heisenberg_2d(1, 1) — single site, no bonds."""
+        H = SparseHamiltonian.heisenberg_2d(1, 1, J=1.0)
+        assert H.n == 2
+        M = H.to_dense()
+        np.testing.assert_allclose(M, 0.0, atol=1e-12)
 
 
 # ===========================================================================
@@ -402,3 +441,10 @@ class TestHubbard1D:
         """L=0 raises LanczosError."""
         with pytest.raises(LanczosError, match="L must be >= 1"):
             SparseHamiltonian.hubbard_1d(0)
+
+    def test_l3_ground_state_matches_dense(self):
+        """L=3 Hubbard Lanczos ground state matches dense diagonalization (validates JW signs)."""
+        H = SparseHamiltonian.hubbard_1d(3, t=1.0, U=4.0)
+        e0_lz = LanczosSolver(k=1, seed=0).solve(H).ground_state_energy()
+        e0_dense = _evals(H)[0]
+        assert abs(e0_lz - e0_dense) < 1e-8
