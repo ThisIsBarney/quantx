@@ -71,6 +71,28 @@ class TestSpectralResult:
         result = SpectralResult.from_engine_output(self._mock_raw())
         assert result.gap is None
 
+    def test_gap_zero_preserved(self):
+        """gap=0.0 (gapless system) must not be silently dropped by falsy-or."""
+        raw = self._mock_raw()
+        raw["gap"] = 0.0
+        result = SpectralResult.from_engine_output(raw)
+        assert result.gap is not None
+        assert result.gap == pytest.approx(0.0)
+
+    def test_gap_alias_spectral_gap(self):
+        """spectral_gap alias is accepted."""
+        raw = self._mock_raw()
+        raw["spectral_gap"] = 2.5
+        result = SpectralResult.from_engine_output(raw)
+        assert result.gap == pytest.approx(2.5)
+
+    def test_gap_alias_energy_gap(self):
+        """energy_gap alias is accepted."""
+        raw = self._mock_raw()
+        raw["energy_gap"] = 0.0  # gapless via energy_gap alias
+        result = SpectralResult.from_engine_output(raw)
+        assert result.gap == pytest.approx(0.0)
+
     def test_alternate_field_names(self):
         """Accept 'frequencies', 'k_points', 'spectral_weight' aliases."""
         omega = [0.0, 1.0, 2.0]
@@ -226,10 +248,11 @@ class TestKrylovRealTime:
         evolver = KrylovEvolver(m=20, dt=0.1)
         t = 1.5
         psi_t = evolver.evolve(H, psi0, t=t)
-        # Should differ only by global phase e^{-iE0*t}
-        ratio = psi_t / (np.exp(-1j * E0 * t) * psi0)
-        np.testing.assert_allclose(ratio.real, 1.0, atol=1e-5)
-        np.testing.assert_allclose(ratio.imag, 0.0, atol=1e-5)
+        # Should differ only by global phase e^{-iE0*t}.
+        # Use assert_allclose on the full vector to avoid division-by-zero
+        # on near-zero components.
+        expected = np.exp(-1j * E0 * t) * psi0
+        np.testing.assert_allclose(psi_t, expected, atol=1e-5)
 
     def test_sparse_hamiltonian_input(self):
         """SparseHamiltonian is accepted as input."""

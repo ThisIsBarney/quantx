@@ -165,8 +165,13 @@ class SpectralResult:
             S_kw = np.zeros((n_k, n_w))
 
         # ── Spectral gap ──────────────────────────────────────────────────
-        gap_raw = raw.get("gap") or raw.get("spectral_gap") or raw.get("energy_gap")
-        gap = float(gap_raw) if gap_raw is not None else None
+        # Use explicit key iteration to avoid the falsy-or bug where a
+        # physically meaningful gap=0.0 (gapless system) would be discarded.
+        gap: "float | None" = None
+        for _gap_key in ("gap", "spectral_gap", "energy_gap"):
+            if _gap_key in raw:
+                gap = float(raw[_gap_key])
+                break
 
         return cls(omega=omega, S_kw=S_kw, kpoints=kpoints, gap=gap, raw=raw)
 
@@ -296,38 +301,31 @@ def _expm_mv_real(H_m: "np.ndarray", t: float, e1: "np.ndarray") -> "np.ndarray"
 
     Works for both real-time (t complex) and imaginary-time (t real negative).
     H_m is a small (m×m) matrix.
+
+    For Hermitian H_m (the common case — Arnoldi on Hermitian H produces a
+    symmetric tridiagonal Hessenberg, i.e. Lanczos), ``np.linalg.eigh`` is
+    used: it guarantees real eigenvalues and an orthogonal eigenvector matrix,
+    so no explicit inversion is needed and numerical stability is improved.
+    For non-Hermitian H_m (general case), falls back to ``np.linalg.eig``.
     """
-    evals, evecs = np.linalg.eig(H_m.astype(complex))
-    # H_m = V D V^{-1}  →  e^{t H_m} = V e^{t D} V^{-1}
-    try:
-        evecs_inv = np.linalg.inv(evecs)
-    except np.linalg.LinAlgError:
-        # Nearly singular: use pinv
-        evecs_inv = np.linalg.pinv(evecs)
-    exp_tD = np.exp(t * evals)
-    return evecs @ (exp_tD * (evecs_inv @ e1))
-
-
-def _arnoldi_step(
-    matvec: Any, N: int, m: int
-) -> "tuple[np.ndarray, np.ndarray, np.ndarray, int]":
-    """Run one Arnoldi iteration starting from a freshly randomised vector.
-
-    Returns
-    -------
-    V:
-        Krylov basis matrix, shape (N, m_eff).
-    H_m:
-        Upper Hessenberg matrix, shape (m_eff, m_eff).
-    v0:
-        The initial vector used (normalised).
-    m_eff:
-        Actual Krylov dimension reached (may be < m if invariant subspace).
-    """
-    rng = np.random.default_rng(0)
-    v0 = rng.standard_normal(N).astype(complex)
-    v0 /= np.linalg.norm(v0)
-    return _arnoldi_from_v0(matvec, v0, m)
+    H_c = H_m.astype(complex)
+    if np.allclose(H_c, H_c.conj().T, atol=1e-10):
+        # Hermitian case: eigh gives real eigenvalues, unitary eigenvectors.
+        # e^{t H_m} = V e^{t D} V†  (no explicit inversion needed).
+        evals_real, evecs = np.linalg.eigh(H_c)
+        exp_tD = np.exp(t * evals_real)          # t may be complex
+        return evecs @ (exp_tD * (evecs.conj().T @ e1))
+    else:
+        # General (non-Hermitian) case.
+        # H_m = V D V^{-1}  →  e^{t H_m} = V e^{t D} V^{-1}
+        evals, evecs = np.linalg.eig(H_c)
+        try:
+            evecs_inv = np.linalg.inv(evecs)
+        except np.linalg.LinAlgError:
+            # Nearly singular: use pinv
+            evecs_inv = np.linalg.pinv(evecs)
+        exp_tD = np.exp(t * evals)
+        return evecs @ (exp_tD * (evecs_inv @ e1))
 
 
 def _arnoldi_from_v0(
@@ -569,6 +567,10 @@ class KrylovEvolver:
 
         matvec, _ = _get_matvec_and_n(H)
         psi0_arr = np.array(psi0, dtype=complex)
+        # Normalise psi0 so that the autocorrelation |⟨ψ₀|ψ(t)⟩|² is in [0,1].
+        norm0 = np.linalg.norm(psi0_arr)
+        if norm0 > 1e-14:
+            psi0_arr = psi0_arr / norm0
         psi = psi0_arr.copy()
 
         times = [0.0]
