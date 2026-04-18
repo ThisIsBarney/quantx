@@ -72,6 +72,13 @@ from .transpiler import (
     TranspileResult,
     HardwareTranspiler,
 )
+from .adapters import (
+    AdapterError,
+    to_cirq,
+    from_cirq,
+    to_braket,
+    from_braket,
+)
 
 __all__ = [
     "CircuitError",
@@ -178,4 +185,10 @@ __all__ = [
     "CouplingMap",
     "TranspileResult",
     "HardwareTranspiler",
+    # Cirq + Braket adapters (M77)
+    "AdapterError",
+    "to_cirq",
+    "from_cirq",
+    "to_braket",
+    "from_braket",
 ]
