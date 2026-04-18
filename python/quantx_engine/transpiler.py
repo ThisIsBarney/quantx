@@ -592,6 +592,15 @@ class HardwareTranspiler:
         """
         cm = self.coupling_map
 
+        # Validate that every gate references a mapped logical qubit
+        for gate in circuit:
+            for lq in gate.qubits:
+                if lq not in initial_mapping:
+                    raise TranspilerError(
+                        f"Logical qubit {lq} referenced in circuit but not "
+                        "present in initial_mapping."
+                    )
+
         # Build mutable mapping tables
         l2p: "dict[int, int]" = dict(initial_mapping)  # logical → physical
         p2l: "dict[int, int]" = {p: l for l, p in l2p.items()}  # inverse
@@ -627,14 +636,10 @@ class HardwareTranspiler:
                         lb = p2l.get(pb)
                         if la is not None:
                             l2p[la] = pb
-                        if lb is not None:
-                            l2p[lb] = pa
-                        if la is not None:
                             p2l[pb] = la
                         if lb is not None:
+                            l2p[lb] = pa
                             p2l[pa] = lb
-                        # Update path: the physical position of l1 changed
-                        path[i + 1] = l2p[l1]
 
                 # Emit the gate on the (now-adjacent) physical qubits
                 p1_final = l2p[l1]
