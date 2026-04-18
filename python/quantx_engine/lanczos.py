@@ -145,6 +145,325 @@ class SparseHamiltonian:
                     entries.append((state, flipped, complex(J * 0.5)))
         return SparseHamiltonian(n=dim, entries=entries)
 
+    @staticmethod
+    def from_pauli_terms(
+        n_sites: int,
+        terms: "list[tuple[float | complex, str, list[int]]]",
+    ) -> "SparseHamiltonian":
+        """Build a SparseHamiltonian from a list of Pauli-string terms.
+
+        Each term is a ``(coefficient, ops, sites)`` triple where:
+
+        * ``coefficient`` — real or complex scalar prefactor.
+        * ``ops`` — string of single-character Pauli labels, one per site
+          (e.g. ``"ZZ"``, ``"XY"``, ``"Z"``).  Supported: ``'I'``, ``'X'``,
+          ``'Y'``, ``'Z'``.
+        * ``sites`` — list of qubit indices, same length as ``ops``.
+
+        The Hamiltonian acts on a 2ⁿ-dimensional Hilbert space with the
+        computational basis ordered as :math:`|s_0, s_1, \\ldots, s_{n-1}\\rangle`
+        where :math:`s_i = (\\text{state} >> i) \\& 1`.
+
+        Parameters
+        ----------
+        n_sites:
+            Number of qubits.
+        terms:
+            List of (coefficient, ops, sites) tuples.
+
+        Returns
+        -------
+        SparseHamiltonian
+
+        Examples
+        --------
+        Reproduce a 3-site ZZ + transverse-field Ising model::
+
+            H = SparseHamiltonian.from_pauli_terms(3, [
+                (-1.0, "ZZ", [0, 1]),
+                (-1.0, "ZZ", [1, 2]),
+                (-0.5, "X",  [0]),
+                (-0.5, "X",  [1]),
+                (-0.5, "X",  [2]),
+            ])
+        """
+        if n_sites < 1:
+            raise LanczosError("n_sites must be >= 1")
+        dim = 1 << n_sites
+        entries = []
+        for coeff, ops, sites in terms:
+            if len(ops) != len(sites):
+                raise LanczosError(
+                    f"ops length ({len(ops)}) must match sites length ({len(sites)})"
+                )
+            for site in sites:
+                if site < 0 or site >= n_sites:
+                    raise LanczosError(
+                        f"Site index {site} out of range [0, {n_sites - 1}]"
+                    )
+            if len(sites) != len(set(sites)):
+                raise LanczosError(
+                    f"Duplicate site indices in term: {sites}. "
+                    "Each site may appear at most once per term."
+                )
+            for op in ops:
+                if op not in ("I", "X", "Y", "Z"):
+                    raise LanczosError(
+                        f"Unknown Pauli operator '{op}'. Choose from: I, X, Y, Z"
+                    )
+            c = complex(coeff)   # avoid shadowing the loop variable
+            for i in range(dim):
+                j = i
+                amplitude = c
+                for op, site in zip(ops, sites):
+                    bit = (i >> site) & 1  # bit value in original ket |i⟩
+                    if op == "I":
+                        pass
+                    elif op == "X":
+                        j ^= (1 << site)
+                    elif op == "Y":
+                        j ^= (1 << site)
+                        amplitude *= 1j if bit == 0 else -1j
+                    elif op == "Z":
+                        amplitude *= 1 - 2 * bit   # +1 for |0⟩, -1 for |1⟩
+                entries.append((j, i, amplitude))
+        return SparseHamiltonian(n=dim, entries=entries)
+
+    @staticmethod
+    def xxz_chain(
+        n_sites: int, J: float = 1.0, delta: float = 1.0, hz: float = 0.0
+    ) -> "SparseHamiltonian":
+        """1D XXZ spin chain (open BC).
+
+        .. math::
+
+            H = J \\sum_{i=0}^{n-2} \\left[
+                \\frac{1}{2}(\\sigma^+_i \\sigma^-_{i+1} + \\text{h.c.})
+                + \\Delta\\, Z_i Z_{i+1}
+            \\right]
+            + h_z \\sum_i Z_i
+
+        where :math:`\\sigma^+ = \\begin{pmatrix}0&1\\\\0&0\\end{pmatrix}`,
+        ``J`` is the overall exchange scale, and ``delta`` (Δ) is the
+        anisotropy ratio.
+
+        Special cases:
+
+        * ``delta=1``:  isotropic Heisenberg antiferromagnet;
+          ``xxz_chain(n, J=J, delta=1)`` equals ``heisenberg_1d(n, J=J)``
+        * ``delta=0``:  XX model (free-fermion), no ZZ coupling
+        * ``delta→∞``:  classical Ising limit
+
+        Parameters
+        ----------
+        n_sites:
+            Number of spins.  Must be >= 1.
+        J:
+            Overall exchange coupling (energy scale).
+        delta:
+            Anisotropy Δ = J_z / J_xy.
+        hz:
+            Uniform longitudinal field.
+        """
+        if n_sites < 1:
+            raise LanczosError("n_sites must be >= 1")
+        dim = 1 << n_sites
+        entries = []
+        for state in range(dim):
+            for site in range(n_sites - 1):
+                nxt = site + 1
+                si = (state >> site) & 1
+                sj = (state >> nxt) & 1
+                zi = 1 - 2 * si
+                zj = 1 - 2 * sj
+                # ZZ term: J * delta * ZiZj
+                if delta != 0.0:
+                    entries.append((state, state, complex(J * delta * zi * zj)))
+                # XY flip: J * 0.5 * (σ+σ- + h.c.)
+                if si != sj:
+                    flipped = state ^ (1 << site) ^ (1 << nxt)
+                    entries.append((state, flipped, complex(J * 0.5)))
+            # hz*Z term
+            if hz != 0.0:
+                for site in range(n_sites):
+                    si = (state >> site) & 1
+                    entries.append((state, state, complex(hz * (1 - 2 * si))))
+        return SparseHamiltonian(n=dim, entries=entries)
+
+    @staticmethod
+    def heisenberg_2d(
+        Lx: int, Ly: int, J: float = 1.0
+    ) -> "SparseHamiltonian":
+        """2D Heisenberg model on an Lx × Ly rectangular lattice (open BC).
+
+        .. math::
+
+            H = J \\sum_{\\langle ij \\rangle} \\left[
+                Z_i Z_j + \\frac{1}{2}(\\sigma^+_i \\sigma^-_j + \\text{h.c.})
+            \\right]
+
+        Sites are labelled ``(x, y) → x + y·Lx``.  Bonds connect
+        ``(x, y)–(x+1, y)`` (horizontal) and ``(x, y)–(x, y+1)`` (vertical).
+
+        Parameters
+        ----------
+        Lx, Ly:
+            Lattice dimensions.  Total sites = Lx * Ly ≤ 20 (dense backend).
+        J:
+            Exchange coupling.
+        """
+        n_sites = Lx * Ly
+        if n_sites < 1:
+            raise LanczosError("Lx * Ly must be >= 1")
+        dim = 1 << n_sites
+
+        # Collect all bonds (pairs of site indices)
+        bonds: list[tuple[int, int]] = []
+        for y in range(Ly):
+            for x in range(Lx - 1):
+                bonds.append((x + y * Lx, x + 1 + y * Lx))   # horizontal
+        for y in range(Ly - 1):
+            for x in range(Lx):
+                bonds.append((x + y * Lx, x + (y + 1) * Lx))  # vertical
+
+        entries = []
+        for state in range(dim):
+            for s_i, s_j in bonds:
+                si = (state >> s_i) & 1
+                sj = (state >> s_j) & 1
+                zi = 1 - 2 * si
+                zj = 1 - 2 * sj
+                entries.append((state, state, complex(J * zi * zj)))
+                if si != sj:
+                    flipped = state ^ (1 << s_i) ^ (1 << s_j)
+                    entries.append((state, flipped, complex(J * 0.5)))
+        return SparseHamiltonian(n=dim, entries=entries)
+
+    @staticmethod
+    def bose_hubbard(
+        L: int, t: float = 1.0, U: float = 4.0, max_occ: int = 4
+    ) -> "SparseHamiltonian":
+        """Bose-Hubbard model on a 1D chain (open BC).
+
+        .. math::
+
+            H = -t \\sum_i (a^\\dagger_i a_{i+1} + \\text{h.c.})
+                + \\frac{U}{2} \\sum_i n_i(n_i - 1)
+
+        Fock basis: each site holds 0 … max_occ bosons.  State index:
+
+        .. math::
+
+            \\text{idx} = \\sum_{i=0}^{L-1} n_i \\cdot M^i, \\quad M = \\text{max\\_occ} + 1
+
+        Hilbert space dimension: ``(max_occ + 1)^L``.
+
+        Parameters
+        ----------
+        L:
+            Number of sites.
+        t:
+            Hopping amplitude.
+        U:
+            On-site interaction strength.
+        max_occ:
+            Maximum occupation per site (truncation).
+        """
+        if L < 1:
+            raise LanczosError("L must be >= 1")
+        if max_occ < 1:
+            raise LanczosError("max_occ must be >= 1")
+        M = max_occ + 1
+        dim = M ** L
+        powers = [M ** s for s in range(L)]   # precompute M^s
+
+        def get_occ(state: int, site: int) -> int:
+            return (state // powers[site]) % M
+
+        def set_occ(state: int, site: int, n: int, old_n: int) -> int:
+            return state + (n - old_n) * powers[site]
+
+        entries = []
+        for state in range(dim):
+            for site in range(L - 1):
+                ni = get_occ(state, site)
+                nj = get_occ(state, site + 1)
+                # a†_i a_{i+1}: destroy at site+1, create at site
+                if nj > 0 and ni < max_occ:
+                    s2 = set_occ(set_occ(state, site, ni + 1, ni), site + 1, nj - 1, nj)
+                    amp = -t * ((ni + 1) * nj) ** 0.5
+                    entries.append((s2, state, complex(amp)))
+                # a†_{i+1} a_i (h.c.): destroy at site, create at site+1
+                if ni > 0 and nj < max_occ:
+                    s2 = set_occ(set_occ(state, site, ni - 1, ni), site + 1, nj + 1, nj)
+                    amp = -t * (ni * (nj + 1)) ** 0.5
+                    entries.append((s2, state, complex(amp)))
+            # on-site interaction U/2 * n*(n-1)
+            for site in range(L):
+                ni = get_occ(state, site)
+                if ni >= 2:
+                    entries.append((state, state, complex(U / 2 * ni * (ni - 1))))
+        return SparseHamiltonian(n=dim, entries=entries)
+
+    @staticmethod
+    def hubbard_1d(L: int, t: float = 1.0, U: float = 4.0) -> "SparseHamiltonian":
+        """Single-band Fermi-Hubbard model on a 1D chain (open BC).
+
+        .. math::
+
+            H = -t \\sum_{i,\\sigma} (c^\\dagger_{i,\\sigma} c_{i+1,\\sigma} + \\text{h.c.})
+                + U \\sum_i n_{i,\\uparrow} n_{i,\\downarrow}
+
+        Encoding: spin-up occupations in the lower L bits (bit ``i`` = site ``i``
+        spin-up), spin-down occupations in the upper L bits.
+        State index: ``up_bits | (down_bits << L)``.
+        Hilbert space dimension: ``4^L = 2^{2L}``.
+
+        JW ordering — ``(\\uparrow_0, \\uparrow_1, \\ldots, \\downarrow_0, \\downarrow_1,
+        \\ldots)`` — gives sign ``+1`` for nearest-neighbour intra-sector hopping.
+
+        Parameters
+        ----------
+        L:
+            Number of sites.
+        t:
+            Hopping amplitude.
+        U:
+            On-site Hubbard interaction.
+        """
+        if L < 1:
+            raise LanczosError("L must be >= 1")
+        up_mask = (1 << L) - 1
+        dim = 1 << (2 * L)
+        entries = []
+
+        for state in range(dim):
+            up = state & up_mask
+            dn = state >> L
+
+            # Spin-up hopping (JW sign = +1 for adjacent sites in up sector)
+            for i in range(L - 1):
+                ui  = (up >> i) & 1
+                ui1 = (up >> (i + 1)) & 1
+                if ui != ui1:  # one occupied, one empty → can hop
+                    new_up = up ^ (1 << i) ^ (1 << (i + 1))
+                    entries.append((new_up | (dn << L), state, complex(-t)))
+
+            # Spin-down hopping (JW sign = +1 for adjacent sites in dn sector)
+            for i in range(L - 1):
+                di  = (dn >> i) & 1
+                di1 = (dn >> (i + 1)) & 1
+                if di != di1:
+                    new_dn = dn ^ (1 << i) ^ (1 << (i + 1))
+                    entries.append((up | (new_dn << L), state, complex(-t)))
+
+            # Hubbard on-site interaction
+            for i in range(L):
+                if ((up >> i) & 1) and ((dn >> i) & 1):
+                    entries.append((state, state, complex(U)))
+
+        return SparseHamiltonian(n=dim, entries=entries)
+
 
 def _build_tridiagonal(alpha: list, beta: list) -> "np.ndarray":
     """Build symmetric tridiagonal matrix from diagonal and sub-diagonal."""
