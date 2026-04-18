@@ -309,7 +309,11 @@ class QuantumChannel:
             K1 = np.sqrt(p / 2.0) * np.array([[1, 0], [0, -1]], dtype=complex)
             return cls([K0, K1])
         else:
-            ops = [np.sqrt(1.0 - p) * np.eye(d, dtype=complex)]
+            ops = []
+            # Only include the identity term when p < 1 (at p=1 it would be
+            # the zero operator, which is non-standard and wastes computation).
+            if p < 1.0:
+                ops.append(np.sqrt(1.0 - p) * np.eye(d, dtype=complex))
             for i in range(d):
                 Ki = np.zeros((d, d), dtype=complex)
                 Ki[i, i] = np.sqrt(p)
@@ -492,7 +496,7 @@ class QuantumChannel:
 # ---------------------------------------------------------------------------
 
 class SteadyStateSolver:
-    """Find the fixed point ρ_ss of a quantum channel: Φ(ρ_ss) = ρ_ss.
+    """Find a fixed point ρ_ss of a quantum channel: Φ(ρ_ss) = ρ_ss.
 
     Algorithm:
 
@@ -505,6 +509,14 @@ class SteadyStateSolver:
 
     For CPTP maps the eigenvalue 1 is always present; the corresponding
     eigenvector(s) span the set of fixed points.
+
+    .. note::
+       For channels with a **degenerate fixed-point subspace** (e.g. the
+       identity channel, or p = 0 dephasing) the solver returns *one*
+       valid fixed-point density matrix.  The result is determined by
+       the eigenvector ordering from :func:`numpy.linalg.eig` and is
+       not guaranteed to be a specific state.  If you need all fixed
+       points, compute the nullspace of (L − I) manually.
 
     Parameters
     ----------

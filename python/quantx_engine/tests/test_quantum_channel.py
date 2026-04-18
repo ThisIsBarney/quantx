@@ -165,12 +165,11 @@ class TestFactoryChannels:
             np.testing.assert_allclose(result, _rho_mixed(), atol=1e-12)
 
     def test_depolarizing_partial(self):
-        """p = 0.5: state closer to I/2."""
+        """p = 0.5: Φ(ρ) = (1-0.5)ρ + 0.5·I/2."""
         ch = QuantumChannel.depolarizing(2, 0.5)
-        rho = _rho_0()
+        rho = _rho_0()  # [[1,0],[0,0]]
         result = ch.apply(rho)
-        # Should be 0.5*(1-0.5)*[[1,0],[0,0]] + 0.5*I/2 = 0.5*[[1,0],[0,0]] + 0.25*I
-        # = [[0.75, 0], [0, 0.25]]
+        # Φ(|0⟩⟨0|) = 0.5·|0⟩⟨0| + 0.5·I/2 = [[0.75, 0], [0, 0.25]]
         np.testing.assert_allclose(result, [[0.75, 0], [0, 0.25]], atol=1e-12)
 
     def test_depolarizing_is_unital(self):
@@ -202,11 +201,14 @@ class TestFactoryChannels:
         np.testing.assert_allclose(result, [[0.5, 0], [0, 0.5]], atol=1e-12)
 
     def test_dephasing_partial(self):
-        """p = 0.5: off-diagonals halved."""
+        """p = 0.5: off-diagonals × 0.5, diagonal unchanged."""
         ch = QuantumChannel.dephasing(0.5)
-        rho = _rho_plus()
+        rho = _rho_plus()  # [[0.5, 0.5],[0.5, 0.5]]
         result = ch.apply(rho)
-        np.testing.assert_allclose(result[0, 1].real, 0.25, atol=1e-12)
+        # Expected: [[0.5, 0.25],[0.25, 0.5]]
+        np.testing.assert_allclose(result[0, 1], 0.25 + 0j, atol=1e-12)
+        np.testing.assert_allclose(result[1, 0], 0.25 + 0j, atol=1e-12)
+        np.testing.assert_allclose(result[0, 0].real, 0.5, atol=1e-12)
         np.testing.assert_allclose(result[1, 1].real, 0.5, atol=1e-12)
 
     def test_dephasing_d3(self):
@@ -218,6 +220,15 @@ class TestFactoryChannels:
         # Diagonal should be preserved, off-diagonals scaled by (1-p)=0.6
         np.testing.assert_allclose(np.diag(result).real, [1/3, 1/3, 1/3], atol=1e-12)
         np.testing.assert_allclose(result[0, 1].real, 0.6 / 3, atol=1e-12)
+
+    def test_dephasing_d3_p1_no_zero_kraus(self):
+        """At p=1, d>2 dephasing must not include the zero operator."""
+        ch = QuantumChannel.dephasing(1.0, d=3)
+        for K in ch.kraus_ops:
+            assert np.linalg.norm(K) > 1e-12, "Zero Kraus operator found"
+        # Should have exactly d=3 Kraus operators (the projectors |i⟩⟨i|)
+        assert ch.n_kraus == 3
+        assert ch.is_trace_preserving()
 
     # ── Bit-flip and phase-flip ───────────────────────────────────────────
 
@@ -375,6 +386,12 @@ class TestSuperoperatorChoi:
         with pytest.raises(ChannelError, match="perfect square"):
             QuantumChannel.from_choi(np.eye(6, dtype=complex))
 
+    def test_from_choi_all_negative_eigenvalues_raises(self):
+        """Choi matrix with no positive eigenvalues → ChannelError."""
+        # -I is negative definite: all eigenvalues = -1
+        with pytest.raises(ChannelError, match="No positive eigenvalues"):
+            QuantumChannel.from_choi(-np.eye(4, dtype=complex))
+
 
 # ===========================================================================
 # QuantumChannel — compose and tensor
@@ -434,6 +451,20 @@ class TestComposeAndTensor:
         np.testing.assert_allclose(
             composed.superoperator(), LB @ LA, atol=1e-10
         )
+
+    def test_compose_non_commutative(self):
+        """A.compose(B) ≠ B.compose(A) for non-commuting channels.
+
+        Use |1⟩⟨1| with amplitude-damping then bit-flip:
+          A(|1⟩) = I/2 → B(I/2) = I/2
+          B(|1⟩) = 0.7|0⟩+0.3|1⟩ → A([[0.7,0],[0,0.3]]) = [[0.85,0],[0,0.15]]
+        """
+        chA = QuantumChannel.amplitude_damping(0.5)
+        chB = QuantumChannel.bit_flip(0.7)
+        rho = _rho_1()  # |1⟩⟨1|
+        result_AB = chA.compose(chB).apply(rho)   # A first, then B
+        result_BA = chB.compose(chA).apply(rho)   # B first, then A
+        assert not np.allclose(result_AB, result_BA, atol=1e-6)
 
 
 # ===========================================================================
@@ -506,6 +537,17 @@ class TestSteadyStateSolver:
         solver = SteadyStateSolver()
         rho_ss = solver.solve(ch)
         np.testing.assert_allclose(rho_ss, np.eye(3) / 3, atol=1e-8)
+
+    def test_identity_channel_returns_valid_density_matrix(self):
+        """Identity channel has degenerate fixed-point subspace; solver
+        should return some valid density matrix without raising."""
+        ch = QuantumChannel.identity(2)
+        solver = SteadyStateSolver()
+        rho_ss = solver.solve(ch)
+        assert _is_density_matrix(rho_ss), f"Not a density matrix: {rho_ss}"
+        # Any density matrix is a fixed point of the identity channel
+        rho_applied = ch.apply(rho_ss)
+        np.testing.assert_allclose(rho_applied, rho_ss, atol=1e-10)
 
     def test_invalid_tol_raises(self):
         with pytest.raises(ChannelError, match="tol must be > 0"):
