@@ -76,34 +76,41 @@ def _canonical(name: str) -> str:
 # ===========================================================================
 
 # QuantX canonical name → callable that returns a cirq Gate (given params list)
-def _build_cirq_gate_map() -> "dict[str, Any]":
-    """Build name→gate-factory map using already-imported cirq module."""
+# Cache keyed by the cirq module's id so a reload is handled correctly.
+_CIRQ_GATE_MAP_CACHE: "dict[int, dict[str, Any]]" = {}
+
+
+def _get_cirq_gate_map() -> "dict[str, Any]":
+    """Return the cached name→gate-factory map, building it on first use."""
     import cirq  # noqa: PLC0415
-    return {
-        "id":    lambda p: cirq.I,
-        "h":     lambda p: cirq.H,
-        "x":     lambda p: cirq.X,
-        "y":     lambda p: cirq.Y,
-        "z":     lambda p: cirq.Z,
-        "s":     lambda p: cirq.S,
-        "sdg":   lambda p: cirq.S**-1,
-        "t":     lambda p: cirq.T,
-        "tdg":   lambda p: cirq.T**-1,
-        "sx":    lambda p: cirq.X**0.5,
-        "sxdg":  lambda p: cirq.X**-0.5,
-        "rx":    lambda p: cirq.rx(p[0]),
-        "ry":    lambda p: cirq.ry(p[0]),
-        "rz":    lambda p: cirq.rz(p[0]),
-        "cx":    lambda p: cirq.CNOT,
-        "cnot":  lambda p: cirq.CNOT,
-        "cz":    lambda p: cirq.CZ,
-        "cy":    lambda p: cirq.Y.controlled(1),
-        "swap":  lambda p: cirq.SWAP,
-        "iswap": lambda p: cirq.ISWAP,
-        "ccx":   lambda p: cirq.CCX,
-        "toffoli": lambda p: cirq.CCX,
-        "cswap": lambda p: cirq.CSWAP,
-    }
+    key = id(cirq)
+    if key not in _CIRQ_GATE_MAP_CACHE:
+        _CIRQ_GATE_MAP_CACHE[key] = {
+            "id":    lambda p: cirq.I,
+            "h":     lambda p: cirq.H,
+            "x":     lambda p: cirq.X,
+            "y":     lambda p: cirq.Y,
+            "z":     lambda p: cirq.Z,
+            "s":     lambda p: cirq.S,
+            "sdg":   lambda p: cirq.S**-1,
+            "t":     lambda p: cirq.T,
+            "tdg":   lambda p: cirq.T**-1,
+            "sx":    lambda p: cirq.X**0.5,
+            "sxdg":  lambda p: cirq.X**-0.5,
+            "rx":    lambda p: cirq.rx(p[0]),
+            "ry":    lambda p: cirq.ry(p[0]),
+            "rz":    lambda p: cirq.rz(p[0]),
+            "cx":    lambda p: cirq.CNOT,
+            "cnot":  lambda p: cirq.CNOT,
+            "cz":    lambda p: cirq.CZ,
+            "cy":    lambda p: cirq.Y.controlled(1),
+            "swap":  lambda p: cirq.SWAP,
+            "iswap": lambda p: cirq.ISWAP,
+            "ccx":   lambda p: cirq.CCX,
+            "toffoli": lambda p: cirq.CCX,
+            "cswap": lambda p: cirq.CSWAP,
+        }
+    return _CIRQ_GATE_MAP_CACHE[key]
 
 
 def to_cirq(
@@ -143,7 +150,7 @@ def to_cirq(
             n_qubits = max(q for g in circuit for q in g.qubits) + 1
 
     qubits = cirq.LineQubit.range(n_qubits)
-    gate_map = _build_cirq_gate_map()
+    gate_map = _get_cirq_gate_map()
 
     ops = []
     for gate in circuit:
@@ -178,13 +185,36 @@ _CIRQ_TYPE_TO_NAME: "dict[str, str]" = {
 }
 
 
+def _qubit_index(q: "Any") -> int:
+    """Extract an integer qubit index from a Cirq qubit object.
+
+    Supports :class:`cirq.LineQubit` (attribute ``x``) and
+    :class:`cirq.GridQubit` when it falls on row 0 (attribute ``col``).
+    Raises :class:`AdapterError` for types that cannot be mapped to a
+    single integer index.
+    """
+    if hasattr(q, "x"):           # LineQubit
+        return int(q.x)
+    if hasattr(q, "col") and hasattr(q, "row"):  # GridQubit
+        if q.row != 0:
+            raise AdapterError(
+                f"Cannot convert GridQubit({q.row},{q.col}) to a linear "
+                "qubit index: only row-0 GridQubits are supported."
+            )
+        return int(q.col)
+    raise AdapterError(
+        f"Unsupported Cirq qubit type {type(q).__name__!r}; "
+        "only LineQubit (and row-0 GridQubit) are supported."
+    )
+
+
 def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
     """Convert a single Cirq Operation to GateOp; return None if unknown."""
     gate = op.gate
     if gate is None:
         return None
     type_name = type(gate).__name__
-    qubits = [q.x if hasattr(q, "x") else int(str(q).lstrip("q")) for q in op.qubits]
+    qubits = [_qubit_index(q) for q in op.qubits]
 
     # Parametric rotation gates
     if type_name == "Rx":
@@ -201,7 +231,8 @@ def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
         if math.isclose(exp, 1.0):
             return GateOp(base, qubits)
         if math.isclose(exp, -1.0) and base == "z":
-            return GateOp("s" if math.isclose(abs(exp), 0.5) else base, qubits)
+            # ZPowGate(exponent=-1) is equivalent to Z (global-phase difference).
+            return GateOp(base, qubits)
         if math.isclose(exp, 0.5):
             return GateOp("s" if base == "z" else "sx", qubits)
         if math.isclose(exp, 0.25):
