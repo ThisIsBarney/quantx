@@ -278,9 +278,16 @@ def _minimize_energy(
             # Try step down
             p_dn = p.copy(); p_dn[k] -= step_sizes[k]
             E_dn = energy_fn(p_dn)
-            best = min((E, p), (E_up, p_up), (E_dn, p_dn), key=lambda t: t[0])
-            if best[0] < E - 1e-12:
-                E, p = best
+            # Pick the best move using explicit comparisons (avoids
+            # ValueError from NumPy array truth-value ambiguity in min()).
+            if E_up <= E_dn:
+                best_E, best_p = (E_up, p_up)
+            else:
+                best_E, best_p = (E_dn, p_dn)
+            if E < best_E:
+                best_E, best_p = E, p
+            if best_E < E - 1e-12:
+                E, p = best_E, best_p
                 step_sizes[k] = min(step_sizes[k] * 1.1, 1.0)
                 improved = True
             else:
@@ -407,7 +414,17 @@ class UCCSDSolver:
         return len(self._generators)
 
     def _uccsd_state(self, params: "np.ndarray") -> "np.ndarray":
-        """Evaluate |ψ_UCCSD(θ)⟩."""
+        """Evaluate |ψ_UCCSD(θ)⟩.
+
+        Implements the single-exponent UCC ansatz::
+
+            U(θ) = exp(Σ_k θ_k K_k)   |ψ⟩ = U(θ) |HF⟩
+
+        This is the mathematically exact UCC (all amplitudes in one
+        exponent).  It differs from the Trotterized / product-formula
+        ansatz ``∏_k exp(θ_k K_k)`` when generators do not commute;
+        the two forms share the same variational space and both are valid.
+        """
         A = sum(t * K for t, K in zip(params, self._generators))
         U = _expm_antiherm(A)
         psi0 = hf_state(self.n_electrons, self.n_qubits)
@@ -572,10 +589,14 @@ class ADAPTVQESolver:
             chosen_ops.append(best_k)
             params.append(0.0)
 
-            # Optimise all current parameters
-            def energy_fn(p: "np.ndarray") -> float:
+            # Optimise all current parameters.
+            # Snapshot chosen_ops so the closure is not affected by
+            # future mutations of the outer list (defensive capture).
+            ops_snapshot = list(chosen_ops)
+
+            def energy_fn(p: "np.ndarray", _ops=ops_snapshot) -> float:
                 state = hf_state(self.n_electrons, self.n_qubits)
-                for param_i, op_idx in zip(p, chosen_ops):
+                for param_i, op_idx in zip(p, _ops):
                     K = self._pool[op_idx]
                     U = _expm_antiherm(param_i * K)
                     state = _normalize(U @ state)
@@ -668,14 +689,19 @@ class QAOASolver:
     def _qaoa_state(
         self, gamma: "np.ndarray", beta: "np.ndarray", H_cost: "np.ndarray"
     ) -> "np.ndarray":
+        # Hoist eigendecompositions out of the layer loop — they are the
+        # same for every layer and eigh dominates the per-layer cost.
+        vals_c, vecs_c = np.linalg.eigh(H_cost)
+        vecs_c_dag = vecs_c.conj().T
+        vals_b, vecs_b = np.linalg.eigh(self._H_mixer)
+        vecs_b_dag = vecs_b.conj().T
+
         psi = self._initial_state()
         for g, b in zip(gamma, beta):
-            # exp(-iγ H_C): H_C diagonal in computational basis ≡ eigendecomp
-            vals_c, vecs_c = np.linalg.eigh(H_cost)
-            psi = (vecs_c * np.exp(-1j * g * vals_c)) @ (vecs_c.conj().T @ psi)
+            # exp(-iγ H_C)
+            psi = (vecs_c * np.exp(-1j * g * vals_c)) @ (vecs_c_dag @ psi)
             # exp(-iβ H_B)
-            vals_b, vecs_b = np.linalg.eigh(self._H_mixer)
-            psi = (vecs_b * np.exp(-1j * b * vals_b)) @ (vecs_b.conj().T @ psi)
+            psi = (vecs_b * np.exp(-1j * b * vals_b)) @ (vecs_b_dag @ psi)
         return psi
 
     def run(
@@ -746,7 +772,11 @@ class QITEResult:
 
     @property
     def converged(self) -> bool:
-        """True if the energy change in the last 5 steps was < 1e-6."""
+        """True if the energy change over the last 4 recorded steps was < 1e-6.
+
+        Specifically checks ``|energies[-1] - energies[-5]|``, which spans
+        indices −5 to −1 (a gap of 4 steps).
+        """
         if len(self.energies) < 5:
             return False
         return abs(self.energies[-1] - self.energies[-5]) < 1e-6
