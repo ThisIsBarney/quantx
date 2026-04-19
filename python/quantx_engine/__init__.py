@@ -15,6 +15,19 @@ from .ibm import IBMQuantumBackend, IBMConnectorError, circuit_to_qasm3
 from .chemistry import (
     PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
 )
+from .advanced_chemistry import (
+    AdvChemError,
+    build_hamiltonian_matrix,
+    hf_state,
+    UCCSDResult,
+    UCCSDSolver,
+    ADAPTVQEResult,
+    ADAPTVQESolver,
+    QAOAResult,
+    QAOASolver,
+    QITEResult,
+    QITESolver,
+)
 from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
 from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError, MWPMDecoder
 from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
@@ -100,6 +113,18 @@ __all__ = [
     "jordan_wigner",
     "MolecularVQE",
     "ChemistryError",
+    # Advanced chemistry solvers (M79)
+    "AdvChemError",
+    "build_hamiltonian_matrix",
+    "hf_state",
+    "UCCSDResult",
+    "UCCSDSolver",
+    "ADAPTVQEResult",
+    "ADAPTVQESolver",
+    "QAOAResult",
+    "QAOASolver",
+    "QITEResult",
+    "QITESolver",
     "QuantumNeuralNetwork",
     "QuantumClassifier",
     "QMLError",
