@@ -38,6 +38,13 @@ from .quantum_kernel import (
     QSVMResult,
     QSVM,
 )
+from .rb_qv import (
+    RBQVError,
+    RBResult,
+    StandardRB,
+    QVResult,
+    QuantumVolume,
+)
 from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
 from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError, MWPMDecoder
 from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
@@ -144,6 +151,12 @@ __all__ = [
     "frobenius_alignment",
     "QSVMResult",
     "QSVM",
+    # Randomized Benchmarking + Quantum Volume (M81)
+    "RBQVError",
+    "RBResult",
+    "StandardRB",
+    "QVResult",
+    "QuantumVolume",
     "QuantumNeuralNetwork",
     "QuantumClassifier",
     "QMLError",
