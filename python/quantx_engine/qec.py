@@ -840,7 +840,15 @@ class MWPMDecoder:
             costs[(i, n_d + i)] = costs[(n_d + i, i)] = d
             paths[(i, n_d + i)] = paths[(n_d + i, i)] = p
 
-        # Boundary proxy–proxy edges (cost 0, no correction)
+        # Boundary proxy–proxy edges (cost 0, no correction).
+        #
+        # "Doubled-graph" trick: we create a virtual boundary proxy node
+        # n_d+i for every real defect i.  Each proxy represents the path
+        # from defect i to the nearest boundary.  Matching a real defect i
+        # to its proxy n_d+i means "route this defect to the boundary".
+        # Two proxies are always free to match each other (cost 0, empty
+        # path) so that every matching — even of an odd-count defect set —
+        # remains a perfect matching on 2*n_d nodes.
         for i in range(n_d):
             for j in range(n_d):
                 if i != j:
