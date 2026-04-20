@@ -206,7 +206,9 @@ def _fit_rb(
 
     best: "tuple[float, float, float, float] | None" = None
 
-    for p_try in np.linspace(0.001, 0.9999, 600):
+    # Grid spans [0, 1] so edge cases (noiseless p≈1 or fully-depolarised p≈0)
+    # are reachable; np.linalg.lstsq handles degenerate columns gracefully.
+    for p_try in np.linspace(0.0, 1.0, 600):
         phi = np.column_stack([p_try ** m_arr, np.ones_like(m_arr)])
         sol, _, _, _ = np.linalg.lstsq(phi, p_arr, rcond=None)
         A_try, B_try = float(sol[0]), float(sol[1])
@@ -214,7 +216,8 @@ def _fit_rb(
         if best is None or residual < best[0]:
             best = (residual, p_try, A_try, B_try)
 
-    assert best is not None
+    if best is None:  # unreachable in practice, but safer than assert
+        raise RBQVError("_fit_rb: grid search produced no candidates.")
     return best[1], best[2], best[3]  # p, A, B
 
 
@@ -352,8 +355,10 @@ class StandardRB:
                     if self.p_error > 0.0:
                         rho = _dm_depolarize(rho, self.p_error)
 
-                # Apply composite inverse
+                # Apply composite inverse (also subject to per-Clifford noise)
                 rho = _dm_apply_gate(rho, inv_gate)
+                if self.p_error > 0.0:
+                    rho = _dm_depolarize(rho, self.p_error)
 
                 # Survival probability = ⟨0|ρ|0⟩
                 total += float(np.real(rho[0, 0]))
