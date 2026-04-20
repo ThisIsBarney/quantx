@@ -281,10 +281,23 @@ def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
     if type_name == "IdentityGate":
         return GateOp("id", qubits)
 
-    # ControlledGate: e.g. cirq.Y.controlled(1) emitted by to_cirq for "cy"
+    # ControlledGate: e.g. cirq.Y.controlled(1) emitted by to_cirq for "cy".
+    # Guard against multi-controlled or non-default-control variants that
+    # would have a different arity or semantics from a plain CY gate.
     if type_name == "ControlledGate":
         sub_gate = getattr(gate, "sub_gate", None)
-        if sub_gate is not None:
+        num_controls = getattr(gate, "num_controls", lambda: None)()
+        # Accept only single-control (num_controls == 1) with default all-1
+        # control values (cirq default: ((1,),) or similar).
+        ctrl_vals = getattr(gate, "control_values", None)
+        default_ctrl = (ctrl_vals is None) or all(
+            set(cv) == {1} for cv in ctrl_vals
+        )
+        if (
+            sub_gate is not None
+            and num_controls == 1
+            and default_ctrl
+        ):
             sub_type = type(sub_gate).__name__
             sub_exp = float(getattr(sub_gate, "exponent", 1))
             if sub_type == "YPowGate" and math.isclose(sub_exp, 1.0):
