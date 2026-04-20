@@ -366,6 +366,10 @@ def frobenius_alignment(K1: "np.ndarray", K2: "np.ndarray") -> float:
     _require_numpy()
     K1 = np.asarray(K1, dtype=float)
     K2 = np.asarray(K2, dtype=float)
+    if K1.shape != K2.shape:
+        raise QKernelError(
+            f"K1 and K2 must have the same shape, got {K1.shape} vs {K2.shape}."
+        )
     num = float(np.sum(K1 * K2))
     denom = float(np.linalg.norm(K1, "fro") * np.linalg.norm(K2, "fro"))
     return num / denom if denom > 1e-12 else 0.0
@@ -585,7 +589,7 @@ class QSVM:
         """
         _require_numpy()
         X = np.atleast_2d(np.asarray(X, dtype=float))
-        y = np.asarray(y, dtype=float)
+        y = np.asarray(y, dtype=float).ravel()  # flatten (n,1) → (n,)
         if X.shape[0] != len(y):
             raise QKernelError(
                 f"X has {X.shape[0]} rows but y has {len(y)} entries."
@@ -669,5 +673,5 @@ class QSVM:
         -------
         float in [0, 1].
         """
-        y = np.asarray(y, dtype=float)
+        y = np.asarray(y, dtype=float).ravel()  # flatten (n,1) → (n,)
         return float(np.mean(self.predict(X) == y))
