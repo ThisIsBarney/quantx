@@ -171,7 +171,12 @@ def binder_cumulant(samples: "np.ndarray") -> float:
         )
     m2 = float(np.mean(arr ** 2))
     m4 = float(np.mean(arr ** 4))
-    if m2 < 1e-14:
+    # Use a *relative* near-zero guard so that physically valid data with
+    # small-magnitude order parameters (e.g. values ~1e-8) are not rejected.
+    # The Binder cumulant is scale-invariant; it is only undefined when the
+    # variance is truly zero relative to the fourth moment.
+    scale_sq = float(np.max(arr ** 2))
+    if scale_sq < 1e-30 or m2 < 1e-12 * scale_sq:
         raise FiniteSizeError(
             "⟨m²⟩ ≈ 0; the order parameter is identically zero and the "
             "Binder cumulant is not defined."
@@ -500,18 +505,22 @@ class FiniteSizeScaling:
             L_i = self.sizes[i]
             x_i = (self.params - jc) * L_i ** (1.0 / nu)
             y_i = obs[i] * L_i ** beta_over_nu
+            # np.interp requires xp to be increasing; sort x_i to guarantee this.
+            sort_i = np.argsort(x_i)
+            x_i_sorted = x_i[sort_i]
+            y_i_sorted = y_i[sort_i]
             for j in range(i + 1, len(self.sizes)):
                 L_j = self.sizes[j]
                 x_j = (self.params - jc) * L_j ** (1.0 / nu)
                 y_j = obs[j] * L_j ** beta_over_nu
                 # Restrict to overlapping x-range
-                x_lo = max(float(x_i.min()), float(x_j.min()))
-                x_hi = min(float(x_i.max()), float(x_j.max()))
+                x_lo = max(float(x_i_sorted.min()), float(x_j.min()))
+                x_hi = min(float(x_i_sorted.max()), float(x_j.max()))
                 mask = (x_j >= x_lo) & (x_j <= x_hi)
                 if mask.sum() < 2:
                     continue
                 # Interpolate curve i onto curve j's x-grid within overlap
-                y_i_on_j = np.interp(x_j[mask], x_i, y_i)
+                y_i_on_j = np.interp(x_j[mask], x_i_sorted, y_i_sorted)
                 diff = y_i_on_j - y_j[mask]
                 total_cost += float(np.mean(diff ** 2))
                 count += 1

@@ -387,9 +387,9 @@ class TestSuperoperatorChoi:
             QuantumChannel.from_choi(np.eye(6, dtype=complex))
 
     def test_from_choi_all_negative_eigenvalues_raises(self):
-        """Choi matrix with no positive eigenvalues → ChannelError."""
-        # -I is negative definite: all eigenvalues = -1
-        with pytest.raises(ChannelError, match="No positive eigenvalues"):
+        """Choi matrix with strongly negative eigenvalues → ChannelError."""
+        # -I is negative definite: all eigenvalues = -1 (not completely positive)
+        with pytest.raises(ChannelError, match="not completely positive"):
             QuantumChannel.from_choi(-np.eye(4, dtype=complex))
 
 

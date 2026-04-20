@@ -234,7 +234,14 @@ def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
             # ZPowGate(exponent=-1) is equivalent to Z (global-phase difference).
             return GateOp(base, qubits)
         if math.isclose(exp, 0.5):
-            return GateOp("s" if base == "z" else "sx", qubits)
+            if base == "z":
+                return GateOp("s", qubits)
+            if base == "x":
+                return GateOp("sx", qubits)
+            if base == "y":
+                # YPowGate(0.5) is √Y = Ry(π/2); "sx" is wrong axis.
+                return GateOp("ry", qubits, [math.pi / 2])
+            return GateOp(base, qubits)
         if math.isclose(exp, 0.25):
             return GateOp("t" if base == "z" else base, qubits)
         if math.isclose(exp, -0.25):
@@ -263,12 +270,38 @@ def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
         exp = float(gate.exponent)
         if math.isclose(exp, 1.0):
             return GateOp("swap", qubits)
+    if type_name in ("ISwapPowGate",):
+        exp = float(gate.exponent)
+        if math.isclose(exp, 1.0):
+            return GateOp("iswap", qubits)
     if type_name in ("CCXPowGate",):
         return GateOp("ccx", qubits)
     if type_name in ("CSwapGate",):
         return GateOp("cswap", qubits)
     if type_name == "IdentityGate":
         return GateOp("id", qubits)
+
+    # ControlledGate: e.g. cirq.Y.controlled(1) emitted by to_cirq for "cy".
+    # Guard against multi-controlled or non-default-control variants that
+    # would have a different arity or semantics from a plain CY gate.
+    if type_name == "ControlledGate":
+        sub_gate = getattr(gate, "sub_gate", None)
+        num_controls = getattr(gate, "num_controls", lambda: None)()
+        # Accept only single-control (num_controls == 1) with default all-1
+        # control values (cirq default: ((1,),) or similar).
+        ctrl_vals = getattr(gate, "control_values", None)
+        default_ctrl = (ctrl_vals is None) or all(
+            set(cv) == {1} for cv in ctrl_vals
+        )
+        if (
+            sub_gate is not None
+            and num_controls == 1
+            and default_ctrl
+        ):
+            sub_type = type(sub_gate).__name__
+            sub_exp = float(getattr(sub_gate, "exponent", 1))
+            if sub_type == "YPowGate" and math.isclose(sub_exp, 1.0):
+                return GateOp("cy", qubits)
 
     # Unknown gate: return None to let caller handle
     return None
