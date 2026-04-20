@@ -28,6 +28,16 @@ from .advanced_chemistry import (
     QITEResult,
     QITESolver,
 )
+from .quantum_kernel import (
+    QKernelError,
+    QuantumFeatureMap,
+    ZZFeatureMap,
+    FidelityQuantumKernel,
+    target_alignment,
+    frobenius_alignment,
+    QSVMResult,
+    QSVM,
+)
 from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
 from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError, MWPMDecoder
 from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
@@ -125,6 +135,15 @@ __all__ = [
     "QAOASolver",
     "QITEResult",
     "QITESolver",
+    # Quantum kernel methods + QSVM (M80)
+    "QKernelError",
+    "QuantumFeatureMap",
+    "ZZFeatureMap",
+    "FidelityQuantumKernel",
+    "target_alignment",
+    "frobenius_alignment",
+    "QSVMResult",
+    "QSVM",
     "QuantumNeuralNetwork",
     "QuantumClassifier",
     "QMLError",
