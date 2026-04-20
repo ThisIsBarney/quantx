@@ -856,13 +856,27 @@ class MWPMDecoder:
                     paths[(n_d + i, n_d + j)] = []
 
         # ── Solve MWPM ────────────────────────────────────────────────
-        all_nodes = list(range(2 * n_d))
         n_mwpm = 2 * n_d
 
         if n_d <= self.max_exact:
             _, matching = _mwpm_bitmask(costs, n_mwpm)
         else:
-            _, matching = _mwpm_greedy_fallback(costs, all_nodes)
+            # Greedy fallback: only match among real defect nodes [0..n_d-1].
+            # Passing proxy nodes (cost 0) to the greedy causes proxy-proxy
+            # pairs to be consumed first, stranding real defects at ∞ cost.
+            # Instead we match real nodes greedily; any real defect left
+            # unpaired (odd count) is routed to its own boundary proxy.
+            real_nodes = list(range(n_d))
+            _, real_matching = _mwpm_greedy_fallback(costs, real_nodes)
+            matched_real: "set[int]" = set()
+            for u, v in real_matching:
+                matched_real.add(u)
+                matched_real.add(v)
+            matching = list(real_matching)
+            # Pair any unmatched real defect with its boundary proxy
+            for i in range(n_d):
+                if i not in matched_real:
+                    matching.append((i, n_d + i))
 
         # ── Apply corrections ─────────────────────────────────────────
         for u, v in matching:
@@ -878,10 +892,20 @@ class MWPMDecoder:
 
     def decode_x(self, z_syndrome: "list[int]") -> "list[int]":
         """Decode Z-stabilizer syndrome (X errors) → X correction operator."""
+        if not hasattr(self.code, "z_stabs"):
+            raise QECError(
+                f"MWPMDecoder.decode_x is not supported for "
+                f"{type(self.code).__name__}; use SurfaceCode."
+            )
         return self._decode(z_syndrome, self.code.z_stabs)
 
     def decode_z(self, x_syndrome: "list[int]") -> "list[int]":
         """Decode X-stabilizer syndrome (Z errors) → Z correction operator."""
+        if not hasattr(self.code, "x_stabs"):
+            raise QECError(
+                f"MWPMDecoder.decode_z is not supported for "
+                f"{type(self.code).__name__}; use SurfaceCode."
+            )
         return self._decode(x_syndrome, self.code.x_stabs)
 
     def logical_error_rate(

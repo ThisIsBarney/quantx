@@ -234,7 +234,14 @@ def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
             # ZPowGate(exponent=-1) is equivalent to Z (global-phase difference).
             return GateOp(base, qubits)
         if math.isclose(exp, 0.5):
-            return GateOp("s" if base == "z" else "sx", qubits)
+            if base == "z":
+                return GateOp("s", qubits)
+            if base == "x":
+                return GateOp("sx", qubits)
+            if base == "y":
+                # YPowGate(0.5) is √Y = Ry(π/2); "sx" is wrong axis.
+                return GateOp("ry", qubits, [math.pi / 2])
+            return GateOp(base, qubits)
         if math.isclose(exp, 0.25):
             return GateOp("t" if base == "z" else base, qubits)
         if math.isclose(exp, -0.25):
@@ -263,12 +270,25 @@ def _cirq_op_to_gateop(op: "Any") -> "GateOp | None":
         exp = float(gate.exponent)
         if math.isclose(exp, 1.0):
             return GateOp("swap", qubits)
+    if type_name in ("ISwapPowGate",):
+        exp = float(gate.exponent)
+        if math.isclose(exp, 1.0):
+            return GateOp("iswap", qubits)
     if type_name in ("CCXPowGate",):
         return GateOp("ccx", qubits)
     if type_name in ("CSwapGate",):
         return GateOp("cswap", qubits)
     if type_name == "IdentityGate":
         return GateOp("id", qubits)
+
+    # ControlledGate: e.g. cirq.Y.controlled(1) emitted by to_cirq for "cy"
+    if type_name == "ControlledGate":
+        sub_gate = getattr(gate, "sub_gate", None)
+        if sub_gate is not None:
+            sub_type = type(sub_gate).__name__
+            sub_exp = float(getattr(sub_gate, "exponent", 1))
+            if sub_type == "YPowGate" and math.isclose(sub_exp, 1.0):
+                return GateOp("cy", qubits)
 
     # Unknown gate: return None to let caller handle
     return None

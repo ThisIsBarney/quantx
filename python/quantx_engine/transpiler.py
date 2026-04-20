@@ -538,6 +538,11 @@ class HardwareTranspiler:
             initial_mapping = {i: i for i in range(n_logical)}
         routed, final_mapping, n_swaps = self._route(decomposed, initial_mapping)
 
+        # ── Step 2b: decompose inserted SWAPs into native gates ───────
+        # _route() inserts raw GateOp("swap", ...) for routing; these must
+        # be decomposed so the output only contains native gates.
+        routed = self._decompose_all(routed)
+
         # ── Step 3: optimisation ──────────────────────────────────────
         if optimization_level >= 2:
             routed = _cancel_inverses(routed)
@@ -634,6 +639,12 @@ class HardwareTranspiler:
                         # Update mappings
                         la = p2l.get(pa)
                         lb = p2l.get(pb)
+                        # Remove stale entries before updating to keep
+                        # p2l bijective: pa and pb exchange their occupants.
+                        if la is not None:
+                            del p2l[pa]
+                        if lb is not None:
+                            del p2l[pb]
                         if la is not None:
                             l2p[la] = pb
                             p2l[pb] = la

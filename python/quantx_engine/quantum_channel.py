@@ -205,6 +205,12 @@ class QuantumChannel:
         evals, evecs = np.linalg.eigh(J_herm)
         ops = []
         for i, lam in enumerate(evals):
+            if lam < -tol:
+                raise ChannelError(
+                    f"Choi matrix has eigenvalue {lam:.3e} < −{tol:.3e}; "
+                    "the input matrix is not completely positive (not a valid "
+                    "quantum channel). Provide a PSD Choi matrix."
+                )
             if lam > tol:
                 psi = evecs[:, i] * np.sqrt(lam)
                 # K = psi reshaped in column-major (Fortran) order
@@ -567,6 +573,14 @@ class SteadyStateSolver:
         for idx in candidates:
             v = evecs[:, idx]
             M = v.reshape(d, d)
+            # Phase-normalize before symmetrizing: the eigenvector is only
+            # defined up to a global complex phase e^{iφ}, which can make
+            # (M + M†)/2 ≈ 0 even for a valid ρ_ss (e.g. v = i·vec(ρ_ss)).
+            # Rotate so that Tr(M) is real and positive, which maximises
+            # Re(Tr(H)) and ensures H has non-zero trace.
+            tr_M = np.trace(M)
+            if abs(tr_M) > 1e-14:
+                M = M * (abs(tr_M) / tr_M)  # multiply by conj(tr_M)/|tr_M|
             # Project to Hermitian
             H = (M + M.conj().T) / 2.0
             tr = float(np.real(np.trace(H)))

@@ -269,6 +269,10 @@ def _minimize_energy(
     E = energy_fn(p)
     step_sizes = np.full(len(p), step)
 
+    # Zero-parameter ansatz (e.g. QAOA p=0): nothing to optimize.
+    if len(p) == 0:
+        return E, p
+
     for _sweep in range(n_iter):
         improved = False
         for k in range(len(p)):
@@ -567,6 +571,12 @@ class ADAPTVQESolver:
         -------
         ADAPTVQEResult
         """
+        if len(self._pool) == 0:
+            raise AdvChemError(
+                "ADAPTVQESolver: operator pool is empty. "
+                "Provide at least one generator via the 'pool' argument."
+            )
+
         psi = hf_state(self.n_electrons, self.n_qubits)
         chosen_ops: "list[int]" = []
         params: "list[float]" = []

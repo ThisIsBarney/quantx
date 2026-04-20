@@ -312,9 +312,11 @@ class SparseHamiltonian:
         J:
             Exchange coupling.
         """
+        if Lx < 1 or Ly < 1:
+            raise LanczosError(
+                f"Lx and Ly must each be >= 1, got Lx={Lx}, Ly={Ly}"
+            )
         n_sites = Lx * Ly
-        if n_sites < 1:
-            raise LanczosError("Lx * Ly must be >= 1")
         dim = 1 << n_sites
 
         # Collect all bonds (pairs of site indices)

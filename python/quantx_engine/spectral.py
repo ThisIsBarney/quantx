@@ -129,8 +129,11 @@ class SpectralResult:
             raise SpectralError("numpy is required for SpectralResult")
 
         # ── Frequency axis ────────────────────────────────────────────────
+        # Include "omega_vals" which is the key emitted by the native
+        # C++ spectral_result_to_json serializer.
         omega_raw = (
-            raw.get("omega")
+            raw.get("omega_vals")
+            or raw.get("omega")
             or raw.get("frequencies")
             or raw.get("freq")
             or []
@@ -138,8 +141,10 @@ class SpectralResult:
         omega = np.asarray(omega_raw, dtype=float)
 
         # ── k-points ──────────────────────────────────────────────────────
+        # "k_vals" is emitted by the native serializer.
         kpoints_raw = (
-            raw.get("kpoints")
+            raw.get("k_vals")
+            or raw.get("kpoints")
             or raw.get("k_points")
             or raw.get("k_grid")
             or raw.get("kvec")
@@ -148,8 +153,10 @@ class SpectralResult:
         kpoints = np.asarray(kpoints_raw, dtype=float)
 
         # ── S(k, ω) ───────────────────────────────────────────────────────
+        # "spectral" is emitted by the native serializer.
         skw_raw = (
             raw.get("S_kw")
+            or raw.get("spectral")
             or raw.get("spectral_weight")
             or raw.get("dsf")
             or raw.get("Skw")
