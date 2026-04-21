@@ -119,6 +119,13 @@ from .tomography import (
     StateTomography,
     ProcessTomography,
 )
+from .optimal_control import (
+    OCError,
+    GRAPEResult,
+    GRAPESolver,
+    CRABResult,
+    CRABSolver,
+)
 
 __all__ = [
     "CircuitError",
@@ -267,4 +274,10 @@ __all__ = [
     "TomographyError",
     "StateTomography",
     "ProcessTomography",
+    # Quantum optimal control — GRAPE and CRAB (M84)
+    "OCError",
+    "GRAPEResult",
+    "GRAPESolver",
+    "CRABResult",
+    "CRABSolver",
 ]

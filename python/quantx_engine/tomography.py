@@ -302,11 +302,12 @@ class ProcessTomography:
         #
         # This IS the correct formula for a unitary channel with single Kraus.
 
-        # Normalise by sqrt(d) so that Tr(chi @ chi†) = d² for any unitary,
-        # making process_fidelity(chi, chi) = 1 (trace-preserving channels).
-        sqrt_d = float(np.sqrt(d))
+        # Pauli expansion: U = ∑_m c_m P_m where c_m = Tr(P_m U) / d.
+        # For a unitary channel E(ρ) = UρU†: χ_mn = c_m c_n*.
+        # With this normalisation ∑_m|c_m|² = 1, so Tr(χ χ†) = 1 and
+        # process_fidelity = Tr(χ₁ χ₂†) lies in [0, 1] with 1 for identical unitaries.
         coeffs = np.array(
-            [np.trace(P @ U) / sqrt_d for _, P in paulis],
+            [np.trace(P @ U) / d for _, P in paulis],
             dtype=complex,
         )
         chi = np.outer(coeffs, coeffs.conj())
@@ -317,12 +318,15 @@ class ProcessTomography:
         chi1: "np.ndarray",
         chi2: "np.ndarray",
     ) -> float:
-        """Compute process fidelity F_process(E1, E2) = Tr(χ1 χ2) / d².
+        """Compute process fidelity F_process(E1, E2) = Tr(χ1 χ2†).
+
+        With the 1/d Pauli normalisation used by :meth:`chi_matrix` this
+        equals |⟨c1|c2⟩|² ∈ [0, 1] with 1 when the two unitaries are equal.
 
         Parameters
         ----------
         chi1, chi2:
-            Chi matrices of the same shape.
+            Chi matrices of the same shape, as returned by :meth:`chi_matrix`.
 
         Returns
         -------
@@ -336,8 +340,7 @@ class ProcessTomography:
                 f"chi1 and chi2 must have the same shape, "
                 f"got {chi1.shape} vs {chi2.shape}."
             )
-        d2 = self._d ** 2
-        fid = float(np.real(np.trace(chi1 @ chi2.conj().T))) / d2
+        fid = float(np.real(np.trace(chi1 @ chi2.conj().T)))
         return min(1.0, max(0.0, fid))
 
     def average_gate_fidelity(
