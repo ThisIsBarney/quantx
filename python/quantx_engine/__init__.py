@@ -109,6 +109,23 @@ from .adapters import (
     to_braket,
     from_braket,
 )
+from .xeb import (
+    XEBError,
+    XEBResult,
+    CrossEntropyBenchmarking,
+)
+from .tomography import (
+    TomographyError,
+    StateTomography,
+    ProcessTomography,
+)
+from .optimal_control import (
+    OCError,
+    GRAPEResult,
+    GRAPESolver,
+    CRABResult,
+    CRABSolver,
+)
 
 __all__ = [
     "CircuitError",
@@ -249,4 +266,18 @@ __all__ = [
     "from_cirq",
     "to_braket",
     "from_braket",
+    # Cross-entropy benchmarking (M82)
+    "XEBError",
+    "XEBResult",
+    "CrossEntropyBenchmarking",
+    # State and process tomography (M83)
+    "TomographyError",
+    "StateTomography",
+    "ProcessTomography",
+    # Quantum optimal control — GRAPE and CRAB (M84)
+    "OCError",
+    "GRAPEResult",
+    "GRAPESolver",
+    "CRABResult",
+    "CRABSolver",
 ]
