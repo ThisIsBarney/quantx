@@ -1,5 +1,13 @@
 """Public Python SDK exports for QuantX."""
 
+from .primitives import (
+    PrimitiveError,
+    SparsePauliOp,
+    EstimatorResult,
+    SamplerResult,
+    Estimator,
+    Sampler,
+)
 from .engine import CircuitError, Engine
 from .qasm import ParseError, parse_qasm_to_circuit
 from .noise import (
@@ -280,4 +288,11 @@ __all__ = [
     "GRAPESolver",
     "CRABResult",
     "CRABSolver",
+    # Estimator + Sampler primitives (M85)
+    "PrimitiveError",
+    "SparsePauliOp",
+    "EstimatorResult",
+    "SamplerResult",
+    "Estimator",
+    "Sampler",
 ]
