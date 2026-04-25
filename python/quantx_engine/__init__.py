@@ -140,6 +140,21 @@ from .optimal_control import (
     CRABResult,
     CRABSolver,
 )
+from .templates import (
+    TemplateError,
+    CircuitTemplate,
+    hardware_efficient_ansatz,
+    iqp_circuit,
+    qaoa_circuit,
+    ghz_circuit,
+    quantum_fourier_transform,
+    uccsd_ansatz,
+)
+from .noise_char import (
+    NoiseCharError,
+    CharacterizedNoise,
+    NoiseCharacterizer,
+)
 
 __all__ = [
     "CircuitError",
@@ -306,4 +321,17 @@ __all__ = [
     "DynamicCircuit",
     "DynamicResult",
     "DynamicSimulator",
+    # Circuit Templates Library (M88)
+    "TemplateError",
+    "CircuitTemplate",
+    "hardware_efficient_ansatz",
+    "iqp_circuit",
+    "qaoa_circuit",
+    "ghz_circuit",
+    "quantum_fourier_transform",
+    "uccsd_ansatz",
+    # Noise characterization pipeline (M87)
+    "NoiseCharError",
+    "CharacterizedNoise",
+    "NoiseCharacterizer",
 ]
