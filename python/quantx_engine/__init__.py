@@ -8,6 +8,12 @@ from .primitives import (
     Estimator,
     Sampler,
 )
+from .dynamic import (
+    DynamicCircuitError,
+    DynamicCircuit,
+    DynamicResult,
+    DynamicSimulator,
+)
 from .engine import CircuitError, Engine
 from .qasm import ParseError, parse_qasm_to_circuit
 from .noise import (
@@ -295,4 +301,9 @@ __all__ = [
     "SamplerResult",
     "Estimator",
     "Sampler",
+    # Dynamic circuits (M86)
+    "DynamicCircuitError",
+    "DynamicCircuit",
+    "DynamicResult",
+    "DynamicSimulator",
 ]
