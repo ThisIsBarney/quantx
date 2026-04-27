@@ -1,5 +1,22 @@
 """Public Python SDK exports for QuantX."""
 
+from .pulse import (
+    PulseError,
+    DriveChannel,
+    MeasureChannel,
+    ControlChannel,
+    ConstantWaveform,
+    GaussianWaveform,
+    DRAGWaveform,
+    FlatTopWaveform,
+    ArbitraryWaveform,
+    PulseSchedule,
+    PulseInstruction,
+    QubitSystem,
+    PulseResult,
+    PulseSimulator,
+    pi_pulse_area,
+)
 from .primitives import (
     PrimitiveError,
     SparsePauliOp,
@@ -157,6 +174,22 @@ from .noise_char import (
 )
 
 __all__ = [
+    # Pulse-level simulator (M89)
+    "PulseError",
+    "DriveChannel",
+    "MeasureChannel",
+    "ControlChannel",
+    "ConstantWaveform",
+    "GaussianWaveform",
+    "DRAGWaveform",
+    "FlatTopWaveform",
+    "ArbitraryWaveform",
+    "PulseSchedule",
+    "PulseInstruction",
+    "QubitSystem",
+    "PulseResult",
+    "PulseSimulator",
+    "pi_pulse_area",
     "CircuitError",
     "Engine",
     "ParseError",
