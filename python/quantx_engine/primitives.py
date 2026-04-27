@@ -414,6 +414,40 @@ def _depolarize_local(
     return rho
 
 
+def _amplitude_damp_local(
+    rho: "np.ndarray",
+    gamma: float,
+    qubits: list[int],
+    n: int,
+) -> "np.ndarray":
+    """Apply independent single-qubit amplitude damping to each qubit in
+    `qubits`.
+
+    Kraus operators for the amplitude-damping channel (|1⟩ → |0⟩ decay):
+
+        K0 = [[1, 0], [0, √(1−γ)]]   (no-jump)
+        K1 = [[0, √γ], [0, 0]]        (jump: |1⟩ decays to |0⟩)
+
+    Channel: ``E(ρ) = K0 ρ K0† + K1 ρ K1†``
+
+    This correctly models energy dissipation: the |1⟩ population decays
+    toward |0⟩ with rate γ, and off-diagonal (coherence) terms shrink as
+    √(1−γ).  It is distinct from depolarizing noise, which applies isotropic
+    Pauli mixing.
+    """
+    if gamma <= 0.0:
+        return rho
+    sqrt_gamma = math.sqrt(gamma)
+    sqrt_1mg = math.sqrt(max(1.0 - gamma, 0.0))
+    K0_local = np.array([[1.0, 0.0], [0.0, sqrt_1mg]], dtype=complex)
+    K1_local = np.array([[0.0, sqrt_gamma], [0.0, 0.0]], dtype=complex)
+    for q in qubits:
+        K0 = _embed_gate(K0_local, [q], n)
+        K1 = _embed_gate(K1_local, [q], n)
+        rho = K0 @ rho @ K0.conj().T + K1 @ rho @ K1.conj().T
+    return rho
+
+
 def _dm_simulate(
     ops: list[dict],
     n_qubits: int,
@@ -422,20 +456,33 @@ def _dm_simulate(
 ) -> "np.ndarray":
     """Simulate a circuit with noise using a density matrix.
 
-    Applies single-qubit depolarizing noise after every gate; the noise
-    probability is taken from the noise model's ``depolarizing_prob`` (or
-    ``amplitude_damping_gamma``) field.
+    After each gate applies the appropriate noise channel derived from the
+    noise model:
+
+    - :class:`~quantx_engine.noise.DepolarizingNoise` → depolarizing channel
+      (isotropic Pauli mixing, ``depolarizing_prob`` key).
+    - :class:`~quantx_engine.noise.AmplitudeDampingNoise` or
+      :class:`~quantx_engine.noise.ThermalRelaxationNoise` → amplitude-damping
+      channel via proper Kraus operators K0/K1 (``amplitude_damping_gamma``
+      key), which correctly biases population toward |0⟩.
+    - Both keys present (composite noise) → depolarizing then amplitude
+      damping applied in sequence.
     """
     d = 1 << n_qubits
     rho = np.zeros((d, d), dtype=complex)
     rho[0, 0] = 1.0
 
-    p_noise = 0.0
+    p_depol = 0.0
+    gamma_ad = 0.0
     if noise_model is not None:
         nd = noise_model.to_dict()
-        p_noise = float(
-            nd.get("depolarizing_prob", nd.get("amplitude_damping_gamma", 0.0))
-        )
+        p_depol = float(nd.get("depolarizing_prob", 0.0))
+        # amplitude_damping_gamma is set by AmplitudeDampingNoise.to_dict()
+        # and also appears in ThermalRelaxationNoise metadata under "gamma"
+        # via the noise_metadata sub-dict; use the top-level key when present.
+        gamma_ad = float(nd.get("amplitude_damping_gamma", 0.0))
+        if gamma_ad == 0.0 and "noise_metadata" in nd:
+            gamma_ad = float(nd["noise_metadata"].get("gamma", 0.0))
 
     for op in ops:
         name: str = op.get("name", "").lower()
@@ -446,8 +493,10 @@ def _dm_simulate(
         qubits: list[int] = op.get("qubits", op.get("targets", []))
         U = _get_gate_matrix(name, params if params else None)
         rho = _apply_gate_dm(rho, U, qubits, n_qubits)
-        if p_noise > 0.0:
-            rho = _depolarize_local(rho, p_noise, qubits, n_qubits)
+        if p_depol > 0.0:
+            rho = _depolarize_local(rho, p_depol, qubits, n_qubits)
+        if gamma_ad > 0.0:
+            rho = _amplitude_damp_local(rho, gamma_ad, qubits, n_qubits)
 
     return rho
 
