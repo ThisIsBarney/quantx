@@ -1,5 +1,53 @@
 """Public Python SDK exports for QuantX."""
 
+from .fault_tolerant import (
+    FTError,
+    LogicalQubit,
+    MagicStateDistillery,
+    DistillationResult,
+    FaultTolerantCircuit,
+    logical_error_rate_vs_distance,
+    t_gate_cost,
+)
+from .crosstalk import (
+    CrosstalkError,
+    CouplingGraph,
+    CrosstalkModel,
+    zz_routing_cost,
+    cheapest_path,
+    echo_sequence,
+)
+from .pulse import (
+    PulseError,
+    DriveChannel,
+    MeasureChannel,
+    ControlChannel,
+    ConstantWaveform,
+    GaussianWaveform,
+    DRAGWaveform,
+    FlatTopWaveform,
+    ArbitraryWaveform,
+    PulseSchedule,
+    PulseInstruction,
+    QubitSystem,
+    PulseResult,
+    PulseSimulator,
+    pi_pulse_area,
+)
+from .primitives import (
+    PrimitiveError,
+    SparsePauliOp,
+    EstimatorResult,
+    SamplerResult,
+    Estimator,
+    Sampler,
+)
+from .dynamic import (
+    DynamicCircuitError,
+    DynamicCircuit,
+    DynamicResult,
+    DynamicSimulator,
+)
 from .engine import CircuitError, Engine
 from .qasm import ParseError, parse_qasm_to_circuit
 from .noise import (
@@ -126,8 +174,63 @@ from .optimal_control import (
     CRABResult,
     CRABSolver,
 )
+from .templates import (
+    TemplateError,
+    CircuitTemplate,
+    hardware_efficient_ansatz,
+    iqp_circuit,
+    qaoa_circuit,
+    ghz_circuit,
+    quantum_fourier_transform,
+    uccsd_ansatz,
+)
+from .noise_char import (
+    NoiseCharError,
+    CharacterizedNoise,
+    NoiseCharacterizer,
+)
+from .floquet import (
+    FloquetError,
+    FloquetSystem,
+    FloquetResult,
+    BlochFloquetSolver,
+    floquet_spectrum,
+    floquet_effective_hamiltonian,
+    driven_two_level,
+)
 
 __all__ = [
+    # Fault-tolerant logical qubits (M91)
+    "FTError",
+    "LogicalQubit",
+    "MagicStateDistillery",
+    "DistillationResult",
+    "FaultTolerantCircuit",
+    "logical_error_rate_vs_distance",
+    "t_gate_cost",
+    # Crosstalk + ZZ coupling model (M90)
+    "CrosstalkError",
+    "CouplingGraph",
+    "CrosstalkModel",
+    "zz_routing_cost",
+    "cheapest_path",
+    "echo_sequence",
+    # Pulse-level simulator (M89)
+    "PulseError",
+    "DriveChannel",
+    "MeasureChannel",
+    "ControlChannel",
+    "ConstantWaveform",
+    "GaussianWaveform",
+    "DRAGWaveform",
+    "FlatTopWaveform",
+    "ArbitraryWaveform",
+    "PulseSchedule",
+    "PulseInstruction",
+    "QubitSystem",
+    "PulseResult",
+    "PulseSimulator",
+    "pi_pulse_area",
     "CircuitError",
     "Engine",
     "ParseError",
@@ -280,4 +383,37 @@ __all__ = [
     "GRAPESolver",
     "CRABResult",
     "CRABSolver",
+    # Estimator + Sampler primitives (M85)
+    "PrimitiveError",
+    "SparsePauliOp",
+    "EstimatorResult",
+    "SamplerResult",
+    "Estimator",
+    "Sampler",
+    # Dynamic circuits (M86)
+    "DynamicCircuitError",
+    "DynamicCircuit",
+    "DynamicResult",
+    "DynamicSimulator",
+    # Circuit Templates Library (M88)
+    "TemplateError",
+    "CircuitTemplate",
+    "hardware_efficient_ansatz",
+    "iqp_circuit",
+    "qaoa_circuit",
+    "ghz_circuit",
+    "quantum_fourier_transform",
+    "uccsd_ansatz",
+    # Noise characterization pipeline (M87)
+    "NoiseCharError",
+    "CharacterizedNoise",
+    "NoiseCharacterizer",
+    # Floquet engineering + Bloch-Floquet band structure (M92)
+    "FloquetError",
+    "FloquetSystem",
+    "FloquetResult",
+    "BlochFloquetSolver",
+    "floquet_spectrum",
+    "floquet_effective_hamiltonian",
+    "driven_two_level",
 ]

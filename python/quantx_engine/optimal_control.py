@@ -302,11 +302,6 @@ class GRAPESolver:
             # --- Update controls ---
             u += learning_rate * grad
 
-        else:
-            fidelity_history.append(
-                _fidelity(self.U_target.conj().T @ F[n], d)
-            )
-
         return GRAPEResult(
             controls=u.copy(),
             fidelity_history=fidelity_history,
@@ -512,8 +507,13 @@ class CRABSolver:
 
         x0 = rng.standard_normal(n_params) * 0.05
 
-        # Simple Nelder-Mead (pure NumPy, no scipy dependency)
-        x_opt = _nelder_mead(objective, x0, max_iter=n_iterations)
+        # Simple Nelder-Mead (pure NumPy, no scipy dependency).
+        # stop_val = -fidelity_threshold because we minimise -fidelity.
+        x_opt = _nelder_mead(
+            objective, x0,
+            max_iter=n_iterations,
+            stop_val=-fidelity_threshold,
+        )
 
         coeffs_opt = x_opt.reshape(nc, nh, 2)
         u_opt = self._build_controls(coeffs_opt, t_grid, base_freqs)
@@ -541,6 +541,7 @@ def _nelder_mead(
     rho: float = 0.5,
     sigma: float = 0.5,
     tol: float = 1e-6,
+    stop_val: float = -float("inf"),
 ) -> "np.ndarray":
     """Minimise func(x) via the Nelder-Mead simplex algorithm.
 
@@ -556,6 +557,9 @@ def _nelder_mead(
         Standard Nelder-Mead reflection/expansion/contraction/shrink factors.
     tol:
         Convergence tolerance on simplex diameter.
+    stop_val:
+        Stop early (success) when ``func(x) <= stop_val``.  The default
+        ``-inf`` effectively disables early stopping.
 
     Returns
     -------
@@ -564,13 +568,19 @@ def _nelder_mead(
     n = len(x0)
     # Initialise simplex
     simplex = [x0.copy()]
-    f_vals = [func(x0)]
+    f0 = func(x0)
+    f_vals = [f0]
+    if f0 <= stop_val:
+        return x0.copy()
     step = max(0.05 * np.max(np.abs(x0)), 0.05)
     for i in range(n):
         x = x0.copy()
         x[i] += step
+        fi = func(x)
         simplex.append(x)
-        f_vals.append(func(x))
+        f_vals.append(fi)
+        if fi <= stop_val:
+            return x.copy()
 
     n_evals = n + 1
 
@@ -579,6 +589,10 @@ def _nelder_mead(
         order = np.argsort(f_vals)
         simplex = [simplex[i] for i in order]
         f_vals = [f_vals[i] for i in order]
+
+        # Early-stop: best vertex already meets threshold
+        if f_vals[0] <= stop_val:
+            break
 
         # Check convergence
         diam = max(np.linalg.norm(simplex[i] - simplex[0]) for i in range(1, n + 1))
@@ -592,6 +606,10 @@ def _nelder_mead(
         x_r = centroid + alpha * (centroid - simplex[-1])
         f_r = func(x_r)
         n_evals += 1
+        if f_r <= stop_val:
+            simplex[-1] = x_r
+            f_vals[-1] = f_r
+            break
         if n_evals >= max_iter:
             simplex[-1] = x_r
             f_vals[-1] = f_r
@@ -613,6 +631,8 @@ def _nelder_mead(
             else:
                 simplex[-1] = x_r
                 f_vals[-1] = f_r
+            if min(f_e, f_r) <= stop_val:
+                break
             continue
 
         # Contraction
@@ -625,6 +645,8 @@ def _nelder_mead(
         if f_c < f_vals[-1]:
             simplex[-1] = x_c
             f_vals[-1] = f_c
+            if f_c <= stop_val:
+                break
             continue
 
         # Shrink
@@ -636,7 +658,7 @@ def _nelder_mead(
             n_evals += 1
             new_simplex.append(x_s)
             new_fvals.append(f_s)
-            if n_evals >= max_iter:
+            if f_s <= stop_val or n_evals >= max_iter:
                 break
         simplex = new_simplex
         f_vals = new_fvals
