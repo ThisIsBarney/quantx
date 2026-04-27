@@ -1,5 +1,14 @@
 """Public Python SDK exports for QuantX."""
 
+from .fault_tolerant import (
+    FTError,
+    LogicalQubit,
+    MagicStateDistillery,
+    DistillationResult,
+    FaultTolerantCircuit,
+    logical_error_rate_vs_distance,
+    t_gate_cost,
+)
 from .crosstalk import (
     CrosstalkError,
     CouplingGraph,
@@ -182,6 +191,14 @@ from .noise_char import (
 )
 
 __all__ = [
+    # Fault-tolerant logical qubits (M91)
+    "FTError",
+    "LogicalQubit",
+    "MagicStateDistillery",
+    "DistillationResult",
+    "FaultTolerantCircuit",
+    "logical_error_rate_vs_distance",
+    "t_gate_cost",
     # Crosstalk + ZZ coupling model (M90)
     "CrosstalkError",
     "CouplingGraph",
