@@ -189,6 +189,15 @@ from .noise_char import (
     CharacterizedNoise,
     NoiseCharacterizer,
 )
+from .floquet import (
+    FloquetError,
+    FloquetSystem,
+    FloquetResult,
+    BlochFloquetSolver,
+    floquet_spectrum,
+    floquet_effective_hamiltonian,
+    driven_two_level,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -399,4 +408,12 @@ __all__ = [
     "NoiseCharError",
     "CharacterizedNoise",
     "NoiseCharacterizer",
+    # Floquet engineering + Bloch-Floquet band structure (M92)
+    "FloquetError",
+    "FloquetSystem",
+    "FloquetResult",
+    "BlochFloquetSolver",
+    "floquet_spectrum",
+    "floquet_effective_hamiltonian",
+    "driven_two_level",
 ]
