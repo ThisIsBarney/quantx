@@ -1,5 +1,13 @@
 """Public Python SDK exports for QuantX."""
 
+from .crosstalk import (
+    CrosstalkError,
+    CouplingGraph,
+    CrosstalkModel,
+    zz_routing_cost,
+    cheapest_path,
+    echo_sequence,
+)
 from .pulse import (
     PulseError,
     DriveChannel,
@@ -174,6 +182,13 @@ from .noise_char import (
 )
 
 __all__ = [
+    # Crosstalk + ZZ coupling model (M90)
+    "CrosstalkError",
+    "CouplingGraph",
+    "CrosstalkModel",
+    "zz_routing_cost",
+    "cheapest_path",
+    "echo_sequence",
     # Pulse-level simulator (M89)
     "PulseError",
     "DriveChannel",
