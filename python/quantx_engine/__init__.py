@@ -209,6 +209,13 @@ from .hardware import (
     calibration_to_noise_model,
     available_backends,
 )
+from .tdmrg import (
+    TDMRGError,
+    TDMRGResult,
+    TDMRGSolver,
+    real_time_evolve,
+    imaginary_time_evolve,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -427,6 +434,12 @@ __all__ = [
     "floquet_spectrum",
     "floquet_effective_hamiltonian",
     "driven_two_level",
+    # Time-dependent DMRG (M94)
+    "TDMRGError",
+    "TDMRGResult",
+    "TDMRGSolver",
+    "real_time_evolve",
+    "imaginary_time_evolve",
     # Real hardware backend integration (M93)
     "HardwareError",
     "BackendCalibration",
