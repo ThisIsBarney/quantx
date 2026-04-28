@@ -216,6 +216,20 @@ from .tdmrg import (
     real_time_evolve,
     imaginary_time_evolve,
 )
+from .quantum_network import (
+    NetworkError,
+    QuantumNode,
+    QuantumChannel,
+    QuantumNetwork,
+    BellPairGenerator,
+    EntanglementSwapper,
+    QuantumRepeater,
+    NetworkResult,
+    fidelity_after_dephasing,
+    fidelity_after_swapping,
+    fidelity_after_purification,
+    simulate_repeater_chain,
+)
 from .noise_vqe import (
     NoiseVQEError,
     SPSAOptimizer,
@@ -443,6 +457,19 @@ __all__ = [
     "floquet_spectrum",
     "floquet_effective_hamiltonian",
     "driven_two_level",
+    # Quantum network simulation (M96)
+    "NetworkError",
+    "QuantumNode",
+    "QuantumChannel",
+    "QuantumNetwork",
+    "BellPairGenerator",
+    "EntanglementSwapper",
+    "QuantumRepeater",
+    "NetworkResult",
+    "fidelity_after_dephasing",
+    "fidelity_after_swapping",
+    "fidelity_after_purification",
+    "simulate_repeater_chain",
     # Noise-aware VQE + SPSA optimizer (M95)
     "NoiseVQEError",
     "SPSAOptimizer",
