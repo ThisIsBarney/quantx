@@ -198,6 +198,17 @@ from .floquet import (
     floquet_effective_hamiltonian,
     driven_two_level,
 )
+from .hardware import (
+    HardwareError,
+    BackendCalibration,
+    HardwareJobResult,
+    HardwareJob,
+    IBMHardwareBackend,
+    IonQBackend,
+    GoogleBackend,
+    calibration_to_noise_model,
+    available_backends,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -416,4 +427,14 @@ __all__ = [
     "floquet_spectrum",
     "floquet_effective_hamiltonian",
     "driven_two_level",
+    # Real hardware backend integration (M93)
+    "HardwareError",
+    "BackendCalibration",
+    "HardwareJobResult",
+    "HardwareJob",
+    "IBMHardwareBackend",
+    "IonQBackend",
+    "GoogleBackend",
+    "calibration_to_noise_model",
+    "available_backends",
 ]
