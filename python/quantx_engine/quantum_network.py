@@ -148,21 +148,25 @@ def fidelity_after_dephasing(F: float, p_deph: float) -> float:
 def fidelity_after_swapping(F_A: float, F_B: float, F_gate: float = 1.0) -> float:
     """Fidelity after BSM-based entanglement swapping.
 
-    Given two Werner states with fidelities F_A and F_B, and a BSM with
-    fidelity F_gate (modelled as a depolarising error with p = 1 - F_gate),
-    the output fidelity is::
+    Given two Werner states with fidelities F_A and F_B and a BSM with
+    fidelity F_gate, the output Werner-state fidelity is::
 
-        F_swap = (4 F_A F_B − 1) / 3 * F_gate + (1 − F_gate) / 4
+        F_ideal = F_A · F_B + (1 − F_A)(1 − F_B) / 3
+        F_swap  = F_gate · F_ideal + (1 − F_gate) / 4
 
-    This is the exact formula for Werner states under ideal BSM combined
-    with a depolarising error on the BSM outcome.
+    This is the exact formula derived from the Werner-state parameterisation
+    p = (4F − 1)/3 and the multiplicative property p_out = p_A · p_B under
+    a perfect BSM.  Key properties:
+
+    * F_A = 1 → F_swap = F_B (swapping a perfect pair preserves the other).
+    * F_A = F_B = 1/4 → F_swap = 1/4 (maximally mixed is a fixed point).
 
     Parameters
     ----------
     F_A, F_B : float ∈ [0, 1]
         Fidelities of the two Bell pairs to be swapped.
     F_gate : float ∈ [0, 1]
-        BSM gate fidelity.
+        BSM gate fidelity (1 = perfect BSM).
 
     Returns
     -------
@@ -171,9 +175,10 @@ def fidelity_after_swapping(F_A: float, F_B: float, F_gate: float = 1.0) -> floa
     for name, val in [("F_A", F_A), ("F_B", F_B), ("F_gate", F_gate)]:
         if not 0.0 <= val <= 1.0:
             raise NetworkError(f"{name} must be in [0,1], got {val}")
-    # Ideal swap: F_out_ideal = (4*F_A*F_B - 1) / 3
-    F_ideal = (4.0 * F_A * F_B - 1.0) / 3.0
-    # Gate error depolarises the output state
+    # Exact Werner-state ideal-swap formula: p_out = p_A * p_B
+    # → F_out = (3 p_A p_B + 1) / 4 = F_A F_B + (1-F_A)(1-F_B) / 3
+    F_ideal = F_A * F_B + (1.0 - F_A) * (1.0 - F_B) / 3.0
+    # Imperfect BSM depolarises the output
     F_out = F_gate * F_ideal + (1.0 - F_gate) / 4.0
     return float(np.clip(F_out, 0.0, 1.0))
 
@@ -403,8 +408,10 @@ class BellPairGenerator:
     def generate(self, n_pairs: int = 1) -> list[float]:
         """Generate Bell pairs; return list of achieved fidelities.
 
-        Each pair attempt succeeds with probability ``channel.transmission``.
-        Successful pairs have fidelity ``channel.bell_pair_fidelity()``.
+        Each pair attempt succeeds with probability ``channel.transmission``;
+        the success count is already modelled by the binomial draw, so the
+        returned fidelity is the *conditional* fidelity of a successfully
+        transmitted pair — dephasing only, no additional transmission penalty.
 
         Parameters
         ----------
@@ -416,15 +423,17 @@ class BellPairGenerator:
         list[float]
             Fidelities of successfully generated pairs (length ≤ n_pairs).
         """
-        fidelity = self.channel.bell_pair_fidelity()
+        # Conditional fidelity: quality of a pair that *did* arrive successfully.
+        # Transmission loss affects rate (binomial), not per-pair quality.
+        fidelity = fidelity_after_dephasing(1.0, self.channel.dephasing)
         total_attempts = n_pairs * self.attempts_per_cycle
         successes = self._rng.binomial(total_attempts, self.channel.transmission)
         successes = min(successes, n_pairs)
         return [fidelity] * successes
 
     def expected_fidelity(self) -> float:
-        """Expected fidelity of a successfully generated pair."""
-        return self.channel.bell_pair_fidelity()
+        """Expected fidelity of a successfully generated pair (conditional on success)."""
+        return fidelity_after_dephasing(1.0, self.channel.dephasing)
 
     def expected_rate(self) -> float:
         """Expected number of pairs generated per cycle."""
@@ -736,6 +745,8 @@ def simulate_repeater_chain(
         raise NetworkError("n_hops must be non-negative")
     if segment_length_km <= 0:
         raise NetworkError("segment_length_km must be positive")
+    if memory_coherence_time is not None and memory_coherence_time <= 0:
+        raise NetworkError("memory_coherence_time must be positive")
 
     n_segments = n_hops + 1
     total_km = n_segments * segment_length_km

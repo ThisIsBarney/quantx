@@ -610,9 +610,7 @@ class TestSimulateRepeaterChain(unittest.TestCase):
         self.assertEqual(r.n_hops, 0)
 
     def test_fidelity_in_0_1(self):
-        # With 10 km segments and default params, fidelity survives up to ~2 hops
-        # before swapping degrades the state to the mixed-state floor.
-        for n in [0, 1, 2]:
+        for n in [0, 1, 3, 5]:
             r = simulate_repeater_chain(n_hops=n, segment_length_km=10.0)
             self.assertGreater(r.end_to_end_fidelity, 0.0)
             self.assertLessEqual(r.end_to_end_fidelity, 1.0)
@@ -662,13 +660,19 @@ class TestSimulateRepeaterChain(unittest.TestCase):
             simulate_repeater_chain(n_hops=1, segment_length_km=0.0)
 
     def test_with_memory_dephasing(self):
-        # n_hops=1 (single swap): t_wait = 0.1 * 1 = 0.1s, T2=1s → mild dephasing
         r = simulate_repeater_chain(
-            n_hops=1, segment_length_km=10.0,
+            n_hops=2, segment_length_km=10.0,
             memory_coherence_time=1.0, t_segment_s=0.1
         )
         self.assertIsInstance(r, NetworkResult)
         self.assertGreater(r.end_to_end_fidelity, 0.0)
+
+    def test_zero_coherence_time_raises(self):
+        with self.assertRaises(NetworkError):
+            simulate_repeater_chain(
+                n_hops=1, segment_length_km=10.0,
+                memory_coherence_time=0.0, t_segment_s=0.1
+            )
 
     def test_perfect_channel_high_fidelity(self):
         """Zero-length, no dephasing, perfect BSM → F ≈ 1."""
