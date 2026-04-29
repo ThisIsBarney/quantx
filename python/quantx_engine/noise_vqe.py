@@ -352,7 +352,10 @@ def _nelder_mead(
         if len(history) > 5 and abs(history[-1] - history[-6]) < tol:
             break
 
-    return simplex[0], history
+    # Return the actual best vertex, not simplex[0] which may be stale
+    # if the last iteration updated a non-0 slot to a better value.
+    best_idx = int(np.argmin(fvals))
+    return simplex[best_idx], history
 
 
 # ── NoiseAwareVQEResult ───────────────────────────────────────────────────────
