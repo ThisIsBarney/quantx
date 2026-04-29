@@ -230,6 +230,20 @@ from .quantum_network import (
     fidelity_after_purification,
     simulate_repeater_chain,
 )
+from .quantum_protocols import (
+    ProtocolError,
+    BB84Result,
+    BB84Protocol,
+    E91Result,
+    E91Protocol,
+    TeleportationResult,
+    TeleportationProtocol,
+    DenseCodingResult,
+    DenseCodingProtocol,
+    bb84_key_rate,
+    chsh_inequality_value,
+    teleportation_fidelity,
+)
 from .noise_vqe import (
     NoiseVQEError,
     SPSAOptimizer,
@@ -457,6 +471,19 @@ __all__ = [
     "floquet_spectrum",
     "floquet_effective_hamiltonian",
     "driven_two_level",
+    # Quantum communication protocols (M97)
+    "ProtocolError",
+    "BB84Result",
+    "BB84Protocol",
+    "E91Result",
+    "E91Protocol",
+    "TeleportationResult",
+    "TeleportationProtocol",
+    "DenseCodingResult",
+    "DenseCodingProtocol",
+    "bb84_key_rate",
+    "chsh_inequality_value",
+    "teleportation_fidelity",
     # Quantum network simulation (M96)
     "NetworkError",
     "QuantumNode",
