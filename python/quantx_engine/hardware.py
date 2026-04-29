@@ -658,14 +658,17 @@ def _quantx_schedule_to_qiskit(schedule, backend_obj: Any) -> Any:
         ch = instr.channel
         waveform = instr.waveform
 
-        # Map channel to Qiskit channel
-        q_idx = getattr(ch, "qubit_index", 0)
+        # Map channel to Qiskit channel using the correct QuantX attribute names:
+        # DriveChannel.qubit, MeasureChannel.qubit, ControlChannel.index
         ch_type = type(ch).__name__
         if ch_type == "DriveChannel":
+            q_idx = int(getattr(ch, "qubit", 0))
             qch = qpulse.DriveChannel(q_idx)
         elif ch_type == "MeasureChannel":
+            q_idx = int(getattr(ch, "qubit", 0))
             qch = qpulse.MeasureChannel(q_idx)
         elif ch_type == "ControlChannel":
+            q_idx = int(getattr(ch, "index", 0))
             qch = qpulse.ControlChannel(q_idx)
         else:
             continue
@@ -717,38 +720,66 @@ _IONQ_BASE_URL = "https://api.ionq.co/v0.3"
 
 
 def _circuit_to_ionq(circuit: dict[str, Any]) -> dict[str, Any]:
-    """Convert a QuantX circuit dict to IonQ native circuit JSON format."""
+    """Convert a QuantX circuit dict to IonQ native circuit JSON format.
+
+    Handles both capitalisation conventions (``"CNOT"`` / ``"cnot"`` / ``"cx"``)
+    and both qubit-field layouts (``"targets"``/``"controls"`` or the standard
+    QuantX ``"qubits"`` flat list).
+    """
     n_qubits = int(circuit.get("qubits", 0))
     ops = circuit.get("operations", [])
     ionq_gates: list[dict[str, Any]] = []
 
-    for op in ops:
-        name = str(op.get("name", ""))
-        targets = list(op.get("targets", []))
-        controls = list(op.get("controls", []))
-        params = list(op.get("params", []))
+    # Canonical-name aliases for common QuantX lowercase/alternative names
+    _ALIASES: dict[str, str] = {
+        "cx": "CNOT", "ccx": "CNOT",
+        "cz": "CZ",
+        "h": "H", "x": "X", "y": "Y", "z": "Z",
+        "s": "S", "t": "T", "sdg": "Sdg", "tdg": "Tdg",
+        "rx": "RX", "ry": "RY", "rz": "RZ",
+        "sx": "SX", "sxdg": "SXdg",
+        "swap": "SWAP", "id": "I",
+        "measure": "MEASURE", "reset": "RESET", "barrier": "BARRIER",
+    }
 
-        if name in ("MEASURE", "RESET", "BARRIER"):
+    for op in ops:
+        name_raw = str(op.get("name", "")).strip()
+        # Normalise: try exact match, then alias map, then uppercase
+        name = _ALIASES.get(name_raw.lower(), name_raw) or name_raw.upper()
+
+        if name.upper() in ("MEASURE", "RESET", "BARRIER"):
             continue  # IonQ measures all at end implicitly
 
-        ionq_name = _QX_TO_IONQ.get(name)
+        ionq_name = _QX_TO_IONQ.get(name) or _QX_TO_IONQ.get(name.upper())
         if ionq_name is None:
             raise HardwareError(
-                f"Gate {name!r} has no IonQ equivalent. "
+                f"Gate {name_raw!r} has no IonQ equivalent. "
                 f"Supported: {sorted(_QX_TO_IONQ)}."
             )
 
+        # Support both 'qubits' flat list and 'targets'/'controls' fields
+        all_qubits = list(op.get("qubits", []))
+        targets = list(op.get("targets", all_qubits))
+        controls = list(op.get("controls", []))
+        params = list(op.get("params", []))
+
         gate_dict: dict[str, Any] = {"gate": ionq_name}
 
-        if name in ("CNOT", "CZ"):
-            if not controls:
+        norm = name.upper()
+        if norm in ("CNOT", "CZ"):
+            # Two-qubit gate: if no explicit controls, first qubit is control
+            if not controls and len(targets) >= 2:
                 controls = targets[:1]
                 targets = targets[1:]
-            gate_dict["control"] = int(controls[0])
-            gate_dict["target"] = int(targets[0]) if targets else 0
-        elif name == "SWAP":
-            if len(targets) >= 2:
-                gate_dict["targets"] = [int(targets[0]), int(targets[1])]
+            elif not controls and all_qubits and not targets:
+                controls = all_qubits[:1]
+                targets = all_qubits[1:]
+            gate_dict["control"] = int(controls[0]) if controls else 0
+            gate_dict["target"] = int(targets[0]) if targets else 1
+        elif norm == "SWAP":
+            swap_qubits = targets if len(targets) >= 2 else all_qubits
+            if len(swap_qubits) >= 2:
+                gate_dict["targets"] = [int(swap_qubits[0]), int(swap_qubits[1])]
             else:
                 continue
         elif params:
@@ -1171,7 +1202,21 @@ class GoogleBackend:
             q_to_idx = {q: i for i, q in enumerate(sorted(qubits))}
             coupling: list[tuple[int, int]] = []
             for q in qubits:
-                for nb in device.qubit_set() if hasattr(device, "qubit_set") else []:
+                # Prefer device.neighbors_of(q) for physical adjacency;
+                # fall back to GridQubit-style row/col neighbours.
+                neighbors: list[Any] = []
+                if hasattr(device, "neighbors_of"):
+                    try:
+                        neighbors = list(device.neighbors_of(q))
+                    except Exception:
+                        pass
+                if not neighbors and hasattr(q, "neighbors"):
+                    try:
+                        neighbors = [nb for nb in q.neighbors()
+                                     if nb in q_to_idx]
+                    except Exception:
+                        pass
+                for nb in neighbors:
                     if nb in q_to_idx and q_to_idx[q] < q_to_idx[nb]:
                         coupling.append((q_to_idx[q], q_to_idx[nb]))
 
@@ -1216,16 +1261,26 @@ def _google_result_to_hardware(
 
 
 def _cirq_result_to_counts(result: Any, shots: int) -> dict[str, int]:
-    """Convert a Cirq Result object to a bitstring count dict."""
+    """Convert a Cirq Result object to a joint-bitstring count dict.
+
+    All measurement keys are sorted alphabetically and concatenated per shot
+    to produce a single bitstring per repetition, matching the hardware-style
+    ``{"0110": 42, ...}`` format.
+    """
     counts: dict[str, int] = {}
     try:
-        import numpy as np
-
-        for key in result.measurements:
-            arr = result.measurements[key]   # shape (shots, n_qubits)
-            for row in arr:
-                bits = "".join(str(int(b)) for b in row)
-                counts[bits] = counts.get(bits, 0) + 1
+        keys = sorted(result.measurements.keys())
+        if not keys:
+            return counts
+        # Build per-shot bitstrings by concatenating all measurement key arrays
+        arrays = [result.measurements[k] for k in keys]  # each: (reps, n_bits)
+        n_reps = len(arrays[0])
+        for i in range(n_reps):
+            bits = "".join(
+                "".join(str(int(b)) for b in arr[i])
+                for arr in arrays
+            )
+            counts[bits] = counts.get(bits, 0) + 1
         return counts
     except Exception:
         return {}

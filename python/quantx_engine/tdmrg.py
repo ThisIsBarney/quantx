@@ -215,7 +215,7 @@ def _apply_two_site_gate(
     mps.tensors[site + 1] = (S[:keep, np.newaxis] * Vt[:keep, :]).reshape(
         keep, d, chi_r
     )
-    return S  # full singular value array (before truncation)
+    return S[:keep]  # truncated singular values — match the actual MPS state
 
 
 def _entanglement_entropy(singular_values: np.ndarray) -> float:
