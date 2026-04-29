@@ -501,9 +501,13 @@ class E91Protocol:
                 b_sub = bob_outcomes[mask]
                 correlations[key_pair] = float(np.mean(a_sub * b_sub))
             else:
-                # Compute theoretical value as fallback
+                # Fallback: theoretical correlation scaled by the same noise
+                # factor applied in the sampling loop.  Each channel_error_rate
+                # flip negates Bob's outcome, attenuating correlations by
+                # (1 − 2·e).  Without this, the fallback overestimates |S|.
                 ta, tb = chsh_angles[key_pair]
-                correlations[key_pair] = self._correlation(ta, tb)
+                noise_scale = 1.0 - 2.0 * self.channel_error_rate
+                correlations[key_pair] = noise_scale * self._correlation(ta, tb)
 
         S = chsh_inequality_value(correlations)
         bell_violation = S > 2.0
@@ -625,21 +629,21 @@ class TeleportationProtocol:
         # Theoretical average fidelity (Werner-state teleportation channel)
         f_avg = teleportation_fidelity(F_eff)
 
-        # Per-state stochastic model for the Werner depolarizing channel:
-        #   Λ(ρ) = p·ρ + (1−p)·I/2,  p = (4F−1)/3
+        # Per-state stochastic model consistent with f_avg = (2F+1)/3 for all F.
         #
-        # For each teleportation event:
-        #   - With prob p: channel is identity → fidelity = 1
-        #   - With prob (1−p): channel outputs maximally mixed → fidelity = 1/2
+        # Treat each teleportation as a Bernoulli trial:
+        #   - "success"  (prob f_avg)     → state transferred perfectly, f = 1
+        #   - "failure"  (prob 1 − f_avg) → state completely lost,       f = 0
         #
-        # Mean = p·1 + (1−p)·½ = (1+p)/2 = (2F+1)/3 ✓
-        # P(fidelity > 2/3) = P(good event) = p   (bad events give 0.5 < 2/3)
+        # E[f_i] = f_avg                               ✓ for all F ∈ [0, 1]
+        # P(f > 2/3) = P(success) = f_avg              ✓ only when F > 0.5
+        #
+        # Unlike the previous {1, 0.5} model, this remains consistent with
+        # theoretical_avg_fidelity even for F < 0.25 where the Werner
+        # mixture parameter p = (4F−1)/3 is negative (unphysical depolarizer).
         rng = self._rng
-        p_werner = (4.0 * F_eff - 1.0) / 3.0
-        p_werner = float(np.clip(p_werner, 0.0, 1.0))
-
-        good_events = rng.random(n_states) < p_werner
-        per_state_fidelities = np.where(good_events, 1.0, 0.5)
+        good_events = rng.random(n_states) < f_avg
+        per_state_fidelities = np.where(good_events, 1.0, 0.0)
         avg_fidelity = float(np.mean(per_state_fidelities))
 
         # Classical limit is 2/3; count successes above it

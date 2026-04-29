@@ -399,6 +399,51 @@ class TestDenseCodingProtocol:
         assert "capacity" in r
 
 
+# ── Codex review regression tests ────────────────────────────────────────────
+
+class TestCodexRegressions:
+    """Regression tests for issues found in Codex review of M97."""
+
+    def test_e91_fallback_chsh_respects_channel_noise(self):
+        """P1: CHSH fallback value must include channel_error_rate attenuation.
+
+        With very small n_pairs many CHSH masks will be empty and the fallback
+        path is exercised.  A noisy channel (e=0.5) should flatten all
+        correlations to zero → S ≈ 0, no Bell violation.
+        """
+        proto = E91Protocol(
+            bell_pair_fidelity=0.99,
+            channel_error_rate=0.5,  # maximal noise; all correlations → 0
+            seed=0,
+        )
+        result = proto.run(n_pairs=4)  # minimum allowed → fallback path likely
+        # With e=0.5 every correlation is scaled by (1-2*0.5)=0; S ≤ 2, no
+        # Bell violation.  Before the fix, unattenuated fallback could report
+        # S > 2 even for maximally noisy channels.
+        assert not result.bell_violation
+
+    def test_teleportation_avg_fidelity_consistent_below_quarter(self):
+        """P2: average_fidelity must match theoretical_avg_fidelity for F < 0.25.
+
+        The old {1, 0.5} model clipped p_werner to 0 for F < 0.25 and reported
+        avg_fidelity = 0.5 while theoretical was (2F+1)/3 < 0.5.
+        The new {1, 0} Bernoulli model stays consistent.
+        """
+        proto = TeleportationProtocol(channel_fidelity=0.1, bsm_fidelity=1.0, seed=42)
+        result = proto.run(n_states=5000)
+        theoretical = result.metadata["theoretical_avg_fidelity"]  # (2*0.1+1)/3 ≈ 0.4
+        # Simulated mean should be within 3σ of theoretical
+        # σ ≈ sqrt(p*(1-p)/n) ≈ sqrt(0.4*0.6/5000) ≈ 0.007
+        assert abs(result.average_fidelity - theoretical) < 0.05
+
+    def test_teleportation_avg_fidelity_consistent_above_quarter(self):
+        """P2 (non-regression): model still consistent for F > 0.25."""
+        proto = TeleportationProtocol(channel_fidelity=0.8, bsm_fidelity=1.0, seed=42)
+        result = proto.run(n_states=5000)
+        theoretical = result.metadata["theoretical_avg_fidelity"]
+        assert abs(result.average_fidelity - theoretical) < 0.05
+
+
 # ── Integration: BB84 over repeater chain ─────────────────────────────────────
 
 class TestIntegration:
