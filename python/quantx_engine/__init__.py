@@ -216,6 +216,15 @@ from .tdmrg import (
     real_time_evolve,
     imaginary_time_evolve,
 )
+from .noise_vqe import (
+    NoiseVQEError,
+    SPSAOptimizer,
+    NoiseAwareVQEResult,
+    NoiseAwareVQE,
+    build_hea_circuit,
+    hardware_efficient_vqe,
+    n_hea_params,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -434,6 +443,14 @@ __all__ = [
     "floquet_spectrum",
     "floquet_effective_hamiltonian",
     "driven_two_level",
+    # Noise-aware VQE + SPSA optimizer (M95)
+    "NoiseVQEError",
+    "SPSAOptimizer",
+    "NoiseAwareVQEResult",
+    "NoiseAwareVQE",
+    "build_hea_circuit",
+    "hardware_efficient_vqe",
+    "n_hea_params",
     # Time-dependent DMRG (M94)
     "TDMRGError",
     "TDMRGResult",
