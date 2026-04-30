@@ -1,22 +1,17 @@
 name: Python CI
 
-# Runs the full pure-Python test suite (SDK + REST server routes) on every
+# Runs the full pure-Python test suite (SDK + all server tests) on every
 # push and pull-request targeting master/main.  No C++ build is required —
 # all tested modules are self-contained Python.
+#
+# No path filters are used so ci-gate always runs and never leaves branch-
+# protection checks pending when only non-code files change.
 
 on:
   push:
     branches: ["master", "main"]
-    paths:
-      - "python/**"
-      - "server/**"
-      - ".github/workflows/python-ci.yml"
   pull_request:
     branches: ["master", "main"]
-    paths:
-      - "python/**"
-      - "server/**"
-      - ".github/workflows/python-ci.yml"
   workflow_dispatch:
 
 concurrency:
@@ -93,12 +88,12 @@ jobs:
           # FastAPI server + test client
           pip install "fastapi>=0.110.0" "httpx>=0.27.0" anyio pydantic
 
-      - name: Run server route tests
+      - name: Run server tests
         env:
           # Repo root on sys.path so `import server.main` resolves
           PYTHONPATH: ${{ github.workspace }}
         run: |
-          pytest server/tests/test_new_routes.py \
+          pytest server/tests/ \
             -q --tb=short \
             --junit-xml=reports/server-${{ matrix.python-version }}.xml
 
