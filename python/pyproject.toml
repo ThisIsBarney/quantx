@@ -18,25 +18,38 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: Physics",
   "Intended Audience :: Science/Research",
 ]
 dependencies = [
-    "numpy>=2.2.6",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
-numpy = ["numpy>=1.24"]
 dev = ["pytest>=7.0", "numpy>=1.24"]
 pennylane = ["pennylane>=0.30.0"]
+# All dependencies needed to run the full test suite in CI
+ci = [
+    "pytest>=7.0",
+    "numpy>=1.24",
+    "scipy>=1.10",
+    "networkx>=3.0",
+    "pennylane>=0.30.0",
+]
 
 [project.entry-points."pennylane.plugins"]
 "quantx.statevector" = "quantx_engine.pennylane_plugin:QuantXDevice"
 
 [tool.setuptools]
 packages = ["quantx_engine"]
+
+[tool.pytest.ini_options]
+# Run from the python/ directory: `pytest` or `pytest quantx_engine/tests/`
+testpaths = ["quantx_engine/tests"]
+addopts = "-q --tb=short"
 
 [dependency-groups]
 dev = [
