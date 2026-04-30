@@ -61,6 +61,8 @@ async def pulse_simulate(req: PulseSimulateRequest) -> dict[str, Any]:
     from quantx_engine.pulse import (
         PulseError,
         DriveChannel,
+        MeasureChannel,
+        ControlChannel,
         GaussianWaveform,
         DRAGWaveform,
         FlatTopWaveform,
@@ -101,7 +103,18 @@ async def pulse_simulate(req: PulseSimulateRequest) -> dict[str, Any]:
         # Build schedule using PulseSchedule.add(channel, waveform, t_start)
         schedule = PulseSchedule(name="api_schedule")
         for wf in req.waveforms:
-            channel = DriveChannel(qubit=wf.channel_index)
+            ctype = wf.channel_type.lower()
+            if ctype == "drive":
+                channel = DriveChannel(qubit=wf.channel_index)
+            elif ctype == "measure":
+                channel = MeasureChannel(qubit=wf.channel_index)
+            elif ctype == "control":
+                channel = ControlChannel(index=wf.channel_index)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail={"ok": False, "error": f"Unknown channel_type: {wf.channel_type!r}. Use 'drive', 'measure', or 'control'."},
+                )
             wtype = wf.waveform_type.lower()
             if wtype == "gaussian":
                 sigma = wf.sigma if wf.sigma is not None else wf.duration / 4.0
@@ -121,6 +134,16 @@ async def pulse_simulate(req: PulseSimulateRequest) -> dict[str, Any]:
                     detail={"ok": False, "error": f"Unknown waveform_type: {wf.waveform_type!r}"},
                 )
             schedule.add(channel, wave, wf.t_start)
+
+        # Extend schedule to req.t_total so idle T1/T2 evolution is included.
+        # A zero-amplitude constant pulse padded to t_total ensures the ODE
+        # solver integrates over the full requested time window.
+        if schedule.duration < req.t_total:
+            schedule.add(
+                DriveChannel(qubit=0),
+                ConstantWaveform(duration=req.t_total, amp=0.0),
+                0.0,
+            )
 
         sim = PulseSimulator()
         result = sim.run(schedule=schedule, system=system)

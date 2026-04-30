@@ -180,6 +180,7 @@ async def noise_aware_vqe(req: NoiseAwareVQERequest) -> dict[str, Any]:
     Returns the ground-state energy estimate and converged parameters.
     """
     from quantx_engine.noise_vqe import NoiseAwareVQE, NoiseVQEError
+    from quantx_engine.noise import DepolarizingNoise
     import numpy as np
 
     dim = 2 ** req.n_qubits
@@ -199,13 +200,14 @@ async def noise_aware_vqe(req: NoiseAwareVQERequest) -> dict[str, Any]:
                 )
             H += 1j * np.array(req.hamiltonian_imag, dtype=float)
 
-        # NoiseAwareVQE noise_model expects a NoiseModel object or None.
-        # We pass None and rely on the noise built into the VQE circuit.
+        # Build noise model from the requested depolarizing probability.
+        # p=0 → noiseless (noise_model=None); p>0 → DepolarizingNoise per gate.
+        noise_model = DepolarizingNoise(req.depolarizing_noise) if req.depolarizing_noise > 0 else None
         vqe = NoiseAwareVQE(
             hamiltonian=H,
             n_qubits=req.n_qubits,
             n_layers=req.n_layers,
-            noise_model=None,
+            noise_model=noise_model,
             max_iter=req.max_iter,
             seed=req.seed if req.seed is not None else 42,
         )
