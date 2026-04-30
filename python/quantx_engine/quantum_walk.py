@@ -137,7 +137,19 @@ def _make_coin(coin: str | np.ndarray, d: int) -> np.ndarray:
             raise QuantumWalkError(
                 f"Custom coin must be {d}×{d}, got {coin.shape}"
             )
-        return coin.astype(complex)
+        c = coin.astype(complex)
+        eye = np.eye(d, dtype=complex)
+        if not np.allclose(c.conj().T @ c, eye, atol=1e-10):
+            raise QuantumWalkError(
+                "Custom coin must be unitary: C†C ≠ I. "
+                "Pass a unitary matrix or use 'hadamard', 'grover', 'identity'."
+            )
+        if not np.allclose(c @ c.conj().T, eye, atol=1e-10):
+            raise QuantumWalkError(
+                "Custom coin must be unitary: CC† ≠ I. "
+                "Pass a unitary matrix or use 'hadamard', 'grover', 'identity'."
+            )
+        return c
     name = coin.lower()
     if name == "hadamard":
         return _hadamard_coin(d)
@@ -231,6 +243,8 @@ class DiscreteTimeWalk:
         self._state = np.zeros(d * n, dtype=complex)
         for c in range(d):
             self._state[c * n + initial_pos] = c0[c]
+        # Snapshot of the initial state — never mutated, used by GroverWalk.search
+        self._initial_state = self._state.copy()
 
         # Precompute coin ⊗ I  (d·n × d·n)
         self._coin_full = np.kron(self._coin_op, np.eye(n, dtype=complex))
@@ -687,7 +701,10 @@ class GroverWalk:
         # Build the Grover walk operator: W_G = W · Oracle
         W_G = self._walk._W @ self._oracle
 
-        state = self._walk._state.copy()
+        # Always start from the walk's construction-time initial state so that
+        # prior run()/step() calls on the shared DiscreteTimeWalk do not affect
+        # hitting-time measurements.
+        state = self._walk._initial_state.copy()
         n, d = self._walk.n_nodes, self._walk.coin_dim
         step_probs: list[float] = []
         hitting_time: Optional[int] = None

@@ -78,6 +78,27 @@ class TestDiscreteTimeWalkConstruction:
         with pytest.raises(QuantumWalkError, match="2×2"):
             DiscreteTimeWalk.cycle(8, coin=bad_coin)
 
+    def test_custom_unitary_coin_accepted(self):
+        """A valid unitary 2×2 coin (e.g. phase gate) should be accepted."""
+        phase = np.array([[1, 0], [0, 1j]], dtype=complex)  # T-gate, unitary
+        w = DiscreteTimeWalk.cycle(8, coin=phase)
+        assert w.coin_dim == 2
+
+    def test_custom_non_unitary_coin_raises(self):
+        """A non-unitary custom coin must be rejected with a clear error."""
+        bad = np.array([[2.0, 0.0], [0.0, 0.5]], dtype=complex)  # not unitary
+        with pytest.raises(QuantumWalkError, match="unitary"):
+            DiscreteTimeWalk.cycle(8, coin=bad)
+
+    def test_custom_coin_cdagger_c_check(self):
+        """Column-normalised but not row-normalised matrix must be rejected."""
+        # rows sum to 1 but columns don't form an orthonormal basis
+        bad = np.array([[0.6, 0.8], [0.8, -0.6]], dtype=complex)
+        # This is actually unitary (rotation); use a truly non-unitary one
+        bad_nu = np.array([[1.0, 0.5], [0.0, 1.0]], dtype=complex)  # upper triangular
+        with pytest.raises(QuantumWalkError, match="unitary"):
+            DiscreteTimeWalk.cycle(8, coin=bad_nu)
+
     def test_initial_state_normalised(self):
         w = DiscreteTimeWalk.cycle(8)
         assert abs(np.linalg.norm(w.state) - 1.0) < 1e-12
@@ -473,6 +494,40 @@ class TestGroverWalkSearch:
         r2 = gw2.search(max_steps=50)
         # 3 marked nodes → higher max marked probability
         assert r2.max_marked_prob >= r1.max_marked_prob or True  # structural
+
+    def test_search_idempotent_after_run(self):
+        """search() must give identical results regardless of prior run() calls."""
+        w = DiscreteTimeWalk.complete(8, coin="grover")
+        gw = GroverWalk(w, marked_nodes=[4], threshold=0.3)
+
+        # First search: walk untouched
+        r1 = gw.search(max_steps=60)
+
+        # Mutate walk state via run()
+        w.run(steps=20)
+
+        # Second search: must produce the same result
+        r2 = gw.search(max_steps=60)
+
+        assert r1.hitting_time == r2.hitting_time
+        np.testing.assert_allclose(r1.step_probs, r2.step_probs, atol=1e-12)
+        np.testing.assert_allclose(r1.position_probs, r2.position_probs, atol=1e-12)
+
+    def test_search_idempotent_after_step(self):
+        """search() must give identical results regardless of prior step() calls."""
+        w = DiscreteTimeWalk.complete(8, coin="grover")
+        gw = GroverWalk(w, marked_nodes=[4], threshold=0.3)
+
+        r1 = gw.search(max_steps=40)
+
+        # Apply several manual steps
+        for _ in range(5):
+            w.step()
+
+        r2 = gw.search(max_steps=40)
+
+        assert r1.hitting_time == r2.hitting_time
+        np.testing.assert_allclose(r1.step_probs, r2.step_probs, atol=1e-12)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
