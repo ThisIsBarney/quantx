@@ -253,6 +253,16 @@ from .noise_vqe import (
     hardware_efficient_vqe,
     n_hea_params,
 )
+from .quantum_walk import (
+    QuantumWalkError,
+    WalkResult,
+    GroverWalkResult,
+    DiscreteTimeWalk,
+    ContinuousTimeQuantumWalk,
+    GroverWalk,
+    walk_spectrum,
+    ctqw_transfer_probability,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -521,4 +531,13 @@ __all__ = [
     "GoogleBackend",
     "calibration_to_noise_model",
     "available_backends",
+    # Quantum walk algorithms (M100)
+    "QuantumWalkError",
+    "WalkResult",
+    "GroverWalkResult",
+    "DiscreteTimeWalk",
+    "ContinuousTimeQuantumWalk",
+    "GroverWalk",
+    "walk_spectrum",
+    "ctqw_transfer_probability",
 ]
