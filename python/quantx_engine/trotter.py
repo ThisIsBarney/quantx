@@ -100,6 +100,23 @@ class TrotterTerm:
     pauli_string: str
 
     def __post_init__(self) -> None:
+        # ── Validate coefficient is real ───────────────────────────────────
+        c = self.coefficient
+        if isinstance(c, complex):
+            if c.imag != 0.0:
+                raise TrotterError(
+                    f"TrotterTerm coefficient must be real for a Hermitian "
+                    f"Hamiltonian; got {c!r} (imaginary part {c.imag})"
+                )
+            self.coefficient = c.real
+        else:
+            try:
+                self.coefficient = float(c)
+            except (TypeError, ValueError) as exc:
+                raise TrotterError(
+                    f"TrotterTerm coefficient must be a real number, got {c!r}"
+                ) from exc
+        # ── Validate Pauli string ──────────────────────────────────────────
         self.pauli_string = self.pauli_string.upper()
         for ch in self.pauli_string:
             if ch not in _PAULI_MAP:
@@ -435,7 +452,11 @@ class TrotterSimulator:
         while _bound(n_qubits, terms, t, hi, order) > target_error:
             hi *= 2
             if hi > 100_000:
-                return hi  # safety cap
+                raise TrotterError(
+                    f"optimal_steps: cannot satisfy target_error={target_error} "
+                    f"within 100,000 steps (order={order}, t={t}). "
+                    f"Try a larger target_error, smaller t, or higher order."
+                )
 
         # Binary search in [lo, hi]
         while hi - lo > 1:

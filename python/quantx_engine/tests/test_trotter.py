@@ -97,6 +97,21 @@ class TestTrotterTerm:
     def test_negative_coefficient_ok(self):
         assert TrotterTerm(-1.5, "ZZ").coefficient == -1.5
 
+    def test_pure_real_complex_accepted(self):
+        """complex(1.0, 0.0) has zero imaginary part — should be accepted."""
+        t = TrotterTerm(complex(1.0, 0.0), "ZZ")
+        assert t.coefficient == pytest.approx(1.0)
+
+    def test_complex_coefficient_raises(self):
+        """Non-zero imaginary part must be rejected at construction time."""
+        with pytest.raises(TrotterError, match="real"):
+            TrotterTerm(1.0 + 0.5j, "ZZ")
+
+    def test_complex_coefficient_error_not_deferred(self):
+        """The error must come from TrotterTerm, not from math.cos later."""
+        with pytest.raises(TrotterError):
+            TrotterTerm(2j, "Z")  # purely imaginary
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TrotterSimulator — construction
@@ -517,6 +532,15 @@ class TestOptimalSteps:
         """Commuting H has zero error bound → minimum 1 step."""
         terms = [TrotterTerm(1.0, "ZZ"), TrotterTerm(0.5, "IZ")]
         assert TrotterSimulator.optimal_steps(2, terms, 1.0, 1e-6, 1) == 1
+
+    def test_impossible_target_raises(self):
+        """Impossibly tight target should raise rather than return a silently
+        wrong step count that still violates the bound."""
+        terms = self._terms()
+        with pytest.raises(TrotterError, match="100,000"):
+            # target_error=0 is already caught; use an astronomically tight
+            # target that can never be met by any reasonable step count
+            TrotterSimulator.optimal_steps(2, terms, 1000.0, 1e-300, 1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
