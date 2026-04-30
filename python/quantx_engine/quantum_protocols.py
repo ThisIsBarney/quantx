@@ -512,7 +512,9 @@ class E91Protocol:
         S = chsh_inequality_value(correlations)
         bell_violation = S > 2.0
 
-        skr = bb84_key_rate(qber)
+        # QBER can statistically exceed 0.5 with very low fidelity states;
+        # clamp to [0, 0.5] before computing key rate (negative rate → 0).
+        skr = bb84_key_rate(min(qber, 0.5))
 
         return E91Result(
             n_pairs=n_pairs,

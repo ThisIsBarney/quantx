@@ -15,6 +15,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from quantx_engine import Engine, CircuitError
 
+from server.routers.network import router as network_router
+from server.routers.protocols import router as protocols_router
+from server.routers.pulse import router as pulse_router
+from server.routers.advanced import router as advanced_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,10 +33,13 @@ app = FastAPI(
     title="QuantX Engine API",
     description=(
         "REST API for the QuantX quantum simulation engine. "
-        "Exposes 37 physics solvers (VQE, Hubbard, toric code, SYK, ...) "
-        "and a gate-model circuit simulator via HTTP."
+        "Exposes 37 C++ physics solvers (VQE, Hubbard, toric code, SYK, ...), "
+        "a gate-model circuit simulator, quantum network simulation (M96), "
+        "quantum communication protocols (M97), pulse-level simulation (M89), "
+        "and advanced solvers (Floquet M92, TDMRG M94, noise-aware VQE M95, "
+        "fault-tolerant qubits M91)."
     ),
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -41,6 +49,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# M98: new Python-SDK routers (no native library required)
+app.include_router(network_router)
+app.include_router(protocols_router)
+app.include_router(pulse_router)
+app.include_router(advanced_router)
 
 
 def _engine(request: Request) -> Engine:
