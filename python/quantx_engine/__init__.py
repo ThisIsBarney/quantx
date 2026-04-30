@@ -263,6 +263,14 @@ from .quantum_walk import (
     walk_spectrum,
     ctqw_transfer_probability,
 )
+from .trotter import (
+    TrotterError,
+    TrotterTerm,
+    TrotterResult,
+    TrotterSimulator,
+    heisenberg_trotter,
+    ising_trotter,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -540,4 +548,11 @@ __all__ = [
     "GroverWalk",
     "walk_spectrum",
     "ctqw_transfer_probability",
+    # Suzuki-Trotter Hamiltonian simulation (M101)
+    "TrotterError",
+    "TrotterTerm",
+    "TrotterResult",
+    "TrotterSimulator",
+    "heisenberg_trotter",
+    "ising_trotter",
 ]
