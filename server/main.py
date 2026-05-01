@@ -19,6 +19,11 @@ from server.routers.network import router as network_router
 from server.routers.protocols import router as protocols_router
 from server.routers.pulse import router as pulse_router
 from server.routers.advanced import router as advanced_router
+from server.routers.jobs import router as jobs_router  # M103
+from server.result_cache import ResultCache            # M103
+
+# M103: module-level cache singleton (accessible even when lifespan doesn't run)
+_global_result_cache: ResultCache = ResultCache()
 
 
 @asynccontextmanager
@@ -26,6 +31,7 @@ async def lifespan(app: FastAPI):
     """Load the native engine library at startup."""
     lib_path = os.environ.get("QUANTX_LIB_PATH")
     app.state.engine = Engine(lib_path)
+    app.state.result_cache = _global_result_cache      # M103
     yield
 
 
@@ -55,10 +61,29 @@ app.include_router(network_router)
 app.include_router(protocols_router)
 app.include_router(pulse_router)
 app.include_router(advanced_router)
+# M103: async job queue
+app.include_router(jobs_router)
 
 
 def _engine(request: Request) -> Engine:
     return request.app.state.engine
+
+
+# ── M103: result cache endpoint ───────────────────────────────────────────────
+
+@app.get("/cache/{cache_key}", tags=["cache"])
+async def get_cached_result(cache_key: str, request: Request) -> Any:
+    """Return a previously cached solver result by its SHA-256 cache key.
+
+    The cache key is the value returned by ``ResultCache.make_key(endpoint,
+    payload)``.  Returns 404 if the key is absent or the entry has expired.
+    """
+    # Use app.state cache if lifespan ran, otherwise fall back to module singleton
+    cache: ResultCache = getattr(request.app.state, "result_cache", _global_result_cache)
+    value = cache.get(cache_key)
+    if value is None:
+        raise HTTPException(status_code=404, detail=f"Cache key {cache_key!r} not found")
+    return {"cache_key": cache_key, "result": value}
 
 
 @app.get("/health", tags=["meta"])
