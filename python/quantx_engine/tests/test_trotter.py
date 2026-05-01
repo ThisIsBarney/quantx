@@ -281,13 +281,15 @@ class TestOrder1:
 
     def test_less_accurate_than_order2(self):
         """Order-1 error should be larger than order-2 for the same n_steps."""
-        sim = self._sim()
-        H = sim.hamiltonian
-        psi0 = sim.initial_state
+        # H = X + Z on 1 qubit: [X,Z] = -2iY ≠ 0, so Trotter errors are non-trivial.
+        # XX and YY (2-qubit) pairwise commute, making those Trotter steps exact.
+        terms = [TrotterTerm(1.0, "X"), TrotterTerm(1.0, "Z")]
+        sim = TrotterSimulator(1, terms)
+        H, psi0 = sim.hamiltonian, sim.initial_state
         t = 1.0
         exact = _exact_evolve(H, psi0, t)
-        e1 = float(np.linalg.norm(sim.run(t=t, n_steps=20, order=1).state - exact))
-        e2 = float(np.linalg.norm(sim.run(t=t, n_steps=20, order=2).state - exact))
+        e1 = float(np.linalg.norm(sim.run(t=t, n_steps=5, order=1).state - exact))
+        e2 = float(np.linalg.norm(sim.run(t=t, n_steps=5, order=2).state - exact))
         assert e1 > e2
 
 
@@ -313,7 +315,9 @@ class TestOrder2:
         assert _is_unitary(self._sim()._step2(0.1))
 
     def test_error_decreases_with_more_steps(self):
-        sim = self._sim()
+        # H = X + Z on 1 qubit: non-commuting, Trotter errors well above machine ε.
+        terms = [TrotterTerm(1.0, "X"), TrotterTerm(1.0, "Z")]
+        sim = TrotterSimulator(1, terms)
         H, psi0 = sim.hamiltonian, sim.initial_state
         exact = _exact_evolve(H, psi0, 1.0)
         e_coarse = float(np.linalg.norm(sim.run(1.0, 10, 2).state - exact))
@@ -361,7 +365,10 @@ class TestOrder4:
 
     def test_more_accurate_than_order2_per_cost(self):
         """Order-4 with fewer steps beats order-2 with more."""
-        sim = self._sim()
+        # H = X + Y + Z on 1 qubit: all terms pairwise non-commuting, so
+        # Trotter errors are non-trivial and the order-4 advantage is visible.
+        terms = [TrotterTerm(1.0, "X"), TrotterTerm(1.0, "Y"), TrotterTerm(1.0, "Z")]
+        sim = TrotterSimulator(1, terms)
         H, psi0 = sim.hamiltonian, sim.initial_state
         exact = _exact_evolve(H, psi0, 1.0)
         e2 = float(np.linalg.norm(sim.run(1.0, 30, 2).state - exact))
@@ -616,7 +623,7 @@ class TestIsingTrotter:
         exact = _exact_evolve(H, psi0, 1.0)
         e_c = float(np.linalg.norm(sim.run(1.0,  10, 2).state - exact))
         e_f = float(np.linalg.norm(sim.run(1.0, 200, 2).state - exact))
-        assert e_f < e_c and e_f < 1e-6
+        assert e_f < e_c and e_f < 2e-5  # order-2 error ∝ dt², n=200 → ~1e-5
 
 
 # ─────────────────────────────────────────────────────────────────────────────
