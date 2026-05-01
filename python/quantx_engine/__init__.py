@@ -271,6 +271,19 @@ from .trotter import (
     heisenberg_trotter,
     ising_trotter,
 )
+from .many_body import (
+    ManyBodyError,
+    OTOCResult,
+    OTOCSweepResult,
+    SYKResult,
+    SYKModel,
+    DMRG2DResult,
+    SnakeMapper,
+    compute_otoc,
+    otoc_sweep,
+    syk_hamiltonian,
+    dmrg_2d,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -555,4 +568,16 @@ __all__ = [
     "TrotterSimulator",
     "heisenberg_trotter",
     "ising_trotter",
+    # Many-body physics enhancements (M102)
+    "ManyBodyError",
+    "OTOCResult",
+    "OTOCSweepResult",
+    "SYKResult",
+    "SYKModel",
+    "DMRG2DResult",
+    "SnakeMapper",
+    "compute_otoc",
+    "otoc_sweep",
+    "syk_hamiltonian",
+    "dmrg_2d",
 ]
