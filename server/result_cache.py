@@ -94,8 +94,13 @@ class ResultCache:
         return value
 
     def set(self, key: str, value: Any) -> None:
-        """Store *value* under *key*, evicting the oldest entry if at capacity."""
-        if len(self._store) >= self.config.max_entries:
+        """Store *value* under *key*.
+
+        Evicts the oldest entry only when the cache is at capacity **and** the
+        key does not already exist (overwriting an existing key never increases
+        the cache size, so no eviction is necessary).
+        """
+        if key not in self._store and len(self._store) >= self.config.max_entries:
             # Python dicts preserve insertion order → first key is oldest
             oldest = next(iter(self._store))
             del self._store[oldest]
@@ -107,3 +112,11 @@ class ResultCache:
 
     def __len__(self) -> int:
         return len(self._store)
+
+
+# ── Module-level singleton ────────────────────────────────────────────────────
+# Shared by server.routers.jobs (writes job results) and server.main
+# (GET /cache/{key} reads).  Importing this name from both modules ensures a
+# single cache instance — avoids the cross-module split where jobs write to
+# one cache and the endpoint reads from another.
+shared_result_cache: ResultCache = ResultCache()

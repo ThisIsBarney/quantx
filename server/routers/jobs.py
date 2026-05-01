@@ -24,14 +24,16 @@ from pydantic import BaseModel
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "python"))
 
 from server.job_store import JobStore
-from server.result_cache import ResultCache
+from server.result_cache import ResultCache, shared_result_cache
 
 router = APIRouter(prefix="/jobs", tags=["async-jobs"])
 
 # ── Module-level singletons ───────────────────────────────────────────────────
+# _cache uses the shared singleton from result_cache so that job results are
+# visible to the GET /cache/{key} endpoint in main.py (P1 fix).
 
 _store: JobStore = JobStore()
-_cache: ResultCache = ResultCache()
+_cache: ResultCache = shared_result_cache
 
 
 def _get_store() -> JobStore:

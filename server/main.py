@@ -19,11 +19,12 @@ from server.routers.network import router as network_router
 from server.routers.protocols import router as protocols_router
 from server.routers.pulse import router as pulse_router
 from server.routers.advanced import router as advanced_router
-from server.routers.jobs import router as jobs_router  # M103
-from server.result_cache import ResultCache            # M103
+from server.routers.jobs import router as jobs_router          # M103
+from server.result_cache import ResultCache, shared_result_cache  # M103
 
-# M103: module-level cache singleton (accessible even when lifespan doesn't run)
-_global_result_cache: ResultCache = ResultCache()
+# M103: re-export the shared singleton so the /cache endpoint and the jobs
+# router always operate on the same cache object (P1 fix).
+_global_result_cache: ResultCache = shared_result_cache
 
 
 @asynccontextmanager
