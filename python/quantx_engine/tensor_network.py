@@ -804,6 +804,7 @@ def _dmrg_update(
     site: int,
     max_chi: int,
     direction: str,
+    eps: float | None = None,
 ) -> tuple[float, MPS]:
     """Single two-site DMRG update at bond (site, site+1)."""
     A_l = mps.tensors[site]        # (chi_l, d, chi_m)
@@ -862,6 +863,10 @@ def _dmrg_update(
     U, S, Vt = np.linalg.svd(theta, full_matrices=False)
 
     chi_new = min(max_chi, len(S))
+    # Apply eps-based adaptive truncation: discard σᵢ < eps·σ₀
+    if eps is not None and len(S) > 0 and S[0] > 0:
+        adaptive_chi = int(np.sum(S > eps * S[0]))
+        chi_new = min(chi_new, max(1, adaptive_chi))
     U = U[:, :chi_new]
     S = S[:chi_new]
     Vt = Vt[:chi_new, :]

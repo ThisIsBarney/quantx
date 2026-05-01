@@ -284,6 +284,17 @@ from .many_body import (
     syk_hamiltonian,
     dmrg_2d,
 )
+from .mps_simulator import (
+    MPSSimulatorError,
+    AdaptiveTruncation,
+    MPSSimulator,
+    CachedDMRG,
+    BenchmarkResult,
+    ComparisonResult,
+    mps_benchmark,
+    ghz_fidelity,
+    compare_mps_sv,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -580,4 +591,14 @@ __all__ = [
     "otoc_sweep",
     "syk_hamiltonian",
     "dmrg_2d",
+    # MPS simulator extension (M104)
+    "MPSSimulatorError",
+    "AdaptiveTruncation",
+    "MPSSimulator",
+    "CachedDMRG",
+    "BenchmarkResult",
+    "ComparisonResult",
+    "mps_benchmark",
+    "ghz_fidelity",
+    "compare_mps_sv",
 ]
