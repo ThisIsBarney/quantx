@@ -421,6 +421,30 @@ class TestDMRG2D:
         r2 = dmrg_2d(Lx=2, Ly=2, J=2.0)
         assert r2.energy < r1.energy
 
+    def test_variational_path_runs_without_error(self):
+        """4×4 lattice (16 sites > 12) exercises the variational MPS path.
+
+        Verifies that the corrected einsum contraction and non-adjacent bond
+        inclusion do not raise ValueError or produce NaN/Inf energies.
+        The exact energy value is not asserted; only numerical sanity is checked.
+        """
+        r = dmrg_2d(Lx=4, Ly=4, J=1.0, bond_dim=4, sweeps=2, model="heisenberg")
+        assert isinstance(r, DMRG2DResult)
+        assert math.isfinite(r.energy)
+        assert r.energy < 0  # antiferromagnetic → negative ground state
+
+    def test_variational_ising_path_runs(self):
+        """4×4 Ising lattice (variational path): completes without error, finite energy.
+
+        The variational MPS path uses a mean-field approximation for non-adjacent
+        (cross-row) bonds, so convergence to the true ground state requires more
+        sweeps than tested here.  We only assert that the code runs correctly and
+        returns a finite energy.
+        """
+        r = dmrg_2d(Lx=4, Ly=4, J=1.0, bond_dim=4, sweeps=2, model="ising")
+        assert isinstance(r, DMRG2DResult)
+        assert math.isfinite(r.energy)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Exports

@@ -806,12 +806,44 @@ def _normalise_mps(mps: list[np.ndarray]) -> list[np.ndarray]:
         Q, R = np.linalg.qr(mat)
         new_chi = Q.shape[1]
         mps[i] = Q.reshape(d, chi_l, new_chi)
-        mps[i + 1] = np.einsum("ij,jkl->ikl", R, mps[i + 1])
+        # R: [new_chi, old_chi_r]; mps[i+1]: [d, old_chi_r, chi_r_next]
+        # Contract over the shared bond (j = old_chi_r) → [d, new_chi, chi_r_next]
+        mps[i + 1] = np.einsum("ij,kjl->kil", R, mps[i + 1])
     # Normalise last tensor
     norm = np.linalg.norm(mps[-1])
     if norm > 1e-12:
         mps[-1] = mps[-1] / norm
     return mps
+
+
+def _expect_op(mps: list[np.ndarray], k: int, op: np.ndarray) -> float:
+    """Mean-field expectation ⟨op⟩ on site k (no environment tensors).
+
+    Uses the raw MPS tensor at site k, ignoring environment factors.  This is
+    exact when k is the boundary of a left-/right-canonical MPS and the rest
+    of the chain is orthogonally compressed, but is used here as a
+    mean-field approximation for non-adjacent bond contributions during the
+    two-site DMRG update.
+
+    Parameters
+    ----------
+    mps : list of np.ndarray
+        MPS tensors, each with shape [d, chi_l, chi_r].
+    k : int
+        Site index.
+    op : np.ndarray
+        Physical-space operator, shape [d, d].
+
+    Returns
+    -------
+    float
+        Real part of the (unnormalized) expectation value.
+    """
+    T = mps[k]  # [d, chi_l, chi_r]
+    # ⟨op⟩ = Σ_{s,p,l,r} T*[s,l,r] op[s,p] T[p,l,r] / ||T||²
+    val = float(np.real(np.einsum("slr,sp,plr->", T.conj(), op, T)))
+    norm = float(np.real(np.einsum("slr,slr->", T.conj(), T)))
+    return val / norm if norm > 1e-14 else 0.0
 
 
 def _two_site_update(
@@ -823,35 +855,64 @@ def _two_site_update(
     bond_dim: int,
 ) -> tuple[np.ndarray, float, float]:
     """Apply local Hamiltonian to two-site tensor and return updated theta, energy, error."""
-    n = len(mps)
     A = mps[site]       # [d, chi_l, chi_m]
     B = mps[site + 1]   # [d, chi_m, chi_r]
     d = 2
+    chi_l = A.shape[1]
+    chi_r = B.shape[2]
 
-    # Two-site wavefunction theta[sigma_i, sigma_j, chi_l, chi_r]
-    theta = np.einsum("ijk,jlm->ilkm", A, B)  # [d, d, chi_l, chi_r] — reorder below
-    theta = np.einsum("ijk,klm->ijlm", A, B)  # [d_i, chi_l, d_j, chi_r]
-    # reshape: [d_i, d_j, chi_l, chi_r]
-    chi_l, chi_r = A.shape[1], B.shape[2]
-    chi_m = A.shape[2]
-    theta = np.einsum("ijk,klm->iljm", A, B).reshape(d * chi_l, d * chi_r)
+    # Two-site wavefunction: A[p_i, chi_l, chi_m] × B[p_j, chi_m, chi_r]
+    # einsum "ijk,lkm->iljm": i=p_i, j=chi_l, k=chi_m(shared), l=p_j, m=chi_r
+    # result shape [p_i, chi_l, p_j, chi_r], reshaped to [d*chi_l, d*chi_r]
+    theta = np.einsum("ijk,lkm->iljm", A, B).reshape(d * chi_l, d * chi_r)
 
-    # Build local Hamiltonian for bonds involving (site, site+1)
+    # Build local Hamiltonian, including non-adjacent snake-mapped bonds.
+    # For each NN bond (bi, bj):
+    #   • both endpoints in {site, site+1}  → direct 2-site interaction term
+    #   • one endpoint in window            → mean-field: replace partner with ⟨op⟩
+    #   • neither endpoint in window        → skip
     h_local = np.zeros((d * d, d * d), dtype=complex)
-    for (i, j) in pairs:
-        if not ({i, j} <= {site, site + 1}):
-            continue
-        if model == "heisenberg":
-            for op in ("X", "Y", "Z"):
-                Pi = _PAULI[op]
-                Pj = _PAULI[op]
-                if i == site and j == site + 1:
-                    h_local += J * np.kron(Pi, Pj)
-                elif i == site + 1 and j == site:
-                    h_local += J * np.kron(Pj, Pi)
+    I2 = np.eye(d, dtype=complex)
+    win = {site: 0, site + 1: 1}
+
+    for (bi, bj) in pairs:
+        i_loc = win.get(bi)
+        j_loc = win.get(bj)
+
+        if i_loc is None and j_loc is None:
+            continue  # bond entirely outside the two-site window
+
+        if i_loc is not None and j_loc is not None:
+            # Both endpoints in window → standard 2-site interaction
+            if model == "heisenberg":
+                for op_name in ("X", "Y", "Z"):
+                    P = _PAULI[op_name]
+                    if i_loc == 0:
+                        h_local += J * np.kron(P, P)
+                    else:
+                        h_local += J * np.kron(P, P)
+            else:  # ising
+                Z = _PAULI["Z"]
+                h_local += -J * np.kron(Z, Z)
         else:
-            Zi, Zj = _PAULI["Z"], _PAULI["Z"]
-            h_local += -J * np.kron(Zi, Zj)
+            # One endpoint in window, one outside → mean-field single-site term
+            loc_idx = i_loc if i_loc is not None else j_loc
+            ext_site = bj if i_loc is not None else bi
+            if model == "heisenberg":
+                for op_name in ("X", "Y", "Z"):
+                    exp_val = _expect_op(mps, ext_site, _PAULI[op_name])
+                    P_loc = J * exp_val * _PAULI[op_name]
+                    if loc_idx == 0:
+                        h_local += np.kron(P_loc, I2)
+                    else:
+                        h_local += np.kron(I2, P_loc)
+            else:  # ising
+                exp_val = _expect_op(mps, ext_site, _PAULI["Z"])
+                P_loc = -J * exp_val * _PAULI["Z"]
+                if loc_idx == 0:
+                    h_local += np.kron(P_loc, I2)
+                else:
+                    h_local += np.kron(I2, P_loc)
 
     # Effective environment (identity for simplicity — single-site approximation)
     H_eff = np.kron(np.eye(chi_l), np.kron(h_local, np.eye(chi_r)))
