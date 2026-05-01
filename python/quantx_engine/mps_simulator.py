@@ -437,7 +437,9 @@ class CachedDMRG:
             for i in range(N - 1):
                 R_env = R_envs[i + 2]
                 eff_chi = self._eff_chi_for_update(mps, i)
-                energy, mps = _dmrg_update(mps, self.mpo, L_envs[-1], R_env, i, eff_chi, "right")
+                energy, mps = _dmrg_update(
+                    mps, self.mpo, L_envs[-1], R_env, i, eff_chi, "right", eps=self.eps
+                )
                 new_L = _grow_left_env(L_envs[-1], mps.tensors[i], self.mpo.tensors[i])
                 L_envs.append(new_L)
 
@@ -447,7 +449,9 @@ class CachedDMRG:
             for i in range(N - 2, -1, -1):
                 L_env_i = L_envs[i]  # cached — O(1) lookup
                 eff_chi = self._eff_chi_for_update(mps, i)
-                energy, mps = _dmrg_update(mps, self.mpo, L_env_i, R_env, i, eff_chi, "left")
+                energy, mps = _dmrg_update(
+                    mps, self.mpo, L_env_i, R_env, i, eff_chi, "left", eps=self.eps
+                )
                 R_env = _grow_right_env(R_env, mps.tensors[i + 1], self.mpo.tensors[i + 1])
 
             sweep_energies.append(float(energy))
@@ -466,11 +470,11 @@ class CachedDMRG:
         )
 
     def _eff_chi_for_update(self, mps: MPS, site: int) -> int:
-        """Return the effective max_chi to pass to ``_dmrg_update``.
+        """Return the hard max_chi cap to pass to ``_dmrg_update``.
 
-        For adaptive mode (eps is set), we request the hard max and let
-        ``AdaptiveTruncation`` post-process.  The standard ``_dmrg_update``
-        uses ``max_chi`` for SVD truncation directly, so we pass ``max_chi``.
+        The eps-based adaptive threshold is applied *inside* ``_dmrg_update``
+        where the SVD singular values are available.  This method returns only
+        the hard upper bound on bond dimension.
         """
         return self.max_chi
 

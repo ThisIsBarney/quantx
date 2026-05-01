@@ -372,6 +372,17 @@ class TestCachedDMRG:
         result = dmrg.run()
         assert result.energy < 0
 
+    def test_eps_constrains_bond_dimension(self):
+        """Very aggressive eps should keep fewer bonds than eps=None."""
+        mpo = MPO.heisenberg(n=6, J=1.0)
+        # eps=None: no adaptive truncation, max_chi=8 is hard cap
+        result_full = CachedDMRG(mpo=mpo, max_chi=8, eps=None, n_sweeps=4, seed=0).run()
+        # eps=0.9: discard SVs below 90% of σ_max → extremely aggressive
+        result_trimmed = CachedDMRG(mpo=mpo, max_chi=8, eps=0.9, n_sweeps=4, seed=0).run()
+        max_bond_full = max(t.shape[2] for t in result_full.mps.tensors[:-1])
+        max_bond_trimmed = max(t.shape[2] for t in result_trimmed.mps.tensors[:-1])
+        assert max_bond_trimmed <= max_bond_full
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Exports
