@@ -24,7 +24,7 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["server", "server.backends", "server.routers"]
+packages = ["server", "server.backends", "server.routers", "server.auth"]
 
 [tool.pytest.ini_options]
 # Run from the server/ directory: `PYTHONPATH=.. pytest`
