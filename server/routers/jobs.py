@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import sys
 import os
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -25,6 +26,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "python")
 
 from server.job_store import JobStore
 from server.result_cache import ResultCache, shared_result_cache
+from server.observability.metrics import (  # M107
+    track_job_status,
+    track_job_duration,
+    update_jobs_active,
+)
 
 router = APIRouter(prefix="/jobs", tags=["async-jobs"])
 
@@ -152,27 +158,39 @@ async def _run_job(job_id: str, endpoint: str, payload: dict) -> None:
     store = _get_store()
     cache = _get_cache()
 
-    await store.set_running(job_id)
-
-    # Check result cache first
-    cache_key = ResultCache.make_key(endpoint, payload)
-    cached = cache.get(cache_key)
-    if cached is not None:
-        await store.set_done(job_id, cached)
-        return
-
-    solver = _SOLVER_REGISTRY.get(endpoint)
-    if solver is None:
-        await store.set_failed(job_id, f"Unknown endpoint: {endpoint!r}")
-        return
-
-    loop = asyncio.get_event_loop()
+    t0 = time.perf_counter()
+    update_jobs_active(+1)
     try:
-        result = await loop.run_in_executor(None, solver, payload)
-        cache.set(cache_key, result)
-        await store.set_done(job_id, result)
-    except Exception as exc:  # noqa: BLE001
-        await store.set_failed(job_id, str(exc))
+        await store.set_running(job_id)
+
+        # Check result cache first
+        cache_key = ResultCache.make_key(endpoint, payload)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            await store.set_done(job_id, cached)
+            track_job_status("done")
+            track_job_duration(endpoint, time.perf_counter() - t0)
+            return
+
+        solver = _SOLVER_REGISTRY.get(endpoint)
+        if solver is None:
+            await store.set_failed(job_id, f"Unknown endpoint: {endpoint!r}")
+            track_job_status("failed")
+            return
+
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(None, solver, payload)
+            cache.set(cache_key, result)
+            await store.set_done(job_id, result)
+            track_job_status("done")
+            track_job_duration(endpoint, time.perf_counter() - t0)
+        except Exception as exc:  # noqa: BLE001
+            await store.set_failed(job_id, str(exc))
+            track_job_status("failed")
+            track_job_duration(endpoint, time.perf_counter() - t0)
+    finally:
+        update_jobs_active(-1)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
