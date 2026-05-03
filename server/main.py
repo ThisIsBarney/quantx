@@ -15,13 +15,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from quantx_engine import Engine, CircuitError
 
+from fastapi import Depends
+
 from server.routers.network import router as network_router
 from server.routers.protocols import router as protocols_router
 from server.routers.pulse import router as pulse_router
 from server.routers.advanced import router as advanced_router
 from server.routers.jobs import router as jobs_router, _get_store  # M103
+from server.routers.auth import router as auth_router              # M106
 from server.result_cache import ResultCache, shared_result_cache   # M103
 from server.backends import create_job_store_backend               # M105
+from server.auth.api_key import require_api_key                    # M106
 
 # M103: re-export the shared singleton so the /cache endpoint and the jobs
 # router always operate on the same cache object (P1 fix).
@@ -72,8 +76,10 @@ app.include_router(network_router)
 app.include_router(protocols_router)
 app.include_router(pulse_router)
 app.include_router(advanced_router)
-# M103: async job queue
-app.include_router(jobs_router)
+# M103: async job queue (protected when auth is enabled)
+app.include_router(jobs_router, dependencies=[Depends(require_api_key)])
+# M106: auth endpoints (always open — /auth/token is the bootstrap entry-point)
+app.include_router(auth_router)
 
 
 def _engine(request: Request) -> Engine:
