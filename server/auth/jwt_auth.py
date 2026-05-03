@@ -25,9 +25,26 @@ def _b64url_decode(s: str) -> bytes:
 
 
 def _get_secret() -> bytes:
-    return os.environ.get(
-        "QUANTX_JWT_SECRET", "quantx-dev-secret-change-in-production"
-    ).encode()
+    """Return the JWT signing secret.
+
+    When ``QUANTX_API_KEYS`` is configured (auth enabled) the secret **must**
+    be supplied via ``QUANTX_JWT_SECRET``.  Falling back to a hard-coded
+    default would let an attacker forge Bearer tokens by using the well-known
+    default value, defeating API-key protection entirely.
+
+    In open-access / dev mode (no ``QUANTX_API_KEYS``) the default is
+    acceptable because JWT tokens carry no security value there anyway.
+    """
+    secret = os.environ.get("QUANTX_JWT_SECRET")
+    if secret is None:
+        if os.environ.get("QUANTX_API_KEYS", "").strip():
+            raise RuntimeError(
+                "QUANTX_JWT_SECRET must be set when QUANTX_API_KEYS is configured. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
+        # Open-access / dev mode — default value is harmless here
+        return b"quantx-dev-secret-change-in-production"
+    return secret.encode()
 
 
 def create_jwt(sub: str, scopes: list[str], ttl_seconds: int | None = None) -> str:

@@ -1,6 +1,7 @@
 """M106: API-key and Bearer-JWT authentication dependency."""
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Optional
 
@@ -29,6 +30,17 @@ def _mask_key(key: str) -> str:
     if len(key) <= 8:
         return "****"
     return key[:4] + "****" + key[-4:]
+
+
+def _rl_key_for(raw: str) -> str:
+    """Return a stable, unique rate-limit identifier for *raw*.
+
+    The identifier is the SHA-256 hex digest of the credential, so it is:
+    - **unique** — no two distinct credentials share the same bucket,
+    - **opaque** — the raw credential is never exposed in logs or memory,
+    - distinct from the display-only ``_mask_key`` value.
+    """
+    return hashlib.sha256(raw.encode()).hexdigest()
 
 
 async def require_api_key(
@@ -66,6 +78,9 @@ async def require_api_key(
     if api_key and api_key in allowed:
         identity = {
             "sub": _mask_key(api_key),
+            # P2: use a collision-free hash of the raw key as the rate-limit
+            # bucket — _mask_key is lossy and short keys all map to "****".
+            "_rl_key": _rl_key_for(api_key),
             "scopes": ["solver:read", "solver:write", "jobs:submit"],
         }
 
@@ -73,7 +88,13 @@ async def require_api_key(
     if identity is None and bearer is not None:
         payload = verify_jwt(bearer.credentials)
         if payload is not None:
-            identity = {"sub": payload["sub"], "scopes": payload.get("scopes", [])}
+            # Rate-limit by the unique JWT subject; the raw token string changes
+            # on each re-issue so we key on sub (the masked key identity).
+            identity = {
+                "sub": payload["sub"],
+                "_rl_key": _rl_key_for(payload["sub"]),
+                "scopes": payload.get("scopes", []),
+            }
 
     if identity is None:
         raise HTTPException(
@@ -82,8 +103,8 @@ async def require_api_key(
             headers={"WWW-Authenticate": 'ApiKey realm="QuantX", Bearer realm="QuantX"'},
         )
 
-    # 3. Rate limiting
-    allowed_req, retry_after = await check_rate_limit(identity["sub"])
+    # 3. Rate limiting — use the opaque _rl_key, not the display-only sub
+    allowed_req, retry_after = await check_rate_limit(identity["_rl_key"])
     if not allowed_req:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

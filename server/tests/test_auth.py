@@ -22,8 +22,10 @@ except Exception:
         from server.main import app
     app.state.engine = _mock_engine
 
-# Reset the rate-limit windows between test modules
+# Reset the rate-limit windows between tests
 from server.auth.rate_limit import reset_all as _reset_rate_limit
+
+_JWT_SECRET = "test-secret-for-unit-tests"
 
 
 @pytest.fixture(autouse=True)
@@ -33,24 +35,11 @@ def _clean_rate_limit():
     _reset_rate_limit()
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _client(monkeypatch, api_keys: str | None = "sk-test-1,sk-test-2") -> TestClient:
-    """Return a TestClient with QUANTX_API_KEYS set (or cleared)."""
-    if api_keys is None:
-        monkeypatch.delenv("QUANTX_API_KEYS", raising=False)
-    else:
-        monkeypatch.setenv("QUANTX_API_KEYS", api_keys)
-    # Clear cached key-set between tests by re-importing the dependency module
+def _reload_auth(monkeypatch):
+    """Reload auth module so env-var changes take effect in the dependency."""
     import importlib
     import server.auth.api_key as _mod
     importlib.reload(_mod)
-    # Re-patch the router reference
-    from server.routers import auth as _auth_router_mod
-    importlib.reload(_auth_router_mod)
-    return TestClient(app, raise_server_exceptions=False)
 
 
 # ---------------------------------------------------------------------------
@@ -60,26 +49,21 @@ def _client(monkeypatch, api_keys: str | None = "sk-test-1,sk-test-2") -> TestCl
 class TestApiKeyAuth:
     def test_missing_key_returns_401(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        from server.auth.api_key import require_api_key
-        import asyncio, importlib
-        import server.auth.api_key as _mod
-        importlib.reload(_mod)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.get("/auth/whoami")
         assert r.status_code == 401
 
     def test_wrong_key_returns_401(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.get("/auth/whoami", headers={"X-API-Key": "sk-wrong"})
         assert r.status_code == 401
 
     def test_valid_key_returns_200(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.get("/auth/whoami", headers={"X-API-Key": "sk-test-1"})
         assert r.status_code == 200
@@ -89,8 +73,7 @@ class TestApiKeyAuth:
 
     def test_open_access_when_no_keys_configured(self, monkeypatch):
         monkeypatch.delenv("QUANTX_API_KEYS", raising=False)
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.get("/auth/whoami")
         assert r.status_code == 200
@@ -98,8 +81,7 @@ class TestApiKeyAuth:
 
     def test_masked_identity_returned(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-abcdefgh-1234")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.get("/auth/whoami", headers={"X-API-Key": "sk-abcdefgh-1234"})
         assert r.status_code == 200
@@ -108,6 +90,22 @@ class TestApiKeyAuth:
         assert "sk-abcdefgh-1234" not in sub
         assert "****" in sub
 
+    def test_raw_key_not_in_rl_key(self, monkeypatch):
+        """P2: _rl_key_for must not return the plaintext key."""
+        from server.auth.api_key import _rl_key_for
+        key = "sk-secret-key-value"
+        rl = _rl_key_for(key)
+        assert key not in rl
+        # Should be a 64-char hex string (SHA-256)
+        assert len(rl) == 64
+
+    def test_two_distinct_keys_have_distinct_rl_buckets(self, monkeypatch):
+        """P2: different API keys must get different rate-limit buckets."""
+        from server.auth.api_key import _rl_key_for
+        assert _rl_key_for("key-A") != _rl_key_for("key-B")
+        # Short keys that mask to the same "****" must still differ
+        assert _rl_key_for("abc") != _rl_key_for("xyz")
+
 
 # ---------------------------------------------------------------------------
 # JWT authentication
@@ -115,10 +113,10 @@ class TestApiKeyAuth:
 
 class TestJwtAuth:
     def test_token_endpoint_open(self, monkeypatch):
-        """POST /auth/token is accessible without any API key."""
+        """POST /auth/token is accessible without a prior API key header."""
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        monkeypatch.setenv("QUANTX_JWT_SECRET", _JWT_SECRET)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.post("/auth/token", json={"api_key": "sk-test-1"})
         assert r.status_code == 200
@@ -128,28 +126,29 @@ class TestJwtAuth:
 
     def test_invalid_key_on_token_endpoint_returns_401(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        # QUANTX_JWT_SECRET intentionally NOT set: 401 is raised before
+        # create_jwt is called so the secret guard must not fire.
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
         r = client.post("/auth/token", json={"api_key": "sk-bad"})
         assert r.status_code == 401
 
     def test_jwt_bearer_grants_access(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        monkeypatch.setenv("QUANTX_JWT_SECRET", _JWT_SECRET)
+        _reload_auth(monkeypatch)
         client = TestClient(app, raise_server_exceptions=False)
-        # Get token
+        # Exchange API key for JWT
         token = client.post("/auth/token", json={"api_key": "sk-test-1"}).json()["access_token"]
-        # Use token as Bearer
+        # Use JWT as Bearer
         r = client.get("/auth/whoami", headers={"Authorization": f"Bearer {token}"})
         assert r.status_code == 200
         assert "sub" in r.json()
 
     def test_expired_jwt_returns_401(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        monkeypatch.setenv("QUANTX_JWT_SECRET", _JWT_SECRET)
+        _reload_auth(monkeypatch)
         from server.auth.jwt_auth import create_jwt
         # Issue a token that expired 10 seconds ago
         token = create_jwt(sub="test****", scopes=["solver:read"], ttl_seconds=-10)
@@ -159,12 +158,20 @@ class TestJwtAuth:
 
     def test_tampered_jwt_returns_401(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
-        from server.auth.jwt_auth import create_jwt
-        token = create_jwt(sub="test****", scopes=["solver:read"])
-        # Flip last character to break the signature
-        tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+        monkeypatch.setenv("QUANTX_JWT_SECRET", _JWT_SECRET)
+        _reload_auth(monkeypatch)
+        import server.auth.jwt_auth as _jwt_mod
+        token = _jwt_mod.create_jwt(sub="test****", scopes=["solver:read"])
+        # Tamper the FIRST character of the signature segment (carries 6 full
+        # data bits, guaranteed to change the decoded bytes and break the HMAC).
+        # Avoid flipping the last character: for a 32-byte HMAC the last
+        # base64url char only contributes 4 bits and its bottom 2 are zero-
+        # padding, so 'A'↔'B' (which differ only in that padding bit) leaves
+        # the decoded bytes identical and the signature still validates.
+        parts = token.split(".")
+        sig = parts[2]
+        tampered_sig = ("B" if sig[0] != "B" else "C") + sig[1:]
+        tampered = ".".join([parts[0], parts[1], tampered_sig])
         client = TestClient(app, raise_server_exceptions=False)
         r = client.get("/auth/whoami", headers={"Authorization": f"Bearer {tampered}"})
         assert r.status_code == 401
@@ -176,6 +183,7 @@ class TestJwtAuth:
 
 class TestJwtUnit:
     def test_roundtrip(self):
+        """Open-access mode: default secret is used, roundtrip succeeds."""
         from server.auth.jwt_auth import create_jwt, verify_jwt
         token = create_jwt(sub="alice", scopes=["solver:read"])
         payload = verify_jwt(token)
@@ -202,6 +210,31 @@ class TestJwtUnit:
         assert verify_jwt("onlytwoparts") is None
         assert verify_jwt("") is None
 
+    def test_p1_secret_required_when_auth_enabled(self, monkeypatch):
+        """P1: _get_secret raises RuntimeError when auth enabled but secret missing."""
+        monkeypatch.setenv("QUANTX_API_KEYS", "sk-test-1")
+        monkeypatch.delenv("QUANTX_JWT_SECRET", raising=False)
+        # Test via the module reference so we bypass any caching issues
+        import server.auth.jwt_auth as _jwt_mod
+        # Verify env is in the expected state
+        import os
+        assert os.environ.get("QUANTX_API_KEYS") == "sk-test-1"
+        assert os.environ.get("QUANTX_JWT_SECRET") is None
+        with pytest.raises(RuntimeError, match="QUANTX_JWT_SECRET"):
+            _jwt_mod._get_secret()
+        with pytest.raises(RuntimeError, match="QUANTX_JWT_SECRET"):
+            _jwt_mod.create_jwt(sub="test", scopes=[])
+
+    def test_p1_secret_not_required_in_open_access_mode(self, monkeypatch):
+        """P1: default secret is fine when auth is disabled (open-access)."""
+        monkeypatch.delenv("QUANTX_API_KEYS", raising=False)
+        monkeypatch.delenv("QUANTX_JWT_SECRET", raising=False)
+        from server.auth.jwt_auth import create_jwt, verify_jwt
+        token = create_jwt(sub="anon", scopes=[])
+        payload = verify_jwt(token)
+        assert payload is not None
+        assert payload["sub"] == "anon"
+
 
 # ---------------------------------------------------------------------------
 # Rate limiting
@@ -212,8 +245,7 @@ class TestRateLimit:
     async def test_exceeding_rpm_returns_429(self, monkeypatch):
         monkeypatch.setenv("QUANTX_API_KEYS", "sk-rl-test")
         monkeypatch.setenv("QUANTX_RATE_LIMIT_RPM", "3")
-        import importlib, server.auth.api_key as _mod
-        importlib.reload(_mod)
+        _reload_auth(monkeypatch)
         _reset_rate_limit()
         client = TestClient(app, raise_server_exceptions=False)
         headers = {"X-API-Key": "sk-rl-test"}
