@@ -1,86 +1,63 @@
-"""M103: In-memory async job store with TTL expiry.
+"""M103/M105: JobStore — thin wrapper around an AbstractJobStoreBackend.
 
-Jobs are keyed by UUID. Status lifecycle:
-  pending → running → done | failed
+Backward-compatible API: code that imports ``JobStore`` and calls
+``create/get/set_running/set_done/set_failed`` continues to work without
+changes.  The default backend is ``InMemoryBackend`` (no external services
+required).
 
-The store is a plain dict protected by an asyncio.Lock so concurrent
-background tasks can update job records safely.
+To select a different backend at runtime use the ``QUANTX_JOB_STORE_URL``
+environment variable and call ``create_job_store_backend()``::
+
+    QUANTX_JOB_STORE_URL=sqlite:///var/quantx/jobs.db
+
+See ``server.backends`` for supported URL schemes.
 """
 from __future__ import annotations
 
-import asyncio
-import time
-import uuid
-from dataclasses import dataclass, field
+import os
 from typing import Any
 
-
-@dataclass
-class JobRecord:
-    """Single job entry stored in ``JobStore``."""
-
-    job_id: str
-    status: str  # "pending" | "running" | "done" | "failed"
-    result: Any = None
-    error: str | None = None
-    created_at: float = field(default_factory=time.monotonic)
+from server.backends.base import JobRecord
+from server.backends import AbstractJobStoreBackend, create_job_store_backend
 
 
 class JobStore:
-    """Thread-safe in-memory job store.
+    """Async job store.  Delegates all operations to the configured backend.
 
     Parameters
     ----------
-    ttl_seconds : float
-        Jobs older than this are silently evicted on the next ``get`` call.
-        Default: 3600 s (1 hour).
+    backend:
+        If supplied, use this backend directly.  If *None* (default), the
+        backend is created from the ``QUANTX_JOB_STORE_URL`` env var, falling
+        back to the in-memory backend.
     """
 
-    def __init__(self, ttl_seconds: float = 3600.0) -> None:
-        self.ttl_seconds = ttl_seconds
-        self._jobs: dict[str, JobRecord] = {}
-        self._lock: asyncio.Lock = asyncio.Lock()
+    def __init__(self, backend: AbstractJobStoreBackend | None = None) -> None:
+        if backend is None:
+            url = os.environ.get("QUANTX_JOB_STORE_URL", "memory://")
+            backend = create_job_store_backend(url)
+        self._backend = backend
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    @property
+    def backend(self) -> AbstractJobStoreBackend:
+        """The underlying backend instance (useful for lifespan connect/close)."""
+        return self._backend
+
+    # ── Public API (unchanged from M103) ─────────────────────────────────────
 
     async def create(self) -> JobRecord:
-        """Create a new job in ``pending`` state and return its record."""
-        job_id = str(uuid.uuid4())
-        record = JobRecord(job_id=job_id, status="pending")
-        async with self._lock:
-            self._jobs[job_id] = record
-        return record
+        """Create a new job in ``pending`` state."""
+        return await self._backend.create()
 
     async def get(self, job_id: str) -> JobRecord | None:
-        """Return the record for *job_id*, or ``None`` if not found / expired."""
-        async with self._lock:
-            await self._evict_locked()
-            return self._jobs.get(job_id)
+        """Return the job record, or ``None`` if absent / expired."""
+        return await self._backend.get(job_id)
 
     async def set_running(self, job_id: str) -> None:
-        async with self._lock:
-            if job_id in self._jobs:
-                self._jobs[job_id].status = "running"
+        await self._backend.set_running(job_id)
 
     async def set_done(self, job_id: str, result: Any) -> None:
-        async with self._lock:
-            if job_id in self._jobs:
-                r = self._jobs[job_id]
-                r.status = "done"
-                r.result = result
+        await self._backend.set_done(job_id, result)
 
     async def set_failed(self, job_id: str, error: str) -> None:
-        async with self._lock:
-            if job_id in self._jobs:
-                r = self._jobs[job_id]
-                r.status = "failed"
-                r.error = error
-
-    def _is_expired(self, record: JobRecord) -> bool:
-        return time.monotonic() - record.created_at > self.ttl_seconds
-
-    async def _evict_locked(self) -> None:
-        """Remove expired jobs.  Must be called with ``self._lock`` held."""
-        expired = [jid for jid, rec in self._jobs.items() if self._is_expired(rec)]
-        for jid in expired:
-            del self._jobs[jid]
+        await self._backend.set_failed(job_id, error)

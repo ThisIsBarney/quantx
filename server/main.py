@@ -19,8 +19,9 @@ from server.routers.network import router as network_router
 from server.routers.protocols import router as protocols_router
 from server.routers.pulse import router as pulse_router
 from server.routers.advanced import router as advanced_router
-from server.routers.jobs import router as jobs_router          # M103
-from server.result_cache import ResultCache, shared_result_cache  # M103
+from server.routers.jobs import router as jobs_router, _get_store  # M103
+from server.result_cache import ResultCache, shared_result_cache   # M103
+from server.backends import create_job_store_backend               # M105
 
 # M103: re-export the shared singleton so the /cache endpoint and the jobs
 # router always operate on the same cache object (P1 fix).
@@ -33,7 +34,16 @@ async def lifespan(app: FastAPI):
     lib_path = os.environ.get("QUANTX_LIB_PATH")
     app.state.engine = Engine(lib_path)
     app.state.result_cache = _global_result_cache      # M103
+
+    # M105: connect the job store backend (SQLite/Redis open connections here)
+    job_store_backend = _get_store().backend
+    await job_store_backend.connect()
+    app.state.job_store_backend = job_store_backend
+
     yield
+
+    # M105: graceful shutdown
+    await job_store_backend.close()
 
 
 app = FastAPI(
