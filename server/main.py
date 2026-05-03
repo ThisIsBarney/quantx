@@ -26,6 +26,8 @@ from server.routers.auth import router as auth_router              # M106
 from server.result_cache import ResultCache, shared_result_cache   # M103
 from server.backends import create_job_store_backend               # M105
 from server.auth.api_key import require_api_key                    # M106
+from server.observability.metrics import MetricsMiddleware, metrics_router  # M107
+from server.observability.tracing import setup_tracing             # M107
 
 # M103: re-export the shared singleton so the /cache endpoint and the jobs
 # router always operate on the same cache object (P1 fix).
@@ -43,6 +45,9 @@ async def lifespan(app: FastAPI):
     job_store_backend = _get_store().backend
     await job_store_backend.connect()
     app.state.job_store_backend = job_store_backend
+
+    # M107: initialise OTel tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT unset)
+    setup_tracing(app)
 
     yield
 
@@ -70,6 +75,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# M107: metrics middleware — must be added AFTER CORS so it sees final status codes
+app.add_middleware(MetricsMiddleware)
 
 # M98: new Python-SDK routers (no native library required)
 app.include_router(network_router)
@@ -80,6 +87,8 @@ app.include_router(advanced_router)
 app.include_router(jobs_router, dependencies=[Depends(require_api_key)])
 # M106: auth endpoints (always open — /auth/token is the bootstrap entry-point)
 app.include_router(auth_router)
+# M107: Prometheus scrape endpoint (unauthenticated — metrics contain no secrets)
+app.include_router(metrics_router)
 
 
 def _engine(request: Request) -> Engine:
