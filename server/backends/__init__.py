@@ -17,6 +17,10 @@ The URL scheme is resolved from ``QUANTX_JOB_STORE_URL`` at server startup.
 """
 from __future__ import annotations
 
+import re
+import sys
+from urllib.parse import urlparse
+
 from server.backends.base import AbstractJobStoreBackend, JobRecord
 from server.backends.memory import InMemoryBackend
 from server.backends.sqlite_backend import SqliteBackend
@@ -42,8 +46,14 @@ def create_job_store_backend(url: str | None = None) -> AbstractJobStoreBackend:
         return InMemoryBackend()
 
     if url.startswith("sqlite"):
-        # Accept both "sqlite:///path" and "sqlite+aiosqlite:///path"
-        path = url.split("///", 1)[-1]
+        # Accept both "sqlite:///path" and "sqlite+aiosqlite:///path".
+        # Use urlparse so that "sqlite:///var/db.db" yields path "/var/db.db"
+        # rather than stripping the leading "/" via a naive split.
+        path = urlparse(url).path
+        # On Windows urlparse gives "/C:/path" for absolute drive paths;
+        # strip the spurious leading slash so os.path operations work correctly.
+        if sys.platform == "win32":
+            path = re.sub(r"^/([A-Za-z]:)", r"\1", path)
         return SqliteBackend(path)
 
     if url.startswith("redis"):

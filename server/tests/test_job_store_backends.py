@@ -234,20 +234,22 @@ def test_factory_empty_url():
 
 
 def test_factory_sqlite_url():
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    os.unlink(path)
-    b = create_job_store_backend(f"sqlite:///{path}")
+    # Test that the absolute path is preserved: sqlite:///var/db.db → /var/db.db
+    b = create_job_store_backend("sqlite:///var/quantx/jobs.db")
     assert isinstance(b, SqliteBackend)
-    assert b.path == path
+    assert b.path == "/var/quantx/jobs.db"
+
+
+def test_factory_sqlite_url_relative():
+    b = create_job_store_backend("sqlite:///relative/jobs.db")
+    assert isinstance(b, SqliteBackend)
+    assert b.path == "/relative/jobs.db"
 
 
 def test_factory_sqlite_aiosqlite_url():
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    os.unlink(path)
-    b = create_job_store_backend(f"sqlite+aiosqlite:///{path}")
+    b = create_job_store_backend("sqlite+aiosqlite:///var/db.db")
     assert isinstance(b, SqliteBackend)
+    assert b.path == "/var/db.db"
 
 
 def test_factory_unknown_scheme_raises():
@@ -284,7 +286,14 @@ async def test_job_store_env_var_sqlite(monkeypatch):
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     os.unlink(path)
-    monkeypatch.setenv("QUANTX_JOB_STORE_URL", f"sqlite:///{path}")
+    # Build a cross-platform sqlite URL: use forward slashes and ensure a
+    # leading "/" so urlparse strips exactly one slash.  On Windows, drive
+    # paths like "C:/..." become "/C:/..." and the factory strips the extra
+    # leading slash via a regex (sys.platform == "win32" guard).
+    fwd = path.replace("\\", "/")
+    if not fwd.startswith("/"):
+        fwd = "/" + fwd
+    monkeypatch.setenv("QUANTX_JOB_STORE_URL", f"sqlite://{fwd}")
     store = JobStore()
     assert isinstance(store.backend, SqliteBackend)
     await store.backend.connect()

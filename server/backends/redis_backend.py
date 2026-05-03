@@ -79,7 +79,9 @@ class RedisBackend(AbstractJobStoreBackend):
             "created_at": str(record.created_at),
         }
         await self._client.hset(key, mapping=mapping)
-        await self._client.expire(key, int(self.ttl_seconds))
+        # P2: use PEXPIRE (milliseconds) to preserve fractional TTL values;
+        # avoids int() truncation that would set TTL=0 and delete immediately.
+        await self._client.pexpire(key, int(self.ttl_seconds * 1000))
         return record
 
     async def get(self, job_id: str) -> JobRecord | None:
@@ -93,11 +95,17 @@ class RedisBackend(AbstractJobStoreBackend):
     async def set_running(self, job_id: str) -> None:
         self._require_connected()
         key = _KEY_PREFIX + job_id
+        # P1: only update if the key already exists to avoid creating a
+        # malformed hash (missing job_id / created_at) on an unknown/expired job.
+        if not await self._client.exists(key):
+            return
         await self._client.hset(key, "status", "running")
 
     async def set_done(self, job_id: str, result: Any) -> None:
         self._require_connected()
         key = _KEY_PREFIX + job_id
+        if not await self._client.exists(key):
+            return
         await self._client.hset(key, mapping={
             "status": "done",
             "result_json": json.dumps(result, default=str),
@@ -106,6 +114,8 @@ class RedisBackend(AbstractJobStoreBackend):
     async def set_failed(self, job_id: str, error: str) -> None:
         self._require_connected()
         key = _KEY_PREFIX + job_id
+        if not await self._client.exists(key):
+            return
         await self._client.hset(key, mapping={"status": "failed", "error": error})
 
     async def delete_expired(self, ttl_seconds: float) -> int:
