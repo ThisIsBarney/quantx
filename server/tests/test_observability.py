@@ -59,6 +59,10 @@ def metrics_app():
     async def ping():
         return {"ok": True}
 
+    @app.get("/items/{item_id}")
+    async def get_item(item_id: str):
+        return {"item_id": item_id}
+
     return app
 
 
@@ -103,6 +107,37 @@ def test_metrics_middleware_records_multiple_requests(metrics_app):
     client = TestClient(metrics_app)
     for _ in range(3):
         assert client.get("/ping").status_code == 200
+
+
+def test_metrics_middleware_uses_route_template_not_raw_path(metrics_app):
+    """P1: Middleware must label metrics with the route template, not raw path.
+
+    Without this fix, each UUID would create a new time series causing cardinality
+    explosion.  The middleware reads ``request.scope["route"].path`` after routing
+    to get a stable template like ``/items/{item_id}`` instead of raw values.
+
+    We assert against the Prometheus text output rather than REGISTRY internals
+    to avoid relying on whether prometheus_client strips ``_total`` from family names.
+    """
+    if not PROM_AVAILABLE:
+        pytest.skip("prometheus_client not installed")
+
+    client = TestClient(metrics_app)
+    # Hit the same parametric route with two different path-param values
+    client.get("/items/uuid-aaa")
+    client.get("/items/uuid-bbb")
+
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    text = resp.text
+
+    # The route template must appear in the Prometheus text; raw UUIDs must not
+    assert "{item_id}" in text, (
+        "Route template '/items/{item_id}' not found in Prometheus output. "
+        f"Snippet:\n{text[:2000]}"
+    )
+    assert "uuid-aaa" not in text, "Raw path param 'uuid-aaa' leaked into metrics"
+    assert "uuid-bbb" not in text, "Raw path param 'uuid-bbb' leaked into metrics"
 
 
 # ── Tracing helpers ────────────────────────────────────────────────────────────

@@ -126,7 +126,10 @@ class MetricsMiddleware(BaseHTTPMiddleware):
         duration = time.perf_counter() - start
 
         if PROM_AVAILABLE and request.url.path != "/metrics":
-            endpoint = request.url.path
+            # Use the route template (e.g. "/jobs/{job_id}/status") rather than
+            # the raw path to avoid cardinality explosion from UUIDs / ids.
+            route = request.scope.get("route")
+            endpoint = route.path if route is not None else request.url.path
             status = str(response.status_code)
             REQUEST_COUNTER.labels(endpoint=endpoint, status=status).inc()
             REQUEST_DURATION.labels(endpoint=endpoint).observe(duration)
