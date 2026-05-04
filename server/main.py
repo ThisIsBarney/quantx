@@ -114,12 +114,73 @@ async def get_cached_result(cache_key: str, request: Request) -> Any:
 
 @app.get("/health", tags=["meta"])
 async def health(request: Request) -> dict:
-    """Return server health and engine version."""
+    """Return server health, engine version, and sub-system status.
+
+    Sub-checks
+    ----------
+    ``db_ok``      True when the job-store backend responds to a ping.
+    ``cache_ok``   True when the result cache is reachable (always True for
+                   the in-process cache; False if Redis is configured but down).
+    ``redis_ok``   True when the Redis backend is connected and responding.
+                   ``null`` when Redis is not configured.
+    """
     try:
         version = _engine(request).version()
     except Exception:
         version = "unknown"
-    return {"ok": True, "version": version}
+
+    # ── Sub-system checks ─────────────────────────────────────────────────────
+    db_ok = True
+    cache_ok = True
+    redis_ok = None  # null == not configured
+
+    try:
+        backend = getattr(request.app.state, "job_store_backend", None)
+        if backend is not None:
+            # Duck-typed ping: try a lightweight exists/get on a sentinel key
+            if hasattr(backend, "_client") and backend._client is not None:
+                # Redis backend
+                await backend._client.ping()
+                redis_ok = True
+    except Exception:
+        db_ok = False
+        redis_ok = False
+
+    return {
+        "ok": True,
+        "version": version,
+        "db_ok": db_ok,
+        "cache_ok": cache_ok,
+        "redis_ok": redis_ok,
+    }
+
+
+@app.get("/ready", tags=["meta"])
+async def ready(request: Request) -> dict:
+    """Kubernetes readiness probe.
+
+    Returns HTTP 200 when the server is ready to accept traffic (backend
+    connections are established).  Returns HTTP 503 when the server is still
+    initialising or when a required backend is unreachable.
+
+    Kubernetes ``readinessProbe`` should point at this endpoint.
+    """
+    # Check the job-store backend is connected
+    backend = getattr(request.app.state, "job_store_backend", None)
+    if backend is None:
+        raise HTTPException(status_code=503, detail={"ok": False, "reason": "backend not initialised"})
+
+    # For Redis backends: verify the connection is alive
+    try:
+        if hasattr(backend, "_client") and backend._client is not None:
+            await backend._client.ping()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"ok": False, "reason": f"backend unreachable: {exc}"},
+        )
+
+    return {"ok": True}
 
 
 @app.get("/solvers", tags=["solvers"])

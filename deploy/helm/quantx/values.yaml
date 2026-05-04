@@ -1,0 +1,119 @@
+# Default values for the QuantX Helm chart.
+# Override with:  helm upgrade --install quantx ./deploy/helm/quantx -f my-values.yaml
+#
+# Before first install run:
+#   helm dependency update deploy/helm/quantx   # fetches Bitnami Redis sub-chart
+
+replicaCount: 2
+
+image:
+  repository: quantx-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: quantx.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── Authentication ─────────────────────────────────────────────────────────────
+auth:
+  # Comma-separated list of API keys.  Leave empty for open-access dev mode.
+  apiKeys: ""
+  # HS256 JWT signing secret.  REQUIRED when apiKeys is set.
+  # Supply via --set auth.jwtSecret=... or a sealed-secrets value.
+  jwtSecret: ""
+  rateLimitRpm: 60
+
+# ── Job store ──────────────────────────────────────────────────────────────────
+jobStore:
+  # "memory" | "sqlite" | "redis"
+  # When redis.enabled=true this is auto-set to redis://quantx-redis-master:6379/0
+  backend: memory
+  url: ""
+
+# ── Redis (Bitnami sub-chart) ──────────────────────────────────────────────────
+redis:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: false
+
+# ── Observability ──────────────────────────────────────────────────────────────
+metrics:
+  # Expose /metrics to Prometheus via a ServiceMonitor (requires prometheus-operator)
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    namespace: ""
+
+otel:
+  endpoint: ""
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# ── Horizontal Pod Autoscaler ─────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  # Scale on CPU utilisation (always available) as primary trigger.
+  # When prometheus-adapter is installed, uncomment the custom metric block
+  # below to additionally scale on quantx_jobs_active.
+  targetCPUUtilizationPercentage: 70
+  # Custom metric (optional — requires prometheus-adapter):
+  # customMetrics:
+  #   - type: Pods
+  #     pods:
+  #       metric:
+  #         name: quantx_jobs_active
+  #       target:
+  #         type: AverageValue
+  #         averageValue: "5"
+
+# ── Pod settings ──────────────────────────────────────────────────────────────
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,21 @@
+apiVersion: v2
+name: quantx
+description: QuantX quantum simulation API server
+type: application
+version: 0.1.0
+appVersion: "0.2.0"
+keywords:
+  - quantum
+  - simulation
+  - api
+home: https://github.com/ThisIsBarney/quantx
+maintainers:
+  - name: QuantX Team
+
+# Sub-chart dependencies.
+# Run `helm dependency update deploy/helm/quantx` to fetch them.
+dependencies:
+  - name: redis
+    version: "19.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
