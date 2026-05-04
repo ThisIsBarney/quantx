@@ -1,5 +1,5 @@
-"""M104: MPS simulator extension — adaptive bond dimension, environment caching,
-and benchmarks for 50+ qubit circuits.
+"""M104/M109: MPS simulator — adaptive bond dimension, environment caching,
+GPU acceleration (CuPy backend), and benchmarks for 50+ qubit circuits.
 
 Three additions to the existing tensor-network stack:
 
@@ -28,9 +28,11 @@ Three additions to the existing tensor-network stack:
 
 Quick start::
 
-    from quantx_engine.mps_simulator import MPSSimulator, mps_benchmark, ghz_fidelity
+    from quantx_engine.mps_simulator import (
+        MPSSimulator, mps_benchmark, ghz_fidelity, gpu_mps_benchmark,
+    )
 
-    # Simulate a 50-qubit GHZ circuit
+    # CPU simulation (default)
     sim = MPSSimulator(n_qubits=50, max_bond=2, eps=1e-12)
     sim.h(0)
     for q in range(49):
@@ -38,16 +40,26 @@ Quick start::
     fid = ghz_fidelity(50, max_bond=2)
     print(f"GHZ fidelity at n=50: {fid:.6f}")
 
-    # Benchmark 20-qubit random circuit
-    result = mps_benchmark(n_qubits=20, circuit_depth=10, max_bond=16)
+    # GPU simulation — falls back to CPU when CuPy is unavailable
+    sim_gpu = MPSSimulator(n_qubits=30, max_bond=32, backend="cuda")
+    sim_gpu.h(0)
+    for q in range(29):
+        sim_gpu.cx(q, q + 1)
+
+    # GPU vs CPU throughput benchmark
+    result = gpu_mps_benchmark(n_qubits=30, circuit_depth=10, max_bond=32)
     print(result)
 """
 from __future__ import annotations
 
 import math
 import time
+import types
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
+
+ModuleType = types.ModuleType
 
 import numpy as np
 
@@ -71,10 +83,66 @@ __all__ = [
     "CachedDMRG",
     "BenchmarkResult",
     "ComparisonResult",
+    "GpuBenchmarkResult",
     "mps_benchmark",
     "ghz_fidelity",
     "compare_mps_sv",
+    "gpu_mps_benchmark",
+    "get_backend_module",
+    "is_gpu_available",
 ]
+
+# ── GPU / CPU array module selection ─────────────────────────────────────────
+
+def get_backend_module(backend: str) -> ModuleType:
+    """Return the array module (``cupy`` or ``numpy``) for *backend*.
+
+    If *backend* is ``"cuda"`` but CuPy is not installed (or no GPU is
+    present), emits a ``UserWarning`` and falls back to NumPy so code
+    written for the GPU backend degrades gracefully on CPU-only machines.
+
+    Parameters
+    ----------
+    backend : ``"cpu"`` | ``"cuda"``
+
+    Returns
+    -------
+    ``cupy`` or ``numpy`` module object.
+    """
+    if backend == "cuda":
+        try:
+            import cupy as cp  # type: ignore[import]
+            # Verify that at least one device is available
+            cp.cuda.runtime.getDeviceCount()  # raises if no CUDA devices
+            return cp
+        except Exception:  # ImportError or cupy.cuda.runtime.CUDARuntimeError
+            warnings.warn(
+                "CuPy / CUDA not available — falling back to CPU (numpy) backend.",
+                stacklevel=3,
+            )
+            return np
+    if backend != "cpu":
+        raise MPSSimulatorError(
+            f"Unknown backend {backend!r}. Choose 'cpu' or 'cuda'."
+        )
+    return np
+
+
+def is_gpu_available() -> bool:
+    """Return True if CuPy is installed and at least one CUDA device is found."""
+    try:
+        import cupy as cp  # type: ignore[import]
+        cp.cuda.runtime.getDeviceCount()
+        return True
+    except Exception:
+        return False
+
+
+def _to_numpy(arr: Any) -> np.ndarray:
+    """Convert a CuPy array to NumPy, or return the array unchanged."""
+    if hasattr(arr, "get"):  # cupy.ndarray has .get()
+        return arr.get()
+    return np.asarray(arr)
 
 # ── Pauli / common gates ──────────────────────────────────────────────────────
 
@@ -136,11 +204,16 @@ class AdaptiveTruncation:
         (U_t, S_t, Vh_t, trunc_error)
             Truncated factors and the accumulated truncation error
             Σ_{discarded} σ_i².
+
+        Notes
+        -----
+        Uses duck-typed `.sum()` so the method works transparently with both
+        NumPy and CuPy arrays (M109 GPU backend support).
         """
-        threshold = self.eps * S[0] if S[0] > 0 else 0.0
-        keep = int(np.sum(S > threshold))
+        threshold = self.eps * float(S[0]) if float(S[0]) > 0 else 0.0
+        keep = int((S > threshold).sum())
         keep = max(1, min(keep, self.max_bond))
-        trunc_error = float(np.sum(S[keep:] ** 2))
+        trunc_error = float((S[keep:] ** 2).sum())
         return U[:, :keep], S[:keep], Vh[:keep, :], trunc_error
 
 
@@ -161,6 +234,10 @@ class MPSSimulator:
         Hard bond-dimension cap.
     eps : float
         Relative SVD truncation threshold.
+    backend : ``"cpu"`` | ``"cuda"``
+        Compute backend.  ``"cuda"`` uses CuPy for GPU-accelerated tensor
+        contractions and SVD; falls back to NumPy silently when CuPy is
+        absent so code is portable across CPU-only machines.
     """
 
     def __init__(
@@ -168,15 +245,23 @@ class MPSSimulator:
         n_qubits: int,
         max_bond: int = 128,
         eps: float = 1e-12,
+        backend: str = "cpu",
     ) -> None:
         if n_qubits < 1:
             raise MPSSimulatorError("n_qubits must be ≥ 1")
         self.n_qubits = n_qubits
         self._trunc = AdaptiveTruncation(max_bond=max_bond, eps=eps)
+        self._xp: ModuleType = get_backend_module(backend)
+        # Resolve effective backend: if "cuda" was requested but get_backend_module
+        # fell back to numpy (no CuPy/GPU), record "cpu" so .backend always reflects
+        # the *actual* compute substrate, preventing false GPU-path logic downstream.
+        self._backend: str = "cpu" if self._xp is np else backend
+
         # Tensors in shape (chi_l, d, chi_r) — same convention as tensor_network.MPS
-        self._tensors: list[np.ndarray] = []
+        xp = self._xp
+        self._tensors: list[Any] = []
         for _ in range(n_qubits):
-            v = np.zeros((1, 2, 1), dtype=complex)
+            v = xp.zeros((1, 2, 1), dtype=complex)
             v[0, 0, 0] = 1.0          # |0⟩
             self._tensors.append(v)
 
@@ -201,6 +286,11 @@ class MPSSimulator:
 
     # ── Gate application ──────────────────────────────────────────────────────
 
+    @property
+    def backend(self) -> str:
+        """Active compute backend: ``'cpu'`` or ``'cuda'``."""
+        return self._backend
+
     def apply_gate(self, gate: np.ndarray, site: int) -> "MPSSimulator":
         """Apply a single-qubit gate to *site*.
 
@@ -213,14 +303,15 @@ class MPSSimulator:
         -------
         self (for chaining)
         """
+        xp = self._xp
         self._check_site(site)
-        gate = np.asarray(gate, dtype=complex)
+        gate = xp.asarray(gate, dtype=complex)
         if gate.shape != (2, 2):
             raise MPSSimulatorError(f"Single-qubit gate must be (2,2), got {gate.shape}")
         # A[chi_l, d, chi_r] → contract d with gate[d', d]
         A = self._tensors[site]              # (chi_l, d, chi_r)
         # new_A[chi_l, d', chi_r] = Σ_d gate[d', d] A[chi_l, d, chi_r]
-        self._tensors[site] = np.einsum("ij,kjl->kil", gate, A)
+        self._tensors[site] = xp.einsum("ij,kjl->kil", gate, A)
         return self
 
     def apply_two_qubit_gate(
@@ -237,9 +328,10 @@ class MPSSimulator:
         site : int
             Left site; right site is ``site+1``.
         """
+        xp = self._xp
         self._check_site(site)
         self._check_site(site + 1)
-        gate = np.asarray(gate, dtype=complex)
+        gate = xp.asarray(gate, dtype=complex)
         if gate.shape == (4, 4):
             gate = gate.reshape(2, 2, 2, 2)
         if gate.shape != (2, 2, 2, 2):
@@ -253,25 +345,25 @@ class MPSSimulator:
         chi_r = B.shape[2]
 
         # Theta[chi_l, d_i, d_j, chi_r] = A[chi_l, d_i, chi_m] B[chi_m, d_j, chi_r]
-        theta = np.tensordot(A, B, axes=([2], [0]))  # (chi_l, d_i, d_j, chi_r)
+        theta = xp.tensordot(A, B, axes=([2], [0]))  # (chi_l, d_i, d_j, chi_r)
 
         # Apply gate: gate shape is (d_i', d_j', d_i, d_j)
         # new_theta[chi_l, d_i', d_j', chi_r] = Σ_{d_i,d_j} gate[d_i',d_j',d_i,d_j] * theta[chi_l,d_i,d_j,chi_r]
         # tensordot contracts gate axes (2,3)=(d_i,d_j) with theta axes (1,2)=(d_i,d_j)
         # result shape: [d_i', d_j', chi_l, chi_r] → transpose to [chi_l, d_i', d_j', chi_r]
-        new_theta = np.tensordot(gate, theta, axes=([2, 3], [1, 2])).transpose(2, 0, 1, 3)
+        new_theta = xp.tensordot(gate, theta, axes=([2, 3], [1, 2])).transpose(2, 0, 1, 3)
 
         # Reshape for SVD: (chi_l * d_i', d_j' * chi_r)
         mat = new_theta.reshape(chi_l * 2, 2 * chi_r)
-        U, S, Vh = np.linalg.svd(mat, full_matrices=False)
+        U, S, Vh = xp.linalg.svd(mat, full_matrices=False)
         U, S, Vh, trunc = self._trunc.truncate(U, S, Vh)
         self._truncation_error += trunc
 
         chi_new = len(S)
         # Restore tensors: A ← U * sqrt(S), B ← sqrt(S) * Vh (keep norm balanced)
-        sqrt_S = np.sqrt(S)
-        self._tensors[site]     = (U * sqrt_S[np.newaxis, :]).reshape(chi_l, 2, chi_new)
-        self._tensors[site + 1] = (sqrt_S[:, np.newaxis] * Vh).reshape(chi_new, 2, chi_r)
+        sqrt_S = xp.sqrt(S)
+        self._tensors[site]     = (U * sqrt_S[xp.newaxis, :]).reshape(chi_l, 2, chi_new)
+        self._tensors[site + 1] = (sqrt_S[:, xp.newaxis] * Vh).reshape(chi_new, 2, chi_r)
         return self
 
     # ── Named gates ──────────────────────────────────────────────────────────
@@ -338,11 +430,34 @@ class MPSSimulator:
             raise MPSSimulatorError("cz requires adjacent qubits")
         return self.apply_two_qubit_gate(_CZ, min(q0, q1))
 
+    # ── GPU ↔ CPU transfer ────────────────────────────────────────────────────
+
+    def to_cpu(self) -> "MPSSimulator":
+        """Return a new simulator with all tensors moved to CPU (NumPy).
+
+        If the simulator is already on CPU, returns *self* unchanged.
+        """
+        if self._backend == "cpu":
+            return self
+        cpu_sim = MPSSimulator.__new__(MPSSimulator)
+        cpu_sim.n_qubits = self.n_qubits
+        cpu_sim._trunc = self._trunc
+        cpu_sim._backend = "cpu"
+        cpu_sim._xp = np
+        cpu_sim._tensors = [_to_numpy(t).copy() for t in self._tensors]
+        cpu_sim._truncation_error = self._truncation_error
+        return cpu_sim
+
     # ── State readout ─────────────────────────────────────────────────────────
 
     def to_mps(self) -> MPS:
-        """Export the current state as a :class:`~tensor_network.MPS`."""
-        return MPS(tensors=[t.copy() for t in self._tensors], d=2)
+        """Export the current state as a :class:`~tensor_network.MPS`.
+
+        GPU tensors are automatically transferred to CPU (NumPy) so the
+        returned MPS is always CPU-resident and compatible with all downstream
+        tensor-network utilities.
+        """
+        return MPS(tensors=[_to_numpy(t).copy() for t in self._tensors], d=2)
 
     def to_statevector(self) -> np.ndarray:
         """Contract the MPS into a dense statevector (2^n complex amplitudes)."""
@@ -477,6 +592,48 @@ class CachedDMRG:
         the hard upper bound on bond dimension.
         """
         return self.max_chi
+
+
+# ── GPU benchmark result ─────────────────────────────────────────────────────
+
+@dataclass
+class GpuBenchmarkResult:
+    """Throughput comparison between GPU (CuPy) and CPU (NumPy) MPS backends.
+
+    Attributes
+    ----------
+    n_qubits, circuit_depth, max_bond : int
+        Circuit parameters used for the comparison.
+    cpu_seconds : float
+        Wall time for the CPU run.
+    gpu_seconds : float
+        Wall time for the GPU run.  Equals ``cpu_seconds`` when CuPy is
+        unavailable (both runs are on CPU).
+    speedup : float
+        ``cpu_seconds / gpu_seconds`` — > 1 means GPU is faster.
+    gpu_available : bool
+        True when CuPy was found and a CUDA device was present.
+    cpu_truncation_error : float
+    gpu_truncation_error : float
+    """
+
+    n_qubits: int
+    circuit_depth: int
+    max_bond: int
+    cpu_seconds: float
+    gpu_seconds: float
+    speedup: float
+    gpu_available: bool
+    cpu_truncation_error: float
+    gpu_truncation_error: float
+
+    def __repr__(self) -> str:  # pragma: no cover
+        gpu_tag = "GPU" if self.gpu_available else "GPU(fallback=CPU)"
+        return (
+            f"GpuBenchmarkResult(n={self.n_qubits}, depth={self.circuit_depth}, "
+            f"max_bond={self.max_bond}, CPU={self.cpu_seconds:.3f}s, "
+            f"{gpu_tag}={self.gpu_seconds:.3f}s, speedup={self.speedup:.2f}x)"
+        )
 
 
 # ── Benchmark result containers ───────────────────────────────────────────────
@@ -719,6 +876,95 @@ def compare_mps_sv(
         max_bond=max_bond,
         fidelity=fidelity,
         mps_truncation_error=sim.truncation_error,
+    )
+
+
+def gpu_mps_benchmark(
+    n_qubits: int = 30,
+    circuit_depth: int = 10,
+    max_bond: int = 32,
+    eps: float = 1e-12,
+    seed: int | None = 0,
+    warmup: bool = True,
+) -> GpuBenchmarkResult:
+    """Compare GPU vs CPU throughput for an MPS circuit simulation.
+
+    Runs the same random circuit twice — once on CPU (NumPy) and once on
+    GPU (CuPy when available, otherwise a second CPU run) — and reports
+    wall-clock times and speedup.
+
+    Parameters
+    ----------
+    n_qubits : int
+        Number of qubits.  Default 30 exercises meaningful bond growth.
+    circuit_depth : int
+        Number of alternating Ry + CZ entangling layers.
+    max_bond : int
+        Hard bond-dimension cap.
+    eps : float
+        Relative SVD truncation threshold.
+    seed : int | None
+        Random seed for rotation angles (same for both runs).
+    warmup : bool
+        When True, run a single-layer warm-up pass on the GPU before timing
+        to avoid CUDA JIT compilation latency in the timed run.
+
+    Returns
+    -------
+    GpuBenchmarkResult
+    """
+    if n_qubits < 1:
+        raise MPSSimulatorError("n_qubits must be ≥ 1")
+
+    gpu_avail = is_gpu_available()
+
+    def _run(backend: str) -> tuple[float, float]:
+        """Run benchmark circuit and return (elapsed_s, truncation_error)."""
+        rng = np.random.default_rng(seed)
+        sim = MPSSimulator(n_qubits=n_qubits, max_bond=max_bond, eps=eps, backend=backend)
+        t0 = time.perf_counter()
+        for _ in range(circuit_depth):
+            angles = rng.uniform(0, 2 * math.pi, n_qubits)
+            for q in range(n_qubits):
+                sim.ry(float(angles[q]), q)
+            for parity in (0, 1):
+                for q in range(parity, n_qubits - 1, 2):
+                    sim.cz(q, q + 1)
+        # Synchronise GPU stream before stopping the clock
+        if backend == "cuda" and gpu_avail:
+            try:
+                import cupy as cp  # type: ignore[import]
+                cp.cuda.Stream.null.synchronize()
+            except Exception:
+                pass
+        elapsed = time.perf_counter() - t0
+        return elapsed, sim.truncation_error
+
+    # GPU warm-up pass (amortise CUDA JIT / kernel launch overhead)
+    if warmup and gpu_avail:
+        rng_w = np.random.default_rng(seed)
+        warm = MPSSimulator(n_qubits=min(n_qubits, 4), max_bond=4, eps=eps, backend="cuda")
+        warm.ry(float(rng_w.uniform(0, 1)), 0)
+        try:
+            warm.cz(0, 1)
+        except MPSSimulatorError:
+            pass  # fewer than 2 qubits after clamping
+
+    cpu_s, cpu_err = _run("cpu")
+    gpu_s, gpu_err = _run("cuda")  # falls back to CPU if no GPU
+
+    speedup = cpu_s / gpu_s if gpu_s > 0 else 1.0
+
+    return GpuBenchmarkResult(
+        n_qubits=n_qubits,
+        circuit_depth=circuit_depth,
+        max_bond=max_bond,
+        cpu_seconds=cpu_s,
+        gpu_seconds=gpu_s,
+        speedup=speedup,
+        gpu_available=gpu_avail,
+        cpu_truncation_error=cpu_err,
+        gpu_truncation_error=gpu_err,
     )
 
 

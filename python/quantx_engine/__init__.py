@@ -291,9 +291,13 @@ from .mps_simulator import (
     CachedDMRG,
     BenchmarkResult,
     ComparisonResult,
+    GpuBenchmarkResult,       # M109
     mps_benchmark,
     ghz_fidelity,
     compare_mps_sv,
+    gpu_mps_benchmark,        # M109
+    get_backend_module,       # M109
+    is_gpu_available,         # M109
 )
 
 __all__ = [
@@ -601,4 +605,9 @@ __all__ = [
     "mps_benchmark",
     "ghz_fidelity",
     "compare_mps_sv",
+    # GPU-accelerated MPS (M109)
+    "GpuBenchmarkResult",
+    "gpu_mps_benchmark",
+    "get_backend_module",
+    "is_gpu_available",
 ]
