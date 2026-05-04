@@ -251,8 +251,11 @@ class MPSSimulator:
             raise MPSSimulatorError("n_qubits must be ≥ 1")
         self.n_qubits = n_qubits
         self._trunc = AdaptiveTruncation(max_bond=max_bond, eps=eps)
-        self._backend = backend
         self._xp: ModuleType = get_backend_module(backend)
+        # Resolve effective backend: if "cuda" was requested but get_backend_module
+        # fell back to numpy (no CuPy/GPU), record "cpu" so .backend always reflects
+        # the *actual* compute substrate, preventing false GPU-path logic downstream.
+        self._backend: str = "cpu" if self._xp is np else backend
 
         # Tensors in shape (chi_l, d, chi_r) — same convention as tensor_network.MPS
         xp = self._xp

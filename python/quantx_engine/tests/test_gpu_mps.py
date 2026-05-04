@@ -63,6 +63,20 @@ class TestMPSSimulatorBackend:
         sim.cx(0, 1)
         assert sim.norm() == pytest.approx(1.0, abs=1e-10)
 
+    def test_cuda_fallback_updates_backend_attribute(self):
+        """P2: when CUDA falls back to CPU, .backend must report 'cpu', not 'cuda'."""
+        if is_gpu_available():
+            pytest.skip("Real GPU present; no fallback occurs")
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            sim = MPSSimulator(n_qubits=2, backend="cuda")
+        # Backend must reflect the *resolved* compute substrate
+        assert sim.backend == "cpu", (
+            f"Expected backend='cpu' after CPU fallback, got '{sim.backend}'"
+        )
+        # to_cpu() on a CPU sim should return self (no redundant copy)
+        assert sim.to_cpu() is sim
+
     def test_cuda_backend_produces_correct_ghz_fidelity(self):
         """Results from GPU (or CPU fallback) backend match CPU reference."""
         with warnings.catch_warnings(record=True):
