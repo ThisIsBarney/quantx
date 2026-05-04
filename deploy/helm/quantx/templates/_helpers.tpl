@@ -49,13 +49,27 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
-Job store URL — auto-derive Redis URL when redis sub-chart is enabled.
+Job store URL resolution — priority order:
+  1. redis.enabled=true  → Redis sub-chart service (Bitnami naming: <release>-redis-master)
+  2. jobStore.url set    → use verbatim
+  3. jobStore.backend    → derive canonical URL from backend type:
+       "redis"  → redis://<release>-redis-master:6379/0
+       "sqlite" → sqlite:///data/jobs.db
+       "memory" → "" (no env var injected; in-process default)
+
+Using .Release.Name (not fullname) matches the Bitnami redis sub-chart's own
+service naming convention, which is always <release>-redis-master regardless of
+any nameOverride on the parent chart.
 */}}
 {{- define "quantx.jobStoreUrl" -}}
 {{- if .Values.redis.enabled -}}
-redis://{{ include "quantx.fullname" . }}-redis-master:6379/0
+redis://{{ .Release.Name }}-redis-master:6379/0
 {{- else if .Values.jobStore.url -}}
-{{ .Values.jobStore.url }}
+{{ .Values.jobStore.url | trim }}
+{{- else if eq .Values.jobStore.backend "redis" -}}
+redis://{{ .Release.Name }}-redis-master:6379/0
+{{- else if eq .Values.jobStore.backend "sqlite" -}}
+sqlite:///data/jobs.db
 {{- else -}}
 {{- end }}
 {{- end }}

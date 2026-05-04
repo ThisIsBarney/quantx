@@ -25,7 +25,8 @@ services:
       - "${QUANTX_PORT:-8000}:8000"
     environment:
       # Job store: use Redis for persistence + horizontal scaling
-      QUANTX_JOB_STORE_URL: "redis://redis:6379/0"
+      # Default to the Compose-internal Redis service; override via .env
+      QUANTX_JOB_STORE_URL: "${QUANTX_JOB_STORE_URL:-redis://redis:6379/0}"
       # Auth (leave unset to run open-access in dev)
       QUANTX_API_KEYS: "${QUANTX_API_KEYS:-}"
       QUANTX_JWT_SECRET: "${QUANTX_JWT_SECRET:-}"

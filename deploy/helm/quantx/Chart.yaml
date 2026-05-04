@@ -11,3 +11,11 @@ keywords:
 home: https://github.com/ThisIsBarney/quantx
 maintainers:
   - name: QuantX Team
+
+# Sub-chart dependencies.
+# Run `helm dependency update deploy/helm/quantx` to fetch them.
+dependencies:
+  - name: redis
+    version: "19.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

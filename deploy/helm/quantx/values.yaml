@@ -1,5 +1,8 @@
 # Default values for the QuantX Helm chart.
 # Override with:  helm upgrade --install quantx ./deploy/helm/quantx -f my-values.yaml
+#
+# Before first install run:
+#   helm dependency update deploy/helm/quantx   # fetches Bitnami Redis sub-chart
 
 replicaCount: 2
 
