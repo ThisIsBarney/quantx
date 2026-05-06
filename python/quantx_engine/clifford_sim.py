@@ -357,10 +357,20 @@ class StabilizerState:
 
     # ── Measurement (AG04 Algorithm 1) ────────────────────────────────────────
 
-    def measure(self, qubit: int, seed: int | None = None) -> int:
+    def measure(self, qubit: int, rng: random.Random) -> int:
         """Measure *qubit* in the Z basis, collapsing the state.
 
-        Returns 0 or 1.  Indeterminate outcomes are drawn uniformly at random.
+        Parameters
+        ----------
+        qubit : int
+        rng : random.Random
+            Caller-supplied RNG advanced once per indeterminate measurement.
+            Pass a shared, persistent instance to get independent draws across
+            multiple ``measure()`` calls.
+
+        Returns
+        -------
+        int — 0 or 1.
         """
         self._check_qubit(qubit)
         n, tab, a = self.n, self._tab, qubit
@@ -380,9 +390,9 @@ class StabilizerState:
 
             # Set destabiliser p-n := current stabiliser p
             tab[p - n] = tab[p].copy()
-            # Overwrite stabiliser p with ±Z_a (random phase)
+            # Overwrite stabiliser p with ±Z_a (random phase from shared RNG)
             tab[p] = 0
-            outcome = random.Random(seed).randint(0, 1)
+            outcome = rng.randint(0, 1)
             tab[p, 2 * n] = np.uint8(outcome)
             tab[p, n + a] = np.uint8(1)
             return outcome
@@ -442,7 +452,10 @@ class CliffordSimulator:
 
     def __init__(self, n_qubits: int, seed: int | None = None) -> None:
         self._state = StabilizerState(n_qubits)
-        self._seed = seed
+        # One persistent RNG per simulator instance.  Seeded once at construction
+        # so that successive measurements advance the same generator — independent
+        # qubits in product superpositions get independent (uncorrelated) draws.
+        self._rng: random.Random = random.Random(seed)
         self._measurement_outcomes: list[int] = []
 
     # ── Single-qubit gates ────────────────────────────────────────────────────
@@ -479,15 +492,36 @@ class CliffordSimulator:
     # ── Measurement ───────────────────────────────────────────────────────────
 
     def measure(self, qubit: int, seed: int | None = None) -> int:
-        """Measure *qubit* in the Z basis.  Returns 0 or 1."""
-        effective_seed = seed if seed is not None else self._seed
-        outcome = self._state.measure(qubit, seed=effective_seed)
+        """Measure *qubit* in the Z basis.  Returns 0 or 1.
+
+        Parameters
+        ----------
+        qubit : int
+        seed : int | None
+            If provided, the simulator's RNG is re-seeded with this value
+            *before* this measurement.  Useful for reproducible individual
+            measurements; for reproducible multi-qubit circuits, seed the
+            simulator at construction time instead.
+        """
+        if seed is not None:
+            self._rng.seed(seed)
+        outcome = self._state.measure(qubit, rng=self._rng)
         self._measurement_outcomes.append(outcome)
         return outcome
 
     def measure_all(self, seed: int | None = None) -> list[int]:
-        """Measure all qubits in order, returning the outcome list."""
-        return [self.measure(q, seed=seed) for q in range(self.n_qubits)]
+        """Measure all qubits in order using the simulator's shared RNG.
+
+        Parameters
+        ----------
+        seed : int | None
+            If provided, re-seeds the simulator's RNG once before the first
+            measurement (not once per qubit), so successive measurements get
+            independent draws from the same seeded sequence.
+        """
+        if seed is not None:
+            self._rng.seed(seed)
+        return [self._state.measure(q, rng=self._rng) for q in range(self.n_qubits)]
 
     # ── Properties ───────────────────────────────────────────────────────────
 
@@ -629,6 +663,7 @@ class StimCircuit:
                 method_name = _STIM_TWO[gate]
                 getattr(sim, method_name)(qubits[0], qubits[1])
             elif gate in _STIM_MEASURE:
-                outcomes.append(sim.measure(qubits[0], seed=seed))
+                # Drive through the simulator's shared RNG (no per-call seed).
+                outcomes.append(sim.measure(qubits[0]))
 
         return outcomes

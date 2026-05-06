@@ -80,24 +80,24 @@ class TestSingleQubitGates:
     def test_x_flips_zero_to_one(self):
         sim = CliffordSimulator(n_qubits=1)
         sim.x(0)
-        assert sim.measure(0, seed=0) == 1
+        assert sim.measure(0) == 1
 
     def test_double_x_is_identity(self):
         sim = CliffordSimulator(n_qubits=1)
         sim.x(0).x(0)
-        assert sim.measure(0, seed=0) == 0
+        assert sim.measure(0) == 0
 
     def test_z_leaves_zero_unchanged(self):
         """Z|0⟩ = |0⟩, so Z-measurement should give 0."""
         sim = CliffordSimulator(n_qubits=1)
         sim.z(0)
-        assert sim.measure(0, seed=0) == 0
+        assert sim.measure(0) == 0
 
     def test_y_on_zero(self):
         """Y|0⟩ = i|1⟩ → measures 1."""
         sim = CliffordSimulator(n_qubits=1)
         sim.y(0)
-        assert sim.measure(0, seed=0) == 1
+        assert sim.measure(0) == 1
 
     def test_s_then_sdg_is_identity(self):
         """S followed by S† = I."""
@@ -116,14 +116,14 @@ class TestSingleQubitGates:
         """H|0⟩ is in a superposition — measure 0 or 1 are both valid."""
         sim = CliffordSimulator(n_qubits=1)
         sim.h(0)
-        outcome = sim.measure(0, seed=42)
+        outcome = sim.measure(0)
         assert outcome in (0, 1)
 
     def test_h_h_is_identity(self):
         """H·H = I: state must be deterministically |0⟩ after two Hadamards."""
         sim = CliffordSimulator(n_qubits=1)
         sim.h(0).h(0)
-        assert sim.measure(0, seed=0) == 0
+        assert sim.measure(0) == 0
 
     def test_out_of_range_qubit_raises(self):
         sim = CliffordSimulator(n_qubits=2)
@@ -149,28 +149,28 @@ class TestSingleQubitGates:
 class TestMeasurement:
     def test_measure_zero_state_always_zero(self):
         for seed in range(10):
-            sim = CliffordSimulator(n_qubits=3)
+            sim = CliffordSimulator(n_qubits=3, seed=seed)
             for q in range(3):
-                assert sim.measure(q, seed=seed) == 0
+                assert sim.measure(q) == 0
 
     def test_measure_x_state_always_one(self):
         for seed in range(5):
-            sim = CliffordSimulator(n_qubits=2)
+            sim = CliffordSimulator(n_qubits=2, seed=seed)
             sim.x(0).x(1)
-            assert sim.measure(0, seed=seed) == 1
-            assert sim.measure(1, seed=seed) == 1
+            assert sim.measure(0) == 1
+            assert sim.measure(1) == 1
 
     def test_measure_collapses_superposition(self):
         """After measuring |+⟩ to 0 or 1, second measurement is deterministic."""
-        sim = CliffordSimulator(n_qubits=1)
+        sim = CliffordSimulator(n_qubits=1, seed=7)
         sim.h(0)
-        first = sim.measure(0, seed=7)
-        second = sim.measure(0, seed=7)
+        first = sim.measure(0)
+        second = sim.measure(0)
         assert first == second
 
     def test_measure_all(self):
         sim = CliffordSimulator(n_qubits=4)
-        outcomes = sim.measure_all(seed=0)
+        outcomes = sim.measure_all()
         assert outcomes == [0, 0, 0, 0]
 
     def test_measurement_outcomes_property(self):
@@ -184,6 +184,21 @@ class TestMeasurement:
         assert outcomes[1] == 1
         assert outcomes[2] == 0
 
+    def test_product_superposition_independent_outcomes(self):
+        """P1 regression: H|0⟩⊗H|0⟩ must produce all four outcomes 00/01/10/11.
+
+        Before the fix, every measure(seed=X) recreated random.Random(X) and
+        both qubits always collapsed to the same value (00 or 11 only).
+        """
+        seen = set()
+        for seed in range(200):
+            sim = CliffordSimulator(n_qubits=2, seed=seed)
+            sim.h(0).h(1)
+            outcomes = tuple(sim.measure_all())
+            seen.add(outcomes)
+        assert (0, 1) in seen, "Product state never produced 01"
+        assert (1, 0) in seen, "Product state never produced 10"
+
 
 # ── Bell state ────────────────────────────────────────────────────────────────
 
@@ -193,8 +208,8 @@ class TestBellState:
         for seed in range(20):
             sim = CliffordSimulator(n_qubits=2, seed=seed)
             sim.h(0).cx(0, 1)
-            a = sim.measure(0, seed=seed)
-            b = sim.measure(1, seed=seed)
+            a = sim.measure(0)
+            b = sim.measure(1)
             assert a == b, f"seed={seed}: got {a},{b}"
 
     def test_bell_state_both_outcomes_possible(self):
@@ -203,8 +218,8 @@ class TestBellState:
         for seed in range(50):
             sim = CliffordSimulator(n_qubits=2, seed=seed)
             sim.h(0).cx(0, 1)
-            a = sim.measure(0, seed=seed)
-            b = sim.measure(1, seed=seed)
+            a = sim.measure(0)
+            b = sim.measure(1)
             outcomes.add((a, b))
         assert (0, 0) in outcomes
         assert (1, 1) in outcomes
@@ -222,7 +237,7 @@ class TestGHZ:
         sim.h(0)
         for q in range(n_qubits - 1):
             sim.cx(q, q + 1)
-        outcomes = [sim.measure(q, seed=42) for q in range(n_qubits)]
+        outcomes = [sim.measure(q) for q in range(n_qubits)]
         assert len(set(outcomes)) == 1, f"Outcomes not all equal: {outcomes[:10]}"
 
     def test_ghz_3_qubit_both_values(self):
@@ -231,7 +246,7 @@ class TestGHZ:
         for seed in range(100):
             sim = CliffordSimulator(n_qubits=3, seed=seed)
             sim.h(0).cx(0, 1).cx(0, 2)
-            o = tuple(sim.measure(q, seed=seed) for q in range(3))
+            o = tuple(sim.measure(q) for q in range(3))
             seen.add(o)
         assert (0, 0, 0) in seen
         assert (1, 1, 1) in seen
@@ -305,8 +320,8 @@ class TestLargeScale:
         for q in range(n - 1):
             sim.cx(q, q + 1)
         # Measuring only qubit 0 (random) + qubit n-1 (deterministic, 2 rowmults)
-        m0 = sim.measure(0, seed=0)
-        m_last = sim.measure(n - 1, seed=0)
+        m0 = sim.measure(0)
+        m_last = sim.measure(n - 1)
         elapsed = time.perf_counter() - t0
         assert m0 == m_last, f"Qubits 0 and {n-1} disagree: {m0} vs {m_last}"
         assert elapsed < 60.0, f"10000-qubit GHZ took {elapsed:.1f}s (> 60s limit)"
@@ -319,7 +334,7 @@ class TestLargeScale:
         sim.h(0)
         for q in range(n - 1):
             sim.cx(q, q + 1)
-        outcomes = [sim.measure(q, seed=0) for q in range(n)]
+        outcomes = [sim.measure(q) for q in range(n)]
         elapsed = time.perf_counter() - t0
         assert len(set(outcomes)) == 1, "1000-qubit GHZ: not all equal"
         assert elapsed < 60.0, f"1000-qubit GHZ took {elapsed:.1f}s (> 60s limit)"
@@ -330,7 +345,7 @@ class TestLargeScale:
         sim = CliffordSimulator(n_qubits=n)
         for q in range(n):
             sim.x(q)
-        outcomes = sim.measure_all(seed=0)
+        outcomes = sim.measure_all()
         assert all(o == 1 for o in outcomes)
 
     def test_10000_qubit_identity(self):
@@ -344,7 +359,7 @@ class TestLargeScale:
         sim = CliffordSimulator(n_qubits=n)
         for q in range(n):
             sim.h(q).h(q)
-        outcomes = sim.measure_all(seed=0)
+        outcomes = sim.measure_all()
         elapsed = time.perf_counter() - t0
         assert all(o == 0 for o in outcomes)
         assert elapsed < 60.0, f"10000-qubit identity took {elapsed:.1f}s (> 60s limit)"
@@ -550,7 +565,7 @@ class TestPhaseTracking:
         # After H·S·H on |0⟩ we get a superposition, not a Z eigenstate
         sim = CliffordSimulator(n_qubits=1)
         sim.h(0).s(0).h(0)
-        outcome = sim.measure(0, seed=13)
+        outcome = sim.measure(0)
         assert outcome in (0, 1)
 
     def test_s4_is_identity(self):
@@ -568,4 +583,4 @@ class TestPhaseTracking:
         # Then H → |1⟩ → measures 1
         sim = CliffordSimulator(n_qubits=1)
         sim.h(0).z(0).h(0)
-        assert sim.measure(0, seed=0) == 1
+        assert sim.measure(0) == 1
