@@ -299,6 +299,13 @@ from .mps_simulator import (
     get_backend_module,       # M109
     is_gpu_available,         # M109
 )
+from .clifford_sim import (   # M110
+    CliffordError,
+    StabilizerState,
+    CliffordSimulator,
+    StimCircuit,
+    StimCircuitError,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -610,4 +617,10 @@ __all__ = [
     "gpu_mps_benchmark",
     "get_backend_module",
     "is_gpu_available",
+    # Large-scale Clifford simulation (M110)
+    "CliffordError",
+    "StabilizerState",
+    "CliffordSimulator",
+    "StimCircuit",
+    "StimCircuitError",
 ]
