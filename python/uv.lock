@@ -599,14 +599,21 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+ci = [
+    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pennylane", version = "0.42.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "pennylane", version = "0.44.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "pytest" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
 dev = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pytest" },
-]
-numpy = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 pennylane = [
     { name = "pennylane", version = "0.42.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -620,13 +627,17 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=2.2.6" },
+    { name = "networkx", marker = "extra == 'ci'", specifier = ">=3.0" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "numpy", marker = "extra == 'ci'", specifier = ">=1.24" },
     { name = "numpy", marker = "extra == 'dev'", specifier = ">=1.24" },
-    { name = "numpy", marker = "extra == 'numpy'", specifier = ">=1.24" },
+    { name = "pennylane", marker = "extra == 'ci'", specifier = ">=0.30.0" },
     { name = "pennylane", marker = "extra == 'pennylane'", specifier = ">=0.30.0" },
+    { name = "pytest", marker = "extra == 'ci'", specifier = ">=7.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
+    { name = "scipy", marker = "extra == 'ci'", specifier = ">=1.10" },
 ]
-provides-extras = ["numpy", "dev", "pennylane"]
+provides-extras = ["dev", "pennylane", "ci"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.0.3" }]
