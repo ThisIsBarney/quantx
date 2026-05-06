@@ -306,6 +306,13 @@ from .clifford_sim import (   # M110
     StimCircuit,
     StimCircuitError,
 )
+from .ray_sim import (        # M111
+    DistSVError,
+    DistSVResult,
+    DistributedSVSimulator,
+    is_ray_available,
+    dist_sv_benchmark,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -623,4 +630,10 @@ __all__ = [
     "CliffordSimulator",
     "StimCircuit",
     "StimCircuitError",
+    # Distributed statevector via Ray (M111)
+    "DistSVError",
+    "DistSVResult",
+    "DistributedSVSimulator",
+    "is_ray_available",
+    "dist_sv_benchmark",
 ]
