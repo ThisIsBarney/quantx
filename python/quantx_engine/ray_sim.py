@@ -306,8 +306,12 @@ class DistributedSVSimulator:
             self._use_ray = True
         elif backend == "cpu":
             self._use_ray = False
-        else:  # "auto"
+        elif backend == "auto":
             self._use_ray = is_ray_available()
+        else:
+            raise DistSVError(
+                f"Unknown backend {backend!r}; expected 'auto', 'ray', or 'cpu'"
+            )
 
         if self._use_ray:
             warnings.warn(
@@ -624,7 +628,7 @@ def dist_sv_benchmark(
         return sim.to_statevector(), elapsed
 
     def _run_dist(ops: list[tuple]) -> tuple[np.ndarray, float]:
-        sim = DistributedSVSimulator(n_qubits, num_shards=num_shards, backend="cpu")
+        sim = DistributedSVSimulator(n_qubits, num_shards=num_shards, backend="auto")
         t0 = time.perf_counter()
         for op, args in ops:
             getattr(sim, op)(*args)

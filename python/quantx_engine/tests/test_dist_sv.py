@@ -48,6 +48,10 @@ class TestConstruction:
         with pytest.raises(DistSVError):
             DistributedSVSimulator(n_qubits=0)
 
+    def test_unknown_backend_raises(self):
+        with pytest.raises(DistSVError, match="Unknown backend"):
+            DistributedSVSimulator(n_qubits=4, backend="ary")
+
     def test_non_power_of_two_shards_raises(self):
         with pytest.raises(DistSVError):
             DistributedSVSimulator(n_qubits=4, num_shards=3)
