@@ -313,6 +313,14 @@ from .ray_sim import (        # M111
     is_ray_available,
     dist_sv_benchmark,
 )
+from .ftqc_pipeline import (  # M112
+    FTQCPipelineError,
+    PipelineResult,
+    ThresholdCurveResult,
+    FTQCPipeline,
+    threshold_curve,
+    threshold_crossing,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -636,4 +644,11 @@ __all__ = [
     "DistributedSVSimulator",
     "is_ray_available",
     "dist_sv_benchmark",
+    # Fault-tolerant QC end-to-end pipeline (M112)
+    "FTQCPipelineError",
+    "PipelineResult",
+    "ThresholdCurveResult",
+    "FTQCPipeline",
+    "threshold_curve",
+    "threshold_crossing",
 ]
