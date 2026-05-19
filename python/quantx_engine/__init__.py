@@ -359,6 +359,15 @@ from .qiskit_compat import (  # M116
     QuantXSamplerV2,
     QuantXEstimatorV2,
 )
+from .jupyter_widgets import (  # M117
+    WidgetError,
+    CircuitWidgetState,
+    CircuitWidget,
+    BlochSphereWidgetState,
+    BlochSphereWidget,
+    JobMonitorWidgetState,
+    JobMonitorWidget,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -723,4 +732,12 @@ __all__ = [
     "EstimatorPUB",
     "QuantXSamplerV2",
     "QuantXEstimatorV2",
+    # Jupyter interactive widgets (M117)
+    "WidgetError",
+    "CircuitWidgetState",
+    "CircuitWidget",
+    "BlochSphereWidgetState",
+    "BlochSphereWidget",
+    "JobMonitorWidgetState",
+    "JobMonitorWidget",
 ]
