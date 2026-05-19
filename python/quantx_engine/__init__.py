@@ -644,4 +644,11 @@ __all__ = [
     "DistributedSVSimulator",
     "is_ray_available",
     "dist_sv_benchmark",
+    # Fault-tolerant QC end-to-end pipeline (M112)
+    "FTQCPipelineError",
+    "PipelineResult",
+    "ThresholdCurveResult",
+    "FTQCPipeline",
+    "threshold_curve",
+    "threshold_crossing",
 ]

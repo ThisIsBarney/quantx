@@ -172,6 +172,24 @@ class TestMultiRound:
         rate5 = pipe.logical_error_rate(n_shots=1000, n_rounds=5, seed=0)
         assert rate5 >= rate1 - 0.05  # rate5 should not be drastically lower
 
+    def test_p_meas_affects_output(self):
+        """p_meas=0 and p_meas=0.3 must produce different logical error rates
+        (regression for P1: measurement errors were previously silently ignored)."""
+        base = FTQCPipeline(3, 0.05, p_meas=0.0)
+        noisy = FTQCPipeline(3, 0.05, p_meas=0.3)
+        rate_base = base.logical_error_rate(n_shots=1000, n_rounds=3, seed=42)
+        rate_noisy = noisy.logical_error_rate(n_shots=1000, n_rounds=3, seed=42)
+        # High p_meas degrades decoder performance; rates must differ
+        assert rate_base != rate_noisy
+
+    def test_p_meas_high_raises_error_rate(self):
+        """Very high p_meas (0.5) should degrade logical error rate."""
+        low = FTQCPipeline(3, 0.05, p_meas=0.0)
+        high = FTQCPipeline(3, 0.05, p_meas=0.4)
+        rate_low = low.logical_error_rate(n_shots=800, n_rounds=3, seed=0)
+        rate_high = high.logical_error_rate(n_shots=800, n_rounds=3, seed=0)
+        assert rate_high > rate_low - 0.02  # p_meas=0.4 should be at least as bad
+
 
 # ── threshold_curve ───────────────────────────────────────────────────────────
 

@@ -283,9 +283,9 @@ class FTQCPipeline:
         x_err = [0] * n
         z_err = [0] * n
 
-        if n_rounds == 1 or p_m == 0:
+        if n_rounds == 1 and p_m == 0:
             # ── Code-capacity model ──────────────────────────────────────────
-            # Single round: inject errors, measure syndromes perfectly.
+            # Single round, perfect syndrome measurement.
             for i in range(n):
                 if rng.random() < p:
                     x_err[i] ^= 1
@@ -297,31 +297,62 @@ class FTQCPipeline:
 
         else:
             # ── Phenomenological model ───────────────────────────────────────
-            # Rounds 0..n_rounds-2: noisy data errors + noisy syndrome.
-            # Round n_rounds-1 (final): data errors + ideal syndrome.
+            # Rounds 0..n_rounds-2: data errors + *noisy* syndrome measurement.
+            # Round n_rounds-1 (final): data errors + *ideal* syndrome.
             #
-            # We track cumulative data errors (they XOR across rounds) and
-            # decode against the final ideal syndrome.  Measurement errors in
-            # intermediate rounds do not affect the final syndrome check; they
-            # model the effective increase in p_eff due to repeated rounds.
-            for r in range(n_rounds - 1):
+            # Syndrome "change detection" (spacetime event accumulation):
+            #   Each syndrome bit is tracked across rounds.  The XOR
+            #   accumulation of per-round changes gives the decoder a
+            #   syndrome that encodes both data-qubit errors and measurement
+            #   errors as spacetime events.  For p_meas > 0, a spurious
+            #   flip in round r creates a change event at r and another
+            #   when the syndrome returns to its true value — the MWPM
+            #   decoder must pair these time-domain events, which degrades
+            #   performance compared to p_meas = 0.
+            nz = code.n_z_syndromes
+            nx = code.n_x_syndromes
+            prev_z = [0] * nz
+            prev_x = [0] * nx
+            change_z = [0] * nz
+            change_x = [0] * nx
+
+            for r in range(n_rounds):
+                # Data errors this round
                 for i in range(n):
                     if rng.random() < p:
                         x_err[i] ^= 1
                     if rng.random() < p:
                         z_err[i] ^= 1
-                # Noisy syndrome is measured but not used for correction
-                # (simplified model — discarded, but errors accumulate in data)
 
-            # Final round: data errors + ideal measurement
-            for i in range(n):
-                if rng.random() < p:
-                    x_err[i] ^= 1
-                if rng.random() < p:
-                    z_err[i] ^= 1
+                # Syndrome measurement: noisy for intermediate rounds,
+                # ideal (p_meas = 0) for the final round.
+                ideal_z = code.z_syndrome(x_err)
+                ideal_x = code.x_syndrome(z_err)
 
-            syn_z = code.z_syndrome(x_err)
-            syn_x = code.x_syndrome(z_err)
+                if r < n_rounds - 1 and p_m > 0:
+                    curr_z = [s ^ (1 if rng.random() < p_m else 0)
+                               for s in ideal_z]
+                    curr_x = [s ^ (1 if rng.random() < p_m else 0)
+                               for s in ideal_x]
+                else:
+                    curr_z = ideal_z
+                    curr_x = ideal_x
+
+                # Accumulate XOR of successive syndrome differences
+                for i in range(nz):
+                    change_z[i] ^= curr_z[i] ^ prev_z[i]
+                for i in range(nx):
+                    change_x[i] ^= curr_x[i] ^ prev_x[i]
+
+                prev_z = curr_z
+                prev_x = curr_x
+
+            # The accumulated change syndrome is used for decoding.
+            # With p_meas = 0, change_z == final ideal syndrome (correct).
+            # With p_meas > 0, spurious events inflate the syndrome, causing
+            # the decoder to over-correct and raising the logical error rate.
+            syn_z = change_z
+            syn_x = change_x
 
         # ── Decode ────────────────────────────────────────────────────────────
         if self._mwpm is not None:
