@@ -501,6 +501,39 @@ class TestQiskitCompatRegressions:
         assert len(called) == 1  # factory was called exactly once
         assert isinstance(result, PrimitiveResult)
 
+    def test_callable_returning_circuit_object_correct_nqubits(self, monkeypatch):
+        """P2: when a callable returns a circuit-like object (not a bare SV),
+        n_qubits must be re-derived from that object before the recursive
+        _run_circuit call, not inherited as the 0 sentinel.
+
+        Before the fix, the Engine-unavailable fallback used `1 << 0 = 1`
+        producing a 1-element |0⟩ — completely wrong for an n-qubit circuit.
+        We simulate the Engine-absent scenario by patching the import so the
+        ImportError branch fires, triggering the |0⟩ fallback.
+        """
+        import sys
+        import quantx_engine.qiskit_compat as _compat
+
+        n = 3  # 3-qubit circuit
+
+        class _FakeCircuit:
+            """Minimal QuantX-style circuit object with .n_qubits and .gates."""
+            n_qubits = n
+            gates = []
+
+        # Patch the engine module away so _run_circuit hits the ImportError branch
+        # and produces the |0⟩ fallback with whatever n_qubits it was given.
+        monkeypatch.setitem(sys.modules, "quantx_engine.engine", None)
+
+        def factory():
+            return _FakeCircuit()
+
+        sampler = QuantXSamplerV2(default_shots=50, seed=0)
+        result = sampler.run([(factory, 50)])
+        # With the fix: n_qubits inferred from _FakeCircuit.n_qubits = 3
+        # Without the fix: n_qubits would be 0-sentinel → 1-element |0⟩ → num_bits=0
+        assert result[0].data.meas.num_bits == n
+
     def test_sparse_pauli_op_observable(self):
         """P2: SparsePauliOp must work as an estimator observable.
 

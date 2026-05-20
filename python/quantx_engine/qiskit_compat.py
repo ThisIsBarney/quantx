@@ -273,7 +273,11 @@ def _run_circuit(
         # Forward parameter_values if provided so that parameterised factories
         # like ``lambda params: build_circuit(params["theta"])`` work correctly.
         result = circuit(parameter_values) if parameter_values is not None else circuit()
-        return _run_circuit(result, n_qubits)
+        # Re-infer n_qubits from the returned object: if the factory returns a
+        # circuit (not a bare statevector), the original n_qubits sentinel (0)
+        # would make the Engine fallback build a 1-element |0⟩ vector.
+        inferred_n = _n_qubits_from_circuit(result)
+        return _run_circuit(result, inferred_n if inferred_n > 0 else n_qubits)
 
     # QuantX-style circuit: use Engine
     try:
