@@ -1,0 +1,27 @@
+﻿quantx\_engine.ftqc\_pipeline
+=============================
+
+.. automodule:: quantx_engine.ftqc_pipeline
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      threshold_crossing
+      threshold_curve
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      FTQCPipeline
+      PipelineResult
+      ThresholdCurveResult
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      FTQCPipelineError
+   

@@ -22,3 +22,4 @@ benchmarks/reports/
 out/visualizations/
 out/visualizations_test/
 _worktrees/
+docs/_build/

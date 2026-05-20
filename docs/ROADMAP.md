@@ -464,7 +464,12 @@ module-level theory notes for the ten most complex modules (QEC, QML, DMRG, QSP/
 MBQC, McLachlan, OO-VQE, pulse, Floquet, quantum network).
 Configure ReadTheDocs CI build triggered on every push to master.
 Add `docs` badge to README.
-Status: pending
+Deliverables: `docs/source/` (Sphinx source with furo theme), `docs/Makefile`,
+`.readthedocs.yaml`, `docs/source/requirements.txt`.  Pages: index, installation,
+quickstart (5 examples), REST API reference, full API reference across 11 thematic
+sections (62 modules autodoc'd), changelog (linked from CHANGELOG.md).  Build: 0 errors,
+warnings-only (inline LaTeX in docstrings; autosummary dedup).
+Status: completed
 
 ### M132: Tutorial notebooks × 5 (Jupyter, tested in CI)
 Five self-contained tutorial notebooks covering the five most common use cases:
