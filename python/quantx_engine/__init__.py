@@ -382,6 +382,12 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .dyndecouple import (  # M126
+    DDError,
+    DDSequence,
+    DynamicalDecoupling,
+    QuantumMemory,
+)
 from .mbqc import (  # M125
     MBQCError,
     GraphState,
@@ -807,6 +813,11 @@ __all__ = [
     "MagicStateFactory",
     "FTTGate",
     "FTCCXGate",
+    # Quantum memory + dynamical decoupling (M126)
+    "DDError",
+    "DDSequence",
+    "DynamicalDecoupling",
+    "QuantumMemory",
     # Measurement-based quantum computation (M125)
     "MBQCError",
     "GraphState",
