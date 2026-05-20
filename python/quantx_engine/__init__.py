@@ -368,6 +368,13 @@ from .jupyter_widgets import (  # M117
     JobMonitorWidgetState,
     JobMonitorWidget,
 )
+from .rydberg import (  # M118
+    RydbergError,
+    RydbergAtom,
+    RydbergHamiltonian,
+    RydbergResult,
+    RydbergSimulator,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -740,4 +747,10 @@ __all__ = [
     "BlochSphereWidget",
     "JobMonitorWidgetState",
     "JobMonitorWidget",
+    # Neutral-atom Rydberg blockade simulator (M118)
+    "RydbergError",
+    "RydbergAtom",
+    "RydbergHamiltonian",
+    "RydbergResult",
+    "RydbergSimulator",
 ]
