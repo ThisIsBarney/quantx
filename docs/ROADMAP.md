@@ -434,7 +434,14 @@ quantum kernel).  For each module: (a) run Codex review, (b) fix all P1/P2 findi
 (c) add at least one literature-validation test cross-checking a known analytical result or
 published numerical value (e.g. H₂ FCI energy, Hahn-echo decay, surface-code threshold,
 XXZ ground-state energy from Bethe ansatz).
-Status: pending
+Status: **complete** — PR #121 (commit f31ef54). 24 new physics validation tests in
+`test_physics_validation.py` covering: Lanczos (Heisenberg E₀=-3J/2; 4-site vs exact diag;
+TFIM gap ordering), Trotter (order-2 convergence; ZZ population conservation; order comparison),
+McLachlan (imaginary-time cooling; energy conservation), ZNE Richardson (exact for polynomial
+noise), CHSH (Tsirelson 2√2; classical ≤2), BB84 (Shor-Preskill key rate), QEC
+(d=3 corrects all weight-1 errors), CTQW (unitarity; sin²(γt) formula), TEBD (norm
+conservation), Binder cumulant (ordered vs disordered). Also fixed `RepetitionCode.correct()`
+bug: right-boundary error on last qubit was incorrectly corrected.
 
 ### M130: Physical correctness sweep II — M91–M118 (literature cross-validation)
 Same systematic review process for M91–M118 (fault-tolerant qubits, Floquet, hardware backends,
@@ -442,7 +449,12 @@ TD-DMRG, noise-aware VQE, quantum network, quantum walk, Trotter, many-body, MPS
 Clifford sim, distributed SV, FTQC pipeline, non-equilibrium dynamics, CVaR-QAOA, Qiskit V2
 primitives, Jupyter widgets, Rydberg simulator).  Each module gets Codex review + fix cycle +
 one literature-grounded validation test.
-Status: pending
+`test_physics_validation_2.py` (27 tests, all passing): fault-tolerant threshold behavior,
+Floquet quasi-energy ±pair symmetry, Werner state entanglement monotonicity, quantum teleportation
+fidelity formula (2F+1)/3, Clifford Bell-state correlations, Kibble-Zurek defect density power law
+(ν/(1+νz)=0.5 for 1D TFIM), GHZ MPS fidelity = 1.0 at bond-dim 2, SYK negative ground state,
+Rydberg blockade V=C₆/r⁶ energy shift.
+Status: completed
 
 ### M131: Documentation site — Sphinx + ReadTheDocs + full API reference
 Set up `docs/` with Sphinx (autodoc + napoleon) or mkdocs-material.
