@@ -382,6 +382,15 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .ft_tgate import (  # M120
+    MagicStateError,
+    MagicStateFactory,
+    FTTGate,
+    FTCCXGate,
+    # TCountOptimizer lives in ft_tgate but is not re-exported here to
+    # avoid shadowing the existing quantx_engine.clifford_t.TCountOptimizer.
+    # Import it directly: from quantx_engine.ft_tgate import TCountOptimizer
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -766,4 +775,9 @@ __all__ = [
     "CatQubit",
     "GKPState",
     "GKPDecoder",
+    # Fault-tolerant T gate via magic state injection (M120)
+    "MagicStateError",
+    "MagicStateFactory",
+    "FTTGate",
+    "FTCCXGate",
 ]
