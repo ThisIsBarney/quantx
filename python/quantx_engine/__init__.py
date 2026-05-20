@@ -329,6 +329,15 @@ from .excited_state import (  # M113
     detect_conical_intersections,
     pyscf_to_pauli_hamiltonian,
 )
+from .neqdyn import (  # M114
+    NonEquilError,
+    KeldyshResult,
+    KeldyshSolver,
+    EntanglementDynamicsResult,
+    EntanglementDynamics,
+    KibbleZurekResult,
+    KibbleZurekScaling,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -666,4 +675,12 @@ __all__ = [
     "ConicalIntersectionResult",
     "detect_conical_intersections",
     "pyscf_to_pauli_hamiltonian",
+    # Non-equilibrium quantum dynamics (M114)
+    "NonEquilError",
+    "KeldyshResult",
+    "KeldyshSolver",
+    "EntanglementDynamicsResult",
+    "EntanglementDynamics",
+    "KibbleZurekResult",
+    "KibbleZurekScaling",
 ]
