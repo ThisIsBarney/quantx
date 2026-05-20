@@ -382,6 +382,13 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .qldpc import (  # M121
+    LDPCError,
+    ClassicalCode,
+    HypergraphProductCode,
+    LDPCDecoder,
+    bicycle_code,
+)
 from .ft_tgate import (  # M120
     MagicStateError,
     MagicStateFactory,
@@ -780,4 +787,10 @@ __all__ = [
     "MagicStateFactory",
     "FTTGate",
     "FTCCXGate",
+    # Quantum LDPC codes — hypergraph product + bicycle (M121)
+    "LDPCError",
+    "ClassicalCode",
+    "HypergraphProductCode",
+    "LDPCDecoder",
+    "bicycle_code",
 ]
