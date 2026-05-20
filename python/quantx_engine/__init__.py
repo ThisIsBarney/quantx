@@ -348,6 +348,17 @@ from .qaoa_optim import (  # M115
     QAOALandscape,
     warm_start_qaoa,
 )
+from .qiskit_compat import (  # M116
+    QiskitCompatError,
+    BitArray,
+    DataBin,
+    PubResult,
+    PrimitiveResult,
+    SamplerPUB,
+    EstimatorPUB,
+    QuantXSamplerV2,
+    QuantXEstimatorV2,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -702,4 +713,14 @@ __all__ = [
     "QAOALandscapeResult",
     "QAOALandscape",
     "warm_start_qaoa",
+    # Qiskit 1.x Primitives V2 compatibility (M116)
+    "QiskitCompatError",
+    "BitArray",
+    "DataBin",
+    "PubResult",
+    "PrimitiveResult",
+    "SamplerPUB",
+    "EstimatorPUB",
+    "QuantXSamplerV2",
+    "QuantXEstimatorV2",
 ]
