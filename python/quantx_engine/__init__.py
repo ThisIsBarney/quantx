@@ -382,6 +382,11 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .mbqc import (  # M125
+    MBQCError,
+    GraphState,
+    MBQCPattern,
+)
 from .oovqe import (  # M124
     OOVQEError,
     OOVQEResult,
@@ -802,6 +807,10 @@ __all__ = [
     "MagicStateFactory",
     "FTTGate",
     "FTCCXGate",
+    # Measurement-based quantum computation (M125)
+    "MBQCError",
+    "GraphState",
+    "MBQCPattern",
     # Orbital-optimised VQE (M124)
     "OOVQEError",
     "OOVQEResult",
