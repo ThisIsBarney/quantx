@@ -394,3 +394,78 @@ Implemented in `python/quantx_engine/mbqc.py` — 42 tests passing. PR #117.
 ### M126: Quantum memory + dynamical decoupling — `DDSequence` (pulse sequence with filter function), `DynamicalDecoupling` (FID, Hahn, CPMG-n, XY4, XY8, KDD; effective T₂ via filter-function integral), `QuantumMemory` (T₁/T₂ Bloch evolution, DD-enhanced coherence, pulse-error correction)
 Status: completed
 Implemented in `python/quantx_engine/dyndecouple.py` — 42 tests passing. PR #118.
+
+## Phase: Product quality & correctness (Track H)
+
+Goal: close the gap between a working research prototype and a competitive, usable product.
+Six identified deficits in priority order: (1) broken install DX, (2) no stable release,
+(3) unreviewed physics correctness in M60–M118, (4) no documentation site,
+(5) no tutorial notebooks, (6) no published performance benchmarks.
+
+### M127: Fix packaging — `pip install quantx-engine` works out of the box
+Split the package into a pure-Python layer (all M55+ modules, no native build required) and an
+optional native accelerator (`pip install quantx-engine[native]` for the C++ ctypes bridge).
+`engine.py` wraps the C ABI only when `QUANTX_LIB_PATH` is set or the .dll/.so is found;
+otherwise all pure-Python solvers remain fully functional and import cleanly.
+Provide a clear `QuantXNativeNotAvailable` sentinel so users know exactly which features need
+the native build. Update README, RELEASING.md, and pyproject.toml optional-dependencies.
+Status: pending
+
+### M128: Semantic versioning + v0.2.0 release + CHANGELOG
+Establish a versioning policy (semver: MAJOR.MINOR.PATCH, no breaking changes in MINOR).
+Write `CHANGELOG.md` covering all 126 milestones in summary form.
+Add an `__version__` attribute exported from `quantx_engine/__init__.py`.
+Bump pyproject.toml to 0.2.0, cut the GitHub tag and PyPI release, create a GitHub Release
+with release notes generated from CHANGELOG.
+Add `GET /version` endpoint to the REST server.
+Status: pending
+
+### M129: Physical correctness sweep I — M60–M90 (literature cross-validation)
+Systematic Codex review of all modules in M60–M90 (chemistry, QML, QEC, tensor networks,
+Clifford+T, PennyLane plugin, Lanczos, parameter sweep, GPU, error mitigation, Lindblad,
+spectral functions, finite-size scaling, quantum channel, transpiler, MWPM, advanced chemistry,
+quantum kernel).  For each module: (a) run Codex review, (b) fix all P1/P2 findings,
+(c) add at least one literature-validation test cross-checking a known analytical result or
+published numerical value (e.g. H₂ FCI energy, Hahn-echo decay, surface-code threshold,
+XXZ ground-state energy from Bethe ansatz).
+Status: pending
+
+### M130: Physical correctness sweep II — M91–M118 (literature cross-validation)
+Same systematic review process for M91–M118 (fault-tolerant qubits, Floquet, hardware backends,
+TD-DMRG, noise-aware VQE, quantum network, quantum walk, Trotter, many-body, MPS simulator,
+Clifford sim, distributed SV, FTQC pipeline, non-equilibrium dynamics, CVaR-QAOA, Qiskit V2
+primitives, Jupyter widgets, Rydberg simulator).  Each module gets Codex review + fix cycle +
+one literature-grounded validation test.
+Status: pending
+
+### M131: Documentation site — Sphinx + ReadTheDocs + full API reference
+Set up `docs/` with Sphinx (autodoc + napoleon) or mkdocs-material.
+Auto-generate API reference from all public classes/functions in `quantx_engine/`.
+Write a Getting Started page, an Installation page (pure Python vs. native build), and
+module-level theory notes for the ten most complex modules (QEC, QML, DMRG, QSP/QSVT,
+MBQC, McLachlan, OO-VQE, pulse, Floquet, quantum network).
+Configure ReadTheDocs CI build triggered on every push to master.
+Add `docs` badge to README.
+Status: pending
+
+### M132: Tutorial notebooks × 5 (Jupyter, tested in CI)
+Five self-contained tutorial notebooks covering the five most common use cases:
+(1) `tutorial_01_statevector_circuits.ipynb` — Bell/GHZ, noise channels, shot sampling
+(2) `tutorial_02_vqe_chemistry.ipynb` — H₂ ground state, parameter-shift gradients, convergence
+(3) `tutorial_03_surface_code_qec.ipynb` — d=3 surface code, MWPM decoding, threshold sweep
+(4) `tutorial_04_quantum_network.ipynb` — BB84 key distribution, E91 CHSH violation, teleportation
+(5) `tutorial_05_dmrg_heisenberg.ipynb` — 1D Heisenberg chain, ground state, entanglement entropy
+Each notebook runs end-to-end in CI (nbmake or papermill) and matches published reference values
+to within stated tolerances.
+Status: pending
+
+### M133: Performance benchmark suite — QuantX vs. Qiskit-Aer / PennyLane / QuTiP
+Benchmark five scenarios on identical hardware with reproducible scripts:
+(1) Statevector simulation: n=20, 25, 30 qubits random circuit — wall time + memory
+(2) MPS simulation: n=50, 100 GHZ prep, bond-dim sweep — wall time vs accuracy
+(3) DMRG: 1D Heisenberg L=20,40,80, ground state energy error vs. time
+(4) Quantum chemistry VQE: H₂, LiH — energy error vs. iteration count
+(5) QEC simulation: surface code d=3,5,7 logical error rate at p=1% — simulation time
+Publish results as `benchmarks/BENCHMARKS.md` with methodology, hardware spec, raw data,
+and QuantX-vs-competitor tables.  Add benchmark CI job that runs weekly and posts results.
+Status: pending
