@@ -382,6 +382,11 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .oovqe import (  # M124
+    OOVQEError,
+    OOVQEResult,
+    OOVQESolver,
+)
 from .qsp_qsvt import (  # M123
     QSPError,
     QSPAnglesFinder,
@@ -797,6 +802,10 @@ __all__ = [
     "MagicStateFactory",
     "FTTGate",
     "FTCCXGate",
+    # Orbital-optimised VQE (M124)
+    "OOVQEError",
+    "OOVQEResult",
+    "OOVQESolver",
     # Quantum signal processing + QSVT (M123)
     "QSPError",
     "QSPAnglesFinder",
