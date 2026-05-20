@@ -334,24 +334,55 @@ Status: completed
 ### M111: Distributed statevector via Ray — `DistributedSVSimulator` (2^n amplitudes sharded across `num_shards=2^s` blocks, local/global gate dispatch, CPU fallback when Ray absent), `dist_sv_benchmark`, `is_ray_available` (54 tests, PR #102)
 Status: completed
 
+### M112: Fault-tolerant QC end-to-end pipeline — `FTQCPipeline` (SurfaceCode + MWPMDecoder, code-capacity + phenomenological noise), `threshold_curve` (multi-distance p_phys sweep), `threshold_crossing` (41 tests, PR #103)
+Status: completed
+
+### M113: Excited-state quantum chemistry — `ExcitedStateVQE` (exact/deflation/folded-spectrum), `detect_conical_intersections` (gap-threshold sweep), `pyscf_to_pauli_hamiltonian` (43 tests, PR #104)
+Status: completed
+
+### M114: Non-equilibrium quantum dynamics — `KeldyshSolver` (G^R + spectral function, sum-rule verified), `EntanglementDynamics` (partial trace, von Neumann entropy), `KibbleZurekScaling` (1D TFIM quench, power-law fit) (48 tests, PR #105)
+Status: completed
+
+### M115: CVaR-QAOA combinatorial optimisation — `CVaRQAOA` (CVaR_α objective), `MaxCutProblem`, `TSPProblem` (QUBO one-hot), `QAOALandscape` (γ,β grid), `warm_start_qaoa` (random/fixed/tqa/interpolated) (71 tests, PR #106)
+Status: completed
+
+### M116: Qiskit 1.x Primitives V2 compatibility — `QuantXSamplerV2` (BitArray, seeded sampling), `QuantXEstimatorV2` (exact ⟨H⟩; PauliHamiltonian/SparsePauliOp/matrix/dict observables), `PubResult`, `PrimitiveResult` (63 tests, PR #107)
+Status: completed
+
+### M117: Jupyter interactive widgets — `CircuitWidget` (gate palette + grid, on_change), `BlochSphereWidget` (Bloch coords/angles, evolution slider), `JobMonitorWidget` (poll-fn, progress, is_terminal); headless API + graceful ipywidgets fallback (65 tests, PR #108)
+Status: completed
+
+### M118: Neutral-atom Rydberg blockade simulator — `RydbergSimulator` (van der Waals H = (Ω/2)Σσˣ − δΣn + ΣV_ij n_i n_j, exact eigendecomposition), `blockade_radius`, `is_blockaded`, `linear_chain`/`square_lattice` factories; physics-validated Rabi oscillations (61 tests, PR #109)
+Status: completed
+
 ## Phase: Future directions
-### M112: Fault-tolerant QC end-to-end pipeline — Surface code encode → logical gate → syndrome extraction → MWPM decode → logical error rate vs p_phys threshold curve
+
+### Track E — QEC at scale
+
+### M119: Bosonic codes — cat qubits + GKP — `CatQubit` (Kerr-cat H = -Ka†²a² + ε₂(a†²+a²), Fock-space truncation, biased noise), `GKPState` (finite-energy square-lattice code, δ envelope), `GKPDecoder` (SBS shift correction), `CatNoiseModel` (κ₁ single-photon loss, κ_φ dephasing)
 Status: pending
 
-### M113: Excited-state quantum chemistry — EOM-VQE for excitation energies, `ExcitedStateVQE`, PySCF interface, conical intersection detection
+### M120: Fault-tolerant T gate via magic state injection — `MagicStateFactory` (7-to-1 Hadamard + 15-to-1 Reed-Muller protocols), `FTTGate` (teleportation-based injection into surface code qubit), `FTCCXGate` (Toffoli from 4 T gates + Clifford), `TCountOptimizer` (ZX-calculus T-count reduction)
 Status: pending
 
-### M114: Non-equilibrium quantum dynamics — Keldysh Green's function, real-time many-body entanglement entropy, Kibble-Zurek scaling
+### M121: Quantum LDPC codes — hypergraph product — `ClassicalCode` (parity-check matrix, min distance), `HypergraphProductCode(H1, H2)` ([[n,k,d]] parameters), `LDPCDecoder` (belief propagation + OSD post-processing), `bicycle_code(l, m)` (best-known [[n, Θ(n), Θ(√n)]] scaling)
 Status: pending
 
-### M115: Variational quantum optimization at scale — QAOA with CVaR objective, MaxCut/TSP/integer programming, parameter landscape visualization
+### Track F — Quantum algorithms
+
+### M122: McLachlan variational quantum dynamics (VQD) — `McLachlanSolver` (real-time ∂θ/∂t = M⁻¹V, adaptive RK4), `variational_energy(t)` curve, TFIM quench benchmark vs exact TEBD
 Status: pending
 
-### M116: Qiskit 1.x compatibility — `QuantXSamplerV2`/`QuantXEstimatorV2` implementing Primitives V2 interface
+### M123: Quantum signal processing + QSVT — `QSPAnglesFinder` (Remez polynomial → QSP angles), `QSVTCircuit(poly, block_encoding)` (quantum singular value transformation), applications: matrix inversion, Hamiltonian simulation, quantum walk amplification
 Status: pending
 
-### M117: Jupyter interactive widgets — `CircuitWidget` (drag-and-drop), `BlochSphereWidget` (real-time), `JobMonitorWidget`; ipywidgets + anywidget
+### M124: Orbital-optimized VQE (OO-VQE) — `OOVQESolver(molecule, ansatz)` (interleaved orbital rotation + VQE parameter gradients), active-space energy comparison vs CASSCF (H₂O, N₂ dissociation)
 Status: pending
 
-### M118: Neutral-atom backend — QuEra Aquila / Pasqal analog Hamiltonian, Rydberg blockade model, `RydbergSimulator`
+### Track G — Quantum networking depth
+
+### M125: Measurement-based quantum computation (MBQC) — `GraphState(edges)` (stabilizer formalism, CZ generation), `MBQCPattern(graph, measurements)` (one-way computation flow), universal MBQC via cluster state, compile Clifford+T to measurement pattern
+Status: pending
+
+### M126: Quantum memory + dynamical decoupling — `QuantumMemory(T1, T2, t_gate)` (idle-time error accumulation), `SpinEchoSequence`, `DynamicalDecoupling(sequence="XY8")` (1/f noise suppression), `MemoryBenchmark` (T2_echo vs bare T2, infidelity vs storage time)
 Status: pending
