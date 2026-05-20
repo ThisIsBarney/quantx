@@ -338,6 +338,16 @@ from .neqdyn import (  # M114
     KibbleZurekResult,
     KibbleZurekScaling,
 )
+from .qaoa_optim import (  # M115
+    CVaRQAOAError,
+    QAOAResult,
+    MaxCutProblem,
+    TSPProblem,
+    CVaRQAOA,
+    QAOALandscapeResult,
+    QAOALandscape,
+    warm_start_qaoa,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -683,4 +693,13 @@ __all__ = [
     "EntanglementDynamics",
     "KibbleZurekResult",
     "KibbleZurekScaling",
+    # CVaR-QAOA combinatorial optimisation (M115)
+    "CVaRQAOAError",
+    "QAOAResult",
+    "MaxCutProblem",
+    "TSPProblem",
+    "CVaRQAOA",
+    "QAOALandscapeResult",
+    "QAOALandscape",
+    "warm_start_qaoa",
 ]
