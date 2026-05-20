@@ -44,6 +44,15 @@ ci = [
     "pennylane>=0.30.0",
 ]
 
+# Tutorial notebook execution in CI
+notebooks = [
+    "pytest>=7.0",
+    "nbmake>=1.4",
+    "nbformat>=5.9",
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
 # Meta-extra: everything optional
 all = [
     "pennylane>=0.30.0",

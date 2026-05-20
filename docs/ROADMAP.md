@@ -473,14 +473,14 @@ Status: completed
 
 ### M132: Tutorial notebooks × 5 (Jupyter, tested in CI)
 Five self-contained tutorial notebooks covering the five most common use cases:
-(1) `tutorial_01_statevector_circuits.ipynb` — Bell/GHZ, noise channels, shot sampling
-(2) `tutorial_02_vqe_chemistry.ipynb` — H₂ ground state, parameter-shift gradients, convergence
-(3) `tutorial_03_surface_code_qec.ipynb` — d=3 surface code, MWPM decoding, threshold sweep
-(4) `tutorial_04_quantum_network.ipynb` — BB84 key distribution, E91 CHSH violation, teleportation
-(5) `tutorial_05_dmrg_heisenberg.ipynb` — 1D Heisenberg chain, ground state, entanglement entropy
-Each notebook runs end-to-end in CI (nbmake or papermill) and matches published reference values
-to within stated tolerances.
-Status: pending
+(1) `01_getting_started.ipynb` — Heisenberg Lanczos (E₀=-3J/2), Trotter norm conservation, noise channels
+(2) `02_vqe_chemistry.ipynb` — VQE, noise-aware VQE (ZNE), CVaR-QAOA MaxCut
+(3) `03_quantum_error_correction.ipynb` — Repetition code (all weight-1 errors), surface code threshold, LDPC bicycle code
+(4) `04_quantum_networking.ipynb` — BB84 key rate (11% threshold), teleportation fidelity (2F+1)/3, network swapping
+(5) `05_many_body_mps.ipynb` — GHZ MPS fidelity=1.0, TEBD norm conservation, Kibble-Zurek power law, Binder cumulant
+Each notebook runs end-to-end with `nbmake` in CI (`.github/workflows/notebooks-ci.yml`).
+Each assert statement is a correctness check against a known analytical result.
+Status: completed
 
 ### M133: Performance benchmark suite — QuantX vs. Qiskit-Aer / PennyLane / QuTiP
 Benchmark five scenarios on identical hardware with reproducible scripts:
