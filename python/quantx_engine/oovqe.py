@@ -121,21 +121,37 @@ def _orbital_rotation(kappa: np.ndarray, n_orb: int) -> np.ndarray:
 
 
 def _matrix_exp_real(K: np.ndarray) -> np.ndarray:
-    """Matrix exponential of a real skew-symmetric matrix (result is orthogonal)."""
-    # Use Padé approximant via scipy if available, else Taylor expansion.
+    """Matrix exponential of a real skew-symmetric matrix (result is orthogonal).
+
+    Uses SciPy's Padé approximant when available; otherwise falls back to
+    scaling-and-squaring with Taylor series followed by QR re-orthogonalisation
+    to ensure the result is a proper orthogonal matrix (det = +1).
+    """
     try:
         from scipy.linalg import expm  # type: ignore
         return expm(K)
     except ImportError:
-        # Taylor expansion to order 10
+        # Scaling: choose s so ||K / 2^s|| < 0.5 for accurate Taylor expansion
+        norm_K = float(np.linalg.norm(K))
+        s = max(0, int(math.ceil(math.log2(max(1.0, 2.0 * norm_K)))))
+        K_scaled = K / (2 ** s)
+        # Taylor expansion on K_scaled (converges fast for small norm)
         result = np.eye(K.shape[0])
         term = np.eye(K.shape[0])
-        for n in range(1, 11):
-            term = term @ K / n
+        for n in range(1, 17):
+            term = term @ K_scaled / n
             result = result + term
-            if np.linalg.norm(term) < 1e-14:
+            if np.linalg.norm(term) < 1e-15:
                 break
-        return result
+        # Squaring phase: exp(K) = exp(K/2^s)^(2^s)
+        for _ in range(s):
+            result = result @ result
+        # Re-orthogonalise via QR to correct accumulated floating-point drift
+        Q, _ = np.linalg.qr(result)
+        # Ensure proper rotation (det = +1), not a reflection
+        if np.linalg.det(Q) < 0:
+            Q[:, 0] = -Q[:, 0]
+        return Q
 
 
 def _rotate_integrals(h: np.ndarray, U: np.ndarray) -> np.ndarray:
@@ -448,7 +464,7 @@ class OOVQESolver:
     ) -> np.ndarray:
         """Return the orbital gradient ∂E/∂κ at current (κ, θ) values.
 
-        Convenience method for external inspection.
+        Convenience method for external inspection / diagnostics.
 
         Parameters
         ----------
@@ -456,6 +472,11 @@ class OOVQESolver:
             Orbital parameters.  Defaults to zeros.
         theta : array-like or None
             Circuit parameters.  Defaults to zeros.
+
+        Returns
+        -------
+        ndarray
+            Gradient ∂E/∂κ (finite-difference approximation).
         """
         n_kappa = _n_kappa(self.n_orb)
         if kappa is None:
@@ -464,7 +485,21 @@ class OOVQESolver:
             theta = np.zeros(self.n_circuit_params)
         kappa = np.asarray(kappa, dtype=float)
         theta = np.asarray(theta, dtype=float)
-        return self._orbital_gradient_step(kappa, theta) - kappa  # = -lr * grad
+        # Compute ∂E/∂κ directly via central differences (same finite-difference
+        # used internally) instead of returning the parameter-update vector.
+        h = self.eps
+        grad = np.zeros_like(kappa)
+        for i in range(len(kappa)):
+            kappa_p = kappa.copy(); kappa_p[i] += h
+            kappa_m = kappa.copy(); kappa_m[i] -= h
+            U_p = _orbital_rotation(kappa_p, self.n_orb)
+            U_m = _orbital_rotation(kappa_m, self.n_orb)
+            h_p = _rotate_integrals(self.h_core, U_p)
+            h_m = _rotate_integrals(self.h_core, U_m)
+            E_p = float(self._energy_fn(h_p, theta))
+            E_m = float(self._energy_fn(h_m, theta))
+            grad[i] = (E_p - E_m) / (2 * h)
+        return grad
 
     def __repr__(self) -> str:
         return (

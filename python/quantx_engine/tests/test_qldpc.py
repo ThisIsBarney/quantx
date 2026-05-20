@@ -366,8 +366,8 @@ class TestBicycleCode:
     def test_n_qubits_formula(self):
         L = 4
         hp = bicycle_code(L, [0, 1], [0, 2])
-        # n = L*L + L*L = 2L²
-        assert hp.n_qubits == 2 * L * L
+        # Bicycle code: Hx=[A|B], Hz=[B^T|A^T] → n = 2L (not 2L² as in HGP)
+        assert hp.n_qubits == 2 * L
 
     def test_zero_error_syndromes(self):
         hp = bicycle_code(3, [0, 1], [0, 2])

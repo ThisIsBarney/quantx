@@ -213,14 +213,19 @@ class QSPAnglesFinder:
         if order is None:
             order = self.degree
         order = min(order, self.degree)
-        d = self.degree
 
-        # Jacobiangangan–Angelis construction: use the truncated Jacobi–Anger expansion.
-        # For even d: P(x) = Re[ Σ_{j=0}^{d//2} (-it)^{2j} J_{2j}(t) T_{2j}(x) / normfact ]
-        # For simplicity, we use a gradient-descent fit against the target.
-        target_fn = lambda x: math.cos(t * x)  # noqa: E731  (real part of e^{-ixt})
+        # Target: truncated Taylor/Jacobi–Anger cosine approximation to the given order.
+        # cos(tx) ≈ Σ_{j=0}^{floor(order/2)} (-1)^j (tx)^{2j} / (2j)!
+        def target_fn(x: float) -> float:
+            val = 0.0
+            for j in range(order // 2 + 1):
+                val += ((-1.0) ** j) * ((t * x) ** (2 * j)) / math.factorial(2 * j)
+            return val
 
-        return self._fit_phases(target_fn, parity="even", name=f"Hsim(t={t:.3g})")
+        return self._fit_phases(
+            target_fn, parity="even",
+            name=f"Hsim(t={t:.3g},ord={order})",
+        )
 
     def threshold(self, threshold_x: float = 0.0) -> QSPAnglesResult:
         """Phase angles for a step function at threshold_x.
@@ -411,8 +416,10 @@ class QSVTCircuit:
             # Callable block-encoding: apply QSP via QSVT protocol directly
             return self._apply_qsvt_callable(sv)
 
-        # Dense matrix path: use SVD
-        A = self._U_mat[: self.n_signal, : self.n_signal] * self.alpha
+        # Dense matrix path: use SVD.
+        # The signal subspace has dimension 2^n_signal (n_signal is qubit count).
+        sig_dim = 1 << self.n_signal
+        A = self._U_mat[:sig_dim, :sig_dim] * self.alpha
         U, sigmas, Vh = np.linalg.svd(A, full_matrices=False)
 
         # Apply P(σ/α) to each singular value
@@ -426,15 +433,22 @@ class QSVTCircuit:
         return A_poly @ sv
 
     def _apply_qsvt_callable(self, sv: np.ndarray) -> np.ndarray:
-        """QSVT via repeated application of block-encoding callable."""
-        # Use QSP on each component individually (single-qubit simulation)
-        # For callable block-encodings, we apply the signal processing directly
-        # to the state using the phases.
+        """QSVT via repeated application of block-encoding callable.
+
+        Applies the QSP phase sequence to the full state vector:
+        the ancilla Z-rotation e^{i φ Z_anc} splits the state into two halves
+        (|0_anc⟩ and |1_anc⟩ sectors) that pick up phases +φ and −φ.
+        When the state length is 1 (degenerate), a scalar phase is applied.
+        """
         current = sv.copy()
-        # Apply alternating U_A and Z-rotations in the ancilla space
         for i, phi in enumerate(self.phases):
-            # Z-rotation projection on first component
-            current[0] *= cmath.exp(1j * phi)
+            # e^{i phi Z_anc}: |0_anc⟩ half gets e^{+i phi}, |1_anc⟩ half gets e^{-i phi}
+            half = len(current) // 2
+            if half > 0:
+                current[:half] = current[:half] * cmath.exp(1j * phi)
+                current[half:] = current[half:] * cmath.exp(-1j * phi)
+            else:
+                current[0] *= cmath.exp(1j * phi)
             if i < self.degree:
                 current = self._U_fn(current)
         return current

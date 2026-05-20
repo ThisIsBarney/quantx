@@ -112,21 +112,26 @@ class DDSequence:
         F = np.ones(n, dtype=complex) * T  # free precession contribution
 
         pulse_t = self.pulse_times(T)
-        f = np.ones(n, dtype=float)  # switching function: starts at +1
+        pulse_t_set = set(pulse_t)
 
-        # Build |F(ω)|² by integrating the switching function
+        # Build |F(ω)|² by integrating the piecewise-constant switching function exactly.
         # F(ω) = ∫₀ᵀ f(t) e^{iωt} dt
-        # Approximate with piecewise constant segments
+        # On each constant segment [t0, t1]: ∫ f_sign e^{iωt} dt = f_sign (e^{iωt1}-e^{iωt0})/(iω)
+        # L'Hôpital limit as ω→0: f_sign * (t1 - t0)
         segments = sorted(set([0.0] + pulse_t + [T]))
         F_val = np.zeros(n, dtype=complex)
         f_sign = 1.0
         for k in range(len(segments) - 1):
             t0, t1 = segments[k], segments[k + 1]
-            dt = t1 - t0
-            t_mid = (t0 + t1) / 2
-            F_val += f_sign * dt * np.exp(1j * omega * t_mid)
-            # Toggle sign at each pulse
-            if t1 in set(pulse_t):
+            phase1 = np.exp(1j * omega * t1)
+            phase0 = np.exp(1j * omega * t0)
+            integral = np.where(
+                np.abs(omega) < 1e-12,
+                f_sign * (t1 - t0),
+                f_sign * (phase1 - phase0) / (1j * omega),
+            )
+            F_val += integral
+            if t1 in pulse_t_set:
                 f_sign *= -1.0
 
         return np.abs(F_val) ** 2
@@ -450,6 +455,8 @@ class QuantumMemory:
         sequence : DDSequence or None
             DD sequence.
         """
+        if t < 0:
+            raise DDError("t must be non-negative.")
         sv = np.asarray(init_state, dtype=complex).ravel()
         sv = sv / np.linalg.norm(sv)
         rho0 = np.outer(sv, sv.conj())
@@ -510,6 +517,7 @@ class QuantumMemory:
             T2_eff = T2_eff / (1 + p_err * T2_eff / self.T2)
 
         # Apply T₁ amplitude damping: ρ₁₁ → ρ₁₁ e^{-t/T₁}
+        # Off-diagonals already acquire a factor sqrt(e^{-t/T1}) = e^{-t/(2T1}).
         gamma1 = 1.0 / self.T1
         decay1 = math.exp(-gamma1 * t)
         rho_t = np.array([
@@ -517,11 +525,13 @@ class QuantumMemory:
             [rho[1, 0] * math.sqrt(decay1),          rho[1, 1] * decay1],
         ], dtype=complex)
 
-        # Apply T₂ dephasing: off-diagonals × e^{-t/T₂_eff}
-        gamma2 = 1.0 / T2_eff
-        decay2 = math.exp(-gamma2 * t)
-        rho_t[0, 1] *= decay2
-        rho_t[1, 0] *= decay2
+        # Apply PURE dephasing only (T₁ contribution already handled above).
+        # The total T₂ decomposes as 1/T₂ = 1/(2T₁) + 1/T₂_φ (pure dephasing).
+        # Applying the full T₂ here would double-count the 1/(2T₁) term.
+        gamma_phi = max(0.0, 1.0 / T2_eff - 1.0 / (2.0 * self.T1))
+        decay_phi = math.exp(-gamma_phi * t)
+        rho_t[0, 1] *= decay_phi
+        rho_t[1, 0] *= decay_phi
 
         return rho_t
 

@@ -361,8 +361,13 @@ class HypergraphProductCode:
 
     @property
     def k(self) -> int:
-        """Number of logical qubits K = k₁k₂."""
-        return self.code1.k * self.code2.k
+        """Number of logical qubits K = n − rank(Hx) − rank(Hz).
+
+        Uses the CSS formula which correctly accounts for both stabiliser
+        sectors of the hypergraph product, including the transpose-sector
+        logicals that the simple k₁k₂ product formula misses.
+        """
+        return max(0, self.n_qubits - _rank_gf2(self._Hx) - _rank_gf2(self._Hz))
 
     @property
     def n_x_stabs(self) -> int:
@@ -480,6 +485,10 @@ class LDPCDecoder:
         # Channel LLR initialisation
         if channel_llr is not None:
             llr = np.asarray(channel_llr, dtype=float)
+            if llr.shape != (self._n,):
+                raise LDPCError(
+                    f"channel_llr must have shape ({self._n},); got {llr.shape}."
+                )
         else:
             if not (0.0 < error_rate < 1.0):
                 raise LDPCError("error_rate must be in (0, 1).")
@@ -659,6 +668,14 @@ def bicycle_code(
     A = _circulant(a_shifts)
     B = _circulant(b_shifts)
 
-    code_A = ClassicalCode(A)
-    code_B = ClassicalCode(B)
-    return HypergraphProductCode(code_A, code_B)
+    # Bicycle CSS code: Hx = [A | B],  Hz = [Bᵀ | Aᵀ]
+    # Physical qubits: 2L; checks: L each.
+    Hx = np.hstack([A, B]).astype(np.uint8) % 2
+    Hz = np.hstack([B.T, A.T]).astype(np.uint8) % 2
+
+    # Wrap in HypergraphProductCode shell (seeds kept for repr), then override
+    # the parity-check matrices with the correct bicycle construction.
+    code = HypergraphProductCode(ClassicalCode(A), ClassicalCode(B))
+    code._Hx = Hx
+    code._Hz = Hz
+    return code

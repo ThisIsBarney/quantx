@@ -341,6 +341,11 @@ class MBQCPattern:
         """
         if not (0 <= target < self.n):
             raise MBQCError(f"target qubit {target} out of range.")
+        for q in depends_on:
+            if not (0 <= q < self.n):
+                raise MBQCError(
+                    f"depends_on qubit {q} out of range (must be in [0, {self.n - 1}])."
+                )
         self._x_corrections[target] = list(depends_on)
 
     def add_z_correction(self, target: int, depends_on: list[int]) -> None:
@@ -355,6 +360,11 @@ class MBQCPattern:
         """
         if not (0 <= target < self.n):
             raise MBQCError(f"target qubit {target} out of range.")
+        for q in depends_on:
+            if not (0 <= q < self.n):
+                raise MBQCError(
+                    f"depends_on qubit {q} out of range (must be in [0, {self.n - 1}])."
+                )
         self._z_corrections[target] = list(depends_on)
 
     # ------------------------------------------------------------------
@@ -395,16 +405,13 @@ class MBQCPattern:
         if qubit in self.output_qubits:
             raise MBQCError(f"Qubit {qubit} is an output qubit and cannot be measured.")
 
-        # Compute corrected angle from feed-forward
-        corrected_angle = angle
-        # Apply X-corrections that may change the angle by π (signal inversion)
-        if qubit in self._x_corrections:
-            s_x = self._xor_outcomes(self._x_corrections[qubit])
-            corrected_angle = angle + s_x * math.pi
-        # Z-corrections shift angle by same qubit's earlier outcomes
-        if qubit in self._z_corrections:
-            s_z = self._xor_outcomes(self._z_corrections[qubit])
-            corrected_angle = corrected_angle + s_z * math.pi
+        # Compute corrected angle from feed-forward.
+        # MBQC rule: X-dependencies invert the sign of the angle ((-1)^s_x),
+        # then Z-dependencies shift by s_z * π.  Applying an additive shift
+        # instead of a sign flip is incorrect for non-Pauli angles.
+        s_x = self._xor_outcomes(self._x_corrections[qubit]) if qubit in self._x_corrections else 0
+        s_z = self._xor_outcomes(self._z_corrections[qubit]) if qubit in self._z_corrections else 0
+        corrected_angle = ((-1) ** s_x) * angle + s_z * math.pi
 
         # Build projectors onto |+_θ⟩ and |−_θ⟩
         phase = cmath.exp(1j * corrected_angle)
@@ -476,13 +483,15 @@ class MBQCPattern:
         ndarray
             Statevector restricted to the output qubits (re-indexed 0..k-1).
         """
-        # Extract the reduced state on output qubits by tracing out measured qubits
+        # If output_qubits were declared, restrict to them; otherwise fall back
+        # to all unmeasured qubits (to avoid silently including ancilla qubits).
         n = self.n
-        remaining = sorted(
-            q for q in range(n) if q not in self._measured
-        )
+        if self.output_qubits:
+            remaining = sorted(self.output_qubits)
+        else:
+            remaining = sorted(q for q in range(n) if q not in self._measured)
         if not remaining:
-            raise MBQCError("All qubits have been measured; no output state available.")
+            raise MBQCError("No output qubits available.")
         k = len(remaining)
         psi = self._state.reshape([2] * n)
         # Contract away measured qubits (they're in a definite post-selected state already)

@@ -272,11 +272,23 @@ class CatQubit:
 
     @property
     def logical_x(self) -> np.ndarray:
-        """Logical X operator: displacement D(2α) that maps |C_α+⟩↔|C_α−⟩."""
-        # X_L swaps even ↔ odd parity superpositions via coherent displacement
-        # For the cat basis, X_L ≈ a + a† (scaled).  Here we return the exact
-        # displacement operator D(2α) in the Fock basis.
-        return self._displacement(2 * self.alpha)
+        """Logical X operator: swaps |C_α+⟩ ↔ |C_α−⟩ within the code subspace.
+
+        Constructs the unitary X_L = |1_L⟩⟨0_L| + |0_L⟩⟨1_L| + (I − P_code),
+        which acts as Pauli X on the {|0_L⟩, |1_L⟩} code subspace and as the
+        identity on its orthogonal complement.  This is exact for any α.
+        """
+        psi0 = self.encode_0()   # |0_L⟩ = |C_α+⟩
+        psi1 = self.encode_1()   # |1_L⟩ = |C_α−⟩
+        # Code-space projector P = |0_L⟩⟨0_L| + |1_L⟩⟨1_L|
+        P_code = np.outer(psi0, psi0.conj()) + np.outer(psi1, psi1.conj())
+        # X_L maps |0_L⟩↔|1_L⟩ and is identity outside the code space
+        X_L = (
+            np.outer(psi1, psi0.conj())
+            + np.outer(psi0, psi1.conj())
+            + (np.eye(self.N_max) - P_code)
+        )
+        return X_L
 
     @property
     def hamiltonian(self) -> np.ndarray:

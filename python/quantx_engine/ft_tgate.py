@@ -194,7 +194,8 @@ class MagicStateFactory:
 
         if n_bad > cap:
             # Post-selection would discard this run; return theoretical output
-            return 1.0 - self.output_error_rate
+            # Clamp to [0, 1]: high input_error_rate can make output_error_rate > 1
+            return float(max(0.0, min(1.0, 1.0 - self.output_error_rate)))
 
         # Average the Bloch vectors of the "good" copies
         good_states = [s for s, f in zip(noisy_states, fidelities) if f >= 0.9] or noisy_states
@@ -203,7 +204,7 @@ class MagicStateFactory:
         if norm < 1e-12:
             return 0.0
         avg /= norm
-        return min(1.0, float(_t_state_fidelity(avg)))
+        return float(max(0.0, min(1.0, _t_state_fidelity(avg))))
 
     def distill(self, n_states: int = 1, seed: Optional[int] = None) -> list[float]:
         """Simulate ``n_states`` independent distillation rounds.
@@ -467,7 +468,10 @@ class FTCCXGate:
                 else:
                     current = _apply_1q(_T_DAG, current, q, n)
 
-        error_prob = float(min(1.0, n_errors * self.t_gate_error_rate))
+        # Probability that at least one T-gate error occurred in the 7-T Selinger circuit.
+        # Compute a priori (independent of the sampled outcome) to avoid double-scaling.
+        n_t_gates = sum(1 for instr in _CCX_SEQUENCE if instr[0] in ("T", "TDG"))
+        error_prob = float(min(1.0, 1.0 - (1.0 - self.t_gate_error_rate) ** n_t_gates))
         return current, error_prob
 
     def __repr__(self) -> str:

@@ -222,14 +222,14 @@ class TestMBQCPatternOutput:
         assert abs(np.linalg.norm(out) - 1.0) < 1e-10
 
     def test_output_state_correct_size(self):
-        # 4-qubit linear cluster, measure qubits 1 and 2; remaining = [0, 3]
+        # 4-qubit linear cluster, measure qubits 1 and 2; output_qubits=[3]
+        # output_state() now returns only the declared output qubits.
         g = GraphState.linear_cluster(4)
         p = MBQCPattern(g, output_qubits=[3])
         p.run([(1, 0.0), (2, 0.0)], seed=0)
         out = p.output_state()
-        # 2 remaining qubits → state of size 2^2 = 4
-        n_remaining = g.n_qubits - 2  # measured 2 qubits
-        assert out.shape == (1 << n_remaining,)
+        # 1 declared output qubit → state of size 2^1 = 2
+        assert out.shape == (2,)
 
     def test_output_state_no_measurements_returns_full(self):
         g = GraphState(3)

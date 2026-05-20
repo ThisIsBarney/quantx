@@ -32,6 +32,7 @@ References
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Callable, Literal, Optional, Sequence
 
@@ -216,7 +217,8 @@ class McLachlanSolver:
         if t_final <= 0:
             raise McLachlanError("t_final must be positive.")
 
-        n_steps = max(1, round(t_final / self.dt))
+        # Use ceil so that dt_actual ≤ configured dt (round can overshoot by ~1.5×)
+        n_steps = max(1, math.ceil(t_final / self.dt))
         dt_actual = t_final / n_steps
 
         times = np.zeros(n_steps + 1)
@@ -313,8 +315,9 @@ class McLachlanSolver:
         for i in range(self.n_params):
             th_p = theta.copy(); th_p[i] += eps
             th_m = theta.copy(); th_m[i] -= eps
-            psi_p = np.asarray(self.ansatz(th_p), dtype=complex).ravel()
-            psi_m = np.asarray(self.ansatz(th_m), dtype=complex).ravel()
+            # Differentiate the *normalised* state to keep dynamics scale-invariant
+            psi_p = self._psi(th_p)
+            psi_m = self._psi(th_m)
             grads[i] = (psi_p - psi_m) / (2 * eps)
         return grads
 
