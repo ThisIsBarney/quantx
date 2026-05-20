@@ -382,6 +382,11 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .qsp_qsvt import (  # M123
+    QSPError,
+    QSPAnglesFinder,
+    QSVTCircuit,
+)
 from .mclachlan import (  # M122
     McLachlanError,
     McLachlanResult,
@@ -792,6 +797,10 @@ __all__ = [
     "MagicStateFactory",
     "FTTGate",
     "FTCCXGate",
+    # Quantum signal processing + QSVT (M123)
+    "QSPError",
+    "QSPAnglesFinder",
+    "QSVTCircuit",
     # McLachlan variational quantum dynamics (M122)
     "McLachlanError",
     "McLachlanResult",
