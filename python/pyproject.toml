@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantx-engine"
-version = "0.1.0"
-description = "Python SDK for the QuantX quantum simulation engine — 37 physics solvers exposed via a ctypes C ABI bridge"
+version = "0.2.0"
+description = "QuantX quantum simulation SDK — 130+ physics modules covering VQE, MBQC, LDPC codes, bosonic qubits, QSVT, dynamical decoupling, and more"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
@@ -29,8 +29,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Pure-Python extras (no C++ build required)
 dev = ["pytest>=7.0", "numpy>=1.24"]
 pennylane = ["pennylane>=0.30.0"]
+gpu = ["cupy-cuda12x>=13.0"]
+distributed = ["ray[default]>=2.0"]
+
 # All dependencies needed to run the full test suite in CI
 ci = [
     "pytest>=7.0",
@@ -38,6 +42,15 @@ ci = [
     "scipy>=1.10",
     "networkx>=3.0",
     "pennylane>=0.30.0",
+]
+
+# Meta-extra: everything optional
+all = [
+    "pennylane>=0.30.0",
+    "cupy-cuda12x>=13.0",
+    "ray[default]>=2.0",
+    "scipy>=1.10",
+    "networkx>=3.0",
 ]
 
 [project.entry-points."pennylane.plugins"]

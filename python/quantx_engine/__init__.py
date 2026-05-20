@@ -1,5 +1,7 @@
 """Public Python SDK exports for QuantX."""
 
+__version__ = "0.2.0"
+
 from .fault_tolerant import (
     FTError,
     LogicalQubit,
@@ -48,7 +50,7 @@ from .dynamic import (
     DynamicResult,
     DynamicSimulator,
 )
-from .engine import CircuitError, Engine
+from .engine import CircuitError, Engine, QuantXNativeUnavailable
 from .qasm import ParseError, parse_qasm_to_circuit
 from .noise import (
     NoiseModel,
@@ -340,7 +342,7 @@ from .neqdyn import (  # M114
 )
 from .qaoa_optim import (  # M115
     CVaRQAOAError,
-    QAOAResult,
+    QAOAResult as CVaRQAOAResult,  # renamed to avoid clash with advanced_chemistry.QAOAResult
     MaxCutProblem,
     TSPProblem,
     CVaRQAOA,
@@ -457,8 +459,10 @@ __all__ = [
     "PulseResult",
     "PulseSimulator",
     "pi_pulse_area",
+    "__version__",
     "CircuitError",
     "Engine",
+    "QuantXNativeUnavailable",
     "ParseError",
     "parse_qasm_to_circuit",
     "NoiseModel",
@@ -771,7 +775,7 @@ __all__ = [
     "KibbleZurekScaling",
     # CVaR-QAOA combinatorial optimisation (M115)
     "CVaRQAOAError",
-    "QAOAResult",
+    "CVaRQAOAResult",  # quantx_engine.qaoa_optim.QAOAResult aliased to avoid clash
     "MaxCutProblem",
     "TSPProblem",
     "CVaRQAOA",

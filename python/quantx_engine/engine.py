@@ -8,6 +8,17 @@ if TYPE_CHECKING:  # pragma: no cover
     from quantx_engine.lindblad import JumpOperator, LindbladResult
 
 
+class QuantXNativeUnavailable(RuntimeError):
+    """Raised when the native QuantX shared library cannot be loaded.
+
+    This happens when ``quantx-engine`` is installed as a pure-Python wheel
+    (no C++ build) or when the library path is incorrect.  All pure-Python
+    modules — simulators, chemistry solvers, error-correction codes, etc. —
+    continue to work normally; only features that call through to the native
+    C++ engine require the library.
+    """
+
+
 class CircuitError(RuntimeError):
   """Structured circuit execution error carrying a machine-readable code."""
 
@@ -32,9 +43,25 @@ class Engine:
   """ctypes wrapper around the native QuantX library."""
 
   def __init__(self, lib_path=None):
-    """Load the native library and bind the exported C ABI entrypoints."""
+    """Load the native library and bind the exported C ABI entrypoints.
+
+    Raises
+    ------
+    QuantXNativeUnavailable
+        If the shared library cannot be found or loaded.  Pure-Python
+        functionality is unaffected.
+    """
     self._lib_path = lib_path or self._default_library_path()
-    self._lib = ctypes.CDLL(self._lib_path)
+    try:
+        self._lib = ctypes.CDLL(self._lib_path)
+    except OSError as exc:
+        raise QuantXNativeUnavailable(
+            f"Cannot load the QuantX native library from '{self._lib_path}'.\n"
+            "If you installed quantx-engine as a pure-Python package (no C++ build),\n"
+            "the Engine() class is unavailable.  All other quantx_engine modules\n"
+            "work without the native library.\n"
+            f"  Original error: {exc}"
+        ) from exc
     self._lib.qx_run.argtypes = [c_char_p, c_char_p]
     self._lib.qx_run.restype = c_void_p
     self._lib.qx_explain_backend_choice.argtypes = [c_char_p, c_char_p]
