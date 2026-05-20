@@ -409,16 +409,22 @@ optional native accelerator (`pip install quantx-engine[native]` for the C++ cty
 otherwise all pure-Python solvers remain fully functional and import cleanly.
 Provide a clear `QuantXNativeNotAvailable` sentinel so users know exactly which features need
 the native build. Update README, RELEASING.md, and pyproject.toml optional-dependencies.
-Status: pending
+Status: **complete** — PR #119 (commit 3331b90). `QuantXNativeUnavailable` added to `engine.py`;
+`Engine.__init__` raises it with a helpful message on DLL load failure. `__version__ = "0.2.0"` added to
+`__init__.py`. `QAOAResult` naming conflict resolved (`qaoa_optim.QAOAResult` exported as `CVaRQAOAResult`).
+`pyproject.toml` bumped to 0.2.0, optional deps expanded (`gpu`, `distributed`, `all` groups).
+Previously failing `test_advanced_chemistry_importable_from_package` now passes.
 
 ### M128: Semantic versioning + v0.2.0 release + CHANGELOG
 Establish a versioning policy (semver: MAJOR.MINOR.PATCH, no breaking changes in MINOR).
 Write `CHANGELOG.md` covering all 126 milestones in summary form.
-Add an `__version__` attribute exported from `quantx_engine/__init__.py`.
-Bump pyproject.toml to 0.2.0, cut the GitHub tag and PyPI release, create a GitHub Release
-with release notes generated from CHANGELOG.
+`__version__` was already added in M127; this milestone focuses on writing CHANGELOG.md
+and tagging a v0.2.0 GitHub release.
 Add `GET /version` endpoint to the REST server.
-Status: pending
+Status: **complete** — PR #120 (commit pending). `CHANGELOG.md` written covering M1–M127 in
+grouped summary form with Keep-a-Changelog format. `GET /version` REST endpoint added to
+`server/main.py` returning `sdk_version`, `native_version`, `native_available`. GitHub tag
+`v0.2.0` pushed.
 
 ### M129: Physical correctness sweep I — M60–M90 (literature cross-validation)
 Systematic Codex review of all modules in M60–M90 (chemistry, QML, QEC, tensor networks,

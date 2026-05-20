@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "python"))
 
 from quantx_engine import Engine, CircuitError
+import quantx_engine as _quantx_engine
 
 from fastapi import Depends
 
@@ -181,6 +182,36 @@ async def ready(request: Request) -> dict:
         )
 
     return {"ok": True}
+
+
+@app.get("/version", tags=["meta"])
+async def version(request: Request) -> dict:
+    """Return the quantx-engine SDK version and native library version (if loaded).
+
+    Example response::
+
+        {
+          "sdk_version": "0.2.0",
+          "native_version": "0.2.0",
+          "native_available": true
+        }
+
+    ``native_version`` is ``null`` when the native C++ library is not loaded.
+    ``native_available`` is ``false`` when running in pure-Python mode.
+    """
+    sdk_version = getattr(_quantx_engine, "__version__", "unknown")
+    native_version = None
+    native_available = False
+    try:
+        native_version = _engine(request).version()
+        native_available = True
+    except Exception:
+        pass
+    return {
+        "sdk_version": sdk_version,
+        "native_version": native_version,
+        "native_available": native_available,
+    }
 
 
 @app.get("/solvers", tags=["solvers"])

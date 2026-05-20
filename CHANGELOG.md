@@ -1,0 +1,112 @@
+# Changelog
+
+All notable changes to **quantx-engine** are documented here.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
+`MAJOR.MINOR.PATCH` — MINOR increments add new functionality without breaking existing APIs;
+PATCH increments are bug-fixes and packaging corrections only.
+
+---
+
+## [0.2.0] — 2026-05-20
+
+### Added
+- `quantx_engine.__version__` attribute (`"0.2.0"`)
+- `QuantXNativeUnavailable` exception — raised by `Engine.__init__` with a helpful message when
+  the native C++ shared library cannot be loaded; all pure-Python modules remain functional
+- `CVaRQAOAResult` top-level export — `qaoa_optim.QAOAResult` renamed in the public namespace
+  to avoid clash with the earlier `advanced_chemistry.QAOAResult` (M79)
+- **M127** packaging fixes: `pyproject.toml` optional-dependency groups `gpu`, `distributed`, `all`
+
+### Fixed
+- `test_advanced_chemistry_importable_from_package` now passes — `quantx_engine.QAOAResult`
+  correctly refers to `advanced_chemistry.QAOAResult` (M79), not `qaoa_optim.QAOAResult` (M115)
+- All 16 Codex review findings on PRs #111–#118 fixed (bosonic codes, magic-state distillation,
+  bicycle LDPC, McLachlan dynamics, QSP/QSVT, OO-VQE, MBQC, dynamical decoupling)
+
+### Physics modules added in this release cycle (M119–M126)
+| Milestone | Module | Key classes |
+|-----------|--------|-------------|
+| M119 | `bosonic.py` | `CatQubit`, `GKPState`, `GKPDecoder`, `CatNoiseModel` |
+| M120 | `ft_tgate.py` | `FTTGate`, `FTCCXGate`, `MagicStateFactory` |
+| M121 | `qldpc.py` | `ClassicalCode`, `HypergraphProductCode`, `LDPCDecoder`, `bicycle_code` |
+| M122 | `mclachlan.py` | `McLachlanSolver`, `McLachlanResult` |
+| M123 | `qsp_qsvt.py` | `QSPAnglesFinder`, `QSVTCircuit` |
+| M124 | `oovqe.py` | `OOVQESolver`, `OOVQEResult` |
+| M125 | `mbqc.py` | `GraphState`, `MBQCPattern`, `MeasurementResult` |
+| M126 | `dyndecouple.py` | `DynamicalDecoupling`, `QuantumMemory`, `DDSequence` |
+
+---
+
+## [0.1.0] — 2026-04-15
+
+Initial release covering M1–M118 (133 modules, 2000+ tests).
+
+### Track A — Core engine (M1–M20)
+- `Engine` — ctypes bridge to native C++ quantum simulation runtime
+- `CircuitError`, `ParseError`, OpenQASM 3.0 parser (`parse_qasm_to_circuit`)
+- `NoiseModel`, `DepolarizingNoise`, `AmplitudeDampingNoise`, `ThermalRelaxationNoise`,
+  `ReadoutNoise`, `CompositeNoise`
+- `IBMQuantumBackend`, `circuit_to_qasm3`
+
+### Track B — Chemistry & VQE (M21–M50)
+- `PauliTerm`, `PauliHamiltonian`, `jordan_wigner`, `MolecularVQE` (`chemistry.py`)
+- `UCCSDSolver`, `ADAPTVQESolver`, `QAOASolver`, `QITESolver` (`advanced_chemistry.py`)
+- `FidelityQuantumKernel`, `QSVM` (`quantum_kernel.py`)
+- `QuantumNeuralNetwork`, `QuantumClassifier` (`qml.py`)
+- `SPSAOptimizer`, `NoiseAwareVQE` (`noise_vqe.py`)
+- `ExcitedStateVQE`, `detect_conical_intersections` (`excited_state.py`)
+
+### Track C — QEC & Fault tolerance (M51–M70)
+- `RepetitionCode`, `SurfaceCode`, `MWPMDecoder`, `LogicalErrorSimulator` (`qec.py`)
+- `LogicalQubit`, `MagicStateDistillery`, `FaultTolerantCircuit` (`fault_tolerant.py`)
+- `GateSequence`, `SolovayKitaev`, `TCountOptimizer` (`clifford_t.py`)
+- `StabilizerState`, `CliffordSimulator` (`clifford_sim.py`)
+- `FTQCPipeline`, `threshold_curve` (`ftqc_pipeline.py`)
+
+### Track D — Simulation backends (M71–M90)
+- `MPS`, `MPO`, `TEBD`, `DMRG` (`tensor_network.py`)
+- `LanczosSolver`, `ArnoldiSolver` (`lanczos.py`)
+- `MPSSimulator`, `CachedDMRG` (`mps_simulator.py`)
+- `GpuStatevector`, `GpuLanczos` (`gpu.py`)
+- `DistributedSVSimulator` via Ray (`ray_sim.py`)
+- `LindbladSolver` (`lindblad.py`)
+- `KrylovEvolver` (`spectral.py`)
+- `TDMRGSolver` (`tdmrg.py`)
+- `TrotterSimulator` (`trotter.py`)
+- `SYKModel`, `compute_otoc` (`many_body.py`)
+
+### Track E–G — Algorithms & Protocols (M91–M118)
+- Quantum walk algorithms: `DiscreteTimeWalk`, `ContinuousTimeQuantumWalk`, `GroverWalk`
+- Quantum network: `QuantumRepeater`, `EntanglementSwapper`, `BellPairGenerator`
+- Communication protocols: `BB84Protocol`, `E91Protocol`, `TeleportationProtocol`
+- `BlochFloquetSolver`, `FloquetSystem` (`floquet.py`)
+- `GRAPESolver`, `CRABSolver` (`optimal_control.py`)
+- `CrossEntropyBenchmarking` (`xeb.py`)
+- `StateTomography`, `ProcessTomography` (`tomography.py`)
+- `CVaRQAOA`, `QAOALandscape` (`qaoa_optim.py`)
+- `QuantXSamplerV2`, `QuantXEstimatorV2` (`qiskit_compat.py`)
+- `CircuitWidget`, `BlochSphereWidget`, `JobMonitorWidget` (`jupyter_widgets.py`)
+- `RydbergSimulator` (`rydberg.py`)
+- Pulse-level simulation: `PulseSimulator`, `DRAGWaveform` (`pulse.py`)
+- `NonEquilError`, `KeldyshSolver`, `KibbleZurekScaling` (`neqdyn.py`)
+- `IBMHardwareBackend`, `IonQBackend`, `GoogleBackend` (`hardware.py`)
+- `QuantXDevice` PennyLane plugin (`pennylane_plugin.py`)
+- `DynamicCircuit`, `DynamicSimulator` (`dynamic.py`)
+- `HardwareTranspiler` (`transpiler.py`)
+- `ZNEResult`, `zne_mitigate`, `pec_mitigate` (`mitigation.py`)
+- `FiniteSizeScaling`, `binder_cumulant` (`finite_size.py`)
+- `SteadyStateSolver` (`quantum_channel.py`)
+- `QuantumBoltzmannMachine`, `BoltzmannSampler` (`qbm.py`)
+- `RBM` (`qbm.py`), `StandardRB`, `QuantumVolume` (`rb_qv.py`)
+- `ParameterSweep`, `grid_sweep` (`sweep.py`)
+- `CrosstalkModel`, `CouplingGraph` (`crosstalk.py`)
+- `NoiseCharacterizer` (`noise_char.py`)
+- `CircuitTemplate`, `hardware_efficient_ansatz`, `uccsd_ansatz` (`templates.py`)
+- `to_cirq`, `from_cirq`, `to_braket`, `from_braket` (`adapters.py`)
+
+---
+
+[0.2.0]: https://github.com/ThisIsBarney/quantx/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0
