@@ -337,6 +337,56 @@ class TestPySCFAdapter:
         assert len(ham.terms) >= 1
 
 
+# ── Codex review regression tests ────────────────────────────────────────────
+
+class TestDeflationRegressions:
+    """Regression tests for Codex P1/P2 review findings on M113."""
+
+    def test_conjugate_expectation_y_hamiltonian(self):
+        """P2: deflation energies must be correct for Hamiltonians with Y terms.
+
+        H = Y has eigenvalues {-1, +1} with complex eigenvectors.
+        The naive ``v @ H @ v`` (no conjugate) evaluates to 0 for each
+        eigenstate; the correct Hermitian form ``v†Hv`` gives ±1.
+        """
+        # Build single-qubit H = Y
+        terms = [PauliTerm(coeff=1.0+0j, ops={0: "Y"})]
+        ham = PauliHamiltonian(terms=terms, n_qubits=1)
+        result = ExcitedStateVQE(ham, method="deflation", n_states=2).solve(seed=0)
+        evals_sorted = sorted(result.energies)
+        # Both eigenvalues must be ±1; not 0 (which the buggy non-conjugate form
+        # would return for both eigenstates of Y).
+        assert abs(evals_sorted[0] - (-1.0)) < 1e-6, (
+            f"Ground-state energy of Y Hamiltonian should be -1, got {evals_sorted[0]}"
+        )
+        assert abs(evals_sorted[1] - 1.0) < 1e-6, (
+            f"First excited energy of Y Hamiltonian should be +1, got {evals_sorted[1]}"
+        )
+
+    def test_deflation_no_duplicate_states_small_penalty(self):
+        """P2: deflation must not return the ground state twice even when the
+        user-supplied penalty_weight is smaller than the spectral gap.
+
+        Hamiltonian H = 50·Z has eigenvalues {-50, +50}.  With the default
+        penalty_weight=10 (< 100 = gap), the naïve deflation without adaptive
+        scaling would re-select the ground state.  The fix scales the effective
+        penalty to exceed the spectral width.
+        """
+        # Large gap Hamiltonian: eigenvalues ±50
+        terms = [PauliTerm(coeff=50.0+0j, ops={0: "Z"})]
+        ham = PauliHamiltonian(terms=terms, n_qubits=1)
+        # Use small penalty_weight deliberately to expose the bug
+        vqe = ExcitedStateVQE(ham, method="deflation", n_states=2, penalty_weight=5.0)
+        result = vqe.solve(seed=0)
+        assert len(result.energies) == 2
+        # The two energies must be distinct (i.e. NOT both -50)
+        assert abs(result.energies[0] - result.energies[1]) > 1.0, (
+            f"Deflation returned duplicate energies: {result.energies}"
+        )
+        # Ground state must still be correct
+        assert abs(result.energies[0] - (-50.0)) < 1e-6
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 class TestIntegration:

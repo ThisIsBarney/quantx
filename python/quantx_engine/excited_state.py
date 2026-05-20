@@ -218,10 +218,16 @@ class ExcitedStateVQE:
             eigvals, eigvecs = np.linalg.eigh(H_eff)
             e = float(eigvals[0])
             v = eigvecs[:, 0]
-            energies.append(float(np.real(v @ H @ v)))  # energy w.r.t. original H
+            # Use conjugate bra ⟨v| = v† for the Hermitian expectation value;
+            # this matters whenever H has complex entries (e.g. Y Pauli terms).
+            energies.append(float(np.real(v.conj() @ H @ v)))  # energy w.r.t. original H
             states.append(v)
             # Add deflation penalty: H_eff += λ |v⟩⟨v|
-            H_eff = H_eff + self.penalty_weight * np.outer(v, v.conj())
+            # λ must exceed the spectral width of H so that the penalised state
+            # is no longer the ground state of H_eff even when the gap is large.
+            spectral_width = float(eigvals[-1] - eigvals[0])
+            effective_penalty = max(self.penalty_weight, spectral_width + 1.0)
+            H_eff = H_eff + effective_penalty * np.outer(v, v.conj())
 
         e0 = energies[0]
         return ExcitedStateResult(
