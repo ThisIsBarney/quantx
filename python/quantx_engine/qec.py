@@ -130,20 +130,23 @@ class RepetitionCode:
         i = 0
         while i < len(syn):
             if syn[i]:
-                # Determine which qubit flipped: check if i+1 syndrome also set
+                # Determine which qubit flipped using syndrome pattern:
+                #   syn[i]=1, syn[i+1]=1  → error on inner qubit i+1
+                #   syn[i]=1, syn[i+1]=0  → error on left boundary qubit i   (syn[i-1]=0)
+                #   syn[i]=1, i+1 out of range → error on right boundary qubit i+1
                 if i + 1 < len(syn) and syn[i + 1]:
-                    # Error on qubit i+1 (inner qubit)
+                    # Inner qubit i+1 is the error site
                     corrected[i + 1] ^= 1
-                    syn = self.syndrome(corrected)
-                    i = 0
-                    continue
+                elif i + 1 >= len(syn):
+                    # Right-boundary case: the mismatch at the last stabilizer
+                    # implies the error is on the rightmost qubit (i+1 = n-1)
+                    corrected[i + 1] ^= 1
                 else:
-                    # Error on qubit i (boundary) or qubit i+1 (boundary)
-                    # Flip the lower-weight endpoint
+                    # syn[i]=1 with no further violation → left-boundary qubit i
                     corrected[i] ^= 1
-                    syn = self.syndrome(corrected)
-                    i = 0
-                    continue
+                syn = self.syndrome(corrected)
+                i = 0
+                continue
             i += 1
         return corrected
 
