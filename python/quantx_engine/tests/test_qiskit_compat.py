@@ -446,6 +446,134 @@ class TestEstimatorV2ExpectationValues:
         assert "precision" in result[0].metadata
 
 
+# ── Codex review regression tests ─────────────────────────────────────────────
+
+class TestQiskitCompatRegressions:
+    """Regression tests for Codex P1/P2 review findings on M116."""
+
+    def test_callable_circuit_receives_parameter_values_sampler(self):
+        """P2: SamplerPUB callable must receive parameter_values from the PUB.
+
+        Before the fix, circuit() was always called with no arguments, so
+        parameterised factories silently ignored their PUB parameters.
+        """
+        received: dict = {}
+
+        def circuit_factory(params):
+            received["params"] = params
+            # Return a simple |+⟩ statevector regardless of params
+            sv = np.ones(2, dtype=complex) / math.sqrt(2)
+            return sv
+
+        sampler = QuantXSamplerV2(default_shots=100, seed=0)
+        result = sampler.run([(circuit_factory, {"theta": 0.42}, 100)])
+        # Factory must have been called with the parameter dict
+        assert "params" in received
+        assert received["params"] == {"theta": 0.42}
+        # Result must be valid
+        assert isinstance(result, PrimitiveResult)
+
+    def test_callable_circuit_receives_parameter_values_estimator(self):
+        """P2: EstimatorPUB callable must receive parameter_values from the PUB."""
+        received: dict = {}
+
+        def circuit_factory(params):
+            received["params"] = params
+            return _zero_state(1)
+
+        Z = np.array([[1, 0], [0, -1]], dtype=complex)
+        estimator = QuantXEstimatorV2()
+        result = estimator.run([(circuit_factory, Z, {"theta": 1.0})])
+        assert "params" in received
+        assert received["params"] == {"theta": 1.0}
+        assert abs(result[0].data.evs[0] - 1.0) < 1e-10
+
+    def test_callable_without_parameters_still_works(self):
+        """Callables with no PUB parameters are still called with no arguments."""
+        called: list[int] = []
+
+        def circuit_factory():
+            called.append(1)
+            return _zero_state(1)
+
+        sampler = QuantXSamplerV2(default_shots=50, seed=0)
+        result = sampler.run([(circuit_factory, 50)])
+        assert len(called) == 1  # factory was called exactly once
+        assert isinstance(result, PrimitiveResult)
+
+    def test_callable_returning_circuit_object_correct_nqubits(self, monkeypatch):
+        """P2: when a callable returns a circuit-like object (not a bare SV),
+        n_qubits must be re-derived from that object before the recursive
+        _run_circuit call, not inherited as the 0 sentinel.
+
+        Before the fix, the Engine-unavailable fallback used `1 << 0 = 1`
+        producing a 1-element |0⟩ — completely wrong for an n-qubit circuit.
+        We simulate the Engine-absent scenario by patching the import so the
+        ImportError branch fires, triggering the |0⟩ fallback.
+        """
+        import sys
+        import quantx_engine.qiskit_compat as _compat
+
+        n = 3  # 3-qubit circuit
+
+        class _FakeCircuit:
+            """Minimal QuantX-style circuit object with .n_qubits and .gates."""
+            n_qubits = n
+            gates = []
+
+        # Patch the engine module away so _run_circuit hits the ImportError branch
+        # and produces the |0⟩ fallback with whatever n_qubits it was given.
+        monkeypatch.setitem(sys.modules, "quantx_engine.engine", None)
+
+        def factory():
+            return _FakeCircuit()
+
+        sampler = QuantXSamplerV2(default_shots=50, seed=0)
+        result = sampler.run([(factory, 50)])
+        # With the fix: n_qubits inferred from _FakeCircuit.n_qubits = 3
+        # Without the fix: n_qubits would be 0-sentinel → 1-element |0⟩ → num_bits=0
+        assert result[0].data.meas.num_bits == n
+
+    def test_sparse_pauli_op_observable(self):
+        """P2: SparsePauliOp must work as an estimator observable.
+
+        Before the fix, observable.to_matrix() was called but SparsePauliOp
+        has no such method; the AttributeError was swallowed and the call
+        fell through to an 'Unsupported observable type' error.
+        """
+        try:
+            from quantx_engine.primitives import SparsePauliOp
+        except ImportError:
+            pytest.skip("primitives module not available")
+
+        # Build Z observable using SparsePauliOp
+        obs = SparsePauliOp("Z")
+        sv = _zero_state(1)
+        estimator = QuantXEstimatorV2()
+        result = estimator.run([(sv, obs)])
+        # ⟨0|Z|0⟩ = +1
+        assert abs(result[0].data.evs[0] - 1.0) < 1e-10
+
+    def test_sparse_pauli_op_multi_term(self):
+        """SparsePauliOp with duplicate Pauli strings must aggregate coefficients.
+
+        0.5·Z + 0.5·Z = 1.0·Z; ⟨1|Z|1⟩ = -1.0.
+        Before the fix, dict(observable.terms) would discard the second term,
+        leaving only 0.5·Z and returning -0.5 instead of -1.0.
+        """
+        try:
+            from quantx_engine.primitives import SparsePauliOp
+        except ImportError:
+            pytest.skip("primitives module not available")
+
+        obs = SparsePauliOp([("Z", 0.5), ("Z", 0.5)])  # sums to Z
+        sv = np.array([0.0, 1.0], dtype=complex)  # |1⟩
+        estimator = QuantXEstimatorV2()
+        result = estimator.run([(sv, obs)])
+        # ⟨1|(0.5Z + 0.5Z)|1⟩ = ⟨1|Z|1⟩ = -1.0
+        assert abs(result[0].data.evs[0] + 1.0) < 1e-10
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 class TestIntegration:

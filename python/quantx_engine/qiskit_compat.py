@@ -240,13 +240,26 @@ class EstimatorPUB:
 
 # ── Circuit helpers ───────────────────────────────────────────────────────────
 
-def _run_circuit(circuit: Any, n_qubits: int) -> np.ndarray:
+def _run_circuit(
+    circuit: Any,
+    n_qubits: int,
+    parameter_values: Optional[dict] = None,
+) -> np.ndarray:
     """Simulate circuit to obtain statevector.
 
     Supports:
     - QuantX Engine circuits (objects with ``.n_qubits`` and ``.gates``)
-    - Callables returning a statevector
+    - Callables ``f(params?) -> circuit | statevector``
     - numpy arrays (already a statevector)
+
+    Parameters
+    ----------
+    circuit
+        The circuit to simulate.
+    n_qubits
+        Number of qubits (used only for the |0⟩ fallback dimension).
+    parameter_values
+        Optional parameter dict forwarded to callable circuits.
     """
     if isinstance(circuit, np.ndarray):
         sv = circuit.astype(complex)
@@ -256,9 +269,15 @@ def _run_circuit(circuit: Any, n_qubits: int) -> np.ndarray:
         return sv
 
     if callable(circuit) and not hasattr(circuit, "gates"):
-        # Callable: f() -> statevector
-        result = circuit()
-        return _run_circuit(result, n_qubits)
+        # Callable: f(params?) -> circuit or statevector.
+        # Forward parameter_values if provided so that parameterised factories
+        # like ``lambda params: build_circuit(params["theta"])`` work correctly.
+        result = circuit(parameter_values) if parameter_values is not None else circuit()
+        # Re-infer n_qubits from the returned object: if the factory returns a
+        # circuit (not a bare statevector), the original n_qubits sentinel (0)
+        # would make the Engine fallback build a 1-element |0⟩ vector.
+        inferred_n = _n_qubits_from_circuit(result)
+        return _run_circuit(result, inferred_n if inferred_n > 0 else n_qubits)
 
     # QuantX-style circuit: use Engine
     try:
@@ -269,10 +288,13 @@ def _run_circuit(circuit: Any, n_qubits: int) -> np.ndarray:
             return np.asarray(result.statevector, dtype=complex)
         if hasattr(result, "amplitudes"):
             return np.asarray(result.amplitudes, dtype=complex)
-    except Exception:
+    except ImportError:
+        # Engine not installed — fall through to |0⟩ sentinel below.
         pass
+    except Exception as exc:
+        raise QiskitCompatError(f"Circuit execution failed: {exc}") from exc
 
-    # Fallback: |0⟩ state
+    # Fallback: |0⟩ state (used when Engine is not available)
     dim = 1 << n_qubits
     sv = np.zeros(dim, dtype=complex)
     sv[0] = 1.0
@@ -280,10 +302,17 @@ def _run_circuit(circuit: Any, n_qubits: int) -> np.ndarray:
 
 
 def _n_qubits_from_circuit(circuit: Any) -> int:
-    """Infer the number of qubits from a circuit."""
+    """Infer the number of qubits from a circuit.
+
+    Returns 0 for callables whose output dimension is unknown before execution;
+    callers must re-infer n_qubits from the resulting statevector in that case.
+    """
     if isinstance(circuit, np.ndarray):
         n = int(math.log2(len(circuit)))
         return n
+    if callable(circuit) and not hasattr(circuit, "gates"):
+        # Dimension unknown until the callable is invoked; return 0 as sentinel.
+        return 0
     if hasattr(circuit, "n_qubits"):
         return int(circuit.n_qubits)
     if hasattr(circuit, "num_qubits"):
@@ -320,13 +349,19 @@ def _expectation_value(sv: np.ndarray, observable: Any) -> float:
     except ImportError:
         pass
 
-    # SparsePauliOp from our primitives module
+    # SparsePauliOp from our primitives module.
+    # SparsePauliOp.terms yields (pauli_str, coeff) pairs; aggregate into a
+    # coefficient dict (summing duplicate Pauli strings) and delegate to
+    # _expectation_from_pauli_dict.  Do not call .to_matrix() — that method
+    # does not exist on SparsePauliOp.
     try:
         from .primitives import SparsePauliOp  # type: ignore
         if isinstance(observable, SparsePauliOp):
-            H = observable.to_matrix()
-            return float(np.real(sv.conj() @ H @ sv))
-    except (ImportError, AttributeError):
+            obs_dict: dict[str, complex] = {}
+            for pauli_str, coeff in observable.terms:
+                obs_dict[pauli_str] = obs_dict.get(pauli_str, 0j) + coeff
+            return _expectation_from_pauli_dict(sv, obs_dict)
+    except ImportError:
         pass
 
     # numpy array
@@ -429,7 +464,9 @@ class QuantXSamplerV2:
                 else SamplerPUB(raw_pub, default_shots=default)
             )
             n = _n_qubits_from_circuit(pub.circuit)
-            sv = _run_circuit(pub.circuit, n)
+            sv = _run_circuit(pub.circuit, n, pub.parameter_values)
+            if n == 0:  # callable: infer actual n_qubits from statevector
+                n = int(math.log2(len(sv)))
             n_shots = shots if shots is not None else pub.shots
             meas = _sample_bitarray(sv, n, n_shots, self._rng)
             data = DataBin.sampler(meas)
@@ -511,7 +548,9 @@ class QuantXEstimatorV2:
                                   default_precision=self.default_precision)
             )
             n = _n_qubits_from_circuit(pub.circuit)
-            sv = _run_circuit(pub.circuit, n)
+            sv = _run_circuit(pub.circuit, n, pub.parameter_values)
+            if n == 0:  # callable: infer actual n_qubits from statevector
+                n = int(math.log2(len(sv)))
 
             # Normalise observables to a list
             obs_list = (
