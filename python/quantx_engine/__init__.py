@@ -382,6 +382,11 @@ from .bosonic import (  # M119
     GKPState,
     GKPDecoder,
 )
+from .mclachlan import (  # M122
+    McLachlanError,
+    McLachlanResult,
+    McLachlanSolver,
+)
 from .qldpc import (  # M121
     LDPCError,
     ClassicalCode,
@@ -787,6 +792,10 @@ __all__ = [
     "MagicStateFactory",
     "FTTGate",
     "FTCCXGate",
+    # McLachlan variational quantum dynamics (M122)
+    "McLachlanError",
+    "McLachlanResult",
+    "McLachlanSolver",
     # Quantum LDPC codes — hypergraph product + bicycle (M121)
     "LDPCError",
     "ClassicalCode",
