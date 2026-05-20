@@ -355,34 +355,42 @@ Status: completed
 ### M118: Neutral-atom Rydberg blockade simulator — `RydbergSimulator` (van der Waals H = (Ω/2)Σσˣ − δΣn + ΣV_ij n_i n_j, exact eigendecomposition), `blockade_radius`, `is_blockaded`, `linear_chain`/`square_lattice` factories; physics-validated Rabi oscillations (61 tests, PR #109)
 Status: completed
 
-## Phase: Future directions
+## Phase: Completed milestones (continued)
 
 ### Track E — QEC at scale
 
 ### M119: Bosonic codes — cat qubits + GKP — `CatQubit` (Kerr-cat H = -Ka†²a² + ε₂(a†²+a²), Fock-space truncation, biased noise), `GKPState` (finite-energy square-lattice code, δ envelope), `GKPDecoder` (SBS shift correction), `CatNoiseModel` (κ₁ single-photon loss, κ_φ dephasing)
-Status: pending
+Status: completed
+Implemented in `python/quantx_engine/bosonic.py` — 65 tests passing. PR #111.
 
-### M120: Fault-tolerant T gate via magic state injection — `MagicStateFactory` (7-to-1 Hadamard + 15-to-1 Reed-Muller protocols), `FTTGate` (teleportation-based injection into surface code qubit), `FTCCXGate` (Toffoli from 4 T gates + Clifford), `TCountOptimizer` (ZX-calculus T-count reduction)
-Status: pending
+### M120: Fault-tolerant T gate via magic state injection — `MagicStateFactory` (7-to-1 and 15-to-1 distillation, output error ≈ 35ε³), `FTTGate` (gate-teleportation ancilla injection), `FTCCXGate` (Selinger 7-T Toffoli), `TCountOptimizer` (peephole T·T→S, T·T†→I reductions + CCX decomposition catalogue)
+Status: completed
+Implemented in `python/quantx_engine/ft_tgate.py` — 87 tests passing. PR #112.
 
-### M121: Quantum LDPC codes — hypergraph product — `ClassicalCode` (parity-check matrix, min distance), `HypergraphProductCode(H1, H2)` ([[n,k,d]] parameters), `LDPCDecoder` (belief propagation + OSD post-processing), `bicycle_code(l, m)` (best-known [[n, Θ(n), Θ(√n)]] scaling)
-Status: pending
+### M121: Quantum LDPC codes — hypergraph product — `ClassicalCode` (GF(2) parity-check matrix, RREF, generator matrix), `HypergraphProductCode` (Hx/Hz Kronecker construction, CSS commutativity), `LDPCDecoder` (flooding BP + OSD-1), `bicycle_code(L, a_shifts, b_shifts)` (quasi-cyclic CSS code)
+Status: completed
+Implemented in `python/quantx_engine/qldpc.py` — 60 tests passing. PR #113.
 
 ### Track F — Quantum algorithms
 
-### M122: McLachlan variational quantum dynamics (VQD) — `McLachlanSolver` (real-time ∂θ/∂t = M⁻¹V, adaptive RK4), `variational_energy(t)` curve, TFIM quench benchmark vs exact TEBD
-Status: pending
+### M122: McLachlan variational quantum dynamics — `McLachlanSolver` (real-time/imaginary-time evolution, M·θ̇=V linear system, Euler+RK4 integrators, central-difference gradients), `McLachlanResult` (trajectory container)
+Status: completed
+Implemented in `python/quantx_engine/mclachlan.py` — 38 tests passing. PR #114.
 
-### M123: Quantum signal processing + QSVT — `QSPAnglesFinder` (Remez polynomial → QSP angles), `QSVTCircuit(poly, block_encoding)` (quantum singular value transformation), applications: matrix inversion, Hamiltonian simulation, quantum walk amplification
-Status: pending
+### M123: Quantum signal processing + QSVT — `QSPAnglesFinder` (Chebyshev, sign, Hamiltonian-simulation, threshold polynomial targets; gradient-descent phase fitter), `QSVTCircuit` (SVT via phase-interleaved block-encoding queries, `polynomial_values()`, `singular_value_transform()`)
+Status: completed
+Implemented in `python/quantx_engine/qsp_qsvt.py` — 46 tests passing. PR #115.
 
-### M124: Orbital-optimized VQE (OO-VQE) — `OOVQESolver(molecule, ansatz)` (interleaved orbital rotation + VQE parameter gradients), active-space energy comparison vs CASSCF (H₂O, N₂ dissociation)
-Status: pending
+### M124: Orbital-optimised VQE (OO-VQE) — `OOVQESolver` (alternating minimisation: inner VQE circuit-param gradient descent + outer orbital gradient step, U=exp(K) rotation, h̃=U^T h U), `OOVQEResult` (energy history, convergence flag)
+Status: completed
+Implemented in `python/quantx_engine/oovqe.py` — 38 tests passing. PR #116.
 
 ### Track G — Quantum networking depth
 
-### M125: Measurement-based quantum computation (MBQC) — `GraphState(edges)` (stabilizer formalism, CZ generation), `MBQCPattern(graph, measurements)` (one-way computation flow), universal MBQC via cluster state, compile Clifford+T to measurement pattern
-Status: pending
+### M125: Measurement-based quantum computation (MBQC) — `GraphState` (n-qubit graph state via CZ edges, entanglement entropy, fidelity, linear/grid factories), `MBQCPattern` (adaptive single-qubit measurements, Born-probability sampling, feed-forward X/Z corrections, output state)
+Status: completed
+Implemented in `python/quantx_engine/mbqc.py` — 42 tests passing. PR #117.
 
-### M126: Quantum memory + dynamical decoupling — `QuantumMemory(T1, T2, t_gate)` (idle-time error accumulation), `SpinEchoSequence`, `DynamicalDecoupling(sequence="XY8")` (1/f noise suppression), `MemoryBenchmark` (T2_echo vs bare T2, infidelity vs storage time)
-Status: pending
+### M126: Quantum memory + dynamical decoupling — `DDSequence` (pulse sequence with filter function), `DynamicalDecoupling` (FID, Hahn, CPMG-n, XY4, XY8, KDD; effective T₂ via filter-function integral), `QuantumMemory` (T₁/T₂ Bloch evolution, DD-enhanced coherence, pulse-error correction)
+Status: completed
+Implemented in `python/quantx_engine/dyndecouple.py` — 42 tests passing. PR #118.
