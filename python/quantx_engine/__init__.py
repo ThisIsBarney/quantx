@@ -321,6 +321,14 @@ from .ftqc_pipeline import (  # M112
     threshold_curve,
     threshold_crossing,
 )
+from .excited_state import (  # M113
+    ExcitedStateError,
+    ExcitedStateResult,
+    ExcitedStateVQE,
+    ConicalIntersectionResult,
+    detect_conical_intersections,
+    pyscf_to_pauli_hamiltonian,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -651,4 +659,11 @@ __all__ = [
     "FTQCPipeline",
     "threshold_curve",
     "threshold_crossing",
+    # Excited-state quantum chemistry (M113)
+    "ExcitedStateError",
+    "ExcitedStateResult",
+    "ExcitedStateVQE",
+    "ConicalIntersectionResult",
+    "detect_conical_intersections",
+    "pyscf_to_pauli_hamiltonian",
 ]
