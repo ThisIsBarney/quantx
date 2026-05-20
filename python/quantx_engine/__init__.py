@@ -375,6 +375,13 @@ from .rydberg import (  # M118
     RydbergResult,
     RydbergSimulator,
 )
+from .bosonic import (  # M119
+    BosonicError,
+    CatNoiseModel,
+    CatQubit,
+    GKPState,
+    GKPDecoder,
+)
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -753,4 +760,10 @@ __all__ = [
     "RydbergHamiltonian",
     "RydbergResult",
     "RydbergSimulator",
+    # Bosonic codes — cat qubits + GKP (M119)
+    "BosonicError",
+    "CatNoiseModel",
+    "CatQubit",
+    "GKPState",
+    "GKPDecoder",
 ]
