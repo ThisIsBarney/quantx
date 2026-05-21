@@ -128,10 +128,12 @@ def bench_pennylane() -> BenchResult:
         return BenchResult("vqe_h2", "pennylane", {"n_qubits": N_QUBITS}, 0.0, error=str(exc))
 
 
-def run() -> list[BenchResult]:
+def run(quick: bool = False) -> list[BenchResult]:
     results = []
-    print("  OO-VQE (QuantX)", flush=True)
-    results.append(bench_quantx_oovqe())
+    if not quick:
+        # OO-VQE involves alternating orbital + circuit optimization — slower
+        print("  OO-VQE (QuantX)", flush=True)
+        results.append(bench_quantx_oovqe())
     print("  Noise-aware VQE (QuantX)", flush=True)
     results.append(bench_quantx_noise_vqe())
     print("  PennyLane DefaultQubit", flush=True)

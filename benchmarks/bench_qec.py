@@ -52,8 +52,6 @@ def bench_quantx(distances: list[int], p_phys: float, n_shots: int) -> BenchResu
 def bench_stim(distances: list[int], p_phys: float, n_shots: int) -> BenchResult:
     """Stim fast stabiliser simulator (optional competitor)."""
     try:
-        import stim  # noqa: F401 — just check if available
-        # Build a simple repetition-code circuit using stim
         import stim
         results_per_d = {}
         with timer() as elapsed:
@@ -65,9 +63,11 @@ def bench_stim(distances: list[int], p_phys: float, n_shots: int) -> BenchResult
                     before_round_data_depolarization=p_phys,
                 )
                 sampler = circuit.compile_detector_sampler()
-                det_samples, _ = sampler.sample(shots=n_shots, separate_observables=True)
-                # Count shots with at least one detection event
-                n_fail = int(np.sum(np.any(det_samples, axis=1)))
+                # separate_observables=True returns (det_samples, obs_samples);
+                # obs_samples contains the actual logical observable outcomes.
+                _, obs_samples = sampler.sample(shots=n_shots, separate_observables=True)
+                # Logical error rate = fraction of shots with a logical flip
+                n_fail = int(np.sum(obs_samples.flatten()))
                 results_per_d[d] = n_fail / n_shots
         best_rate = float(results_per_d[max(distances)])
         return BenchResult(

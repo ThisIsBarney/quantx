@@ -71,8 +71,13 @@ def bench_tenpy(n: int, max_bond: int = MAX_BOND) -> BenchResult:
                 B_list.append(B)
             SVs = [np.ones(min(max_bond, 2 ** min(i, n - i))) for i in range(n + 1)]
             mps_state = tenpy_mps.MPS.from_Bflat(sites, B_list, SVs=SVs, bc="finite")
-            norm = mps_state.norm
-            fidelity = float(norm ** 2)
+            # Compute true GHZ fidelity: |<GHZ_exact | psi_MPS>|^2
+            # Convert MPS to dense statevector and overlap with exact GHZ vector
+            psi_mps = mps_state.get_theta(0, n).to_ndarray().reshape(-1)
+            psi_ghz = np.zeros(2 ** n, dtype=complex)
+            psi_ghz[0] = 1.0 / np.sqrt(2)           # |00...0>
+            psi_ghz[-1] = 1.0 / np.sqrt(2)           # |11...1>
+            fidelity = float(abs(np.dot(psi_ghz.conj(), psi_mps)) ** 2)
 
         return BenchResult(
             benchmark="mps_ghz_fidelity",

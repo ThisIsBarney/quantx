@@ -41,7 +41,7 @@ def run_trotter(quick: bool) -> list[BenchResult]:
 
 def run_vqe(quick: bool) -> list[BenchResult]:
     import bench_vqe
-    return bench_vqe.run()
+    return bench_vqe.run(quick=quick)
 
 
 def run_qec(quick: bool) -> list[BenchResult]:
