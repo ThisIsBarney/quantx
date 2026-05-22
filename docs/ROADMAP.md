@@ -636,3 +636,180 @@ Status: complete
 Pick one recent paper (e.g. Google 2023 surface code below threshold), reproduce
 the key figure with QuantX, write a companion blog post / README highlight.
 Status: complete
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase 2 — Production readiness (M158–M172)
+# ─────────────────────────────────────────────────────────────────────────────
+# Derived from competitive gap analysis (2026-05-22).
+# Three tracks address the three root causes identified:
+#   Track L: C++ engine delivery — make the native library reachable by any user
+#   Track M: Python SDK usability — close the API/UX gap vs Qiskit/PennyLane
+#   Track N: Differentiation & benchmarks — prove and publish QuantX's unique value
+
+### Track L — Native delivery: make C++ reachable (M158–M161)
+
+### M158: cibuildwheel multi-platform wheel pipeline
+Set up `cibuildwheel` GitHub Actions job that builds `quantx-engine` wheels
+containing the compiled `libquantx` shared library for:
+  - Linux x86_64 (manylinux_2_28)
+  - macOS arm64 + x86_64 (universal2)
+  - Windows AMD64 (MSVC)
+On `pip install quantx-engine`, the native C++ engine loads automatically —
+no `QUANTX_LIB_PATH` required, no user compilation.
+Deliverables: `.github/workflows/build-wheels.yml`, `pyproject.toml` wheel
+packaging config, smoke test confirming `backend_info()["native"] == True`
+after a plain `pip install`.
+Status: pending
+
+### M159: pybind11 bridge — NumPy zero-copy for hot paths
+Expand `bindings/python/pybind_module.cpp` from 2 functions to full coverage:
+  - `run_statevector(circuit_dict)` → returns `np.ndarray` (complex128, shape 2^n)
+    directly, no JSON serialisation
+  - `run_solver(name, params_dict)` → returns Python dict (JSON only for metadata,
+    not for large array payloads)
+  - `run_lindblad(H, jump_ops, t, dt)` → accepts `np.ndarray` args directly
+Target: statevector round-trip overhead < 50 µs for 20-qubit circuits
+(vs ~50 ms for current ctypes+JSON path).
+Deliverables: expanded `pybind_module.cpp`, updated `Engine` class to prefer
+pybind11 over ctypes when the pybind11 extension is available.
+Status: pending
+
+### M160: Pure-Python dense statevector simulator
+Add `quantx_engine/statevector.py`: a self-contained ~400-line numpy statevector
+simulator that works with zero native dependencies.
+  - `StatevectorSimulator(n_qubits)` — up to 25 qubits
+  - Standard gate set: H, X, Y, Z, S, T, Rx, Ry, Rz, CNOT, CZ, SWAP, Toffoli
+  - Shot-based sampling: `.sample(n_shots, seed)` → `Counter`
+  - Expectation values: `.expectation(pauli_string)`
+  - Used by `Engine` as fallback when native library is absent
+  - Add `StatevectorSimulator` to public API and `__all__`
+This makes `quantx-engine` useful to anyone doing `pip install` on a machine
+without a C++ compiler.
+Status: pending
+
+### M161: QuantumCircuit fluent builder API
+Add `quantx_engine/circuit.py`: Pythonic circuit construction layer.
+  ```python
+  from quantx_engine import QuantumCircuit
+  qc = QuantumCircuit(3)
+  qc.h(0).cx(0, 1).cx(0, 2).measure_all()
+  result = qc.run(n_shots=1024)          # uses StatevectorSimulator or native
+  print(result.counts)                    # {'000': 510, '111': 514}
+  print(result.statevector)               # np.ndarray shape (8,)
+  ```
+  - Full standard gate library (H/X/Y/Z/S/T/Rx/Ry/Rz/CNOT/CZ/SWAP/CCX)
+  - Parametric gates: `qc.rx(theta, 0)` where theta can be a Symbol for VQE
+  - `.to_qasm3()` and `.from_qasm3()` round-trip
+  - `.draw()` → ASCII diagram (no matplotlib required)
+  - Export `QuantumCircuit`, `CircuitResult` from top-level `__init__`
+Status: pending
+
+### Track M — SDK usability: close the UX gap (M162–M166)
+
+### M162: Reduce test skip rate below 15%
+Current state: Track I literature tests skip ~60% of assertions because pure-Python
+fallback paths return wrong types or raise exceptions.
+For each module with skip rate > 30%: add a lightweight numpy-backed stub
+implementation that satisfies the test assertions without needing the native
+library or external packages (qiskit, cupy, ray, etc.).
+Target: `pytest quantx_engine/tests/ -q` reports < 15% skips, 0 failures.
+Deliverables: updated implementations in affected modules + CI enforcement
+(`--max-skip-rate 15` custom pytest plugin or assertion in CI script).
+Status: pending
+
+### M163: GitHub Pages documentation site
+Auto-deploy Sphinx docs to GitHub Pages on every push to master.
+  - `.github/workflows/docs.yml`: build Sphinx → push to `gh-pages` branch
+  - `docs/source/`: ensure all 62 public modules have auto-generated API pages
+    (`sphinx-apidoc` + `automodule`)
+  - Add landing page with install instructions, quickstart, and architecture diagram
+  - Add search (Sphinx built-in)
+  - Badge in README: `[![Docs](https://img.shields.io/badge/docs-quantx.io-blue)](…)`
+Status: pending
+
+### M164: Binder + Colab notebook compatibility
+All 7 notebooks (`01_`–`07_`) must run in zero-install cloud environments:
+  - Add `requirements.txt` in `notebooks/` for Binder
+  - Add `!pip install quantx-engine` cell at top of each notebook
+  - Add [![Open in Colab] and [![Launch Binder] badges to each notebook's
+    first markdown cell and to the README notebooks table
+  - CI job `notebooks-ci.yml`: execute all notebooks with `nbmake` on push
+Status: pending
+
+### M165: Interactive examples gallery
+Add `notebooks/08_circuit_builder.ipynb` demonstrating the M161 QuantumCircuit
+API end-to-end: Bell state, GHZ, QFT, Grover's algorithm, VQE for H₂.
+Add `notebooks/09_physics_solvers.ipynb`: end-to-end demo of 5 C++ solvers
+(Heisenberg, Hubbard, Kitaev chain, SYK, Floquet) callable from Python after
+the M158 wheel ships.
+Status: pending
+
+### M166: Versioned changelog + deprecation policy
+  - Define public API surface: which classes/functions are stable (v1.0 onwards
+    will not change signature without a deprecation cycle)
+  - Add `@deprecated` decorator utility + warnings for any renamed symbols
+  - CHANGELOG entry for every milestone from M158 onward
+  - Bump version to `0.3.0` on Track L completion, `0.4.0` on Track M completion
+Status: pending
+
+### Track N — Differentiation: prove and publish QuantX's value (M167–M172)
+
+### M167: Performance benchmark suite vs Qiskit / QuTiP / ITensor
+Add `benchmarks/compare_backends.py` that measures wall time + memory for:
+  | Problem | QuantX | Qiskit Aer | QuTiP | ITensor (Julia via subprocess) |
+  |---------|--------|------------|-------|-------------------------------|
+  | Lanczos ground state, n=16 Heisenberg | | | | |
+  | Lindblad evolution, 6 qubits, 100 steps | | | | |
+  | DMRG, n=50 Heisenberg, bond-dim=64 | | | | |
+  | TEBD, n=30 TFIM, 200 steps | | | | |
+Publish results in `benchmarks/README.md` with hardware specs.
+CI gate: QuantX must not be >2× slower than the fastest reference on any problem.
+Status: pending
+
+### M168: GPU wheel — CUDA 12 accelerated wheels
+  - Add CUDA-enabled cibuildwheel build leg (`cuda12x` runner)
+  - Build `quantx-engine-gpu` extra on PyPI: `pip install quantx-engine[gpu]`
+  - `GpuStatevector.run(circuit)` backed by real cuBLAS/cuStateVec
+  - Benchmark: GPU vs CPU speedup for n=26–30 qubits (expected 10–100×)
+  - `backend_info()["gpu"] == True` when CUDA available
+Status: pending
+
+### M169: Real hardware round-trip (IBM Quantum)
+Validate the full `IBMHardwareBackend` → `circuit_to_qasm3` → IBM Runtime
+Sampler pipeline on a real QPU (e.g. `ibm_brisbane`):
+  - Bell state circuit: verify CHSH violation in measured counts
+  - Readout error mitigation applied (M-matrix inversion)
+  - Add `examples/ibm_hardware_demo.py` with step-by-step comments
+  - CI: mock IBM API in unit tests; real hardware test gated on `[hardware]` label
+Status: pending
+
+### M170: arXiv technical paper
+Write a 6–8 page arXiv preprint describing QuantX architecture and benchmark
+results from M167. Sections:
+  1. Architecture (C++ core → pybind11 → Python SDK → REST API)
+  2. Physics solver coverage (37 solvers, comparison table vs Qiskit/PennyLane)
+  3. Benchmark results (M167 data)
+  4. QEC showcase (M157 Google 2023 reproduction)
+  5. FTQC resource estimation (M156)
+Deliverable: `paper/quantx_paper.pdf` (LaTeX source in `paper/`)
+Status: pending
+
+### M171: Community infrastructure
+  - GitHub Discussions enabled with pinned "Getting started" and "Physics Q&A" threads
+  - `CONTRIBUTING.md` updated with: how to add a new physics solver (C++ + Python
+    wrapper + literature test), code review checklist, performance expectations
+  - Issue templates: Bug report, Feature request, Physics solver request
+  - Discord server or Zulip workspace for real-time discussion
+  - First external contributor guide: "Add your own Hamiltonian in 30 minutes"
+Status: pending
+
+### M172: v1.0.0 release
+Ship version 1.0.0 with API stability guarantee. Requirements:
+  - All M158–M171 complete
+  - `pip install quantx-engine` works on Linux/macOS/Windows with native engine
+  - `QuantumCircuit` API stable (no breaking changes without deprecation cycle)
+  - Test skip rate < 15%, 0 failures in CI
+  - Docs site live at stable URL
+  - Performance benchmarks published
+  - At least one external contributor (non-author commit merged)
+Status: pending
