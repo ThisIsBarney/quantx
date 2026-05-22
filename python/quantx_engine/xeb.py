@@ -22,6 +22,26 @@ Quick reference::
         depths=[1, 2, 4, 8], n_trials=50
     )
     print(result.mean_fidelity)  # ~ exp(-p * d * depth) for small p
+
+References
+----------
+.. [1] Arute, F. et al. (2019). Quantum supremacy using a programmable
+       superconducting processor. *Nature* 574, 505–510.
+       https://doi.org/10.1038/s41586-019-1666-5
+
+.. [2] Boixo, S. et al. (2018). Characterizing quantum supremacy in
+       near-term devices. *Nat. Phys.* 14, 595–600.
+       https://doi.org/10.1038/s41567-018-0124-x
+
+.. [3] Morvan, A. et al. (2024). Phase transitions in random circuit sampling.
+       *Nature* 634, 328–333.
+       https://doi.org/10.1038/s41586-024-07998-6
+
+Physical validation
+-------------------
+XEB fidelity F_XEB = <P_ideal> * D - 1, where D = 2^n is the Hilbert-space
+dimension and P_ideal is the ideal distribution probability [Arute2019].
+For a perfect noiseless device F_XEB = 1; for a maximally mixed output F_XEB = 0.
 """
 from __future__ import annotations
 

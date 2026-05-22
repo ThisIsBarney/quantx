@@ -1,4 +1,19 @@
-"""Quantum Boltzmann Machine for generative quantum machine learning."""
+"""Quantum Boltzmann Machine for generative quantum machine learning.
+References
+----------
+.. [1] Benedetti, M. et al. (2016). Estimation of effective temperatures in
+       quantum annealers for sampling applications: A case study with possible
+       applications in deep learning. *Phys. Rev. A* 94, 022308.
+       https://doi.org/10.1103/PhysRevA.94.022308
+
+.. [2] Kieferova, M. & Wiebe, N. (2017). Tomography and generative training
+       with quantum Boltzmann machines. *Phys. Rev. A* 96, 062327.
+       https://doi.org/10.1103/PhysRevA.96.062327
+
+.. [3] Amin, M. H. et al. (2018). Quantum Boltzmann machine.
+       *Phys. Rev. X* 8, 021050.
+       https://doi.org/10.1103/PhysRevX.8.021050
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

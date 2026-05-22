@@ -19,6 +19,26 @@ Provides:
 
 All matrix operations use dense NumPy arrays (suitable for small systems,
 e.g. 1–4 qubits / spins).
+
+References
+----------
+.. [1] Eckardt, A. (2017). Colloquium: Atomic quantum gases in periodically
+       driven optical lattices. *Rev. Mod. Phys.* 89, 011004.
+       https://doi.org/10.1103/RevModPhys.89.011004
+
+.. [2] Kitagawa, T. et al. (2010). Exploring topological phases with quantum
+       walks. *Phys. Rev. A* 82, 033429.
+       https://doi.org/10.1103/PhysRevA.82.033429
+
+.. [3] Shirley, J. H. (1965). Solution of the Schroedinger equation with a
+       Hamiltonian periodic in time. *Phys. Rev.* 138, B979.
+       https://doi.org/10.1103/PhysRev.138.B979
+
+Physical validation
+-------------------
+Quasi-energies come in +/- symmetric pairs due to time-reversal symmetry
+of H(t)=H(-t) (symmetric Hamiltonians). Effective Hamiltonian via matrix
+logarithm: H_eff = i*log(U_F)/T where U_F is the one-period propagator.
 """
 from __future__ import annotations
 

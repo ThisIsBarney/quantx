@@ -23,6 +23,15 @@ Not supported (raises ParseError):
 - Subroutines / defcalgrammar
 - Delay / duration types
 - Pulse-level constructs
+
+References
+----------
+.. [1] Cross, A. W. et al. (2022). OpenQASM 3: A broader and deeper quantum
+       assembly language. *ACM Trans. Quantum Comput.* 3, 1–50.
+       https://doi.org/10.1145/3505636
+
+.. [2] Cross, A. W. et al. (2017). Open quantum assembly language.
+       arXiv:1707.03429. https://doi.org/10.48550/arXiv.1707.03429
 """
 from __future__ import annotations
 

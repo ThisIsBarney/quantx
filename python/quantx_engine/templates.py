@@ -17,6 +17,22 @@ Quick reference::
     # Fixed GHZ circuit (no parameters)
     ghz = ghz_circuit(3)
     circuit_dict = ghz.to_circuit()
+
+References
+----------
+.. [1] Kandala, A. et al. (2017). Hardware-efficient variational quantum
+       eigensolver for small molecules and quantum magnets.
+       *Nature* 549, 242. https://doi.org/10.1038/nature23879
+       (Hardware-efficient ansatz template)
+
+.. [2] Farhi, E., Goldstone, J. & Gutmann, S. (2014). A quantum approximate
+       optimization algorithm. arXiv:1411.4028.
+       https://doi.org/10.48550/arXiv.1411.4028
+
+.. [3] Romero, J. et al. (2018). Strategies for quantum computing molecular
+       energies using the unitary coupled cluster ansatz.
+       *Quantum Sci. Technol.* 4, 014008.
+       https://doi.org/10.1088/2058-9565/aad3e4
 """
 from __future__ import annotations
 

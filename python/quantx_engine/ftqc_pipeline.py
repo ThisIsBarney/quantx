@@ -47,6 +47,20 @@ Example::
     # Threshold curve
     curve = threshold_curve(distances=[3, 5, 7], n_shots=500, seed=42)
     print(f"threshold ≈ {curve.threshold:.4f}")
+
+References
+----------
+.. [1] Fowler, A. M. et al. (2012). Surface codes: Towards practical
+       large-scale quantum computation. *Phys. Rev. A* 86, 032324.
+       https://doi.org/10.1103/PhysRevA.86.032324
+
+.. [2] Litinski, D. (2019). A game of surface codes: Large-scale quantum
+       computing with lattice surgery. *Quantum* 3, 128.
+       https://doi.org/10.22331/q-2019-03-05-128
+
+.. [3] Jones, C. et al. (2012). Layered architecture for quantum computing.
+       *Phys. Rev. X* 2, 031007.
+       https://doi.org/10.1103/PhysRevX.2.031007
 """
 from __future__ import annotations
 

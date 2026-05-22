@@ -31,6 +31,26 @@ QAOALandscape
 Functions
 ---------
 warm_start_qaoa
+
+References
+----------
+.. [1] Farhi, E., Goldstone, J. & Gutmann, S. (2014). A quantum approximate
+       optimization algorithm. arXiv:1411.4028.
+       https://doi.org/10.48550/arXiv.1411.4028
+
+.. [2] Bravyi, S. et al. (2020). Obstacles to variational quantum optimization
+       from symmetry protection. *Phys. Rev. Lett.* 125, 260505.
+       https://doi.org/10.1103/PhysRevLett.125.260505
+
+.. [3] Wurtz, J. & Love, P. (2021). MaxCut quantum approximate optimization
+       algorithm performance guarantees for p>1. *Phys. Rev. A* 103, 042612.
+       https://doi.org/10.1103/PhysRevA.103.042612
+
+Physical validation
+-------------------
+QAOA p=1 on MaxCut for a 3-regular graph: approximation ratio >= 0.6924
+[Farhi2014]. CVaR (alpha=0.25) improves the effective expected value by
+focusing on the best alpha-fraction of samples.
 """
 from __future__ import annotations
 

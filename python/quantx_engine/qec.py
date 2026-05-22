@@ -24,6 +24,26 @@ Usage:
     # Threshold sweep
     result = sim.threshold_sweep(p_range=(0.001, 0.15), n_points=12, n_trials=5000)
     print(f"Estimated threshold: {result.threshold:.4f}")
+
+References
+----------
+.. [1] Fowler, A. M. et al. (2012). Surface codes: Towards practical
+       large-scale quantum computation. *Phys. Rev. A* 86, 032324.
+       https://doi.org/10.1103/PhysRevA.86.032324
+
+.. [2] Calderbank, A. R. & Shor, P. W. (1996). Good quantum error-correcting
+       codes exist. *Phys. Rev. A* 54, 1098.
+       https://doi.org/10.1103/PhysRevA.54.1098
+
+.. [3] Steane, A. (1996). Error correcting codes in quantum theory.
+       *Phys. Rev. Lett.* 77, 793.
+       https://doi.org/10.1103/PhysRevLett.77.793
+
+Physical validation
+-------------------
+d=3 surface code with MWPM decoding has threshold ~1% for independent
+depolarising noise [Fowler2012]. Repetition code corrects all single-qubit
+bit-flip errors for any distance d >= 3 (verified in test suite).
 """
 from __future__ import annotations
 

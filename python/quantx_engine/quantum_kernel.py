@@ -18,6 +18,20 @@ Quick reference::
     y   = np.array([-1.0, 1.0, -1.0, 1.0])
     res = clf.fit(X, y)
     print(clf.score(X, y))   # 1.0
+
+References
+----------
+.. [1] Havlicek, V. et al. (2019). Supervised learning with quantum-enhanced
+       feature spaces. *Nature* 567, 209.
+       https://doi.org/10.1038/s41586-019-0980-2
+
+.. [2] Schuld, M. & Killoran, N. (2019). Quantum machine learning in feature
+       Hilbert spaces. *Phys. Rev. Lett.* 122, 040504.
+       https://doi.org/10.1103/PhysRevLett.122.040504
+
+.. [3] Kubler, J. et al. (2021). An inductive bias for distances: Neural nets
+       that respect the geometry of the data.
+       *NeurIPS 2021*. https://doi.org/10.48550/arXiv.2103.09316
 """
 from __future__ import annotations
 

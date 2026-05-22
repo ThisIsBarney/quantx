@@ -39,6 +39,26 @@ Functions
 ---------
 * :func:`real_time_evolve` — convenience wrapper.
 * :func:`imaginary_time_evolve` — convenience wrapper.
+
+References
+----------
+.. [1] White, S. R. (1992). Density matrix formulation for quantum
+       renormalization groups. *Phys. Rev. Lett.* 69, 2863.
+       https://doi.org/10.1103/PhysRevLett.69.2863
+
+.. [2] White, S. R. (1993). Density-matrix algorithms for quantum
+       renormalization groups. *Phys. Rev. B* 48, 10345.
+       https://doi.org/10.1103/PhysRevB.48.10345
+
+.. [3] Vidal, G. (2004). Efficient simulation of one-dimensional quantum
+       many-body systems. *Phys. Rev. Lett.* 93, 040502.
+       https://doi.org/10.1103/PhysRevLett.93.040502
+
+Physical validation
+-------------------
+Imaginary-time tDMRG on the 4-site Heisenberg chain (H = Σ XX+YY+ZZ, open BC)
+converges to E_0 = -6.4641016... within tolerance 1e-6 after sufficient steps,
+matching exact diagonalisation (numpy.linalg.eigvalsh reference).
 """
 from __future__ import annotations
 

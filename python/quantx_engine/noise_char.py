@@ -13,6 +13,22 @@ Quick reference::
     cn = nc.fit_from_rb(rb_result)
     print(cn.depolarizing_prob)   # ≈ 0.04
     noise = cn.to_noise_model()   # DepolarizingNoise instance
+
+References
+----------
+.. [1] Magesan, E. et al. (2012). Efficient measurement of quantum gate error
+       by interleaved randomized benchmarking.
+       *Phys. Rev. Lett.* 109, 080505.
+       https://doi.org/10.1103/PhysRevLett.109.080505
+
+.. [2] Chuang, I. L. & Nielsen, M. A. (1997). Prescription for experimental
+       determination of the dynamics of a quantum black box.
+       *J. Mod. Opt.* 44, 2455.
+       https://doi.org/10.1080/09500349708231894
+
+.. [3] Blume-Kohout, R. et al. (2017). Demonstration of qubit operations below
+       a rigorous fault tolerance threshold with gate set tomography.
+       *Nat. Commun.* 8, 14485. https://doi.org/10.1038/ncomms14485
 """
 from __future__ import annotations
 

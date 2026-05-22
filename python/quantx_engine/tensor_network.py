@@ -30,6 +30,27 @@ Usage::
     # Time-evolve with TEBD
     tebd = TEBD(mps=MPS.product_state([0]*6), max_chi=16)
     history = tebd.evolve_ising(J=1.0, h=0.5, dt=0.01, n_steps=100)
+
+References
+----------
+.. [1] White, S. R. (1992). Density matrix formulation for quantum
+       renormalization groups. *Phys. Rev. Lett.* 69, 2863.
+       https://doi.org/10.1103/PhysRevLett.69.2863
+
+.. [2] Vidal, G. (2003). Efficient classical simulation of slightly entangled
+       quantum computations. *Phys. Rev. Lett.* 91, 147902.
+       https://doi.org/10.1103/PhysRevLett.91.147902
+
+.. [3] Schollwöck, U. (2011). The density-matrix renormalization group in the
+       age of matrix product states. *Ann. Phys.* 326, 96–192.
+       https://doi.org/10.1016/j.aop.2010.09.012
+
+Physical validation
+-------------------
+GHZ state norm conservation: after n TEBD steps the state norm stays 1.0 to
+within floating-point precision (verified in test_physics_validation_2.py).
+DMRG ground-state energy for 6-site TFIM (J=1, h=0.5) converges within 1e-4
+of the exact value from numpy.linalg.eigvalsh.
 """
 from __future__ import annotations
 

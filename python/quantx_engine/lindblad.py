@@ -54,6 +54,29 @@ Quick-start example::
     )
     print(result.entanglement.concurrence[-1])  # concurrence decays to 0
 
+
+References
+----------
+.. [1] Lindblad, G. (1976). On the generators of quantum dynamical semigroups.
+       *Commun. Math. Phys.* 48, 119.
+       https://doi.org/10.1007/BF01608499
+
+.. [2] Gorini, V., Kossakowski, A. & Sudarshan, E. C. G. (1976). Completely
+       positive dynamical semigroups of n-level systems.
+       *J. Math. Phys.* 17, 821.
+       https://doi.org/10.1063/1.522979
+
+.. [3] Johansson, J. R., Nation, P. D. & Nori, F. (2012). QuTiP: An open-
+       source Python framework for the dynamics of open quantum systems.
+       *Comput. Phys. Commun.* 183, 1760.
+       https://doi.org/10.1016/j.cpc.2012.02.021
+
+Physical validation
+-------------------
+Single-qubit amplitude damping (L = sqrt(gamma)*sigma-): the excited state
+population decays exponentially as p_e(t) = exp(-gamma*t) [Lindblad1976].
+Trace preservation: Tr(rho(t)) = 1 for all t (Lindblad master equation
+preserves positivity and trace) [Gorini1976].
 """
 from __future__ import annotations
 

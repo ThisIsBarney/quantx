@@ -27,6 +27,26 @@ Quick reference::
     pt = ProcessTomography(n_qubits=1)
     chi = pt.chi_matrix(np.array([[0,1],[1,0]], dtype=complex))  # X gate
     print(pt.average_gate_fidelity(chi, chi))   # 1.0
+
+References
+----------
+.. [1] Chuang, I. L. & Nielsen, M. A. (1997). Prescription for experimental
+       determination of the dynamics of a quantum black box.
+       *J. Mod. Opt.* 44, 2455–2467.
+       https://doi.org/10.1080/09500349708231894
+
+.. [2] Paris, M. & Rehacek, J. (Eds.) (2004). *Quantum State Estimation*.
+       Springer. https://doi.org/10.1007/b98673
+
+.. [3] Hradil, Z. (1997). Quantum-state estimation.
+       *Phys. Rev. A* 55, R1561.
+       https://doi.org/10.1103/PhysRevA.55.R1561
+
+Physical validation
+-------------------
+State tomography of |0> via Pauli measurements: reconstructed density matrix
+should equal |0><0| with fidelity 1.0 (noiseless simulation). Process fidelity
+of identity channel should be 1.0 [Chuang1997].
 """
 from __future__ import annotations
 

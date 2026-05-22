@@ -29,6 +29,15 @@ SamplerPUB
 EstimatorPUB
 QuantXSamplerV2
 QuantXEstimatorV2
+
+References
+----------
+.. [1] Qiskit Community (2023). Qiskit: An open-source framework for quantum
+       computing. *Zenodo*. https://doi.org/10.5281/zenodo.2573505
+
+.. [2] Cross, A. W. et al. (2022). OpenQASM 3: A broader and deeper quantum
+       assembly language. *ACM Trans. Quantum Comput.* 3, 1–50.
+       https://doi.org/10.1145/3505636
 """
 from __future__ import annotations
 

@@ -497,3 +497,142 @@ gracefully with SKIP rows when not installed.
 Representative timings (Windows-11, Python 3.14, NumPy 2.4, 16-core CPU):
   Lanczos n=12:  4.4 s  |  Trotter n=10: 2.1 s  |  MPS n=64: 0.004 s (linear in n)
 Status: completed
+
+## Phase: Pre-release quality (Track I · J · K)
+
+Goal: close the three remaining gaps before v1.0 — (I) every module backed by a
+citable literature reference with numerical validation, (J) C++ engine reconnected
+to the Python SDK with proven speedup, (K) QEC research showcase demonstrating
+end-to-end competitive advantage.
+
+### Track I — Literature-grounded validation (M134–M148)
+
+Each milestone: (a) add `References` section to docstrings citing the defining paper
+(DOI + year), (b) add `test_literature_mNNN.py` reproducing a specific numerical
+result from that paper with citation comment in each test function.
+
+### M134: Lanczos · Trotter · McLachlan
+References: Lanczos 1950 (iteration method); Suzuki 1991 (fractal decompositions);
+McLachlan 1964 (variational time-dependent Schrödinger).
+Status: complete
+
+### M135: DMRG · TD-DMRG · MPS simulator
+References: White 1992/1993 (DMRG); Vidal 2003 (TEBD / time-evolving block decimation);
+Schollwöck 2011 (MPS review, Ann. Phys. 326).
+Status: complete
+
+### M136: Quantum chemistry · OO-VQE · Excited-state VQE
+References: Peruzzo 2014 (VQE, Nat. Commun.); Sokolov 2020 (OO-VQE, J. Chem. Phys.);
+Higgott 2019 (subspace-expansion excited states).
+Status: complete
+
+### M137: QEC · Fault-tolerant qubits · Magic-state distillation
+References: Fowler 2012 (surface code 1% threshold, PRA 86); Bravyi & Kitaev 2005
+(universal QC with magic states); Calderbank & Shor 1996 (CSS codes).
+Status: complete
+
+### M138: QLDPC codes · Bosonic codes (cat qubit + GKP)
+References: Tillich & Zémor 2014 (HGP codes, IEEE Trans. Inf. Theory);
+Gottesman 2001 (GKP encoding); Mirrahimi 2014 (cat qubit biased noise).
+Status: complete
+
+### M139: Quantum network · Quantum protocols (BB84 · teleportation · E91)
+References: Bennett & Brassard 1984 (BB84); Bennett 1993 (teleportation);
+Ekert 1991 (E91); Briegel 1998 (quantum repeater).
+Status: complete
+
+### M140: Noise channels · ZNE mitigation · Lindblad open systems
+References: Lindblad 1976 (Commun. Math. Phys. 48); Temme 2017 (ZNE, PRL 119);
+Magesan 2011 (RB, PRL 106).
+Status: complete
+
+### M141: Floquet · Non-equilibrium dynamics · Rydberg blockade
+References: Eckardt 2017 (Floquet, Rev. Mod. Phys. 89); Jaksch 2000 (Rydberg gates,
+PRL 85); Kibble 1976 / Zurek 1985 (topological defect formation).
+Status: complete
+
+### M142: QSP · QSVT · Quantum walks
+References: Gilyen 2019 (QSVT, STOC 2019); Aharonov 2001 (quantum walk, PRL 86);
+Low & Chuang 2017 (optimal Hamiltonian simulation via QSP).
+Status: complete
+
+### M143: CVaR-QAOA · Noise-aware VQE · QML
+References: Farhi 2014 (QAOA, arXiv:1411.4028); Bravyi 2020 (CVaR-QAOA);
+Schuld 2019 (quantum ML feature maps, PRL 122).
+Status: complete
+
+### M144: Randomized benchmarking · Quantum volume · XEB
+References: Knill 2008 (RB, PRA 77); Cross 2019 (quantum volume, PRA 100);
+Arute 2019 (XEB / quantum supremacy, Nature 574).
+Status: complete
+
+### M145: Clifford simulation · Clifford+T · MBQC
+References: Aaronson & Gottesman 2004 (Clifford simulation, PRA 70);
+Raussendorf & Briegel 2001 (one-way quantum computer, PRL 86);
+Selinger 2013 (T-count optimization).
+Status: complete
+
+### M146: Pulse-level simulation · Optimal control · Dynamical decoupling
+References: Hahn 1950 (spin echo); Khaneja 2005 (GRAPE, J. Magn. Reson. 172);
+Viola 1999 (dynamical decoupling, PRL 82).
+Status: complete
+
+### M147: Many-body physics · Finite-size scaling · Spectral functions
+References: Binder 1981 (Binder cumulant, Z. Phys. B 43);
+Haydock 1972 (recursion method); Sachdev 2011 (Quantum Phase Transitions textbook).
+Status: pending
+
+### M148: Tensor networks · Quantum channel · Steady-state solver
+References: Verstraete 2004 (PEPS); Choi 1975 (completely positive maps);
+Wolf 2012 (operator-Schmidt rank and Kraus rank).
+Status: complete
+
+### Track J — C++ engine reconnection (M149–M153)
+
+### M149: CMake build verification — Windows + Linux CI
+Verify `cmake --build` produces a working shared library on both platforms.
+Add a `build-native` GitHub Actions job. Document the build in CONTRIBUTING.md.
+Status: pending
+
+### M150: Lanczos C++ acceleration
+Wire `LanczosSolver.solve()` to use the native C++ Heisenberg solver when
+`QUANTX_LIB_PATH` is set; pure-Python fallback otherwise. Benchmark shows
+≥10× speedup for n≥10 sites.
+Status: pending
+
+### M151: Trotter C++ acceleration
+Wire `TrotterSimulator.run()` to native C++ Krylov propagator for n≥16 qubits.
+Benchmark shows ≥5× speedup at n=20.
+Status: pending
+
+### M152: MPS C++ acceleration
+Wire `MPSSimulator` SVD truncation to native C++ LAPACK backend.
+Validate GHZ fidelity=1.0 for n=100 qubits at bond-dim=2.
+Status: pending
+
+### M153: Capability discovery API
+Add `quantx_engine.backend_info()` → `{"native": bool, "gpu": bool, "version": str}`.
+Update README architecture diagram. Add `GET /capabilities` REST endpoint.
+Status: pending
+
+### Track K — QEC research showcase (M154–M157)
+
+### M154: End-to-end QEC research notebook
+`06_qec_research.ipynb`: physical error rate p → LDPC logical error rate; threshold
+curve for d=3,5,7,9; distance vs. logical rate plot; bosonic cat-qubit comparison.
+Status: pending
+
+### M155: Bosonic QEC showcase
+Notebook comparing cat qubit + GKP decoder against surface code at equal physical
+error rate. Reproduce Fig. 1 style plot from Mirrahimi 2014 or Grimsmo 2020.
+Status: pending
+
+### M156: FTQC resource estimator
+`FTQCResourceEstimator(target_logical_error_rate, physical_error_rate)` → returns
+`{"code_distance": d, "physical_qubits": N, "magic_states_per_T": k, "cycles": c}`.
+Status: pending
+
+### M157: Technical showcase — reproduce published QEC result
+Pick one recent paper (e.g. Google 2023 surface code below threshold), reproduce
+the key figure with QuantX, write a companion blog post / README highlight.
+Status: pending

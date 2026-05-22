@@ -15,6 +15,22 @@ fidelity.  The module provides:
 * :func:`echo_sequence` — convenience function that generates a
   :class:`~quantx_engine.pulse.PulseSchedule` with X–X refocusing echoes
   to cancel ZZ accumulation between two qubits.
+
+References
+----------
+.. [1] Sheldon, S. et al. (2016). Procedure for systematically tuning up
+       cross-resonance gates. *Phys. Rev. A* 93, 060302.
+       https://doi.org/10.1103/PhysRevA.93.060302
+
+.. [2] Malekakhlagh, M., Magesan, E. & McKay, D. C. (2020). First-principles
+       analysis of cross-resonance gate operation.
+       *Phys. Rev. A* 102, 042605.
+       https://doi.org/10.1103/PhysRevA.102.042605
+
+.. [3] Mundada, P. et al. (2019). Suppression of qubit crosstalk in a tunable
+       coupling superconducting circuit.
+       *Phys. Rev. Appl.* 12, 054023.
+       https://doi.org/10.1103/PhysRevApplied.12.054023
 """
 from __future__ import annotations
 

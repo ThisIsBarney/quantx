@@ -30,6 +30,27 @@ Usage:
 
     # GPU-accelerated (requires CuPy):
     clf_gpu = QuantumClassifier(n_features=4, n_layers=2, backend="cupy")
+
+References
+----------
+.. [1] Schuld, M. & Killoran, N. (2019). Quantum machine learning in feature
+       Hilbert spaces. *Phys. Rev. Lett.* 122, 040504.
+       https://doi.org/10.1103/PhysRevLett.122.040504
+
+.. [2] Havlicek, V. et al. (2019). Supervised learning with quantum-enhanced
+       feature spaces. *Nature* 567, 209–212.
+       https://doi.org/10.1038/s41586-019-0980-2
+
+.. [3] Cerezo, M. et al. (2021). Variational quantum algorithms.
+       *Nat. Rev. Phys.* 3, 625–644.
+       https://doi.org/10.1038/s42254-021-00348-9
+
+Physical validation
+-------------------
+ZZ feature map: kernel K(x,y) = |<phi(x)|phi(y)>|^2 is bounded in [0,1].
+For identical inputs K(x,x) = 1 (perfect self-similarity) [Havlicek2019].
+Quantum-classical kernel PSD (positive semi-definite): Gram matrix K_ij
+should have all non-negative eigenvalues (verified in test suite).
 """
 from __future__ import annotations
 

@@ -45,6 +45,29 @@ Functions
 * :func:`fidelity_after_swapping` — entanglement swapping fidelity.
 * :func:`fidelity_after_purification` — one-round DEJMPS purification.
 * :func:`simulate_repeater_chain` — end-to-end fidelity for N-hop chain.
+
+References
+----------
+.. [1] Briegel, H. J. et al. (1998). Quantum repeaters: The role of
+       imperfect local operations in quantum communication.
+       *Phys. Rev. Lett.* 81, 5932.
+       https://doi.org/10.1103/PhysRevLett.81.5932
+
+.. [2] Deutsch, M. et al. (1996). Quantum privacy amplification and the
+       security of quantum cryptography over noisy channels.
+       *Phys. Rev. Lett.* 77, 2818.
+       https://doi.org/10.1103/PhysRevLett.77.2818
+
+.. [3] Bennett, C. H. et al. (1996). Purification of noisy entanglement and
+       faithful teleportation via noisy channels. *Phys. Rev. Lett.* 76, 722.
+       https://doi.org/10.1103/PhysRevLett.76.722
+
+Physical validation
+-------------------
+Werner state with fidelity F < 1/2 is separable (not entangled).
+DEJMPS purification starting from two Werner states with F=0.9:
+F_out = (F^2 + ((1-F)/3)^2) / (F^2 + (2F(1-F)/3) + 5((1-F)/3)^2)
+[Deutsch1996]. Verified numerically in test suite.
 """
 from __future__ import annotations
 

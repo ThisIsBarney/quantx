@@ -31,6 +31,29 @@ CatNoiseModel
 CatQubit
 GKPState
 GKPDecoder
+
+References
+----------
+.. [1] Mirrahimi, M. et al. (2014). Dynamically protected cat-qubits: a new
+       paradigm for universal quantum computation. *New J. Phys.* 16, 045014.
+       https://doi.org/10.1088/1367-2630/16/4/045014
+
+.. [2] Gottesman, D., Kitaev, A. & Preskill, J. (2001). Encoding a qubit in
+       an oscillator. *Phys. Rev. A* 64, 012310.
+       https://doi.org/10.1103/PhysRevA.64.012310
+
+.. [3] Cochrane, P. T., Milburn, G. J. & Munro, W. J. (1999). Macroscopically
+       distinct quantum-superposition states as a bosonic code for amplitude
+       damping. *Phys. Rev. A* 59, 2631.
+       https://doi.org/10.1103/PhysRevA.59.2631
+
+Physical validation
+-------------------
+Cat qubit: Kerr-cat Hamiltonian H = -K a†²a² + epsilon_2(a†²+a²) has two
+degenerate ground states in Fock basis at large alpha. Verified via exact
+diagonalisation of the truncated Fock-space matrix.
+GKP state: finite-energy square-lattice code has displacement variance
+sigma^2 = Delta^2/(1 + Delta^2) [Gottesman2001].
 """
 from __future__ import annotations
 

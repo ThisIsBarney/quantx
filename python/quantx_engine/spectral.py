@@ -37,6 +37,29 @@ Quick start::
     # Reference
     e0_lanczos = LanczosSolver(k=1, seed=0).solve(H).ground_state_energy()
     print(abs(e0_krylov - e0_lanczos))  # < 1e-6
+
+References
+----------
+.. [1] Haydock, R., Heine, V. & Kelly, M. J. (1972). Electronic structure
+       based on the local atomic environment for tight-binding bands.
+       *J. Phys. C* 5, 2845.
+       https://doi.org/10.1088/0022-3719/5/20/004
+
+.. [2] Lanczos, C. (1950). An iteration method for the solution of the
+       eigenvalue problem of linear differential and integral operators.
+       *J. Res. Natl. Bur. Stand.* 45, 255.
+       https://doi.org/10.6028/jres.045.026
+
+.. [3] Dagotto, E. (1994). Correlated electrons in high-temperature
+       superconductors. *Rev. Mod. Phys.* 66, 763.
+       https://doi.org/10.1103/RevModPhys.66.763
+
+Physical validation
+-------------------
+Spectral function A(omega) >= 0 (positive semi-definite) and
+integral A(omega) domega = Tr(A) = number of states (sum rule) [Dagotto1994].
+For a non-degenerate ground state, the Lehmann representation gives a
+delta-function peak at E_0 in the zero-temperature A(omega).
 """
 from __future__ import annotations
 

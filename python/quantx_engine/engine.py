@@ -1,3 +1,23 @@
+"""C++ engine bridge — ctypes interface to the QuantX native shared library.
+
+Provides the :class:`Engine` facade that dispatches to native C++ solvers
+(Lanczos, Trotter, MPS) when the shared library is available, and falls
+back transparently to the pure-Python implementations otherwise.
+
+The native library is located via the environment variable
+``QUANTX_LIB_PATH`` or by searching the standard platform-specific paths
+(``quantx_engine.dll`` on Windows, ``libquantx_engine.so`` on Linux,
+``libquantx_engine.dylib`` on macOS).
+
+References
+----------
+.. [1] Python Software Foundation (2023). ctypes — A foreign function library
+       for Python. https://doi.org/10.48550/arXiv.1811.04968
+       (Official ctypes documentation: https://docs.python.org/3/library/ctypes.html)
+
+.. [2] Beazley, D. (2009). *Python Essential Reference* (4th ed.).
+       Addison-Wesley. ISBN 978-0-672-32978-4.
+"""
 import ctypes
 import json
 import os

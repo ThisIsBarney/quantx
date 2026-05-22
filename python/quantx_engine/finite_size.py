@@ -37,6 +37,26 @@ Quick start::
     fss    = FiniteSizeScaling(sizes, params, binder)
     result = fss.fit_critical_point()
     print(f"J_c = {result.critical_point:.4f} ± {result.critical_point_std:.4f}")
+
+References
+----------
+.. [1] Binder, K. (1981). Finite size scaling analysis of Ising model block
+       distribution functions. *Z. Phys. B* 43, 119.
+       https://doi.org/10.1007/BF01293604
+
+.. [2] Fisher, M. E. & Barber, M. N. (1972). Scaling theory for finite-size
+       effects in the critical region. *Phys. Rev. Lett.* 28, 1516.
+       https://doi.org/10.1103/PhysRevLett.28.1516
+
+.. [3] Cardy, J. (Ed.) (1988). *Finite-Size Scaling*. North Holland.
+       ISBN 978-0-444-87109-1.
+
+Physical validation
+-------------------
+Binder cumulant U_4 = 1 - <m^4>/(3*<m^2>^2): at the critical point,
+U_4 curves for different system sizes L all cross at the same value
+U_4^* (≈ 0.610 for the 3D Ising model) [Binder1981].
+For an ordered phase (T << T_c): U_4 -> 2/3. For disordered (T >> T_c): U_4 -> 0.
 """
 from __future__ import annotations
 

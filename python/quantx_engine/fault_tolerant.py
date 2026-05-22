@@ -15,6 +15,26 @@ Provides:
 All simulations are purely classical (no statevector), operating on syndrome
 tables and logical Pauli frames, which is the standard technique for
 fault-tolerant threshold analysis.
+
+References
+----------
+.. [1] Fowler, A. M. et al. (2012). Surface codes: Towards practical
+       large-scale quantum computation. *Phys. Rev. A* 86, 032324.
+       https://doi.org/10.1103/PhysRevA.86.032324
+
+.. [2] Bravyi, S. & Kitaev, A. (2005). Universal quantum computation with
+       ideal Clifford gates and noisy ancillas. *Phys. Rev. A* 71, 022316.
+       https://doi.org/10.1103/PhysRevA.71.022316
+
+.. [3] Knill, E., Laflamme, R. & Zurek, W. H. (1998). Resilient quantum
+       computation. *Science* 279, 342.
+       https://doi.org/10.1126/science.279.5349.342
+
+Physical validation
+-------------------
+15-to-1 magic state distillation: output error = 35*epsilon^3 for input
+error epsilon (cubic suppression). Verified against formula in Bravyi &
+Kitaev 2005, Table I.
 """
 from __future__ import annotations
 

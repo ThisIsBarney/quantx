@@ -31,6 +31,20 @@ Quick start::
     transpiler = HardwareTranspiler(dev, native_gates="cx_rz")
     result = transpiler.transpile(circ)
     print(result.n_swaps)                  # 1
+
+References
+----------
+.. [1] Li, G. et al. (2019). Tackling the qubit mapping problem for NISQ-era
+       quantum devices. *ASPLOS 2019*, 1001–1014.
+       https://doi.org/10.1145/3297858.3304023
+       (SABRE routing algorithm)
+
+.. [2] Maslov, D. et al. (2008). Quantum circuit simplification and level
+       compaction. *IEEE Trans. CAD* 27, 436–444.
+       https://doi.org/10.1109/TCAD.2007.911334
+
+.. [3] Cowtan, A. et al. (2019). On the qubit routing problem.
+       *TQC 2019*, 5:1–5:32. https://doi.org/10.4230/LIPIcs.TQC.2019.5
 """
 from __future__ import annotations
 

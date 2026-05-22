@@ -29,6 +29,28 @@ Functions
 * :func:`bb84_key_rate` — theoretical BB84 secure key fraction.
 * :func:`chsh_inequality_value` — CHSH S-parameter from correlations.
 * :func:`teleportation_fidelity` — fidelity of teleported state given channel F.
+
+References
+----------
+.. [1] Bennett, C. H. & Brassard, G. (1984). Quantum cryptography: Public
+       key distribution and coin tossing. *Proc. IEEE Int. Conf. Comp.* 175.
+       (Reprinted: https://doi.org/10.1016/j.tcs.2014.05.025)
+
+.. [2] Bennett, C. H. et al. (1993). Teleporting an unknown quantum state via
+       dual classical and Einstein-Podolsky-Rosen channels.
+       *Phys. Rev. Lett.* 70, 1895.
+       https://doi.org/10.1103/PhysRevLett.70.1895
+
+.. [3] Shor, P. W. & Preskill, J. (2000). Simple proof of security of the
+       BB84 quantum key distribution protocol.
+       *Phys. Rev. Lett.* 85, 441.
+       https://doi.org/10.1103/PhysRevLett.85.441
+
+Physical validation
+-------------------
+BB84 key rate: r = 1 - 2*h(e) (Shor-Preskill formula). At e=11% threshold,
+r = 0 [Shor2000]. Teleportation fidelity of a Werner state rho_W(F):
+F_tel = (2F+1)/3 [Bennett1993].
 """
 from __future__ import annotations
 

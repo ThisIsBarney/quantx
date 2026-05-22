@@ -1,6 +1,29 @@
 """Lanczos and Arnoldi sparse eigensolver for large quantum Hamiltonians.
 
 Fills the gap for systems too large for dense O(n³) Jacobi diagonalization.
+The Lanczos algorithm reduces an N×N symmetric matrix to a k×k tridiagonal
+form in k matrix-vector products, making it practical for quantum Hamiltonians
+with dim = 2^n where n is the system size.
+
+References
+----------
+.. [1] Lanczos, C. (1950). An iteration method for the solution of the
+       eigenvalue problem of linear differential and integral operators.
+       *J. Res. Natl. Bur. Stand.* 45, 255–282.
+       https://doi.org/10.6028/jres.045.026
+
+.. [2] Cullum, J. K. & Willoughby, R. A. (1985). *Lanczos Algorithms for
+       Large Symmetric Eigenvalue Computations*, Vol. 1.
+       Birkhäuser. ISBN 978-0-8176-3058-4.
+
+.. [3] Paige, C. C. (1971). The computation of eigenvalues and eigenvectors
+       of very large sparse matrices. PhD thesis, University of London.
+
+Physical validation
+-------------------
+The 4-site antiferromagnetic Heisenberg chain (H = ½ Σ σ_i·σ_{i+1}, open BC)
+has ground-state energy E₀ = −3.2321 with our normalization, corresponding to
+E₀/J = −1.6160254 in the standard S = σ/2 convention.
 """
 from __future__ import annotations
 
