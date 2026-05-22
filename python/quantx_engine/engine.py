@@ -940,32 +940,64 @@ class Engine:
       )
 
   @staticmethod
-  def _default_library_path():
-    """Pick the most likely native library path for the current platform."""
+  def _default_library_path() -> str:
+    """Return the best candidate path for the native QuantX shared library.
+
+    Search order (first match wins):
+
+    1. ``QUANTX_LIB_PATH`` environment variable — explicit user / CI override.
+    2. Package directory — the wheel-bundled ``.so`` / ``.dll`` / ``.dylib``
+       placed alongside ``__init__.py`` when ``pip install quantx-engine``
+       installs a native wheel.
+    3. Development build directories relative to the current working directory
+       (``build/Release/``, ``build/Debug/``, ``build-vs/…``).
+
+    Returns
+    -------
+    str
+        Absolute path to the library (may not exist if none of the above was
+        found; the caller handles the ``OSError`` from ``ctypes.CDLL``).
+    """
+    import sys as _sys
+
+    # ── 1. Explicit environment variable ──────────────────────────────────────
+    env_path = os.environ.get("QUANTX_LIB_PATH")
+    if env_path:
+      return env_path
+
+    # ── 2. Wheel-bundled library in the package directory ─────────────────────
+    pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    if os.name == "nt":
+      wheel_lib = os.path.join(pkg_dir, "quantx.dll")
+    elif _sys.platform == "darwin":
+      wheel_lib = os.path.join(pkg_dir, "libquantx.dylib")
+    else:
+      wheel_lib = os.path.join(pkg_dir, "libquantx.so")
+    if os.path.exists(wheel_lib):
+      return wheel_lib
+
+    # ── 3. Development build directories ──────────────────────────────────────
     cwd = os.getcwd()
     if os.name == "nt":
       candidates = [
+          os.path.join(cwd, "build", "Release", "quantx.dll"),
           os.path.join(cwd, "build", "Debug", "quantx.dll"),
+          os.path.join(cwd, "build-vs", "Release", "quantx.dll"),
           os.path.join(cwd, "build-vs", "Debug", "quantx.dll"),
       ]
-      for p in candidates:
-        if os.path.exists(p):
-          return p
-      return candidates[0]
-    if os.uname().sysname == "Darwin":
+    elif _sys.platform == "darwin":
       candidates = [
-          os.path.join(cwd, "build", "Debug", "libquantx.dylib"),
+          os.path.join(cwd, "build", "Release", "libquantx.dylib"),
           os.path.join(cwd, "build", "libquantx.dylib"),
+          os.path.join(cwd, "build", "Debug", "libquantx.dylib"),
       ]
-      for p in candidates:
-        if os.path.exists(p):
-          return p
-      return candidates[0]
-    candidates = [
-        os.path.join(cwd, "build", "Debug", "libquantx.so"),
-        os.path.join(cwd, "build", "libquantx.so"),
-    ]
+    else:
+      candidates = [
+          os.path.join(cwd, "build", "Release", "libquantx.so"),
+          os.path.join(cwd, "build", "libquantx.so"),
+          os.path.join(cwd, "build", "Debug", "libquantx.so"),
+      ]
     for p in candidates:
       if os.path.exists(p):
         return p
-    return candidates[0]
+    return candidates[0]  # best guess; ctypes will raise OSError if absent

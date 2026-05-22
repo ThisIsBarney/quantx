@@ -174,6 +174,19 @@ target_compile_definitions(qx_capi PRIVATE QX_CAPI_EXPORTS=1)
 set_target_properties(qx_capi PROPERTIES OUTPUT_NAME quantx)
 qx_set_config_output_dirs(qx_capi)
 
+# ── Wheel install target (M158) ───────────────────────────────────────────────
+# When QX_WHEEL_LIB_DIR is set (by build_native_for_wheel.py or CI), cmake
+# --install will copy the compiled library directly into the Python package
+# directory so it gets bundled into the wheel.
+if(DEFINED QX_WHEEL_LIB_DIR)
+  install(
+    TARGETS qx_capi
+    LIBRARY DESTINATION "${QX_WHEEL_LIB_DIR}"
+    RUNTIME DESTINATION "${QX_WHEEL_LIB_DIR}"
+  )
+  message(STATUS "qx_capi wheel install dir: ${QX_WHEEL_LIB_DIR}")
+endif()
+
 add_executable(qx_smoke tests/test_engine.cpp)
 target_link_libraries(qx_smoke PRIVATE qx_core)
 if(NOT WIN32)
