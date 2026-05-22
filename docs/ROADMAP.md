@@ -659,7 +659,7 @@ no `QUANTX_LIB_PATH` required, no user compilation.
 Deliverables: `.github/workflows/build-wheels.yml`, `pyproject.toml` wheel
 packaging config, smoke test confirming `backend_info()["native"] == True`
 after a plain `pip install`.
-Status: pending
+Status: complete
 
 ### M159: pybind11 bridge — NumPy zero-copy for hot paths
 Expand `bindings/python/pybind_module.cpp` from 2 functions to full coverage:
