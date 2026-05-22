@@ -383,13 +383,15 @@ from .ray_sim import (        # M111
     is_ray_available,
     dist_sv_benchmark,
 )
-from .ftqc_pipeline import (  # M112
+from .ftqc_pipeline import (  # M112 + M156
     FTQCPipelineError,
     PipelineResult,
     ThresholdCurveResult,
     FTQCPipeline,
     threshold_curve,
     threshold_crossing,
+    ResourceEstimate,         # M156
+    FTQCResourceEstimator,    # M156
 )
 from .excited_state import (  # M113
     ExcitedStateError,
@@ -819,13 +821,15 @@ __all__ = [
     "DistributedSVSimulator",
     "is_ray_available",
     "dist_sv_benchmark",
-    # Fault-tolerant QC end-to-end pipeline (M112)
+    # Fault-tolerant QC end-to-end pipeline (M112) + resource estimator (M156)
     "FTQCPipelineError",
     "PipelineResult",
     "ThresholdCurveResult",
     "FTQCPipeline",
     "threshold_curve",
     "threshold_crossing",
+    "ResourceEstimate",
+    "FTQCResourceEstimator",
     # Excited-state quantum chemistry (M113)
     "ExcitedStateError",
     "ExcitedStateResult",

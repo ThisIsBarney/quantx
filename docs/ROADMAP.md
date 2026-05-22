@@ -620,19 +620,19 @@ Status: complete
 ### M154: End-to-end QEC research notebook
 `06_qec_research.ipynb`: physical error rate p → LDPC logical error rate; threshold
 curve for d=3,5,7,9; distance vs. logical rate plot; bosonic cat-qubit comparison.
-Status: pending
+Status: complete
 
 ### M155: Bosonic QEC showcase
 Notebook comparing cat qubit + GKP decoder against surface code at equal physical
 error rate. Reproduce Fig. 1 style plot from Mirrahimi 2014 or Grimsmo 2020.
-Status: pending
+Status: complete
 
 ### M156: FTQC resource estimator
 `FTQCResourceEstimator(target_logical_error_rate, physical_error_rate)` → returns
 `{"code_distance": d, "physical_qubits": N, "magic_states_per_T": k, "cycles": c}`.
-Status: pending
+Status: complete
 
 ### M157: Technical showcase — reproduce published QEC result
 Pick one recent paper (e.g. Google 2023 surface code below threshold), reproduce
 the key figure with QuantX, write a companion blog post / README highlight.
-Status: pending
+Status: complete
