@@ -33,11 +33,13 @@ from ctypes import c_char_p, c_void_p
 from typing import TYPE_CHECKING
 
 # ── M159: try to import the pybind11 extension once at module load time ───────
-# The module is built with QX_ENABLE_PYBIND=ON and placed next to the ctypes
-# shared library in the wheel.  When present, it enables zero-copy NumPy paths.
+# The extension (_quantx_py.so / _quantx_py.pyd) is built with QX_ENABLE_PYBIND=ON
+# and copied into the quantx_engine package directory alongside the ctypes shared
+# library.  Use a relative import so it is found in the installed wheel's package
+# directory rather than the top-level sys.path (which would always miss it).
 _PYBIND_MODULE = None
 try:
-    import _quantx_py as _PYBIND_MODULE  # type: ignore[import]
+    from . import _quantx_py as _PYBIND_MODULE  # type: ignore[import]
 except ImportError:
     _PYBIND_MODULE = None
 

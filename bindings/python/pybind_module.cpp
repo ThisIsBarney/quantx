@@ -10,19 +10,15 @@
  *
  * plus metadata helpers:
  *
- *   run_solver(name, params_json) -> dict
- *   explain(problem_json)         -> dict
- *   circuit_capabilities()        -> dict
- *   version()                     -> str
- *   list_solvers()                -> list[str]
+ *   explain(problem_json)     -> dict
+ *   circuit_capabilities()    -> dict
+ *   version()                 -> str
+ *   list_solvers()            -> list[str]
  *
  * and backward-compatible wrappers:
  *
  *   run_cpp(problem, options)     -> dict   (JSON round-trip — legacy)
  *   explain_cpp(problem, options) -> dict   (JSON round-trip — legacy)
- *
- * Structured bindings for QuantumProblem, RunOptions, and SimulationResult
- * (the latter exposes .state as a zero-copy NumPy view).
  */
 
 #include <complex>
@@ -38,10 +34,10 @@
 #include "qx/engine.hpp"
 #include "qx/json_utils.hpp"
 #include "qx/types.hpp"
+#include "qx/version.hpp"
 
 namespace py = pybind11;
 using cdouble = std::complex<double>;
-using json    = nlohmann::json;
 
 
 // ── Internal helpers ─────────────────────────────────────────────────────────
@@ -49,7 +45,7 @@ using json    = nlohmann::json;
 /**
  * Copy a std::vector<cdouble> into a 1-D NumPy array (complex128).
  *
- * We intentionally copy rather than share memory so that the C++ SimulationResult
+ * We intentionally copy rather than share memory so that the C++ result object
  * can be destroyed after the call returns without invalidating the Python object.
  */
 static py::array_t<cdouble> vec_to_numpy(const std::vector<cdouble>& v) {
@@ -62,26 +58,7 @@ static py::array_t<cdouble> vec_to_numpy(const std::vector<cdouble>& v) {
 }
 
 /**
- * Convert a flat std::vector<cdouble> of length rows*cols into a 2-D NumPy
- * array of shape (rows, cols).  Used for density-matrix output.
- */
-static py::array_t<cdouble> flat_to_numpy_2d(const std::vector<cdouble>& v,
-                                              py::ssize_t rows,
-                                              py::ssize_t cols) {
-    auto result = py::array_t<cdouble>({rows, cols});
-    auto buf    = result.mutable_unchecked<2>();
-    for (py::ssize_t r = 0; r < rows; ++r) {
-        for (py::ssize_t c = 0; c < cols; ++c) {
-            buf(r, c) = v[static_cast<std::size_t>(r * cols + c)];
-        }
-    }
-    return result;
-}
-
-/**
  * Parse a JSON string and return it as a Python dict via json.loads().
- * This is the cleanest cross-platform way to convert nlohmann::json →
- * Python objects without reimplementing the full type mapping.
  */
 static py::object json_str_to_pydict(const std::string& json_str) {
     return py::module_::import("json").attr("loads")(json_str);
@@ -96,23 +73,12 @@ static py::object json_str_to_pydict(const std::string& json_str) {
  * Run the quantum simulation described by *problem_json* and return the final
  * statevector as a 1-D complex128 NumPy array.  Avoids JSON serialisation of
  * the result — the vector<cdouble> is copied directly into NumPy memory.
- *
- * Parameters
- * ----------
- * problem_json : str
- *     JSON-serialised QuantumProblem (same schema as the C-API run_cpp).
- * options_json : str, optional
- *     JSON-serialised RunOptions (defaults to "{}").
- *
- * Returns
- * -------
- * np.ndarray, dtype=complex128, shape=(2**n_qubits,)
  */
 static py::array_t<cdouble> run_statevector(const std::string& problem_json,
                                             const std::string& options_json = "{}") {
-    auto problem = qx::problem_from_json(json::parse(problem_json));
-    auto options = qx::options_from_json(json::parse(options_json));
-    auto result  = qx::run(problem, options);
+    const auto problem = qx::problem_from_json(problem_json);
+    const auto options = qx::options_from_json(options_json);
+    const auto result  = qx::run(problem, options);
     return vec_to_numpy(result.state);
 }
 
@@ -121,11 +87,13 @@ static py::array_t<cdouble> run_statevector(const std::string& problem_json,
  *
  * Execute a gate-level quantum circuit and return its output statevector as a
  * 1-D complex128 NumPy array.
+ *
+ * CircuitResult::state holds the final statevector (see include/qx/types.hpp).
  */
 static py::array_t<cdouble> run_circuit_sv(const std::string& circuit_json) {
-    auto circuit = qx::circuit_from_json(json::parse(circuit_json));
-    auto result  = qx::run_circuit(circuit);
-    return vec_to_numpy(result.statevector);
+    const auto circuit = qx::circuit_from_json(circuit_json);
+    const auto result  = qx::run_circuit(circuit, qx::RunOptions{});
+    return vec_to_numpy(result.state);   // CircuitResult::state, not ::statevector
 }
 
 /**
@@ -135,11 +103,11 @@ static py::array_t<cdouble> run_circuit_sv(const std::string& circuit_json) {
  * Python dict mapping bitstring → count.
  */
 static py::object run_circuit_counts(const std::string& circuit_json) {
-    auto circuit = qx::circuit_from_json(json::parse(circuit_json));
-    auto result  = qx::run_circuit(circuit);
+    const auto circuit = qx::circuit_from_json(circuit_json);
+    const auto result  = qx::run_circuit(circuit, qx::RunOptions{});
     py::dict counts;
     for (const auto& [bitstring, count] : result.counts) {
-        counts[py::str(bitstring)] = py::int_(count);
+        counts[py::str(bitstring)] = py::int_(static_cast<long long>(count));
     }
     return counts;
 }
@@ -148,28 +116,15 @@ static py::object run_circuit_counts(const std::string& circuit_json) {
 // ── Metadata helpers ─────────────────────────────────────────────────────────
 
 /**
- * run_solver(name, params_json="{}") -> dict
- *
- * Call a named solver by name (one of list_solvers()) with optional params.
- * Returns the full result dict via JSON round-trip.
- */
-static py::object run_solver(const std::string& name,
-                             const std::string& params_json = "{}") {
-    auto params = json::parse(params_json);
-    auto result = qx::run_named_solver(name, params);
-    return json_str_to_pydict(result.dump());
-}
-
-/**
  * explain(problem_json) -> dict
  *
  * Return the backend-choice explanation for a given problem.
- * Wraps qx::explain_backend_choice() and parses the JSON result.
+ * Uses backend_info_to_json() for serialisation (BackendInfo, not SimulationResult).
  */
 static py::object explain(const std::string& problem_json) {
-    auto problem = qx::problem_from_json(json::parse(problem_json));
-    auto result  = qx::explain_backend_choice(problem, qx::RunOptions{});
-    return json_str_to_pydict(qx::result_to_json(result).dump());
+    const auto problem = qx::problem_from_json(problem_json);
+    const auto info    = qx::explain_backend_choice(problem, qx::RunOptions{});
+    return json_str_to_pydict(qx::backend_info_to_json(info));
 }
 
 /**
@@ -178,26 +133,36 @@ static py::object explain(const std::string& problem_json) {
  * Return the gate set and capabilities of the circuit simulator backend.
  */
 static py::object circuit_capabilities() {
-    auto caps = qx::circuit_backend_capabilities();
-    return json_str_to_pydict(caps.dump());
+    const auto caps = qx::circuit_backend_capabilities();
+    return json_str_to_pydict(qx::circuit_capabilities_to_json(caps));
 }
 
 /**
  * version() -> str
  *
  * Return the native engine version string.
+ * Uses qx::version_string() declared in include/qx/version.hpp.
  */
 static std::string version() {
-    return qx::engine_version();
+    return qx::version_string();
 }
 
 /**
  * list_solvers() -> list[str]
  *
- * Return the names of all available solvers.
+ * Return the names of all 37 available physics solvers.
+ * This list mirrors the one in src/c_api.cpp::qx_list_solvers().
  */
 static std::vector<std::string> list_solvers() {
-    return qx::list_solver_names();
+    return {
+        "vqe", "qpe", "qec", "qfield", "phi4", "hubbard", "floquet",
+        "heisenberg", "bose_hubbard", "tfi", "ssh", "kitaev", "anderson",
+        "chern", "hofstadter", "mbl", "spectral", "tenfold", "second_chern",
+        "wilson_loop", "edge_states", "haldane", "weyl", "fu_kane",
+        "lutchyn_oreg", "kitaev_honeycomb", "bbh", "floquet_topo",
+        "non_herm", "aah", "syk", "kondo", "luttinger", "toric",
+        "mipt", "rg", "entanglement"
+    };
 }
 
 
@@ -206,15 +171,13 @@ static std::vector<std::string> list_solvers() {
 /**
  * run_cpp(problem, options) -> dict   [legacy — JSON round-trip]
  *
- * Accepts QuantumProblem and RunOptions objects (or dicts) and returns the
- * full result as a Python dict.  Kept for backward compatibility with code
- * that used the old pybind11 module.
+ * Accepts QuantumProblem and RunOptions objects and returns the full result as
+ * a Python dict.  Kept for backward compatibility.
  */
 static py::object run_cpp_compat(const qx::QuantumProblem& problem,
                                   const qx::RunOptions&     options) {
-    auto result     = qx::run(problem, options);
-    auto result_j   = qx::result_to_json(result);
-    return json_str_to_pydict(result_j.dump());
+    const auto result = qx::run(problem, options);
+    return json_str_to_pydict(qx::result_to_json(result));
 }
 
 /**
@@ -222,9 +185,8 @@ static py::object run_cpp_compat(const qx::QuantumProblem& problem,
  */
 static py::object explain_cpp_compat(const qx::QuantumProblem& problem,
                                       const qx::RunOptions&     options) {
-    auto result   = qx::explain_backend_choice(problem, options);
-    auto result_j = qx::result_to_json(result);
-    return json_str_to_pydict(result_j.dump());
+    const auto info = qx::explain_backend_choice(problem, options);
+    return json_str_to_pydict(qx::backend_info_to_json(info));
 }
 
 
@@ -245,11 +207,10 @@ PYBIND11_MODULE(_quantx_py, m) {
 
         Metadata helpers
         ----------------
-        run_solver(name, params_json="{}") -> dict
-        explain(problem_json)              -> dict
-        circuit_capabilities()             -> dict
-        version()                          -> str
-        list_solvers()                     -> list[str]
+        explain(problem_json)   -> dict
+        circuit_capabilities()  -> dict
+        version()               -> str
+        list_solvers()          -> list[str]
 
         Legacy wrappers (JSON round-trip)
         ---------------------------------
@@ -292,41 +253,48 @@ PYBIND11_MODULE(_quantx_py, m) {
         .def_readwrite("checkpoint_path",    &qx::RunOptions::checkpoint_path);
 
     py::class_<qx::SimulationResult>(m, "SimulationResult", R"pbdoc(
-        Result of a quantum simulation.
+        Result of a Hamiltonian simulation.
 
         Attributes
         ----------
         state : np.ndarray[complex128]
-            Final statevector (zero-copy NumPy view).
-        solver_used : str
-        wall_time_s : float
+            Final statevector (copied to NumPy on access).
+        backend : str
+        elapsed_ms : float
     )pbdoc")
         .def(py::init<>())
         .def_property_readonly("state",
             [](const qx::SimulationResult& r) { return vec_to_numpy(r.state); },
             "Final statevector as a complex128 NumPy array.")
-        .def_readwrite("solver_used",  &qx::SimulationResult::solver_used)
-        .def_readwrite("wall_time_s",  &qx::SimulationResult::wall_time_s);
+        .def_readwrite("backend",     &qx::SimulationResult::backend)
+        .def_readwrite("elapsed_ms",  &qx::SimulationResult::elapsed_ms);
 
     py::class_<qx::CircuitResult>(m, "CircuitResult", R"pbdoc(
         Result of a circuit-level simulation.
 
         Attributes
         ----------
-        statevector : np.ndarray[complex128]
+        state : np.ndarray[complex128]
+            Output statevector (CircuitResult::state, copied to NumPy on access).
         counts : dict[str, int]
+            Measurement counts (bitstring → count).
+        ok : bool
+        elapsed_ms : float
     )pbdoc")
         .def(py::init<>())
-        .def_property_readonly("statevector",
-            [](const qx::CircuitResult& r) { return vec_to_numpy(r.statevector); })
+        .def_property_readonly("state",
+            [](const qx::CircuitResult& r) { return vec_to_numpy(r.state); },
+            "Output statevector as a complex128 NumPy array.")
         .def_property_readonly("counts",
             [](const qx::CircuitResult& r) {
                 py::dict d;
                 for (const auto& [k, v] : r.counts) {
-                    d[py::str(k)] = py::int_(v);
+                    d[py::str(k)] = py::int_(static_cast<long long>(v));
                 }
                 return d;
-            });
+            })
+        .def_readwrite("ok",          &qx::CircuitResult::ok)
+        .def_readwrite("elapsed_ms",  &qx::CircuitResult::elapsed_ms);
 
     // ── Hot-path functions ────────────────────────────────────────────────
 
@@ -335,9 +303,6 @@ PYBIND11_MODULE(_quantx_py, m) {
           py::arg("options_json") = "{}",
           R"pbdoc(
         Run quantum simulation and return statevector as NumPy array.
-
-        This is the fastest entry point: the C++ result vector is copied
-        directly into NumPy memory without JSON serialisation.
 
         Parameters
         ----------
@@ -355,6 +320,8 @@ PYBIND11_MODULE(_quantx_py, m) {
           py::arg("circuit_json"),
           R"pbdoc(
         Execute a gate-level circuit and return its statevector.
+
+        Uses CircuitResult::state (the output statevector field).
 
         Returns
         -------
@@ -374,23 +341,18 @@ PYBIND11_MODULE(_quantx_py, m) {
 
     // ── Metadata helpers ──────────────────────────────────────────────────
 
-    m.def("run_solver", &run_solver,
-          py::arg("name"),
-          py::arg("params_json") = "{}",
-          "Call a named solver and return the result as a Python dict.");
-
     m.def("explain", &explain,
           py::arg("problem_json"),
-          "Return backend-choice explanation for the given problem.");
+          "Return backend-choice explanation for the given problem as a dict.");
 
     m.def("circuit_capabilities", &circuit_capabilities,
-          "Return gate set and capabilities of the circuit simulator.");
+          "Return gate set and capabilities of the circuit simulator as a dict.");
 
     m.def("version", &version,
-          "Return the native engine version string.");
+          "Return the native engine version string (from qx::version_string()).");
 
     m.def("list_solvers", &list_solvers,
-          "Return the names of all available solvers.");
+          "Return the names of all 37 available physics solvers.");
 
     // ── Backward-compatible legacy wrappers ───────────────────────────────
 

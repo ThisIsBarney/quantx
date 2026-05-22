@@ -345,6 +345,74 @@ class TestPybindSourceFile:
             "pybind_module.cpp must preserve backward-compat run_cpp binding"
         )
 
+    def test_uses_result_state_not_statevector(self):
+        """CircuitResult uses .state (not .statevector) per include/qx/types.hpp."""
+        path = _pybind_module_path()
+        if path is None:
+            pytest.skip("pybind_module.cpp not found")
+        content = path.read_text(encoding="utf-8")
+        # Must reference result.state (correct field from CircuitResult)
+        assert "result.state" in content or "r.state" in content, (
+            "pybind_module.cpp must use CircuitResult::state (not ::statevector)"
+        )
+        # Must NOT reference .statevector as a field access (the field does not exist)
+        assert "result.statevector" not in content, (
+            "CircuitResult has no .statevector field — use .state instead"
+        )
+        assert "r.statevector" not in content, (
+            "CircuitResult has no .statevector field — use .state instead"
+        )
+
+    def test_run_circuit_passes_run_options(self):
+        """run_circuit() C++ API requires (circuit, RunOptions) — must supply RunOptions{}."""
+        path = _pybind_module_path()
+        if path is None:
+            pytest.skip("pybind_module.cpp not found")
+        content = path.read_text(encoding="utf-8")
+        assert "RunOptions{}" in content, (
+            "pybind_module.cpp must pass qx::RunOptions{} to qx::run_circuit()"
+        )
+
+    def test_uses_version_string(self):
+        """version() must use qx::version_string() not qx::engine_version()."""
+        path = _pybind_module_path()
+        if path is None:
+            pytest.skip("pybind_module.cpp not found")
+        content = path.read_text(encoding="utf-8")
+        assert "version_string" in content, (
+            "pybind_module.cpp must use qx::version_string() from include/qx/version.hpp"
+        )
+        assert "engine_version" not in content, (
+            "engine_version does not exist in the C++ API — use qx::version_string()"
+        )
+        assert "list_solver_names" not in content, (
+            "list_solver_names does not exist in the C++ API"
+        )
+        assert "run_named_solver" not in content, (
+            "run_named_solver does not exist in the C++ API"
+        )
+
+    def test_engine_py_uses_relative_import(self):
+        """engine.py must use `from . import _quantx_py` (relative) not `import _quantx_py`."""
+        import pathlib
+        here = pathlib.Path(__file__).resolve()
+        for parent in here.parents:
+            candidate = parent / "quantx_engine" / "engine.py"
+            if candidate.exists():
+                content = candidate.read_text(encoding="utf-8")
+                assert "from . import _quantx_py" in content, (
+                    "engine.py must use relative import `from . import _quantx_py` "
+                    "so the extension is found in the installed wheel package directory"
+                )
+                assert "import _quantx_py as _PYBIND_MODULE" not in content.replace(
+                    "from . import _quantx_py as _PYBIND_MODULE", ""
+                ), (
+                    "engine.py must not use absolute `import _quantx_py` "
+                    "(fails in installed wheels where the .so is inside the package)"
+                )
+                return
+        pytest.skip("engine.py not found")
+
 
 # ---------------------------------------------------------------------------
 # 7. Build script: QX_ENABLE_PYBIND flag
