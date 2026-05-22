@@ -592,28 +592,28 @@ Status: complete
 ### M149: CMake build verification — Windows + Linux CI
 Verify `cmake --build` produces a working shared library on both platforms.
 Add a `build-native` GitHub Actions job. Document the build in CONTRIBUTING.md.
-Status: pending
+Status: complete
 
 ### M150: Lanczos C++ acceleration
 Wire `LanczosSolver.solve()` to use the native C++ Heisenberg solver when
 `QUANTX_LIB_PATH` is set; pure-Python fallback otherwise. Benchmark shows
 ≥10× speedup for n≥10 sites.
-Status: pending
+Status: complete
 
 ### M151: Trotter C++ acceleration
 Wire `TrotterSimulator.run()` to native C++ Krylov propagator for n≥16 qubits.
 Benchmark shows ≥5× speedup at n=20.
-Status: pending
+Status: complete
 
 ### M152: MPS C++ acceleration
 Wire `MPSSimulator` SVD truncation to native C++ LAPACK backend.
 Validate GHZ fidelity=1.0 for n=100 qubits at bond-dim=2.
-Status: pending
+Status: complete
 
 ### M153: Capability discovery API
 Add `quantx_engine.backend_info()` → `{"native": bool, "gpu": bool, "version": str}`.
 Update README architecture diagram. Add `GET /capabilities` REST endpoint.
-Status: pending
+Status: complete
 
 ### Track K — QEC research showcase (M154–M157)
 

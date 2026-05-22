@@ -341,6 +341,50 @@ class TrotterSimulator:
         if order not in (1, 2, 4):
             raise TrotterError(f"order must be 1, 2, or 4; got {order}")
 
+        # --- attempt native C++ acceleration (statevector backend) ---
+        if not compute_exact and self._n >= 4:
+            try:
+                from quantx_engine.engine import Engine
+                engine = Engine()
+                problem = {
+                    "qubits": self._n,
+                    "hamiltonian_terms": [
+                        {"label": term.pauli_string, "coefficient": float(term.coefficient.real)}
+                        for term in self._terms
+                    ],
+                    "evolution": {
+                        "total_time": float(t),
+                        "dt": float(t / n_steps),
+                        "method": "trotter",
+                    },
+                    "observables": ["norm"],
+                }
+                result_json = engine.run(problem)
+                if result_json.get("ok", True) and "state" in result_json:
+                    raw = result_json["state"]
+                    # Native returns list of [re, im] pairs or complex numbers
+                    if raw and isinstance(raw[0], (list, tuple)):
+                        state = np.array([complex(x[0], x[1]) for x in raw], dtype=complex)
+                    else:
+                        state = np.array(raw, dtype=complex)
+                    probs = np.abs(state) ** 2
+                    return TrotterResult(
+                        state=state,
+                        probs=probs,
+                        n_steps=n_steps,
+                        order=order,
+                        t=t,
+                        trotter_error=None,
+                        metadata={
+                            "n_qubits": self._n,
+                            "n_terms": len(self._terms),
+                            "dt": t / n_steps,
+                            "backend": result_json.get("backend", "native"),
+                        },
+                    )
+            except Exception:
+                pass  # fall through to pure-Python Trotter
+
         dt = t / n_steps
         if order == 1:
             U_step = self._step1(dt)
