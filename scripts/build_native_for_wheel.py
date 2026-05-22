@@ -7,6 +7,9 @@ compiled ``libquantx.so`` / ``libquantx.dylib`` / ``quantx.dll`` ends up inside
 installed, :class:`~quantx_engine.engine.Engine` finds the library automatically
 (no ``QUANTX_LIB_PATH`` environment variable required).
 
+M159 update: also builds the ``_quantx_py`` pybind11 extension module when
+``pybind11`` is available, enabling zero-copy NumPy return paths.
+
 Usage::
 
     python scripts/build_native_for_wheel.py <dest_pkg_dir>
@@ -48,6 +51,26 @@ def _platform_lib_names() -> list[str]:
     return ["libquantx.so"]
 
 
+def _pybind11_available() -> bool:
+    """Return True if pybind11 is importable (so we can build _quantx_py)."""
+    try:
+        import pybind11  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def _find_pybind_ext(build_dir: str) -> str | None:
+    """Walk build_dir and return the path of the first _quantx_py.*.so/pyd."""
+    for root, _dirs, files in os.walk(build_dir):
+        for f in files:
+            if f.startswith("_quantx_py") and any(
+                f.endswith(ext) for ext in (".so", ".pyd", ".dll")
+            ):
+                return os.path.join(root, f)
+    return None
+
+
 def _find_built_lib(build_dir: str) -> str:
     """Walk build_dir and return the path of the first matching library."""
     lib_names = _platform_lib_names()
@@ -85,7 +108,7 @@ def _find_built_lib(build_dir: str) -> str:
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def build_and_install(dest_dir: str) -> None:
-    """Run CMake, build ``qx_capi``, and copy the library to *dest_dir*."""
+    """Run CMake, build ``qx_capi`` (+ optionally ``_quantx_py``), copy to *dest_dir*."""
     dest_dir = os.path.abspath(dest_dir)
 
     # The repo root is one level above the scripts/ directory
@@ -95,39 +118,59 @@ def build_and_install(dest_dir: str) -> None:
     print(f"[build_native_for_wheel] Repo root : {repo_root}")
     print(f"[build_native_for_wheel] Dest dir  : {dest_dir}")
 
-    cmake     = _find_cmake()
-    build_dir = os.path.join(tempfile.gettempdir(), "qx_wheel_build")
+    cmake        = _find_cmake()
+    build_dir    = os.path.join(tempfile.gettempdir(), "qx_wheel_build")
     os.makedirs(build_dir, exist_ok=True)
 
-    n_jobs = str(os.cpu_count() or 4)
+    n_jobs       = str(os.cpu_count() or 4)
+    has_pybind11 = _pybind11_available()
 
     # ── Configure ────────────────────────────────────────────────────────────
     cfg_cmd = [
         cmake, "-B", build_dir, "-S", repo_root,
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DQX_ENABLE_PYBIND=OFF",   # pybind11 module built separately (M159)
+        f"-DQX_ENABLE_PYBIND={'ON' if has_pybind11 else 'OFF'}",
         "-DQX_ENABLE_MPI=OFF",
         "-DQX_ENABLE_CUDA=OFF",
     ]
     print("[build_native_for_wheel] Configure:", " ".join(cfg_cmd))
     subprocess.run(cfg_cmd, check=True)
 
-    # ── Build qx_capi only ───────────────────────────────────────────────────
-    build_cmd = [
-        cmake, "--build", build_dir,
-        "--target", "qx_capi",
-        "--config", "Release",
-        "--parallel", n_jobs,
-    ]
-    print("[build_native_for_wheel] Build:", " ".join(build_cmd))
-    subprocess.run(build_cmd, check=True)
+    # ── Build targets ────────────────────────────────────────────────────────
+    targets = ["qx_capi"]
+    if has_pybind11:
+        targets.append("_quantx_py")
+        print("[build_native_for_wheel] pybind11 found — also building _quantx_py")
+
+    for target in targets:
+        build_cmd = [
+            cmake, "--build", build_dir,
+            "--target", target,
+            "--config", "Release",
+            "--parallel", n_jobs,
+        ]
+        print("[build_native_for_wheel] Build:", " ".join(build_cmd))
+        subprocess.run(build_cmd, check=True)
 
     # ── Copy into Python package directory ───────────────────────────────────
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # ctypes shared library (qx_capi → quantx.so/.dll/.dylib)
     src = _find_built_lib(build_dir)
     dst = os.path.join(dest_dir, os.path.basename(src))
-    os.makedirs(dest_dir, exist_ok=True)
     shutil.copy2(src, dst)
     print(f"[build_native_for_wheel] Installed: {src} → {dst}")
+
+    # pybind11 extension module (_quantx_py.*.so / _quantx_py.pyd)
+    if has_pybind11:
+        ext = _find_pybind_ext(build_dir)
+        if ext:
+            edst = os.path.join(dest_dir, os.path.basename(ext))
+            shutil.copy2(ext, edst)
+            print(f"[build_native_for_wheel] Installed: {ext} → {edst}")
+        else:
+            print("[build_native_for_wheel] WARNING: _quantx_py extension not found "
+                  "after build — skipping (ctypes path will be used).")
 
 
 def main() -> None:

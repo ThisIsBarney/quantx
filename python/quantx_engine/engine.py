@@ -1,8 +1,13 @@
-"""C++ engine bridge — ctypes interface to the QuantX native shared library.
+"""C++ engine bridge — ctypes / pybind11 interface to the QuantX native library.
 
 Provides the :class:`Engine` facade that dispatches to native C++ solvers
 (Lanczos, Trotter, MPS) when the shared library is available, and falls
 back transparently to the pure-Python implementations otherwise.
+
+M159 adds a pybind11 fast path: when the ``_quantx_py`` extension module is
+importable (built with ``QX_ENABLE_PYBIND=ON``), methods such as
+:meth:`Engine.run_statevector` and :meth:`Engine.run_circuit_sv` return NumPy
+arrays directly without any JSON round-trip overhead.
 
 The native library is located via the environment variable
 ``QUANTX_LIB_PATH`` or by searching the standard platform-specific paths
@@ -17,12 +22,24 @@ References
 
 .. [2] Beazley, D. (2009). *Python Essential Reference* (4th ed.).
        Addison-Wesley. ISBN 978-0-672-32978-4.
+
+.. [3] Jakob, W., Rhinelander, J., & Moldovan, D. (2017). pybind11 — Seamless
+       operability between C++11 and Python. https://github.com/pybind/pybind11
 """
 import ctypes
 import json
 import os
 from ctypes import c_char_p, c_void_p
 from typing import TYPE_CHECKING
+
+# ── M159: try to import the pybind11 extension once at module load time ───────
+# The module is built with QX_ENABLE_PYBIND=ON and placed next to the ctypes
+# shared library in the wheel.  When present, it enables zero-copy NumPy paths.
+_PYBIND_MODULE = None
+try:
+    import _quantx_py as _PYBIND_MODULE  # type: ignore[import]
+except ImportError:
+    _PYBIND_MODULE = None
 
 if TYPE_CHECKING:  # pragma: no cover
     from quantx_engine.lindblad import JumpOperator, LindbladResult
@@ -205,6 +222,94 @@ class Engine:
     result = self.run_circuit(circuit, options)
     self.raise_for_circuit_error(result)
     return result
+
+  # ── M159: pybind11 zero-copy fast paths ─────────────────────────────────────
+
+  @staticmethod
+  def pybind11_available() -> bool:
+    """Return True when the pybind11 extension module ``_quantx_py`` is loaded.
+
+    When True, :meth:`run_statevector` and :meth:`run_circuit_sv` avoid the
+    JSON serialisation overhead and return NumPy arrays via a direct C++→Python
+    memory copy.
+    """
+    return _PYBIND_MODULE is not None
+
+  def run_statevector(
+      self,
+      problem: dict,
+      options: dict | None = None,
+  ):
+    """Run a Hamiltonian simulation and return the statevector.
+
+    When the pybind11 extension is available (:meth:`pybind11_available` is
+    ``True``), this method returns a ``numpy.ndarray`` of dtype ``complex128``
+    with shape ``(2**n_qubits,)`` — no JSON serialisation is performed.
+
+    Without pybind11 the result falls back to the ctypes JSON path and the
+    statevector is returned as a list of ``[re, im]`` pairs embedded in the
+    normal result dict under the ``"state"`` key.
+
+    Parameters
+    ----------
+    problem : dict
+        Problem specification (same schema as :meth:`run`).
+    options : dict, optional
+        Runtime options.
+
+    Returns
+    -------
+    numpy.ndarray (complex128) or dict
+        NumPy array via pybind11, or full result dict via ctypes fallback.
+    """
+    options = options or {}
+    if _PYBIND_MODULE is not None:
+      return _PYBIND_MODULE.run_statevector(
+          json.dumps(problem),
+          json.dumps(options),
+      )
+    # ctypes fallback — result["state"] is a list of [re, im] pairs
+    return self.run(problem, options)
+
+  def run_circuit_sv(self, circuit: dict):
+    """Execute a gate-level circuit and return the output statevector.
+
+    When the pybind11 extension is available, this returns a
+    ``numpy.ndarray[complex128]`` directly.  Otherwise it calls the ctypes
+    path and returns the full result dict.
+
+    Parameters
+    ----------
+    circuit : dict
+        Circuit payload (same schema as :meth:`run_circuit`).
+
+    Returns
+    -------
+    numpy.ndarray (complex128) or dict
+    """
+    if _PYBIND_MODULE is not None:
+      return _PYBIND_MODULE.run_circuit_sv(json.dumps(circuit))
+    return self.run_circuit(circuit)
+
+  def run_circuit_counts_np(self, circuit: dict) -> dict:
+    """Execute a gate-level circuit and return measurement counts.
+
+    When pybind11 is available, the counts dict is populated directly from C++
+    (no JSON round-trip).  Otherwise this is equivalent to calling
+    ``run_circuit(circuit).get("counts", {})``.
+
+    Parameters
+    ----------
+    circuit : dict
+
+    Returns
+    -------
+    dict[str, int]
+    """
+    if _PYBIND_MODULE is not None:
+      return _PYBIND_MODULE.run_circuit_counts(json.dumps(circuit))
+    result = self.run_circuit(circuit)
+    return result.get("counts", {})
 
   def validate_problem(self, problem: dict) -> dict:
     """Validate a problem JSON payload against the native schema checker."""
