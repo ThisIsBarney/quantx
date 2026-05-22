@@ -45,6 +45,27 @@ Quick start::
     # 2D DMRG
     result = dmrg_2d(Lx=2, Ly=2, J=1.0, bond_dim=8, sweeps=4)
     print(result.energy)
+
+References
+----------
+.. [1] Kitaev, A. Y. (1997). Fault-tolerant quantum computation by anyons.
+       *Ann. Phys.* 303, 2–30.
+       https://doi.org/10.1016/S0003-4916(02)00018-0
+
+.. [2] Sachdev, S. & Ye, J. (1993). Gapless spin-fluid ground state in a
+       random quantum Heisenberg magnet. *Phys. Rev. Lett.* 70, 3339.
+       https://doi.org/10.1103/PhysRevLett.70.3339
+
+.. [3] Larkin, A. I. & Ovchinnikov, Yu. N. (1969). Quasiclassical method in
+       the theory of superconductivity. *Sov. Phys. JETP* 28, 1200.
+       (OTOC / scrambling motivation)
+
+Physical validation
+-------------------
+SYK model ground state energy is negative for any random couplings J_ijkl
+(the random model has E_0 < 0 with probability 1) [Sachdev1993].
+OTOC C(t) = -<[W(t),V]^2> grows from 0 and saturates at late times for
+chaotic systems (information scrambling).
 """
 from __future__ import annotations
 

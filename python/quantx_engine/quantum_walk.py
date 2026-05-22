@@ -32,6 +32,28 @@ Quick start::
     ctqw = ContinuousTimeQuantumWalk.from_adjacency(walk.adjacency)
     result_c = ctqw.run(t=5.0)
     print(result_c.position_probs)
+
+References
+----------
+.. [1] Aharonov, Y. et al. (1993). Quantum random walks.
+       *Phys. Rev. A* 48, 1687.
+       https://doi.org/10.1103/PhysRevA.48.1687
+
+.. [2] Aharonov, D., Ambainis, A., Kempe, J. & Vazirani, U. (2001).
+       Quantum walks on graphs. *STOC 2001*, 50–59.
+       https://doi.org/10.1145/380752.380758
+
+.. [3] Grover, L. K. (1996). A fast quantum mechanical algorithm for database
+       search. *STOC 1996*, 212–219.
+       https://doi.org/10.1145/237814.237866
+
+Physical validation
+-------------------
+Continuous-time quantum walk on a cycle of N nodes: probability P(0->k,t) =
+|J_k(2t)|^2 in the large-N limit (Bessel function), where J_k is the k-th
+order Bessel function of the first kind [Aharonov1993].
+Discrete-time Grover walk: quadratic speedup for finding a marked vertex
+[Grover1996]; amplitude at the marked vertex grows as O(1/sqrt(N)) steps.
 """
 from __future__ import annotations
 

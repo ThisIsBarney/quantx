@@ -24,10 +24,16 @@ Classes
 
 References
 ----------
-* McLachlan, A. D. (1964). A variational solution of the time-dependent
-  Schrodinger equation.  *Mol. Phys.* 8, 39–44.
-* Endo, S. et al. (2020). Variational quantum simulation of general processes.
-  *Phys. Rev. Lett.* 125, 010501.
+.. [1] McLachlan, A. D. (1964). A variational solution of the time-dependent
+       Schrodinger equation. *Mol. Phys.* 8, 39–44.
+       https://doi.org/10.1080/00268976400100041
+
+.. [2] Endo, S. et al. (2020). Variational quantum simulation of general
+       processes. *Phys. Rev. Lett.* 125, 010501.
+       https://doi.org/10.1103/PhysRevLett.125.010501
+
+.. [3] Yuan, X. et al. (2019). Theory of variational quantum simulation.
+       *Quantum* 3, 191. https://doi.org/10.22331/q-2019-10-07-191
 """
 
 from __future__ import annotations

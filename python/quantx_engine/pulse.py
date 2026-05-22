@@ -9,6 +9,26 @@ is the qubit–LO detuning.
 
 All frequencies / amplitudes share the same angular-frequency unit (e.g. rad/ns).
 T1 / T2 times are in the matching time unit (e.g. ns).
+
+References
+----------
+.. [1] Allen, L. & Eberly, J. H. (1987). *Optical Resonance and Two-Level
+       Atoms*. Dover Publications. ISBN 978-0-486-65533-4.
+       (Bloch equations, rotating frame, DRAG pulses)
+
+.. [2] Krantz, P. et al. (2019). A quantum engineer's guide to
+       superconducting qubits. *Appl. Phys. Rev.* 6, 021318.
+       https://doi.org/10.1063/1.5089550
+
+.. [3] Motzoi, F. et al. (2009). Simple pulses for elimination of leakage in
+       weakly anharmonic qubits. *Phys. Rev. Lett.* 103, 110501.
+       https://doi.org/10.1103/PhysRevLett.103.110501
+
+Physical validation
+-------------------
+Pi pulse (Gaussian, area = pi): drives |0> -> |1> with fidelity 1.0 in the
+absence of decoherence (ideal two-level system). DRAG suppression: derivative
+correction eliminates leakage to |2> to first order in 1/anharmonicity [Motzoi2009].
 """
 from __future__ import annotations
 

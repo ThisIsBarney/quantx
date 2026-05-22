@@ -49,9 +49,10 @@ class TestFaultTolerantPhysics:
             rng_seed=42,
         )
 
-        # Logical rate should be non-increasing with distance (below threshold)
+        # Logical rate should be non-increasing with distance (below threshold).
+        # Use p=5e-4 which is large enough that rates are reliably non-zero for d=3.
         r3, r5, r7 = results[3], results[5], results[7]
-        assert r3 >= r5 or r3 < 1e-4, (
+        assert r3 >= r5, (
             f"d=3 rate {r3:.2e} should be ≥ d=5 rate {r5:.2e} below threshold"
         )
         # At least one distance should give near-perfect suppression
@@ -489,6 +490,8 @@ class TestRydbergPhysics:
         # The |rr⟩ = |11⟩ state is the last basis state (index 3 in {00,01,10,11})
         # Its diagonal energy should include the interaction V
         H_rr = float(np.real(H[3, 3]))
-        assert abs(H_rr - V_expected) < 0.5, (
+        # Tolerance: ±0.05 covers small Ω/2 = 0.05 off-diagonal corrections
+        # while still requiring < 4% relative error on V_expected ≈ 1.37.
+        assert abs(H_rr - V_expected) < 0.05, (
             f"|rr⟩ diagonal energy {H_rr:.4f} should be close to V={V_expected:.4f}"
         )

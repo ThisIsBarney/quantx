@@ -27,6 +27,21 @@ Functions
   :class:`~quantx_engine.noise.CompositeNoise` when gate errors are large).
 * :func:`available_backends` — scan environment variables for configured
   backends and return a summary dict.
+
+References
+----------
+.. [1] Krantz, P. et al. (2019). A quantum engineer's guide to superconducting
+       qubits. *Appl. Phys. Rev.* 6, 021318.
+       https://doi.org/10.1063/1.5089550
+
+.. [2] Gambetta, J. M. et al. (2017). Characterization of addressability by
+       simultaneous randomized benchmarking.
+       *Phys. Rev. Lett.* 109, 240504.
+       https://doi.org/10.1103/PhysRevLett.109.240504
+
+.. [3] Arute, F. et al. (2019). Quantum supremacy using a programmable
+       superconducting processor. *Nature* 574, 505.
+       https://doi.org/10.1038/s41586-019-1666-5
 """
 from __future__ import annotations
 

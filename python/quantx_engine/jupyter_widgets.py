@@ -26,6 +26,15 @@ BlochSphereWidgetState
 BlochSphereWidget
 JobMonitorWidgetState
 JobMonitorWidget
+
+References
+----------
+.. [1] Granger, B. E. & Perez, F. (2021). Jupyter: Thinking and storytelling
+       with code and data. *Comput. Sci. Eng.* 23, 7–14.
+       https://doi.org/10.1109/MCSE.2021.3059263
+
+.. [2] ipywidgets Development Team (2023). ipywidgets: Interactive HTML Widgets
+       for Jupyter Notebooks. https://doi.org/10.5281/zenodo.3401774
 """
 from __future__ import annotations
 

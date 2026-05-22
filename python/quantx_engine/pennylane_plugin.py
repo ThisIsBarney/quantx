@@ -20,6 +20,16 @@ be installed so that its entry-point is visible to PennyLane::
 
     [project.entry-points."pennylane.plugins"]
     "quantx.statevector" = "quantx_engine.pennylane_plugin:QuantXDevice"
+
+References
+----------
+.. [1] Bergholm, V. et al. (2022). PennyLane: Automatic differentiation of
+       hybrid quantum-classical computations. arXiv:1811.04968.
+       https://doi.org/10.48550/arXiv.1811.04968
+
+.. [2] Schuld, M. et al. (2019). Evaluating analytic gradients on quantum
+       hardware. *Phys. Rev. A* 99, 032331.
+       https://doi.org/10.1103/PhysRevA.99.032331
 """
 from __future__ import annotations
 

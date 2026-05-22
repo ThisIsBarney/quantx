@@ -11,10 +11,23 @@ Implements four components for fault-tolerant T-gate synthesis:
 
 References
 ----------
-* Bravyi, S. & Kitaev, A. (2005). Universal quantum computation with ideal
-  Clifford gates and noisy ancillas. *Phys. Rev. A* 71, 022316.
-* Selinger, P. (2013). Quantum circuits of T-depth one.
-  *Phys. Rev. A* 87, 042302.
+.. [1] Bravyi, S. & Kitaev, A. (2005). Universal quantum computation with ideal
+       Clifford gates and noisy ancillas. *Phys. Rev. A* 71, 022316.
+       https://doi.org/10.1103/PhysRevA.71.022316
+
+.. [2] Selinger, P. (2013). Quantum circuits of T-depth one.
+       *Phys. Rev. A* 87, 042302.
+       https://doi.org/10.1103/PhysRevA.87.042302
+
+.. [3] Campbell, E. T., Terhal, B. M. & Vuillot, C. (2017). Roads towards
+       fault-tolerant universal quantum computation. *Nature* 549, 172.
+       https://doi.org/10.1038/nature23460
+
+Physical validation
+-------------------
+15-to-1 distillation output error: epsilon_out = 35*epsilon_in^3.
+For epsilon_in = 0.01: epsilon_out = 3.5e-5 [Bravyi2005].
+Toffoli gate T count: 7 T gates in the Selinger decomposition [Selinger2013].
 """
 
 from __future__ import annotations

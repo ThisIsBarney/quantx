@@ -16,6 +16,18 @@ Usage:
     from quantx_engine.ibm import IBMQuantumBackend
     backend = IBMQuantumBackend(token="MY_IBM_TOKEN", instance="ibm-q/open/main")
     result = backend.run_circuit(circuit, shots=1000)
+
+References
+----------
+.. [1] Qiskit Community (2023). Qiskit: An open-source framework for quantum
+       computing. *Zenodo*. https://doi.org/10.5281/zenodo.2573505
+
+.. [2] Cross, A. W. et al. (2017). Open quantum assembly language.
+       arXiv:1707.03429. https://doi.org/10.48550/arXiv.1707.03429
+
+.. [3] McKay, D. C. et al. (2018). Qiskit backend specifications for OpenQASM
+       and OpenPulse experiments. arXiv:1809.03452.
+       https://doi.org/10.48550/arXiv.1809.03452
 """
 from __future__ import annotations
 

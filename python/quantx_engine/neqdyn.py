@@ -26,6 +26,25 @@ EntanglementDynamicsResult
 EntanglementDynamics
 KibbleZurekResult
 KibbleZurekScaling
+
+References
+----------
+.. [1] Keldysh, L. V. (1965). Diagram technique for nonequilibrium processes.
+       *Sov. Phys. JETP* 20, 1018. (Translation of Zh. Eksp. Teor. Fiz. 47, 1515)
+
+.. [2] Kibble, T. W. B. (1976). Topology of cosmic domains and strings.
+       *J. Phys. A* 9, 1387.
+       https://doi.org/10.1088/0305-4470/9/8/029
+
+.. [3] Zurek, W. H. (1985). Cosmological experiments in superfluid helium?
+       *Nature* 317, 505.
+       https://doi.org/10.1038/317505a0
+
+Physical validation
+-------------------
+Kibble-Zurek mechanism for 1D TFIM: defect density xi ~ tau_Q^{-nu/(1+nu*z)}
+For 1D TFIM: nu=1, z=1 => xi ~ tau_Q^{-0.5}. Power law exponent = -0.5.
+Verified by linear regression on log(xi) vs log(tau_Q) in test suite.
 """
 from __future__ import annotations
 

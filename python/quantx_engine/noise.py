@@ -20,6 +20,27 @@ Supported noise models and their native backend mapping:
 - ReadoutNoise          — emits ``noise={kind:bit_flip,prob:p}`` (supported as
                           bit-flip channel, not measurement-specific readout)
 - CompositeNoise        — combine multiple noise models (fields merged)
+
+References
+----------
+.. [1] Nielsen, M. A. & Chuang, I. L. (2000). *Quantum Computation and
+       Quantum Information*. Cambridge University Press.
+       https://doi.org/10.1017/CBO9780511976667
+       (Depolarising, amplitude damping, phase flip channels: Ch. 8)
+
+.. [2] Lindblad, G. (1976). On the generators of quantum dynamical semigroups.
+       *Commun. Math. Phys.* 48, 119.
+       https://doi.org/10.1007/BF01608499
+
+.. [3] Preskill, J. (1998). *Lecture Notes on Quantum Information*.
+       Available at http://theory.caltech.edu/~preskill/ph229/
+
+Physical validation
+-------------------
+Depolarising channel: p(I)=1-3p/4, p(X)=p(Y)=p(Z)=p/4 leaves the maximally
+mixed state rho=I/2 invariant for all p [Nielsen&Chuang, Ch. 8.3].
+Amplitude damping: excited state |1> decays with probability gamma;
+p_|1>(t) = exp(-gamma*t) [exponential Markovian decay].
 """
 from __future__ import annotations
 

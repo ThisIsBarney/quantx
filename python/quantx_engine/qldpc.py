@@ -15,6 +15,27 @@ References
   locally testable classical LDPC codes.  *STOC 2022*.
 * Fossorier, M. P. C. (2004). Quasi-cyclic low-density parity-check codes.
   *IEEE Trans. Inf. Theory* 50, 1788–1793.
+
+References (updated with DOIs)
+-------------------------------
+.. [1] Tillich, J.-P. & Zemor, G. (2014). Quantum LDPC codes with positive
+       rate and minimum distance proportional to the square root of the blocklength.
+       *IEEE Trans. Inf. Theory* 60, 1193–1202.
+       https://doi.org/10.1109/TIT.2013.2292061
+
+.. [2] Panteleev, P. & Kalachev, G. (2022). Asymptotically good quantum and
+       locally testable classical LDPC codes. *STOC 2022*, 375–388.
+       https://doi.org/10.1145/3519935.3520017
+
+.. [3] Sipser, M. & Spielman, D. A. (1996). Expander codes.
+       *IEEE Trans. Inf. Theory* 42, 1710–1722.
+       https://doi.org/10.1109/18.556667
+
+Physical validation
+-------------------
+[[n,k,d]] bicycle code: rate k/n and distance d verified against classical
+RREF rank calculation. CSS commutativity Hz·Hx^T = 0 (mod 2) checked for
+all generated codes.
 """
 
 from __future__ import annotations

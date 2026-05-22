@@ -37,6 +37,28 @@ RydbergAtom
 RydbergHamiltonian
 RydbergResult
 RydbergSimulator
+
+References
+----------
+.. [1] Jaksch, D. et al. (2000). Fast quantum gates for neutral atoms.
+       *Phys. Rev. Lett.* 85, 2208.
+       https://doi.org/10.1103/PhysRevLett.85.2208
+
+.. [2] Urban, E. et al. (2009). Observation of Rydberg blockade between two
+       atoms. *Nat. Phys.* 5, 110.
+       https://doi.org/10.1038/nphys1178
+
+.. [3] Lukin, M. D. et al. (2001). Dipole blockade and quantum information
+       processing in mesoscopic atomic ensembles.
+       *Phys. Rev. Lett.* 87, 037901.
+       https://doi.org/10.1103/PhysRevLett.87.037901
+
+Physical validation
+-------------------
+Van der Waals blockade: V(r) = C_6 / r^6. Blockade radius r_b defined by
+V(r_b) = Omega (Rabi frequency). For r < r_b, doubly-excited state is
+energetically suppressed. Rabi oscillations: Omega_eff = sqrt(n)*Omega
+for an n-atom ensemble in the blockade regime [Lukin2001].
 """
 from __future__ import annotations
 

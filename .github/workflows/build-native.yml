@@ -1,0 +1,154 @@
+name: Build Native C++ Engine
+
+# Verifies that the CMake build produces a working shared library on Linux
+# and Windows. Runs the C++ smoke tests (qx_smoke, qx_fft_smoke) to confirm
+# the library loads and basic solver dispatch works.
+#
+# This job is intentionally decoupled from python-ci.yml so C++ failures
+# do not block pure-Python SDK CI.
+
+on:
+  push:
+    branches: ["master", "main"]
+    paths:
+      - "src/**"
+      - "include/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/build-native.yml"
+  pull_request:
+    branches: ["master", "main"]
+    paths:
+      - "src/**"
+      - "include/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/build-native.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: build-native-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Linux build ─────────────────────────────────────────────────────────────
+  build-linux:
+    name: Linux / GCC
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake g++ ninja-build libgomp1
+
+      - name: Configure (Release)
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DQX_ENABLE_OPENMP=ON \
+            -DQX_ENABLE_MPI=OFF \
+            -DQX_ENABLE_PYBIND=OFF \
+            -DQX_ENABLE_CUDA=OFF
+
+      - name: Build
+        run: cmake --build build --parallel $(nproc)
+
+      - name: Run C++ smoke tests
+        run: |
+          ./build/Release/qx_smoke || ./build/qx_smoke
+          ./build/Release/qx_fft_smoke || ./build/qx_fft_smoke
+
+      - name: Verify shared library exports
+        run: |
+          LIB=$(find build -name "libquantx.so" | head -n1)
+          echo "Found library: $LIB"
+          nm -D "$LIB" | grep "qx_run\|qx_version\|qx_list_solvers"
+
+      - name: Test Python ctypes loading
+        # Import only the engine module directly (not the full __init__.py)
+        # to avoid pulling in numpy/scipy which are not installed in this job.
+        run: |
+          python3 -c "
+          import ctypes, pathlib, os, sys
+          lib_paths = list(pathlib.Path('build').rglob('libquantx.so'))
+          if not lib_paths:
+              print('ERROR: libquantx.so not found'); sys.exit(1)
+          p = str(lib_paths[0])
+          os.environ['QUANTX_LIB_PATH'] = p
+          # Import the engine module in isolation; avoid quantx_engine/__init__.py
+          # which would trigger numpy/scipy imports not present in this job.
+          import importlib.util, types
+          spec = importlib.util.spec_from_file_location(
+              'engine', 'python/quantx_engine/engine.py')
+          mod = importlib.util.module_from_spec(spec)
+          # Stub the ctypes-independent sub-imports that __init__.py would pull
+          sys.modules.setdefault('quantx_engine', types.ModuleType('quantx_engine'))
+          spec.loader.exec_module(mod)
+          e = mod.Engine(p)
+          v = e.version()
+          print(f'Native engine version: {v}')
+          assert v, 'version string must be non-empty'
+          print('ctypes load test PASSED')
+          "
+
+      - name: Upload library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantx-native-linux
+          path: build/**/libquantx.so
+          if-no-files-found: ignore
+
+  # ── Windows build ───────────────────────────────────────────────────────────
+  build-windows:
+    name: Windows / MSVC
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure (Release)
+        run: |
+          cmake -S . -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DQX_ENABLE_OPENMP=OFF `
+            -DQX_ENABLE_MPI=OFF `
+            -DQX_ENABLE_PYBIND=OFF `
+            -DQX_ENABLE_CUDA=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Run C++ smoke tests
+        run: |
+          .\build\Release\qx_smoke.exe
+          .\build\Release\qx_fft_smoke.exe
+
+      - name: Verify DLL exports
+        run: |
+          $dll = Get-ChildItem build -Recurse -Filter "quantx.dll" | Select-Object -First 1
+          Write-Host "Found DLL: $($dll.FullName)"
+          dumpbin /exports $dll.FullName | Select-String "qx_run|qx_version|qx_list"
+
+      - name: Upload library artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantx-native-windows
+          path: build/**/*.dll
+          if-no-files-found: ignore
+
+  # ── Build gate ──────────────────────────────────────────────────────────────
+  build-gate:
+    name: Native build gate
+    runs-on: ubuntu-latest
+    needs: [build-linux, build-windows]
+    if: always()
+    steps:
+      - name: Check all builds passed
+        run: |
+          if [[ "${{ needs.build-linux.result }}" != "success" || "${{ needs.build-windows.result }}" != "success" ]]; then
+            echo "One or more native builds failed."
+            exit 1
+          fi
+          echo "All native builds passed."

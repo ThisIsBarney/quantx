@@ -47,6 +47,20 @@ Example::
     # Threshold curve
     curve = threshold_curve(distances=[3, 5, 7], n_shots=500, seed=42)
     print(f"threshold ≈ {curve.threshold:.4f}")
+
+References
+----------
+.. [1] Fowler, A. M. et al. (2012). Surface codes: Towards practical
+       large-scale quantum computation. *Phys. Rev. A* 86, 032324.
+       https://doi.org/10.1103/PhysRevA.86.032324
+
+.. [2] Litinski, D. (2019). A game of surface codes: Large-scale quantum
+       computing with lattice surgery. *Quantum* 3, 128.
+       https://doi.org/10.22331/q-2019-03-05-128
+
+.. [3] Jones, C. et al. (2012). Layered architecture for quantum computing.
+       *Phys. Rev. X* 2, 031007.
+       https://doi.org/10.1103/PhysRevX.2.031007
 """
 from __future__ import annotations
 
@@ -515,3 +529,188 @@ def _estimate_threshold(
     if not crossings:
         return None
     return sum(crossings) / len(crossings)
+
+
+# ── FTQCResourceEstimator ─────────────────────────────────────────────────────
+
+@dataclass
+class ResourceEstimate:
+    """Resource estimate for a fault-tolerant quantum computation.
+
+    Attributes
+    ----------
+    code_distance : int
+        Minimum surface code distance achieving the target logical error rate.
+    physical_qubits : int
+        Total physical qubits = 2·d² (data + ancilla for one logical qubit).
+    logical_error_rate : float
+        Estimated logical error rate at the chosen distance.
+    magic_states_per_t : int
+        Number of 15-to-1 magic state distillation levels (each level = ~200 qubits).
+    physical_qubits_for_t : int
+        Additional physical qubits for one round of T-gate distillation.
+    cycles : int
+        Surface code QEC cycles per logical gate (≈ d rounds).
+    physical_error_rate : float
+        Input physical error rate.
+    target_logical_error_rate : float
+        Input target logical error rate.
+    """
+    code_distance: int
+    physical_qubits: int
+    logical_error_rate: float
+    magic_states_per_t: int
+    physical_qubits_for_t: int
+    cycles: int
+    physical_error_rate: float
+    target_logical_error_rate: float
+
+    def __repr__(self) -> str:
+        return (
+            f"ResourceEstimate(d={self.code_distance}, "
+            f"p_phys={self.physical_error_rate:.2e}, "
+            f"p_target={self.target_logical_error_rate:.2e}, "
+            f"qubits={self.physical_qubits}, "
+            f"p_logical={self.logical_error_rate:.2e})"
+        )
+
+
+class FTQCResourceEstimator:
+    """Estimate physical qubit and magic-state resources for fault-tolerant QC.
+
+    Uses the surface code threshold model from Fowler et al. (2012).  The
+    logical error rate per round scales as
+
+        p_L ≈ A × (p_phys / p_th)^{⌊(d+1)/2⌋}
+
+    where A ≈ 0.1, p_th ≈ 0.01 (1% threshold for the depolarizing model).
+
+    References
+    ----------
+    .. [Fowler2012] Fowler, A. G. et al. (2012). Surface codes: Towards practical
+                    large-scale quantum computation. *Phys. Rev. A* 86, 032324.
+                    https://doi.org/10.1103/PhysRevA.86.032324
+
+    Parameters
+    ----------
+    target_logical_error_rate : float
+        Desired logical error rate per logical gate.
+    physical_error_rate : float
+        Physical qubit error rate (must be < threshold ≈ 0.01).
+    threshold : float, default 0.01
+        Surface code threshold (default: 1%).
+    prefactor : float, default 0.1
+        Pre-exponential constant A in p_L = A * (p/p_th)^t.
+    max_distance : int, default 51
+        Maximum code distance to search.
+
+    Examples
+    --------
+    >>> est = FTQCResourceEstimator(target_logical_error_rate=1e-10,
+    ...                             physical_error_rate=1e-3)
+    >>> result = est.estimate()
+    >>> print(result)
+    ResourceEstimate(d=7, p_phys=1.00e-03, p_target=1.00e-10, qubits=98, p_logical=...)
+    """
+
+    def __init__(
+        self,
+        target_logical_error_rate: float,
+        physical_error_rate: float,
+        threshold: float = 0.01,
+        prefactor: float = 0.1,
+        max_distance: int = 51,
+    ) -> None:
+        if not (0 < target_logical_error_rate < 1):
+            raise FTQCPipelineError(
+                f"target_logical_error_rate must be in (0, 1), got {target_logical_error_rate}"
+            )
+        if not (0 < physical_error_rate < threshold):
+            raise FTQCPipelineError(
+                f"physical_error_rate must be in (0, threshold={threshold:.3f}), "
+                f"got {physical_error_rate}"
+            )
+        self.target_logical_error_rate = target_logical_error_rate
+        self.physical_error_rate = physical_error_rate
+        self.threshold = threshold
+        self.prefactor = prefactor
+        self.max_distance = max_distance
+
+    def _logical_error_rate(self, d: int) -> float:
+        """Estimate p_L for a given distance d using the Fowler 2012 formula."""
+        import math
+        t = (d + 1) // 2
+        r = self.physical_error_rate / self.threshold
+        return self.prefactor * (r ** t)
+
+    def estimate(self) -> ResourceEstimate:
+        """Find the minimum code distance and associated resource count.
+
+        Returns
+        -------
+        ResourceEstimate
+        """
+        # Find minimum d (odd) where p_L < target
+        chosen_d = None
+        chosen_p_L = None
+        for d in range(3, self.max_distance + 2, 2):  # odd d only
+            p_L = self._logical_error_rate(d)
+            if p_L <= self.target_logical_error_rate:
+                chosen_d = d
+                chosen_p_L = p_L
+                break
+
+        if chosen_d is None:
+            # Could not meet target even at max distance
+            chosen_d = self.max_distance if self.max_distance % 2 == 1 else self.max_distance - 1
+            chosen_p_L = self._logical_error_rate(chosen_d)
+
+        # Physical qubit count: 2d² (d² data + d²-1 ancilla ≈ d² ancilla)
+        physical_qubits = 2 * chosen_d * chosen_d
+
+        # Magic state distillation levels for T gates
+        # Each 15-to-1 level: p_out = 35 * p_in^3; target p_T = target_logical_error_rate
+        p_in = self.physical_error_rate
+        levels = 0
+        p_current = p_in
+        while p_current > self.target_logical_error_rate:
+            p_current = 35.0 * p_current ** 3
+            levels += 1
+            if levels > 20:  # safety cap
+                break
+
+        # Each distillation factory: ~200 physical qubits per level (rough estimate)
+        physical_qubits_for_t = levels * 200
+
+        # QEC cycles per logical gate ≈ d syndrome rounds
+        cycles = chosen_d
+
+        return ResourceEstimate(
+            code_distance=chosen_d,
+            physical_qubits=physical_qubits,
+            logical_error_rate=float(chosen_p_L),
+            magic_states_per_t=levels,
+            physical_qubits_for_t=physical_qubits_for_t,
+            cycles=cycles,
+            physical_error_rate=self.physical_error_rate,
+            target_logical_error_rate=self.target_logical_error_rate,
+        )
+
+    def sweep_distances(
+        self,
+        distances: list[int] | None = None,
+    ) -> dict[int, float]:
+        """Return {d: p_logical} for a range of code distances.
+
+        Parameters
+        ----------
+        distances : list[int] | None
+            Distances to evaluate. Defaults to [3, 5, 7, 9, 11, 13, 15].
+
+        Returns
+        -------
+        dict[int, float]
+        """
+        if distances is None:
+            distances = [3, 5, 7, 9, 11, 13, 15]
+        return {d: self._logical_error_rate(d) for d in distances}

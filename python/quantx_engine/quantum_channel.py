@@ -38,6 +38,27 @@ Quick start::
     solver = SteadyStateSolver()
     rho_ss = solver.solve(ch)
     print(np.abs(rho_ss - np.array([[1,0],[0,0]])).max())  # ≈ 0
+
+References
+----------
+.. [1] Choi, M.-D. (1975). Completely positive linear maps on complex
+       matrices. *Linear Algebra Appl.* 10, 285–290.
+       https://doi.org/10.1016/0024-3795(75)90075-0
+
+.. [2] Kraus, K. (1983). *States, Effects, and Operations*.
+       Springer. https://doi.org/10.1007/3-540-12732-1
+
+.. [3] Wolf, M. M. & Cirac, J. I. (2008). Dividing quantum channels.
+       *Commun. Math. Phys.* 279, 147.
+       https://doi.org/10.1007/s00220-008-0411-y
+
+Physical validation
+-------------------
+Choi-Kraus representation: a channel is completely positive iff its Choi
+matrix is positive semi-definite [Choi1975]. The Choi matrix of the
+identity channel I_n is the maximally entangled state |omega><omega| * d,
+where d = 2^n and |omega> = (1/sqrt(d)) * sum_i |ii>.
+Steady-state solver: Liouvillian L rho_ss = 0 (zero eigenvalue of L).
 """
 from __future__ import annotations
 

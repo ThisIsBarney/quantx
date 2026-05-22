@@ -37,6 +37,17 @@ Quick reference::
     # Probability distribution (exact)
     sresult = Sampler().run([bell])
     print(sresult.quasi_dists[0])  # {0: 0.5, 3: 0.5}  (|00⟩ and |11⟩)
+
+References
+----------
+.. [1] Qiskit Community (2023). Qiskit: An open-source framework for quantum
+       computing. *Zenodo*. https://doi.org/10.5281/zenodo.2573505
+       (Estimator/Sampler V2 primitives specification)
+
+.. [2] Bravyi, S. & Gosset, D. (2016). Improved classical simulation of
+       quantum circuits dominated by Clifford gates.
+       *Phys. Rev. Lett.* 116, 250501.
+       https://doi.org/10.1103/PhysRevLett.116.250501
 """
 from __future__ import annotations
 

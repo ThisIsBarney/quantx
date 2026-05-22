@@ -31,6 +31,28 @@ Quick reference::
     )
     result = solver.run(n_iterations=200, learning_rate=0.5)
     print(f"Fidelity: {result.fidelity_history[-1]:.6f}")   # → ≈ 1.0
+
+References
+----------
+.. [1] Khaneja, N. et al. (2005). Optimal control of coupled spin dynamics:
+       Design of NMR pulse sequences by gradient ascent algorithms.
+       *J. Magn. Reson.* 172, 296–305.
+       https://doi.org/10.1016/j.jmr.2004.11.004
+
+.. [2] Caneva, T. et al. (2011). Chopped random-basis quantum optimization.
+       *Phys. Rev. A* 84, 022326.
+       https://doi.org/10.1103/PhysRevA.84.022326
+
+.. [3] de Fouquieres, P. et al. (2011). Second order gradient ascent pulse
+       engineering. *J. Magn. Reson.* 212, 412–417.
+       https://doi.org/10.1016/j.jmr.2011.07.023
+
+Physical validation
+-------------------
+GRAPE gradient for a single-qubit pi rotation: analytic gradient of
+F = |<target|U>|^2 with respect to pulse amplitudes. The gradient has
+magnitude ~ |target - U| * |dU/dparam|. For a Gaussian ansatz, dF/da_k
+= 2*Re(<target|dU/da_k>) [Khaneja2005].
 """
 from __future__ import annotations
 

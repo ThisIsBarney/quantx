@@ -20,6 +20,19 @@ Usage::
     result = solver.solve(H)
 
     print(gpu_info())
+
+References
+----------
+.. [1] Nvidia Corporation (2022). cuQuantum SDK: A high-performance library for
+       quantum information science. https://developer.nvidia.com/cuquantum-sdk
+
+.. [2] Smelyanskiy, M. et al. (2016). qHiPSTER: The quantum high performance
+       software testing environment. arXiv:1601.07195.
+       https://doi.org/10.48550/arXiv.1601.07195
+
+.. [3] Bayraktar, H. et al. (2023). cuQuantum SDK: A high-performance library
+       for accelerating quantum science. *QST* 8, 014014.
+       https://doi.org/10.1088/2058-9565/acb414
 """
 from __future__ import annotations
 

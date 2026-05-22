@@ -26,21 +26,20 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
+    "scipy>=1.10",
+    "networkx>=3.0",
 ]
 
 [project.optional-dependencies]
-# Pure-Python extras (no C++ build required)
-dev = ["pytest>=7.0", "numpy>=1.24"]
+# Development: testing only (scipy/networkx already in core deps)
+dev = ["pytest>=7.0"]
 pennylane = ["pennylane>=0.30.0"]
 gpu = ["cupy-cuda12x>=13.0"]
 distributed = ["ray[default]>=2.0"]
 
-# All dependencies needed to run the full test suite in CI
+# Full CI suite: adds PennyLane for plugin tests
 ci = [
     "pytest>=7.0",
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "networkx>=3.0",
     "pennylane>=0.30.0",
 ]
 
@@ -49,17 +48,13 @@ notebooks = [
     "pytest>=7.0",
     "nbmake>=1.4",
     "nbformat>=5.9",
-    "numpy>=1.24",
-    "scipy>=1.10",
 ]
 
-# Meta-extra: everything optional
+# Meta-extra: everything optional (GPU, distributed, hardware)
 all = [
     "pennylane>=0.30.0",
     "cupy-cuda12x>=13.0",
     "ray[default]>=2.0",
-    "scipy>=1.10",
-    "networkx>=3.0",
 ]
 
 [project.entry-points."pennylane.plugins"]
@@ -67,6 +62,48 @@ all = [
 
 [tool.setuptools]
 packages = ["quantx_engine"]
+
+[tool.setuptools.package-data]
+# Include wheel-bundled native shared libraries so pip-installed packages
+# can load the C++ engine without requiring QUANTX_LIB_PATH to be set.
+quantx_engine = [
+  "*.so",
+  "*.dll",
+  "*.dylib",
+  "*.pyd",
+]
+
+# ── cibuildwheel configuration (M158) ─────────────────────────────────────────
+# Run:  cibuildwheel --output-dir wheelhouse python/
+[tool.cibuildwheel]
+# Build CPython 3.10–3.13; skip 32-bit and musl libc.
+build = "cp310-* cp311-* cp312-* cp313-*"
+skip  = "*-win32 *-manylinux_i686 *-musllinux*"
+
+# Build the native shared library before packaging the wheel.
+# {project} resolves to the python/ directory (where this pyproject.toml lives).
+# CMakeLists.txt is one level up at the repo root.
+before-build = "python {project}/../scripts/build_native_for_wheel.py {project}/quantx_engine"
+
+# Smoke-test the installed wheel: verify native engine is reachable.
+test-command = """python -c "
+from quantx_engine import backend_info
+info = backend_info()
+print('native:', info['native'], '| version:', info['version'])
+assert info['native'], 'Native engine not found in wheel'
+print('M158 smoke test PASSED')
+" """
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
+
+[tool.cibuildwheel.macos]
+archs = ["arm64", "x86_64"]
+repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
 
 [tool.pytest.ini_options]
 # Run from the python/ directory: `pytest` or `pytest quantx_engine/tests/`

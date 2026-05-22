@@ -26,6 +26,26 @@ Usage::
     from quantx_engine.clifford_t import TCountOptimizer
     opt = TCountOptimizer()
     reduced = opt.optimize(GateSequence(["T", "T", "T", "T"]))
+
+References
+----------
+.. [1] Boykin, P. O. et al. (2000). On universal and fault-tolerant quantum
+       computing. *Inf. Process. Lett.* 75, 101–107.
+       https://doi.org/10.1016/S0020-0190(00)00084-3
+
+.. [2] Selinger, P. (2013). Quantum circuits of T-depth one.
+       *Phys. Rev. A* 87, 042302.
+       https://doi.org/10.1103/PhysRevA.87.042302
+
+.. [3] Kliuchnikov, V., Maslov, D. & Mosca, M. (2013). Asymptotically optimal
+       approximation of single qubit unitaries by Clifford and T circuits.
+       *Phys. Rev. Lett.* 110, 190502.
+       https://doi.org/10.1103/PhysRevLett.110.190502
+
+Physical validation
+-------------------
+T gate = diag(1, exp(i*pi/4)). Clifford+T set is universal for quantum
+computation [Boykin2000]. T^8 = I (8-fold periodicity in the Clifford+T group).
 """
 from __future__ import annotations
 

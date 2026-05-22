@@ -1,0 +1,145 @@
+name: Build & publish wheels (M158)
+
+# Triggers:
+#   push to master → build all platforms, upload artifacts
+#   version tag v*  → additionally publish to PyPI
+#   PR             → build Linux only (fast CI gate)
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  # ── Build wheels ────────────────────────────────────────────────────────────
+  build_wheels:
+    name: Wheels · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest   # Linux  x86_64  (manylinux_2_28)
+          - macos-latest    # macOS  arm64 + x86_64
+          - windows-latest  # Windows AMD64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history so version tags resolve
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # cibuildwheel reads [tool.cibuildwheel] from python/pyproject.toml
+      - name: Install cibuildwheel
+        run: pip install cibuildwheel==2.22.0
+
+      # Linux only: also install delocate/auditwheel repair tools
+      - name: Install auditwheel (Linux)
+        if: runner.os == 'Linux'
+        run: pip install auditwheel
+
+      - name: Install delocate (macOS)
+        if: runner.os == 'macOS'
+        run: pip install delocate
+
+      - name: Build wheels
+        # Point cibuildwheel at the python/ subdirectory so it picks up
+        # python/pyproject.toml (which has the [tool.cibuildwheel] section
+        # and the before-build hook that compiles the native library).
+        run: cibuildwheel --output-dir wheelhouse python/
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+
+  # ── Pure-Python sdist (no native lib) ───────────────────────────────────────
+  build_sdist:
+    name: Source distribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build
+        run: pip install build
+      - name: Build sdist
+        working-directory: python
+        run: python -m build --sdist --outdir ../wheelhouse
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: wheelhouse/*.tar.gz
+
+  # ── Smoke-test the Linux wheel in a clean venv ──────────────────────────────
+  smoke_test:
+    name: Wheel smoke test
+    needs: [build_wheels]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wheels-ubuntu-latest
+          path: wheelhouse/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install wheel in fresh venv
+        run: |
+          python -m venv smoke_venv
+          # Install runtime dependencies first (from PyPI), then install the
+          # project wheel without dependency resolution (--no-deps) so that
+          # pip does not try to find numpy/scipy/networkx in the local wheelhouse
+          # where only the quantx-engine wheel exists.
+          smoke_venv/bin/pip install numpy scipy networkx
+          smoke_venv/bin/pip install --no-index --find-links=wheelhouse --no-deps quantx-engine
+      - name: Run smoke tests
+        run: |
+          smoke_venv/bin/python - <<'EOF'
+          from quantx_engine import backend_info, __version__
+          info = backend_info()
+          print(f"quantx-engine {__version__}")
+          print(f"  native  : {info['native']}")
+          print(f"  version : {info['version']}")
+          print(f"  solvers : {info['solvers'][:5]}...")
+          assert info["native"], "Native engine not loaded from wheel!"
+          print("Smoke test PASSED ✓")
+          EOF
+
+  # ── Publish to PyPI on version tags ─────────────────────────────────────────
+  publish:
+    name: Publish to PyPI
+    needs: [build_wheels, build_sdist, smoke_test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: pypi
+      url: https://pypi.org/p/quantx-engine
+    permissions:
+      id-token: write   # Trusted publisher (OIDC) — no API token needed
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist/
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          verbose: true

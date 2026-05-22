@@ -45,8 +45,8 @@ Features at a Glance
 
 * :class:`~quantx_engine.Engine` — C++ physics solver dispatcher (37 named solvers)
 * :class:`~quantx_engine.lanczos.LanczosSolver` — sparse Hamiltonian eigensolver
-* :class:`~quantx_engine.trotter.TrotterSolver` — product-formula time evolution
-* :class:`~quantx_engine.mps_simulator.MPS` — matrix-product-state simulator (TEBD)
+* :class:`~quantx_engine.trotter.TrotterSimulator` — product-formula time evolution
+* :class:`~quantx_engine.mps_simulator.MPSSimulator` — matrix-product-state simulator (TEBD)
 
 .. rubric:: Quantum Error Correction
 

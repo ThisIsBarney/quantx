@@ -19,6 +19,28 @@ Quick reference::
     qv = QuantumVolume(p_error=0.005)
     qv_results = qv.run(max_qubits=3, n_trials=100)
     print(qv_results[-1].quantum_volume)  # largest passing QV
+
+References
+----------
+.. [1] Knill, E. et al. (2008). Randomized benchmarking of quantum gates.
+       *Phys. Rev. A* 77, 012307.
+       https://doi.org/10.1103/PhysRevA.77.012307
+
+.. [2] Cross, A. W. et al. (2019). Validating quantum computers using
+       randomized model circuits. *Phys. Rev. A* 100, 032328.
+       https://doi.org/10.1103/PhysRevA.100.032328
+
+.. [3] Magesan, E., Gambetta, J. M. & Emerson, J. (2011). Scalable and
+       robust randomized benchmarking of quantum processes.
+       *Phys. Rev. Lett.* 106, 180504.
+       https://doi.org/10.1103/PhysRevLett.106.180504
+
+Physical validation
+-------------------
+Standard RB: EPC (error per Clifford gate) extracted from exponential decay
+A + B*p^m, where p = 1 - EPC/(1 - 1/d^2), d = 2^n [Magesan2011].
+Quantum Volume: QV = 2^m where m is the largest m s.t. the heavy-output
+probability of m-qubit random circuits exceeds 2/3 [Cross2019].
 """
 from __future__ import annotations
 

@@ -15,6 +15,17 @@ Usage::
     sweep = ParameterSweep(fn=my_solver, n_workers=4)
     result = sweep.run({"J": [0.5, 1.0, 2.0], "h": [0.0, 0.5, 1.0]})
     df = result.to_dataframe()   # pandas if available, else list of dicts
+
+References
+----------
+.. [1] Peruzzo, A. et al. (2014). A variational eigenvalue solver on a
+       photonic chip. *Nat. Commun.* 5, 4213.
+       https://doi.org/10.1038/ncomms5213
+       (VQE parameter sweeps as canonical example)
+
+.. [2] McClean, J. R. et al. (2018). Barren plateaus in quantum neural
+       network training landscapes.
+       *Nat. Commun.* 9, 4812. https://doi.org/10.1038/s41467-018-07090-4
 """
 from __future__ import annotations
 

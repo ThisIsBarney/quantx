@@ -51,6 +51,7 @@ jobs:
 
       - name: Execute notebooks with nbmake
         run: |
+          mkdir -p reports
           pytest notebooks/ \
             --nbmake \
             --nbmake-timeout=120 \

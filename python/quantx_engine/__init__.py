@@ -2,6 +2,74 @@
 
 __version__ = "0.2.0"
 
+
+def backend_info() -> dict:
+    """Return a capability summary for the active QuantX backend.
+
+    Checks whether the native C++ shared library is loaded (requires
+    ``QUANTX_LIB_PATH`` to point to a compiled ``libquantx.so`` /
+    ``quantx.dll``), and returns a dict describing available features.
+
+    Returns
+    -------
+    dict
+        Keys:
+
+        ``native`` : bool
+            ``True`` when the native C++ engine is available and loaded.
+        ``gpu`` : bool
+            ``True`` when the native engine was built with CUDA/OpenCL support.
+        ``version`` : str
+            Version string (native engine version when available, else
+            ``"pure-python-<__version__>"``).
+        ``solvers`` : list[str]
+            Named physics solvers exposed by the native library (empty for
+            pure-Python mode).
+        ``max_qubits`` : int | None
+            Practical qubit limit reported by the native circuit backend, or
+            ``None`` in pure-Python mode.
+
+    Examples
+    --------
+    >>> from quantx_engine import backend_info
+    >>> info = backend_info()
+    >>> info["native"]
+    False  # unless QUANTX_LIB_PATH is set and the library is compiled
+    """
+    try:
+        from quantx_engine.engine import Engine
+        engine = Engine()
+        try:
+            version_str = engine.version()
+        except Exception:
+            version_str = __version__
+        try:
+            solvers_raw = engine.list_solvers()
+        except Exception:
+            solvers_raw = []
+        try:
+            cap = engine.circuit_capabilities()
+            gpu = cap.get("gpu", False)
+            max_qubits = cap.get("max_qubits", None)
+        except Exception:
+            gpu = False
+            max_qubits = None
+        return {
+            "native": True,
+            "gpu": bool(gpu),
+            "version": str(version_str),
+            "solvers": list(solvers_raw),
+            "max_qubits": max_qubits,
+        }
+    except Exception:
+        return {
+            "native": False,
+            "gpu": False,
+            "version": f"pure-python-{__version__}",
+            "solvers": [],
+            "max_qubits": None,
+        }
+
 from .fault_tolerant import (
     FTError,
     LogicalQubit,
@@ -315,13 +383,15 @@ from .ray_sim import (        # M111
     is_ray_available,
     dist_sv_benchmark,
 )
-from .ftqc_pipeline import (  # M112
+from .ftqc_pipeline import (  # M112 + M156
     FTQCPipelineError,
     PipelineResult,
     ThresholdCurveResult,
     FTQCPipeline,
     threshold_curve,
     threshold_crossing,
+    ResourceEstimate,         # M156
+    FTQCResourceEstimator,    # M156
 )
 from .excited_state import (  # M113
     ExcitedStateError,
@@ -751,13 +821,15 @@ __all__ = [
     "DistributedSVSimulator",
     "is_ray_available",
     "dist_sv_benchmark",
-    # Fault-tolerant QC end-to-end pipeline (M112)
+    # Fault-tolerant QC end-to-end pipeline (M112) + resource estimator (M156)
     "FTQCPipelineError",
     "PipelineResult",
     "ThresholdCurveResult",
     "FTQCPipeline",
     "threshold_curve",
     "threshold_crossing",
+    "ResourceEstimate",
+    "FTQCResourceEstimator",
     # Excited-state quantum chemistry (M113)
     "ExcitedStateError",
     "ExcitedStateResult",
@@ -844,4 +916,6 @@ __all__ = [
     "HypergraphProductCode",
     "LDPCDecoder",
     "bicycle_code",
+    # Backend capability introspection (M153)
+    "backend_info",
 ]

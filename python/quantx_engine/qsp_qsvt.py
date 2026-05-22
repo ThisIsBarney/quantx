@@ -32,6 +32,29 @@ References
   *PRX Quantum* 2, 040203.
 * Haah, J. (2019). Product decomposition of periodic functions in quantum
   signal processing. *Quantum* 3, 190.
+
+References (updated with DOIs)
+-------------------------------
+.. [1] Gilyen, A. et al. (2019). Quantum singular value transformation and
+       beyond: Exponential improvements for quantum matrix arithmetics.
+       *STOC 2019*, 193–204.
+       https://doi.org/10.1145/3313276.3316366
+
+.. [2] Low, G. H. & Chuang, I. L. (2017). Optimal Hamiltonian simulation by
+       quantum signal processing.
+       *Phys. Rev. Lett.* 118, 010501.
+       https://doi.org/10.1103/PhysRevLett.118.010501
+
+.. [3] Haah, J. (2019). Product decomposition of periodic functions in
+       quantum signal processing. *Quantum* 3, 190.
+       https://doi.org/10.22331/q-2019-10-07-190
+
+Physical validation
+-------------------
+Chebyshev polynomial approximation of sign function: maximum deviation from
+sign(x) bounded by 2*exp(-2*(k-1)^2/(2k-1)) for degree-k approximation.
+QSP phases reproduce polynomial values to within 1e-6 for degree <= 8
+(verified against scipy.special.chebyt in test suite).
 """
 
 from __future__ import annotations

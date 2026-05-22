@@ -22,6 +22,28 @@ References
   *Phys. Rev. Lett.* 86, 5188.
 * Danos, V. et al. (2007). The measurement calculus.
   *J. ACM* 54, 8.
+
+References (updated with DOIs)
+-------------------------------
+.. [1] Raussendorf, R. & Briegel, H. J. (2001). A one-way quantum computer.
+       *Phys. Rev. Lett.* 86, 5188.
+       https://doi.org/10.1103/PhysRevLett.86.5188
+
+.. [2] Raussendorf, R., Browne, D. E. & Briegel, H. J. (2003).
+       Measurement-based quantum computation on cluster states.
+       *Phys. Rev. A* 68, 022312.
+       https://doi.org/10.1103/PhysRevA.68.022312
+
+.. [3] Nielsen, M. A. (2006). Cluster-state quantum computation.
+       *Rep. Prog. Phys.* 69, 2015.
+       https://doi.org/10.1088/0034-4885/69/7/R03
+
+Physical validation
+-------------------
+Linear cluster state |+>-CZ-...-CZ-|+>: measuring all qubits in the X basis
+gives a uniformly random bit string (no correlations in X-basis) [Raussendorf2001].
+Single-qubit rotation R_z(theta): teleported via MBQC pattern with angles
+{-theta, 0} and appropriate feed-forward [Raussendorf2003].
 """
 
 from __future__ import annotations

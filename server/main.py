@@ -66,7 +66,7 @@ app = FastAPI(
         "and advanced solvers (Floquet M92, TDMRG M94, noise-aware VQE M95, "
         "fault-tolerant qubits M91)."
     ),
-    version="0.2.0",
+    version=getattr(_quantx_engine, "__version__", "0.2.0"),
     lifespan=lifespan,
 )
 

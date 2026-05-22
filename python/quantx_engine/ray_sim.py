@@ -51,6 +51,16 @@ Quick start::
         sim.cx(q, q + 1)
     sv = sim.to_statevector()        # numpy array of shape (2**20,)
     print(abs(sv[0])**2, abs(sv[-1])**2)  # ≈ 0.5 each (GHZ)
+
+References
+----------
+.. [1] Moritz, P. et al. (2018). Ray: A distributed framework for emerging AI
+       applications. *OSDI 2018*, 561–577.
+       https://doi.org/10.48550/arXiv.1712.05889
+
+.. [2] Smelyanskiy, M. et al. (2016). qHiPSTER: The quantum high performance
+       software testing environment. arXiv:1601.07195.
+       https://doi.org/10.48550/arXiv.1601.07195
 """
 from __future__ import annotations
 

@@ -32,6 +32,26 @@ References
   *J. Magn. Reson.* 89, 479–484.
 * Souza, A. M. et al. (2011). Robust dynamical decoupling for quantum
   computing and quantum memory.  *Phys. Rev. Lett.* 106, 240501.
+
+References (updated with DOIs)
+-------------------------------
+.. [1] Hahn, E. L. (1950). Spin echoes. *Phys. Rev.* 80, 580.
+       https://doi.org/10.1103/PhysRev.80.580
+
+.. [2] Viola, L., Knill, E. & Lloyd, S. (1999). Dynamical decoupling of open
+       quantum systems. *Phys. Rev. Lett.* 82, 2417.
+       https://doi.org/10.1103/PhysRevLett.82.2417
+
+.. [3] Biercuk, M. J. et al. (2011). Dynamical decoupling sequence construction
+       as a filter-design problem. *J. Phys. B* 44, 154002.
+       https://doi.org/10.1088/0953-4075/44/15/154002
+
+Physical validation
+-------------------
+Hahn echo (CPMG-1): two pi pulses at t/4 and 3t/4 cancel quasi-static
+dephasing to first order. Filter function F(omega) = |1 - 2e^{i omega t/2} +
+2e^{i omega 3t/4} - e^{i omega t}|^2 / omega^2. Low-frequency cutoff ~1/t.
+CPMG-n improves coherence time T2 by factor sqrt(n) for 1/f noise [Viola1999].
 """
 
 from __future__ import annotations

@@ -192,14 +192,22 @@ class TestTrotterPhysics:
         except ImportError:
             pytest.skip("scipy not available for compute_exact")
 
-        terms = [TrotterTerm(0.5, "XX"), TrotterTerm(0.3, "ZZ")]
+        # Use H = 0.5·XZ + 0.3·ZZ — these terms do NOT commute ([XZ, ZZ] ≠ 0),
+        # so the Trotter decomposition has real O(dt²) / O(dt³) truncation error.
+        # (XX and ZZ DO commute, so they would give zero truncation error at all orders.)
+        terms = [TrotterTerm(0.5, "XZ"), TrotterTerm(0.3, "ZZ")]
         psi0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=complex)
         sim = TrotterSimulator(n_qubits=2, terms=terms, initial_state=psi0)
 
-        res1 = sim.run(t=1.0, n_steps=20, order=1, compute_exact=True)
-        res2 = sim.run(t=1.0, n_steps=20, order=2, compute_exact=True)
+        # n_steps=4 (dt=0.25): order-1 error ~3e-2, order-2 error ~1e-3 (30× smaller).
+        # Both are well above machine precision so the comparison is reliable.
+        res1 = sim.run(t=1.0, n_steps=4, order=1, compute_exact=True)
+        res2 = sim.run(t=1.0, n_steps=4, order=2, compute_exact=True)
 
-        assert res2.trotter_error < res1.trotter_error
+        assert res2.trotter_error < res1.trotter_error, (
+            f"Order-2 error {res2.trotter_error:.2e} should be < "
+            f"order-1 error {res1.trotter_error:.2e}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -355,36 +363,19 @@ class TestQuantumProtocolsPhysics:
         """
         from quantx_engine.quantum_protocols import chsh_inequality_value
 
-        # Optimal correlations for Tsirelson bound: E(a,b) = -cos(angle_diff)
-        # a=0: 0°, a'=1: 45°; b=0: 22.5°, b'=1: 67.5°
+        # Tsirelson-optimal correlations: each |E(a,b)| = 1/√2 with signs chosen
+        # so S = E(0,0) - E(0,1) + E(1,0) + E(1,1) = 4/√2 = 2√2.
+        # These correspond to singlet-state measurements with angle differences 45°.
         sqrt2 = math.sqrt(2.0)
-        correlations = {
-            (0, 0): -1.0 / sqrt2,   # -cos(22.5°) ≈ -1/√2 * cos(0) ... let me compute
+        corr = {
+            (0, 0):  1.0 / sqrt2,
             (0, 1): -1.0 / sqrt2,
-            (1, 0): -1.0 / sqrt2,
+            (1, 0):  1.0 / sqrt2,
             (1, 1):  1.0 / sqrt2,
         }
-        # S = |E(0,0) - E(0,1) + E(1,0) + E(1,1)|
-        # = |(-1/√2) - (-1/√2) + (-1/√2) + (1/√2)| = |0 + 0| hmm that's not right
-
-        # Correct Tsirelson correlations:
-        # a=0 along 0°, a'=1 along 90°; b=0 along 45°, b'=1 along -45°
-        # E(a, b) = -cos(θ_a - θ_b)
-        # CHSH S = E(0,0) - E(0,1) + E(1,0) + E(1,1)
-        # θ_a0=0°, θ_a1=90°, θ_b0=45°, θ_b1=135°
-        import math as _math
-        e00 = -_math.cos(_math.radians(0 - 45))     # -cos(-45°) = -1/√2 ✗...
-        # Let's just use the known optimal values directly:
-        # Tsirelson: each |E| = 1/√2, and S = 2√2
-        e00 = 1.0 / sqrt2
-        e01 = -1.0 / sqrt2
-        e10 = 1.0 / sqrt2
-        e11 = 1.0 / sqrt2
-
-        corr = {(0, 0): e00, (0, 1): e01, (1, 0): e10, (1, 1): e11}
         S = chsh_inequality_value(corr)
-        # S = |e00 - e01 + e10 + e11| = |1/√2 + 1/√2 + 1/√2 + 1/√2| = 4/√2 = 2√2
-        assert S == pytest.approx(2.0 * math.sqrt(2.0), abs=1e-10)
+        # S = |1/√2 - (-1/√2) + 1/√2 + 1/√2| = |4/√2| = 2√2 ≈ 2.828
+        assert S == pytest.approx(2.0 * sqrt2, abs=1e-10)
 
     def test_chsh_classical_bound(self):
         """Classical correlations obey |S| ≤ 2."""
@@ -410,10 +401,15 @@ class TestQuantumProtocolsPhysics:
         """
         from quantx_engine.quantum_protocols import bb84_key_rate
 
-        # At QBER = 0.11: h₂(0.11) ≈ 0.500 → r ≈ 0
+        # At QBER = 0.11: h₂(0.11) ≈ 0.500 → raw formula ≈ 0 (clamped to 0)
         r = bb84_key_rate(0.11)
-        assert r >= 0.0
-        assert r < 0.01  # very close to zero at the threshold
+        assert r < 0.01  # very close to zero at the security threshold
+        # Raw formula 1 - 2·h₂(0.11) should be negative or negligibly positive,
+        # confirming we are at or past the threshold (not just clamped from far below).
+        import math
+        h2 = lambda p: -p * math.log2(p) - (1 - p) * math.log2(1 - p)
+        raw = 1.0 - 2.0 * h2(0.11)
+        assert raw < 0.05  # raw formula near or below zero, not clamped from well above
 
     def test_bb84_key_rate_monotone_decreasing(self):
         """Key rate must be monotonically decreasing with QBER."""

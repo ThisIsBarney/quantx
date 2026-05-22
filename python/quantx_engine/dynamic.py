@@ -31,6 +31,21 @@ Quick reference::
     result = DynamicSimulator(shots=200, seed=0).run(circ)
     # qubit 1 should always end up in |+⟩ ≡ (|0⟩+|1⟩)/√2, so counts ≈ 50/50
     print(result.counts)
+
+References
+----------
+.. [1] Corcoles, A. D. et al. (2021). Exploiting dynamic quantum circuits in
+       a quantum algorithm with superconducting qubits.
+       *Phys. Rev. Lett.* 127, 100501.
+       https://doi.org/10.1103/PhysRevLett.127.100501
+
+.. [2] Pino, J. M. et al. (2021). Demonstration of the trapped-ion quantum CCD
+       computer architecture. *Nature* 592, 209.
+       https://doi.org/10.1038/s41586-021-03318-4
+
+.. [3] Aaronson, S. (2005). Quantum computing, postselection, and probabilistic
+       polynomial-time. *Proc. R. Soc. A* 461, 3473.
+       https://doi.org/10.1098/rspa.2005.1546
 """
 from __future__ import annotations
 

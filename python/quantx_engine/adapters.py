@@ -19,6 +19,18 @@ All imports of ``cirq`` and ``braket`` are deferred so that the rest of
 QuantX remains importable even if those packages are not installed.
 :class:`AdapterError` is raised when a required package is missing or a gate
 is not supported.
+
+References
+----------
+.. [1] Cirq Developers (2023). Cirq: A Python library for writing, manipulating,
+       and optimizing quantum circuits. *Zenodo*.
+       https://doi.org/10.5281/zenodo.8161252
+
+.. [2] Amazon Web Services (2021). Amazon Braket: Exploring quantum computing.
+       https://aws.amazon.com/braket/ (accessed 2024)
+
+.. [3] Qiskit Community (2023). Qiskit: An open-source framework for quantum
+       computing. *Zenodo*. https://doi.org/10.5281/zenodo.2573505
 """
 from __future__ import annotations
 
