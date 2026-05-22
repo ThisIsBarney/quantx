@@ -192,14 +192,22 @@ class TestTrotterPhysics:
         except ImportError:
             pytest.skip("scipy not available for compute_exact")
 
-        terms = [TrotterTerm(0.5, "XX"), TrotterTerm(0.3, "ZZ")]
+        # Use H = 0.5·XZ + 0.3·ZZ — these terms do NOT commute ([XZ, ZZ] ≠ 0),
+        # so the Trotter decomposition has real O(dt²) / O(dt³) truncation error.
+        # (XX and ZZ DO commute, so they would give zero truncation error at all orders.)
+        terms = [TrotterTerm(0.5, "XZ"), TrotterTerm(0.3, "ZZ")]
         psi0 = np.array([1.0, 0.0, 0.0, 0.0], dtype=complex)
         sim = TrotterSimulator(n_qubits=2, terms=terms, initial_state=psi0)
 
-        res1 = sim.run(t=1.0, n_steps=20, order=1, compute_exact=True)
-        res2 = sim.run(t=1.0, n_steps=20, order=2, compute_exact=True)
+        # n_steps=4 (dt=0.25): order-1 error ~3e-2, order-2 error ~1e-3 (30× smaller).
+        # Both are well above machine precision so the comparison is reliable.
+        res1 = sim.run(t=1.0, n_steps=4, order=1, compute_exact=True)
+        res2 = sim.run(t=1.0, n_steps=4, order=2, compute_exact=True)
 
-        assert res2.trotter_error < res1.trotter_error
+        assert res2.trotter_error < res1.trotter_error, (
+            f"Order-2 error {res2.trotter_error:.2e} should be < "
+            f"order-1 error {res1.trotter_error:.2e}"
+        )
 
 
 # ---------------------------------------------------------------------------

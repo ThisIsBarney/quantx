@@ -26,21 +26,20 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
+    "scipy>=1.10",
+    "networkx>=3.0",
 ]
 
 [project.optional-dependencies]
-# Pure-Python extras (no C++ build required)
-dev = ["pytest>=7.0", "numpy>=1.24"]
+# Development: testing only (scipy/networkx already in core deps)
+dev = ["pytest>=7.0"]
 pennylane = ["pennylane>=0.30.0"]
 gpu = ["cupy-cuda12x>=13.0"]
 distributed = ["ray[default]>=2.0"]
 
-# All dependencies needed to run the full test suite in CI
+# Full CI suite: adds PennyLane for plugin tests
 ci = [
     "pytest>=7.0",
-    "numpy>=1.24",
-    "scipy>=1.10",
-    "networkx>=3.0",
     "pennylane>=0.30.0",
 ]
 
@@ -49,17 +48,13 @@ notebooks = [
     "pytest>=7.0",
     "nbmake>=1.4",
     "nbformat>=5.9",
-    "numpy>=1.24",
-    "scipy>=1.10",
 ]
 
-# Meta-extra: everything optional
+# Meta-extra: everything optional (GPU, distributed, hardware)
 all = [
     "pennylane>=0.30.0",
     "cupy-cuda12x>=13.0",
     "ray[default]>=2.0",
-    "scipy>=1.10",
-    "networkx>=3.0",
 ]
 
 [project.entry-points."pennylane.plugins"]
