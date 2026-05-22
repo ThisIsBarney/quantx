@@ -67,16 +67,30 @@ jobs:
           nm -D "$LIB" | grep "qx_run\|qx_version\|qx_list_solvers"
 
       - name: Test Python ctypes loading
+        # Import only the engine module directly (not the full __init__.py)
+        # to avoid pulling in numpy/scipy which are not installed in this job.
         run: |
           python3 -c "
-          import ctypes, pathlib, os
-          lib = pathlib.Path('build').rglob('libquantx.so')
-          p = next(lib)
-          os.environ['QUANTX_LIB_PATH'] = str(p)
-          from python.quantx_engine.engine import Engine
-          e = Engine(str(p))
+          import ctypes, pathlib, os, sys
+          lib_paths = list(pathlib.Path('build').rglob('libquantx.so'))
+          if not lib_paths:
+              print('ERROR: libquantx.so not found'); sys.exit(1)
+          p = str(lib_paths[0])
+          os.environ['QUANTX_LIB_PATH'] = p
+          # Import the engine module in isolation; avoid quantx_engine/__init__.py
+          # which would trigger numpy/scipy imports not present in this job.
+          import importlib.util, types
+          spec = importlib.util.spec_from_file_location(
+              'engine', 'python/quantx_engine/engine.py')
+          mod = importlib.util.module_from_spec(spec)
+          # Stub the ctypes-independent sub-imports that __init__.py would pull
+          sys.modules.setdefault('quantx_engine', types.ModuleType('quantx_engine'))
+          spec.loader.exec_module(mod)
+          e = mod.Engine(p)
           v = e.version()
           print(f'Native engine version: {v}')
+          assert v, 'version string must be non-empty'
+          print('ctypes load test PASSED')
           "
 
       - name: Upload library artifact

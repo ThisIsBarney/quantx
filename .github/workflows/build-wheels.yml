@@ -98,7 +98,12 @@ jobs:
       - name: Install wheel in fresh venv
         run: |
           python -m venv smoke_venv
-          smoke_venv/bin/pip install --no-index --find-links=wheelhouse quantx-engine
+          # Install runtime dependencies first (from PyPI), then install the
+          # project wheel without dependency resolution (--no-deps) so that
+          # pip does not try to find numpy/scipy/networkx in the local wheelhouse
+          # where only the quantx-engine wheel exists.
+          smoke_venv/bin/pip install numpy scipy networkx
+          smoke_venv/bin/pip install --no-index --find-links=wheelhouse --no-deps quantx-engine
       - name: Run smoke tests
         run: |
           smoke_venv/bin/python - <<'EOF'
