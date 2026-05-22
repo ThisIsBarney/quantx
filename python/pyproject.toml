@@ -73,25 +73,29 @@ quantx_engine = [
   "*.pyd",
 ]
 
-# ── cibuildwheel configuration (M158) ─────────────────────────────────────────
+# ── cibuildwheel configuration (M158 / M159) ──────────────────────────────────
 # Run:  cibuildwheel --output-dir wheelhouse python/
 [tool.cibuildwheel]
 # Build CPython 3.10–3.13; skip 32-bit and musl libc.
 build = "cp310-* cp311-* cp312-* cp313-*"
 skip  = "*-win32 *-manylinux_i686 *-musllinux*"
 
-# Build the native shared library before packaging the wheel.
-# {project} resolves to the python/ directory (where this pyproject.toml lives).
-# CMakeLists.txt is one level up at the repo root.
-before-build = "python {project}/../scripts/build_native_for_wheel.py {project}/quantx_engine"
+# Install pybind11 before build so the script can detect and use it.
+# M159: enables zero-copy NumPy paths in _quantx_py extension.
+before-build = [
+  "pip install pybind11",
+  "python {project}/../scripts/build_native_for_wheel.py {project}/quantx_engine",
+]
 
-# Smoke-test the installed wheel: verify native engine is reachable.
+# Smoke-test the installed wheel: verify native engine + pybind11 fast path.
 test-command = """python -c "
 from quantx_engine import backend_info
+from quantx_engine.engine import Engine
 info = backend_info()
 print('native:', info['native'], '| version:', info['version'])
+print('pybind11:', Engine.pybind11_available())
 assert info['native'], 'Native engine not found in wheel'
-print('M158 smoke test PASSED')
+print('M159 smoke test PASSED')
 " """
 
 [tool.cibuildwheel.linux]

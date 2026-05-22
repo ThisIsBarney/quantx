@@ -672,7 +672,7 @@ Target: statevector round-trip overhead < 50 µs for 20-qubit circuits
 (vs ~50 ms for current ctypes+JSON path).
 Deliverables: expanded `pybind_module.cpp`, updated `Engine` class to prefer
 pybind11 over ctypes when the pybind11 extension is available.
-Status: pending
+Status: complete
 
 ### M160: Pure-Python dense statevector simulator
 Add `quantx_engine/statevector.py`: a self-contained ~400-line numpy statevector
