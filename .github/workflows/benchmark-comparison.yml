@@ -1,0 +1,77 @@
+name: Benchmark Comparison (M167)
+
+# Runs the cross-backend comparison benchmark on every push to master
+# and on manually triggered runs.  The gate check is enforced:
+# QuantX must not be >2× slower than the fastest reference backend
+# on any problem where a reference completes without error.
+
+on:
+  push:
+    branches: ["master", "main"]
+    paths:
+      - "benchmarks/compare_backends.py"
+      - "benchmarks/bench_utils.py"
+      - "python/quantx_engine/**"
+      - ".github/workflows/benchmark-comparison.yml"
+  workflow_dispatch:
+    inputs:
+      enforce_gate:
+        description: "Fail if QuantX is >2x slower than fastest reference"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+concurrency:
+  group: benchmark-comparison-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: Backend comparison / Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - name: Install QuantX SDK + benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "python/[dev]"
+          pip install scipy
+          # QuTiP is optional — install if available for this Python version
+          pip install qutip || echo "::warning::qutip install failed — will be skipped in benchmark"
+
+      - name: Run cross-backend comparison
+        run: |
+          mkdir -p benchmarks/ci_reports
+          python benchmarks/compare_backends.py \
+            --output benchmarks/ci_reports/comparison-${{ matrix.python-version }}.json \
+            --markdown benchmarks/ci_reports/comparison-${{ matrix.python-version }}.md \
+            ${{ (github.event_name == 'workflow_dispatch' && inputs.enforce_gate == 'true') && '--enforce-gate' || (github.event_name == 'push' && '--enforce-gate') || '' }}
+
+      - name: Upload comparison report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison-${{ matrix.python-version }}
+          path: benchmarks/ci_reports/
+          if-no-files-found: ignore
+
+      - name: Print Markdown summary
+        if: always()
+        run: |
+          if [ -f benchmarks/ci_reports/comparison-${{ matrix.python-version }}.md ]; then
+            cat benchmarks/ci_reports/comparison-${{ matrix.python-version }}.md >> $GITHUB_STEP_SUMMARY
+          fi

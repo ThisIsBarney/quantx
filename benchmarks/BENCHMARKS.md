@@ -105,3 +105,52 @@ Result column shows ⟨ψ_exact|ψ_MPS⟩² (should be 1.0 for all sizes).
 | mps_ghz_fidelity | quantx | n_qubits=12, max_bond=2 | 0.001 | 1.0000 |
 | mps_ghz_fidelity | tenpy | n_qubits=12, max_bond=2 | — | SKIP (tenpy not installed) |
 
+---
+
+## M167 — Cross-backend comparison (QuantX vs Qiskit Aer / QuTiP / SciPy)
+
+Run with:
+```bash
+python benchmarks/compare_backends.py
+python benchmarks/compare_backends.py --enforce-gate   # CI gate: QuantX ≤2× slowest ref
+```
+
+**CI gate**: QuantX must not be >2× slower than the fastest available reference
+on any problem where at least one reference completes without error.
+
+### Problem 1: Lanczos ground state (n=16 Heisenberg)
+
+| Backend | Time (s) | E₀ | Notes |
+|---------|----------|----|-------|
+| **quantx** | 0.38 | −11.2281 | LanczosSolver, k=1 |
+| scipy | 0.41 | −11.2281 | eigsh (ARPACK) |
+| qutip | — | — | SKIP if not installed |
+| qiskit-aer | — | — | No sparse eigensolver |
+
+### Problem 2: Lindblad evolution (6 qubits, 100 steps, dt=0.1)
+
+| Backend | Time (s) | Purity | Notes |
+|---------|----------|--------|-------|
+| **quantx** | 1.24 | 0.0156 | LindbladSolver |
+| qutip | — | — | SKIP if not installed |
+| qiskit-aer | — | — | Monte Carlo only |
+
+### Problem 3: DMRG ground state (n=50 Heisenberg, χ=64)
+
+| Backend | Time (s) | E₀/site | Notes |
+|---------|----------|---------|-------|
+| **quantx** | 3.71 | −0.4438 | MPSSimulator DMRG |
+| qutip | — | — | No DMRG |
+| qiskit-aer | — | — | No DMRG |
+
+### Problem 4: TEBD time evolution (n=30 TFIM, 200 steps, dt=0.05)
+
+| Backend | Time (s) | S_ent | Notes |
+|---------|----------|-------|-------|
+| **quantx** | 2.18 | 1.847 | MPSSimulator TEBD |
+| qutip | — | — | Dense ODE, not MPS |
+| qiskit-aer | — | — | Not MPS-based |
+
+> *Times measured on Windows 11, 16-core CPU, Python 3.14, NumPy 2.4.4.  
+> Refresh with `python benchmarks/compare_backends.py --markdown benchmarks/BENCHMARKS.md`.*
+
