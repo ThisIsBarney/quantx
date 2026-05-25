@@ -6,7 +6,42 @@ import os
 
 REPO = "ThisIsBarney/quantx"
 NOTEBOOKS_DIR = os.path.join(os.path.dirname(__file__), "..", "notebooks")
-BRANCH = "master"
+
+
+def _default_branch() -> str:
+    """Derive the repo default branch from git metadata; fall back to 'master'."""
+    import subprocess  # local import — only needed at script run-time
+
+    # Prefer: git symbolic-ref refs/remotes/origin/HEAD → refs/remotes/origin/<branch>
+    try:
+        ref = subprocess.check_output(
+            ["git", "symbolic-ref", "refs/remotes/origin/HEAD"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        return ref.split("/")[-1]  # "main" or "master"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    # Fallback: ask the GitHub CLI (requires `gh` in PATH and authentication)
+    try:
+        branch = subprocess.check_output(
+            ["gh", "repo", "view", "--json", "defaultBranchRef",
+             "--jq", ".defaultBranchRef.name"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if branch:
+            return branch
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        pass
+
+    return "master"
+
+
+BRANCH = _default_branch()
 
 NOTEBOOKS = [
     "01_getting_started.ipynb",
