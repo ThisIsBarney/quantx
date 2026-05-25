@@ -114,45 +114,78 @@ class LindbladError(ValueError):
 # Input types
 # ---------------------------------------------------------------------------
 
-@dataclass
 class JumpOperator:
-    """A single-qubit collapse (jump) operator for the Lindblad equation.
+    """A collapse (jump) operator for the Lindblad equation.
+
+    Can be constructed in two ways:
+
+    1. **Named channel** (original API)::
+
+        JumpOperator("amplitude_damping", qubit=0, rate=0.5)
+        JumpOperator("dephasing",         qubit=1, rate=0.1)
+
+    2. **Explicit matrix** (literature API)::
+
+        L = np.sqrt(gamma) * sigma_minus
+        JumpOperator(L)
 
     Parameters
     ----------
-    kind:
-        Channel type.  One of ``"amplitude_damping"``, ``"dephasing"``,
-        ``"depolarizing"``.
+    kind_or_matrix:
+        Either a channel-kind string (``"amplitude_damping"``,
+        ``"dephasing"``, ``"depolarizing"``) or a numpy array representing
+        the Kraus/jump operator matrix directly.
     qubit:
-        Target qubit index (0-based).
+        Target qubit index (0-based).  Required for named-channel form.
     rate:
-        Jump rate γ ≥ 0.  For amplitude damping this is the T1 decay rate;
-        for dephasing it is the pure-dephasing rate; for depolarizing it is
-        the depolarizing rate.
-
-    Examples
-    --------
-    >>> JumpOperator("amplitude_damping", qubit=0, rate=0.5)  # T1 = 2
-    >>> JumpOperator("dephasing",         qubit=1, rate=0.1)  # T2* ≈ 10
-    >>> JumpOperator("depolarizing",      qubit=0, rate=0.05)
+        Jump rate γ ≥ 0.  Required for named-channel form.
     """
-    kind: str
-    qubit: int
-    rate: float
 
-    def __post_init__(self):
-        if self.kind not in _CHANNEL_PREFIXES:
-            raise LindbladError(
-                f"Unknown jump operator kind {self.kind!r}. "
-                f"Choose from: {list(_CHANNEL_PREFIXES)}"
-            )
-        if self.qubit < 0:
-            raise LindbladError(f"qubit must be >= 0, got {self.qubit}")
-        if self.rate < 0.0:
-            raise LindbladError(f"rate must be >= 0, got {self.rate}")
+    def __init__(
+        self,
+        kind_or_matrix,
+        qubit: int | None = None,
+        rate: float | None = None,
+    ) -> None:
+        import numpy as _np
+        if isinstance(kind_or_matrix, _np.ndarray):
+            # Matrix form
+            self._matrix: "_np.ndarray | None" = kind_or_matrix
+            self.kind: "str | None" = None
+            self.qubit: "int | None" = None
+            self.rate: "float | None" = None
+        else:
+            # Named-channel form (backwards-compatible dataclass behaviour)
+            self._matrix = None
+            self.kind = str(kind_or_matrix)
+            if self.kind not in _CHANNEL_PREFIXES:
+                raise LindbladError(
+                    f"Unknown jump operator kind {self.kind!r}. "
+                    f"Choose from: {list(_CHANNEL_PREFIXES)}"
+                )
+            if qubit is None:
+                raise LindbladError("qubit must be provided for named JumpOperator")
+            if rate is None:
+                raise LindbladError("rate must be provided for named JumpOperator")
+            self.qubit = int(qubit)
+            self.rate = float(rate)
+            if self.qubit < 0:
+                raise LindbladError(f"qubit must be >= 0, got {self.qubit}")
+            if self.rate < 0.0:
+                raise LindbladError(f"rate must be >= 0, got {self.rate}")
+
+    @property
+    def matrix(self):
+        """Kraus operator matrix (only set for matrix-form JumpOperators)."""
+        return self._matrix
 
     def _to_hamiltonian_term(self) -> dict[str, Any]:
         """Convert to the C++ ``HamiltonianTerm`` JSON dict."""
+        if self.kind is None:
+            raise LindbladError(
+                "Cannot convert matrix-form JumpOperator to Hamiltonian term. "
+                "Use the named-channel form instead."
+            )
         prefix = _CHANNEL_PREFIXES[self.kind]
         return {"label": f"{prefix}{self.qubit}", "coefficient": float(self.rate)}
 

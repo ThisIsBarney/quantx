@@ -371,6 +371,11 @@ class HypergraphProductCode:
         return int(self._Hx.shape[1])
 
     @property
+    def n(self) -> int:
+        """Alias for n_qubits."""
+        return self.n_qubits
+
+    @property
     def n_x_checks(self) -> int:
         """Number of X parity checks (rows of Hx)."""
         return int(self._Hx.shape[0])

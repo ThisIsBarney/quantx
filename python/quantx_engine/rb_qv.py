@@ -276,6 +276,19 @@ class RBResult:
     epc: float
     n_qubits: int
 
+    @property
+    def r_squared(self) -> float:
+        """Coefficient of determination R² for the exponential fit A·p^m + B."""
+        import numpy as _np
+        m_arr = _np.array(self.sequence_lengths, dtype=float)
+        p_obs = _np.array(self.survival_probs)
+        p_fit = self.A * self.p_decay ** m_arr + self.B
+        ss_res = float(_np.sum((p_obs - p_fit) ** 2))
+        ss_tot = float(_np.sum((p_obs - p_obs.mean()) ** 2))
+        if ss_tot < 1e-14:
+            return 1.0
+        return max(0.0, 1.0 - ss_res / ss_tot)
+
 
 class StandardRB:
     """Standard randomized benchmarking.
@@ -302,8 +315,12 @@ class StandardRB:
         n_qubits: int = 1,
         p_error: float = 0.001,
         seed: "int | None" = None,
+        *,
+        gate_error: "float | None" = None,
     ) -> None:
         _require_numpy()
+        if gate_error is not None:
+            p_error = gate_error  # alias
         if n_qubits < 1:
             raise RBQVError(f"n_qubits must be ≥ 1, got {n_qubits}.")
         if not (0.0 <= p_error < 1.0):
@@ -314,8 +331,10 @@ class StandardRB:
 
     def run(
         self,
-        m_values: "list[int]",
+        m_values: "list[int] | None" = None,
         n_sequences: int = 30,
+        *,
+        sequence_lengths: "list[int] | None" = None,
     ) -> RBResult:
         """Run the RB experiment.
 
@@ -331,6 +350,10 @@ class StandardRB:
         RBResult
         """
         _require_numpy()
+        if sequence_lengths is not None and m_values is None:
+            m_values = sequence_lengths  # alias
+        if m_values is None:
+            raise RBQVError("m_values (or sequence_lengths) must be provided.")
         m_values = list(m_values)
         if not m_values:
             raise RBQVError("m_values must not be empty.")
@@ -433,6 +456,11 @@ class QVResult:
     quantum_volume: int
     n_trials: int
 
+    @property
+    def heavy_output_probability(self) -> float:
+        """Alias for heavy_output_prob."""
+        return self.heavy_output_prob
+
 
 class QuantumVolume:
     """IBM Quantum Volume protocol.
@@ -454,12 +482,18 @@ class QuantumVolume:
         self,
         p_error: float = 0.001,
         seed: "int | None" = None,
+        *,
+        n_qubits: "int | None" = None,
+        gate_error: "float | None" = None,
     ) -> None:
         _require_numpy()
+        if gate_error is not None:
+            p_error = gate_error  # alias
         if not (0.0 <= p_error < 1.0):
             raise RBQVError(f"p_error must be in [0, 1), got {p_error}.")
         self.p_error = p_error
         self.seed = seed
+        self._fixed_n_qubits = n_qubits  # if set, run() targets this width
 
     def _run_single(
         self,
@@ -523,8 +557,14 @@ class QuantumVolume:
         self,
         max_qubits: int = 4,
         n_trials: int = 100,
-    ) -> "list[QVResult]":
+        *,
+        n_circuits: "int | None" = None,
+    ) -> "list[QVResult] | QVResult":
         """Run QV experiments for n = 1 … max_qubits.
+
+        If the instance was constructed with ``n_qubits=k``, runs a single
+        experiment at width k and returns a single :class:`QVResult`.
+        Otherwise returns a list of results (one per width 1..max_qubits).
 
         Parameters
         ----------
@@ -538,12 +578,23 @@ class QuantumVolume:
         List of :class:`QVResult`, one per width.
         """
         _require_numpy()
-        if max_qubits < 1:
-            raise RBQVError(f"max_qubits must be ≥ 1, got {max_qubits}.")
+        if n_circuits is not None:
+            n_trials = n_circuits  # alias
         if n_trials < 1:
             raise RBQVError("n_trials must be ≥ 1.")
 
         rng = np.random.default_rng(self.seed)
+
+        # Single-width mode: when n_qubits was specified at construction
+        if self._fixed_n_qubits is not None:
+            n = self._fixed_n_qubits
+            if n < 1:
+                raise RBQVError(f"n_qubits must be ≥ 1, got {n}.")
+            return self._run_single(n, n_trials, rng)
+
+        # Multi-width sweep mode
+        if max_qubits < 1:
+            raise RBQVError(f"max_qubits must be ≥ 1, got {max_qubits}.")
         results: "list[QVResult]" = []
         for n in range(1, max_qubits + 1):
             results.append(self._run_single(n, n_trials, rng))

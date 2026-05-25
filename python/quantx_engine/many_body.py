@@ -406,7 +406,19 @@ class SYKModel:
         Random seed for reproducibility.
     """
 
-    def __init__(self, N: int, q: int = 4, seed: Optional[int] = None) -> None:
+    def __init__(
+        self,
+        N: "Optional[int]" = None,
+        q: int = 4,
+        seed: "Optional[int]" = None,
+        *,
+        n_sites: "Optional[int]" = None,
+    ) -> None:
+        # ``n_sites`` kwarg: number of Majorana modes (same as N)
+        if n_sites is not None and N is None:
+            N = n_sites
+        if N is None:
+            raise ManyBodyError("N (or n_sites) must be provided")
         if N < 2 or N % 2 != 0:
             raise ManyBodyError("SYK requires N ≥ 2 even (number of Majorana modes)")
         if q < 2 or q % 2 != 0:

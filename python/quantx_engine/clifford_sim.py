@@ -503,6 +503,10 @@ class CliffordSimulator:
     def cx(self, ctrl: int, target: int) -> "CliffordSimulator":
         self._state.cx(ctrl, target); return self
 
+    def cnot(self, ctrl: int, target: int) -> "CliffordSimulator":
+        """CNOT gate (alias for cx)."""
+        return self.cx(ctrl, target)
+
     def cz(self, q0: int, q1: int) -> "CliffordSimulator":
         self._state.cz(q0, q1); return self
 
@@ -556,6 +560,76 @@ class CliffordSimulator:
     @property
     def measurement_outcomes(self) -> list[int]:
         return list(self._measurement_outcomes)
+
+    def pauli_expectation(self, pauli: str) -> float:
+        """Return expectation value of a Pauli string: +1.0, -1.0, or 0.0.
+
+        Returns +1 if the Pauli is in the stabiliser group, -1 if its
+        negative is, and 0 if the outcome is indeterminate (the Pauli does
+        not commute with at least one generator).
+
+        Parameters
+        ----------
+        pauli : str
+            Pauli string of length n_qubits, each character in {I,X,Y,Z}.
+        """
+        n = self._state.n
+        tab = self._state._tab
+
+        if len(pauli) != n:
+            raise CliffordError(
+                f"Pauli string length {len(pauli)} must equal n_qubits {n}"
+            )
+
+        px = np.zeros(n, dtype=np.uint8)
+        pz = np.zeros(n, dtype=np.uint8)
+        pr = np.uint8(0)
+        for j, c in enumerate(pauli.upper()):
+            if c == "X":
+                px[j] = 1
+            elif c == "Z":
+                pz[j] = 1
+            elif c == "Y":
+                px[j] = 1
+                pz[j] = 1
+                pr ^= np.uint8(1)
+            elif c != "I":
+                raise CliffordError(f"Unknown Pauli character: {c!r}")
+
+        p_row = np.zeros(2 * n + 1, dtype=np.uint8)
+        p_row[:n] = px
+        p_row[n:2 * n] = pz
+        p_row[2 * n] = pr
+
+        # --- commutation check ------------------------------------------
+        # P anticommutes with generator g_i iff
+        #   sum_j (px[j]*gz[j] + pz[j]*gx[j]) is odd.
+        px_i = px.astype(np.int64)
+        pz_i = pz.astype(np.int64)
+        for i in range(n, 2 * n):
+            gx = tab[i, :n].astype(np.int64)
+            gz = tab[i, n:2 * n].astype(np.int64)
+            anticomm = (int(np.dot(px_i, gz)) + int(np.dot(pz_i, gx))) % 2
+            if anticomm:
+                return 0.0  # indeterminate
+
+        # --- eigenvalue reconstruction ----------------------------------
+        # Reduce *scratch* to identity using stabiliser rows as pivots.
+        # Each generator is used at most once (tracked by *used*).
+        scratch = p_row.copy()
+        used = [False] * n
+        for col in range(2 * n):
+            if not scratch[col]:
+                continue
+            for i in range(n):
+                if not used[i] and tab[n + i, col]:
+                    used[i] = True
+                    self._state._scratch_rowmult(scratch, tab[n + i])
+                    break
+
+        if not np.any(scratch[:2 * n]):
+            return 1.0 - 2.0 * float(scratch[2 * n])
+        return 0.0  # fallback (shouldn't occur for valid stabiliser states)
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"CliffordSimulator(n_qubits={self.n_qubits})"

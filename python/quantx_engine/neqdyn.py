@@ -361,6 +361,11 @@ class KibbleZurekResult:
     kz_exponent: float
     kz_prefactor: float
 
+    @property
+    def exponent(self) -> float:
+        """Alias for kz_exponent."""
+        return self.kz_exponent
+
     def to_dict(self) -> dict:
         return {
             "quench_rates": self.quench_rates,
@@ -392,12 +397,19 @@ class KibbleZurekScaling:
         n_sites: int,
         J: float = 1.0,
         n_steps: int = 50,
+        *,
+        model: "Optional[str]" = None,
     ) -> None:
         if n_sites < 2:
             raise NonEquilError(f"n_sites must be ≥ 2, got {n_sites}")
         self.n_sites = n_sites
         self.J = J
         self.n_steps = n_steps
+        # ``model`` kwarg accepted for API compatibility ("tfim_1d" is default)
+        if model is not None and model not in ("tfim_1d",):
+            raise NonEquilError(
+                f"Unknown model {model!r}; supported models: 'tfim_1d'"
+            )
 
     def _build_ising_H(self, h: float) -> np.ndarray:
         """Build 1D TFIM Hamiltonian at field h."""
@@ -466,6 +478,29 @@ class KibbleZurekScaling:
             psi /= np.linalg.norm(psi)
 
         return self._defect_density(psi)
+
+    def run(
+        self,
+        tau_Q_values: "Optional[list[float]]" = None,
+        seed: "Optional[int]" = None,
+        h_i: float = 2.0,
+        h_f: float = 0.1,
+    ) -> KibbleZurekResult:
+        """Alias for :meth:`sweep` with ``tau_Q_values`` → ``quench_rates``.
+
+        Parameters
+        ----------
+        tau_Q_values : list[float] | None
+            Quench time scales (τ_Q).  The quench rate is v = Δh / τ_Q.
+            If None, defaults to a log-spaced range.
+        seed : int | None
+            Ignored (kept for API compatibility).
+        """
+        quench_rates: "Optional[list[float]]" = None
+        if tau_Q_values is not None:
+            dh = h_i - h_f
+            quench_rates = [dh / tq for tq in tau_Q_values]
+        return self.sweep(quench_rates=quench_rates, h_i=h_i, h_f=h_f)
 
     def sweep(
         self,

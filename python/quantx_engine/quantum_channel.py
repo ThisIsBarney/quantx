@@ -245,13 +245,25 @@ class QuantumChannel:
         return cls(ops)
 
     @classmethod
-    def identity(cls, d: int) -> "QuantumChannel":
-        """Identity channel Φ(ρ) = ρ, one Kraus operator K = I_d."""
+    def identity(cls, d: "int | None" = None, *, n_qubits: "int | None" = None) -> "QuantumChannel":
+        """Identity channel Φ(ρ) = ρ, one Kraus operator K = I_d.
+
+        Parameters
+        ----------
+        d : int
+            Hilbert-space dimension.
+        n_qubits : int
+            Alternative to ``d``; sets ``d = 2**n_qubits``.
+        """
         _require_numpy()
+        if n_qubits is not None and d is None:
+            d = 1 << n_qubits
+        if d is None:
+            raise ChannelError("d (or n_qubits) must be provided")
         return cls([np.eye(d, dtype=complex)])
 
     @classmethod
-    def depolarizing(cls, d: int, p: float) -> "QuantumChannel":
+    def depolarizing(cls, d: "int | None" = None, p: float = 0.0, *, n_qubits: "int | None" = None) -> "QuantumChannel":
         """Depolarizing channel Φ(ρ) = (1−p)ρ + p·I/d.
 
         Uses the Weyl-operator Kraus decomposition:
@@ -269,6 +281,10 @@ class QuantumChannel:
             Depolarizing probability ∈ [0, 1].
         """
         _require_numpy()
+        if n_qubits is not None and d is None:
+            d = 1 << n_qubits
+        if d is None:
+            raise ChannelError("d (or n_qubits) must be provided")
         if d < 2:
             raise ChannelError(f"d must be >= 2, got {d}")
         if not 0.0 <= p <= 1.0:
@@ -551,19 +567,80 @@ class SteadyStateSolver:
         Threshold for identifying eigenvalues as "equal to 1".
     """
 
-    def __init__(self, tol: float = 1e-8):
+    def __init__(
+        self,
+        tol: float = 1e-8,
+        *,
+        H: "np.ndarray | None" = None,
+        jump_operators=None,
+    ):
         _require_numpy()
         if tol <= 0:
             raise ChannelError(f"tol must be > 0, got {tol}")
         self.tol = tol
+        self._H = H
+        self._jump_operators = jump_operators
 
-    def solve(self, channel: QuantumChannel) -> "np.ndarray":
+    def _build_lindblad_channel(self) -> "QuantumChannel":
+        """Build a QuantumChannel from H and jump_operators using the Lindblad map."""
+        H = self._H
+        jump_ops = self._jump_operators or []
+        d = H.shape[0]
+
+        # Collect Kraus operators of the Lindblad map (first-order Euler step approximation)
+        # More accurately, we build the superoperator directly.
+        # The Lindblad steady-state superoperator L acts as:
+        #   L[rho] = -i[H,rho] + sum_k (L_k rho L_k† - 1/2 {L_k†L_k, rho})
+        # We vectorize rho (row-major) → vec(rho) of length d²
+        # Then L is a d²×d² matrix.
+
+        d2 = d * d
+        I_d = np.eye(d, dtype=complex)
+
+        # Coherent part: -i(H⊗I - I⊗H^T) acting on vec(rho)
+        L_super = -1j * (np.kron(H, I_d) - np.kron(I_d, H.T))
+
+        # Dissipative part
+        for op in jump_ops:
+            # Get the Kraus matrix
+            if hasattr(op, 'matrix') and op.matrix is not None:
+                Lk = op.matrix.astype(complex)
+            elif hasattr(op, 'kind') and op.kind is not None:
+                # Build from named channel
+                if op.kind == "amplitude_damping":
+                    gamma = float(op.rate)
+                    Lk = np.sqrt(gamma) * np.array([[0, 1], [0, 0]], dtype=complex)
+                elif op.kind == "dephasing":
+                    gamma = float(op.rate)
+                    Lk = np.sqrt(gamma) * np.array([[1, 0], [0, -1]], dtype=complex) / 2
+                else:
+                    continue
+            else:
+                continue
+
+            LkH = Lk.conj().T
+            # L_k rho L_k† → (L_k ⊗ L_k*) vec(rho)
+            # -1/2 {L_k†L_k, rho} → -1/2 ((L_k†L_k ⊗ I) + (I ⊗ (L_k†L_k)^T)) vec(rho)
+            LkHLk = LkH @ Lk
+            L_super += np.kron(Lk, Lk.conj())
+            L_super -= 0.5 * np.kron(LkHLk, I_d)
+            L_super -= 0.5 * np.kron(I_d, LkHLk.T)
+
+        # Build a QuantumChannel whose superoperator IS L_super
+        # We wrap it by creating a dummy channel with a solve method
+        # Instead, just store and use L_super directly in solve()
+        self._L_super = L_super
+        self._d = d
+        return None  # signal to solve() that L_super is available
+
+    def solve(self, channel: "QuantumChannel | None" = None) -> "np.ndarray":
         """Find the steady-state density matrix.
 
         Parameters
         ----------
         channel:
-            A :class:`QuantumChannel` instance.
+            A :class:`QuantumChannel` instance.  May be omitted if *H* and
+            *jump_operators* were provided at construction time.
 
         Returns
         -------
@@ -576,6 +653,36 @@ class SteadyStateSolver:
         ChannelError
             If no physically valid fixed point can be found.
         """
+        # ── Lindblad steady-state path ───────────────────────────────────
+        if channel is None:
+            if self._H is None:
+                raise ChannelError(
+                    "solve() requires either a 'channel' argument or 'H' and "
+                    "'jump_operators' provided at construction time."
+                )
+            self._build_lindblad_channel()
+            L_super = self._L_super
+            d = self._d
+            # Find null space of L_super (steady state satisfies L[rho] = 0)
+            # Use SVD to find null vectors
+            _, s, Vh = np.linalg.svd(L_super)
+            # Null vector = right singular vector for smallest singular value
+            null_vec = Vh[-1].conj()
+            rho = null_vec.reshape(d, d)
+            # Symmetrize and normalize
+            rho = (rho + rho.conj().T) / 2.0
+            ev, U = np.linalg.eigh(rho)
+            ev = np.maximum(ev, 0.0)
+            rho = U @ np.diag(ev) @ U.conj().T
+            tr = float(np.real(np.trace(rho)))
+            if tr < 1e-14:
+                raise ChannelError(
+                    "SteadyStateSolver: Lindblad steady-state density matrix has "
+                    "near-zero trace."
+                )
+            return rho / tr
+
+        # ── CPTP fixed-point path (original) ────────────────────────────
         d = channel.dim
         L = channel.superoperator()
         evals, evecs = np.linalg.eig(L)
