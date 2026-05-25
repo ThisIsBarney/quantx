@@ -1,0 +1,44 @@
+name: Question / Help
+description: Ask a question about using QuantX
+title: "[Question]: "
+labels: ["question"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For quick questions, consider asking on
+        [GitHub Discussions](https://github.com/ThisIsBarney/quantx/discussions)
+        or the [Discord server](https://discord.gg/quantx) — you'll usually
+        get a faster response there.
+
+        Use this form for technical questions that might benefit from a
+        permanent, searchable record.
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question
+      description: What are you trying to do, and what is unclear?
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: What have you tried?
+      description: |
+        Paste any code you have tried so far and describe what you expected
+        vs. what happened.
+      render: python
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: QuantX version
+      placeholder: "0.4.0"
+    validations:
+      required: false

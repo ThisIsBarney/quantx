@@ -1,22 +1,97 @@
 # Contributing to QuantX
 
-Thank you for your interest in contributing to QuantX! This guide covers
-development setup, building the C++ native engine, and running the test suite.
+Thank you for your interest in contributing to QuantX! This guide covers the
+full contribution lifecycle — from filing issues to getting your PR merged —
+as well as development setup, build instructions, and coding conventions.
+
+All contributors are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ---
 
 ## Table of Contents
 
-1. [Development environment](#development-environment)
-2. [Pure-Python SDK](#pure-python-sdk)
-3. [Building the native C++ engine](#building-the-native-c-engine)
+1. [Community channels](#community-channels)
+2. [How to contribute](#how-to-contribute)
+   - [Reporting bugs](#reporting-bugs)
+   - [Requesting features](#requesting-features)
+   - [Submitting a pull request](#submitting-a-pull-request)
+   - [Developer Certificate of Origin](#developer-certificate-of-origin)
+3. [Development environment](#development-environment)
+4. [Pure-Python SDK](#pure-python-sdk)
+5. [Building the native C++ engine](#building-the-native-c-engine)
    - [Linux / macOS](#linux--macos)
    - [Windows](#windows)
    - [MSYS2 / MinGW (Windows)](#msys2--mingw-windows)
-4. [Verifying the build](#verifying-the-build)
-5. [Wiring Python to the native library](#wiring-python-to-the-native-library)
-6. [Running the test suite](#running-the-test-suite)
-7. [Coding conventions](#coding-conventions)
+6. [Verifying the build](#verifying-the-build)
+7. [Wiring Python to the native library](#wiring-python-to-the-native-library)
+8. [Running the test suite](#running-the-test-suite)
+9. [Coding conventions](#coding-conventions)
+
+---
+
+## Community channels
+
+| Channel | Purpose |
+|---------|---------|
+| [GitHub Issues](https://github.com/ThisIsBarney/quantx/issues) | Bug reports, feature requests, questions |
+| [GitHub Discussions](https://github.com/ThisIsBarney/quantx/discussions) | General Q&A, ideas, show-and-tell |
+| [Discord](https://discord.gg/quantx) | Real-time chat — `#help`, `#dev`, `#hardware` channels |
+
+For security vulnerabilities please read [SECURITY.md](SECURITY.md) and
+**do not** open a public issue.
+
+---
+
+## How to contribute
+
+### Reporting bugs
+
+Before opening an issue, search [existing issues](https://github.com/ThisIsBarney/quantx/issues)
+to avoid duplicates.
+
+Use the **Bug Report** template when filing a bug.  Include:
+- QuantX version (`python -c "import quantx_engine; print(quantx_engine.__version__)"`)
+- Python version and operating system
+- Minimal reproducible example
+- Full traceback (if applicable)
+
+### Requesting features
+
+Use the **Feature Request** template.  Describe the quantum simulation use-case
+you are trying to address and, if possible, a sketch of the proposed API.
+
+### Submitting a pull request
+
+1. **Fork** the repository and create a branch:
+   ```bash
+   git checkout -b feat/short-description
+   ```
+2. **Write tests** — every new feature needs at least one `test_*.py` file.
+3. **Run the test suite** locally (see [Running the test suite](#running-the-test-suite)).
+4. **Open a PR** against `master` using the PR template.
+5. A maintainer will review within a few business days.
+6. Address any feedback; the PR is merged once CI passes and at least one
+   approval is received.
+
+**PR scope guidelines**:
+- Keep PRs focused — one feature or fix per PR.
+- Include a `CHANGELOG.md` entry under `[Unreleased]` for user-visible changes.
+- Reference the issue number in the PR description (`Closes #NNN`).
+
+### Developer Certificate of Origin
+
+By submitting a pull request you certify that you have the right to submit
+the contribution under the project's MIT licence and that you agree to the
+[Developer Certificate of Origin v1.1](https://developercertificate.org/).
+
+Add a sign-off to each commit:
+```bash
+git commit -s -m "feat: add my contribution"
+```
+or append manually:
+```
+Signed-off-by: Your Name <your@email.com>
+```
 
 ---
 

@@ -1,0 +1,73 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide enough context for
+        us to understand the use-case and evaluate the proposal.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of QuantX does this relate to?
+      options:
+        - Statevector simulation
+        - MPS / tensor networks (DMRG, TEBD)
+        - Lindblad / open systems
+        - Quantum error correction (QEC)
+        - Variational algorithms (VQE, QAOA)
+        - Quantum chemistry
+        - Quantum walks
+        - Error mitigation (ZNE, PEC)
+        - Hardware backends (IBM, IonQ, etc.)
+        - Benchmarking / performance
+        - Python SDK / API ergonomics
+        - Documentation / notebooks
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or motivation
+      description: >
+        What quantum simulation task are you trying to accomplish?
+        What is the current limitation or friction?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: |
+        Describe the feature you would like to see, including a sketch of the
+        API if possible.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >
+        Have you found any workarounds, or are there existing libraries that
+        partially solve this?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Would you like to implement this?
+      options:
+        - label: Yes, I would like to submit a pull request.
+          required: false

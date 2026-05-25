@@ -1,0 +1,12 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: GitHub Discussions (Q&A, ideas)
+    url: https://github.com/ThisIsBarney/quantx/discussions
+    about: For general questions and community discussion, use GitHub Discussions.
+  - name: Discord (real-time chat)
+    url: https://discord.gg/quantx
+    about: Join the QuantX Discord for quick help and developer chat.
+  - name: Security vulnerabilities
+    url: https://github.com/ThisIsBarney/quantx/blob/master/SECURITY.md
+    about: Please report security issues privately — do not open a public issue.
