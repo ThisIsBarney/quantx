@@ -104,6 +104,20 @@ curl -X POST http://localhost:8000/solve/vqe \
   -d '{"cost_hamiltonian": [{"label": "Z0", "coefficient": -0.5}], "ansatz_type": "uccsd"}'
 ```
 
+## Notebooks
+
+Interactive tutorials — run instantly in Colab or Binder (no local install needed):
+
+| Notebook | Topic | Colab | Binder |
+|----------|-------|-------|--------|
+| [01 — Getting Started](notebooks/01_getting_started.ipynb) | Lanczos, Trotter, noise channels | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/01_getting_started.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/01_getting_started.ipynb) |
+| [02 — VQE Chemistry](notebooks/02_vqe_chemistry.ipynb) | UCCSD-VQE, noise-aware VQE, CVaR-QAOA | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/02_vqe_chemistry.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/02_vqe_chemistry.ipynb) |
+| [03 — Quantum Error Correction](notebooks/03_quantum_error_correction.ipynb) | RepetitionCode, SurfaceCode, MWPM | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/03_quantum_error_correction.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/03_quantum_error_correction.ipynb) |
+| [04 — Quantum Networking](notebooks/04_quantum_networking.ipynb) | BB84, teleportation, entanglement swapping | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/04_quantum_networking.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/04_quantum_networking.ipynb) |
+| [05 — Many-Body MPS](notebooks/05_many_body_mps.ipynb) | DMRG, TEBD, MPS entanglement | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/05_many_body_mps.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/05_many_body_mps.ipynb) |
+| [06 — QEC Research](notebooks/06_qec_research.ipynb) | QLDPC codes, bicycle codes, BP decoder | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/06_qec_research.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/06_qec_research.ipynb) |
+| [07 — Bosonic QEC](notebooks/07_bosonic_qec.ipynb) | Cat qubits, GKP codes, Wigner function | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ThisIsBarney/quantx/blob/master/notebooks/07_bosonic_qec.ipynb) | [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/ThisIsBarney/quantx/master?filepath=notebooks/07_bosonic_qec.ipynb) |
+
 ## CLI
 
 ```powershell
