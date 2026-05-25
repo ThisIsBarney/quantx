@@ -113,7 +113,7 @@ def deprecated(
                     since=since,
                     removed_in=removed_in,
                     replacement=replacement,
-                    stacklevel=2,
+                    stacklevel=3,  # user → new_init → warn
                 )
                 orig_init(self, *args, **kwargs)
 
@@ -129,7 +129,7 @@ def deprecated(
                 since=since,
                 removed_in=removed_in,
                 replacement=replacement,
-                stacklevel=2,
+                stacklevel=3,  # user → wrapper → warn
             )
             return obj(*args, **kwargs)
 
