@@ -85,11 +85,12 @@ def bench_lanczos_quantx() -> BenchResult:
     params = {"n_sites": N_LANCZOS, "k": 1}
     try:
         from quantx_engine.lanczos import LanczosSolver
-        from scipy.sparse import issparse
-        H = _heisenberg_sparse(N_LANCZOS)
         with timer() as elapsed:
             solver = LanczosSolver(k=1, max_iter=500, tol=1e-10)
-            result = solver.solve(H.toarray())
+            # Use the native Heisenberg solver: routes through the C++ backend
+            # when available and falls back to sparse-matrix Lanczos otherwise.
+            # This avoids calling .toarray() on a 2^16 × 2^16 matrix (~32 GiB).
+            result = solver.solve_heisenberg(N_LANCZOS)
         return BenchResult(benchmark=benchmark, backend=backend, params=params,
                            wall_time_s=elapsed[0], result_value=float(result.eigenvalues[0]))
     except Exception as exc:
@@ -149,33 +150,26 @@ def bench_lindblad_quantx() -> BenchResult:
     benchmark, backend = "lindblad_evolution", "quantx"
     params = {"n_qubits": N_LINDBLAD, "steps": N_STEPS_LINDBLAD, "dt": DT_LINDBLAD}
     try:
+        from quantx_engine import Engine
         from quantx_engine.lindblad import LindbladSolver, JumpOperator
-        dim = 2 ** N_LINDBLAD
-        # Transverse-field Ising Hamiltonian
-        I2 = np.eye(2, dtype=complex)
-        Z = np.array([[1, 0], [0, -1]], dtype=complex)
-        H = np.zeros((dim, dim), dtype=complex)
-        for i in range(N_LINDBLAD):
-            term = np.array([[1.0]], dtype=complex)
-            for j in range(N_LINDBLAD):
-                term = np.kron(term, Z if j == i else I2)
-            H += 0.5 * term
-        # Single-qubit depolarizing jump operators
-        ops = []
-        for i in range(N_LINDBLAD):
-            sig_m = np.zeros((2, 2), dtype=complex)
-            sig_m[1, 0] = 1.0
-            L = np.array([[1.0]], dtype=complex)
-            for j in range(N_LINDBLAD):
-                L = np.kron(L, sig_m if j == i else I2)
-            ops.append(JumpOperator(L * 0.1))
-        rho0 = np.eye(dim, dtype=complex) / dim
-        solver = LindbladSolver(H=H, jump_operators=ops)
+        # Transverse-field Ising Hamiltonian: H = 0.5 * sum_i Z_i
+        hamiltonian_terms = [(0.5, f"Z{i}") for i in range(N_LINDBLAD)]
+        # Single-qubit amplitude-damping collapse operators (rate 0.01 per qubit)
+        jump_operators = [
+            JumpOperator("amplitude_damping", qubit=i, rate=0.01)
+            for i in range(N_LINDBLAD)
+        ]
+        solver = LindbladSolver(Engine())
         with timer() as elapsed:
-            result = solver.evolve(rho0, dt=DT_LINDBLAD, n_steps=N_STEPS_LINDBLAD)
-        purity = float(np.real(np.trace(result.rho @ result.rho)))
+            result = solver.solve(
+                n_qubits=N_LINDBLAD,
+                hamiltonian_terms=hamiltonian_terms,
+                jump_operators=jump_operators,
+                total_time=DT_LINDBLAD * N_STEPS_LINDBLAD,
+                dt=DT_LINDBLAD,
+            )
         return BenchResult(benchmark=benchmark, backend=backend, params=params,
-                           wall_time_s=elapsed[0], result_value=purity)
+                           wall_time_s=elapsed[0], result_value=result.final_purity)
     except Exception as exc:
         return _error(benchmark, backend, params, exc)
 
@@ -231,12 +225,14 @@ def bench_dmrg_quantx() -> BenchResult:
     benchmark, backend = "dmrg_ground_state", "quantx"
     params = {"n_sites": N_DMRG, "bond_dim": CHI_DMRG}
     try:
-        from quantx_engine.mps_simulator import MPSSimulator
-        sim = MPSSimulator(n_qubits=N_DMRG, bond_dim=CHI_DMRG)
+        from quantx_engine.tensor_network import MPO
+        from quantx_engine.mps_simulator import CachedDMRG
+        mpo = MPO.heisenberg(N_DMRG)
+        solver = CachedDMRG(mpo=mpo, max_chi=CHI_DMRG, n_sweeps=10)
         with timer() as elapsed:
-            energy = sim.dmrg_ground_state()
+            result = solver.run()
         return BenchResult(benchmark=benchmark, backend=backend, params=params,
-                           wall_time_s=elapsed[0], result_value=float(energy))
+                           wall_time_s=elapsed[0], result_value=float(result.energy))
     except Exception as exc:
         return _error(benchmark, backend, params, exc)
 
@@ -264,12 +260,24 @@ def bench_tebd_quantx() -> BenchResult:
     params = {"n_sites": N_TEBD, "bond_dim": CHI_TEBD, "steps": N_STEPS_TEBD, "dt": DT_TEBD}
     try:
         from quantx_engine.mps_simulator import MPSSimulator
-        sim = MPSSimulator(n_qubits=N_TEBD, bond_dim=CHI_TEBD)
+        # TFIM Hamiltonian: H = -sum_{i} Z_i Z_{i+1} - sum_i X_i
+        hamiltonian_terms = []
+        for i in range(N_TEBD - 1):
+            label = "I" * i + "ZZ" + "I" * (N_TEBD - i - 2)
+            hamiltonian_terms.append({"label": label, "coefficient": -1.0})
+        for i in range(N_TEBD):
+            label = "I" * i + "X" + "I" * (N_TEBD - i - 1)
+            hamiltonian_terms.append({"label": label, "coefficient": -1.0})
+        sim = MPSSimulator(n_qubits=N_TEBD, max_bond=CHI_TEBD)
         with timer() as elapsed:
-            result = sim.tebd_evolve(t=DT_TEBD * N_STEPS_TEBD, n_steps=N_STEPS_TEBD)
-        entropy = float(result.entanglement_entropy) if hasattr(result, "entanglement_entropy") else 0.0
+            sim.evolve_hamiltonian(
+                hamiltonian_terms,
+                total_time=DT_TEBD * N_STEPS_TEBD,
+                dt=DT_TEBD,
+            )
+        # Report max bond dimension used as a proxy for entanglement growth
         return BenchResult(benchmark=benchmark, backend=backend, params=params,
-                           wall_time_s=elapsed[0], result_value=entropy)
+                           wall_time_s=elapsed[0], result_value=float(sim.max_bond_used))
     except Exception as exc:
         return _error(benchmark, backend, params, exc)
 
