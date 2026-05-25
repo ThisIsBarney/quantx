@@ -95,7 +95,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e "python/[dev]"
-          pip install qiskit>=1.0 qiskit-ibm-runtime>=0.20
+          pip install "qiskit>=1.0" "qiskit-ibm-runtime>=0.20"
 
       - name: Run real IBM hardware round-trip test
         env:
@@ -103,8 +103,7 @@ jobs:
         run: |
           python -m pytest python/quantx_engine/tests/test_ibm_hardware_roundtrip.py \
             -v -m "hardware" \
-            --tb=short \
-            --timeout=900
+            --tb=short
 
       - name: Run full demo against QASM simulator
         env:
