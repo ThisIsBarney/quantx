@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantx-engine"
-version = "0.2.0"
+version = "0.4.0"
 description = "QuantX quantum simulation SDK — 130+ physics modules covering VQE, MBQC, LDPC codes, bosonic qubits, QSVT, dynamical decoupling, and more"
 readme = "README.md"
 requires-python = ">=3.10"

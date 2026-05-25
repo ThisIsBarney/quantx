@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.abspath("../../python"))
 project = "QuantX Engine"
 copyright = "2026, QuantX Contributors"
 author = "QuantX Contributors"
-release = "0.2.0"
-version = "0.2.0"
+release = "0.4.0"
+version = "0.4.0"
 
 # ── General configuration ─────────────────────────────────────────────────────
 
@@ -38,7 +38,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_title = "QuantX Engine 0.2.0"
+html_title = "QuantX Engine 0.4.0"
 
 html_theme_options = {
     "sidebar_hide_name": False,
