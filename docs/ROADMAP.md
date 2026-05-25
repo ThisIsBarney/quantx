@@ -685,7 +685,7 @@ simulator that works with zero native dependencies.
   - Add `StatevectorSimulator` to public API and `__all__`
 This makes `quantx-engine` useful to anyone doing `pip install` on a machine
 without a C++ compiler.
-Status: pending
+Status: complete
 
 ### M161: QuantumCircuit fluent builder API
 Add `quantx_engine/circuit.py`: Pythonic circuit construction layer.

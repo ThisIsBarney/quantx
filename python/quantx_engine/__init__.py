@@ -496,6 +496,7 @@ from .ft_tgate import (  # M120
     # avoid shadowing the existing quantx_engine.clifford_t.TCountOptimizer.
     # Import it directly: from quantx_engine.ft_tgate import TCountOptimizer
 )
+from .statevector import StatevectorSimulator  # M160
 
 __all__ = [
     # Fault-tolerant logical qubits (M91)
@@ -918,4 +919,6 @@ __all__ = [
     "bicycle_code",
     # Backend capability introspection (M153)
     "backend_info",
+    # Pure-Python dense statevector simulator (M160)
+    "StatevectorSimulator",
 ]
