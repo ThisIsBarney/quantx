@@ -1,0 +1,58 @@
+name: Docs
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install docs dependencies
+        run: |
+          pip install -r docs/source/requirements.txt
+          # Install quantx-engine in pure-Python mode (no C++ build required)
+          pip install -e "python/" --no-build-isolation 2>/dev/null || true
+
+      - name: Build Sphinx docs
+        run: |
+          cd docs
+          # Auto-generate RST stubs for any new modules not yet in source/api/generated/
+          sphinx-apidoc \
+            --output-dir source/api/generated \
+            --separate \
+            --module-first \
+            --force \
+            ../python/quantx_engine \
+            "../python/quantx_engine/tests" \
+            "../python/quantx_engine/_native*" \
+            2>/dev/null || true
+          # Build HTML
+          sphinx-build -b html source _build/html -W --keep-going -n 2>&1 | tail -20 || \
+          sphinx-build -b html source _build/html --keep-going 2>&1 | tail -20
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/_build/html
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: "docs: deploy from ${{ github.sha }}"

@@ -88,3 +88,5 @@ Module Index
    quantx_engine.pennylane_plugin
    quantx_engine.primitives
    quantx_engine.jupyter_widgets
+   quantx_engine.circuit
+   quantx_engine.statevector
