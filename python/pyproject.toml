@@ -113,6 +113,9 @@ archs = ["AMD64"]
 # Run from the python/ directory: `pytest` or `pytest quantx_engine/tests/`
 testpaths = ["quantx_engine/tests"]
 addopts = "-q --tb=short"
+markers = [
+    "hardware: marks tests that require real quantum hardware credentials (deselect with -m 'not hardware')",
+]
 
 [dependency-groups]
 dev = [
