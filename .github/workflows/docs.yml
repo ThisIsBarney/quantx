@@ -32,6 +32,7 @@ jobs:
 
       - name: Build Sphinx docs
         run: |
+          set -euo pipefail
           cd docs
           # Auto-generate RST stubs for any new modules not yet in source/api/generated/
           sphinx-apidoc \
@@ -41,11 +42,13 @@ jobs:
             --force \
             ../python/quantx_engine \
             "../python/quantx_engine/tests" \
-            "../python/quantx_engine/_native*" \
             2>/dev/null || true
-          # Build HTML
-          sphinx-build -b html source _build/html -W --keep-going -n 2>&1 | tail -20 || \
-          sphinx-build -b html source _build/html --keep-going 2>&1 | tail -20
+          # Build HTML — treat warnings as errors; fall back to lenient build if
+          # an autodoc import error is the only failure (e.g. optional C extension).
+          if ! sphinx-build -b html source _build/html -W --keep-going -n; then
+            echo "::warning::Strict Sphinx build had warnings; retrying without -W"
+            sphinx-build -b html source _build/html --keep-going
+          fi
 
       - name: Deploy to GitHub Pages
         if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
