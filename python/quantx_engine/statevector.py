@@ -166,6 +166,11 @@ def _pauli_string_matrix(pauli: str, n: int, qubits: Sequence[int] | None = None
         )
     mats: list[np.ndarray] = [_I] * n
     if qubits is not None:
+        if len(pauli) != len(qubits):
+            raise ValueError(
+                f"Pauli string length {len(pauli)} != len(qubits) {len(qubits)}; "
+                "both must have the same number of elements."
+            )
         for p, q in zip(pauli, qubits):
             mats[q] = _PAULI_MATRIX[p.upper()]
     else:
@@ -470,9 +475,30 @@ class StatevectorSimulator:
             Real part of the expectation value (imaginary part is zero for
             Hermitian observables).
         """
-        mat = _pauli_string_matrix(pauli.upper(), self._n, qubits)
-        ev = self._state.conj() @ mat @ self._state
-        return float(ev.real)
+        pauli = pauli.upper()
+        if qubits is not None:
+            if len(pauli) != len(qubits):
+                raise ValueError(
+                    f"Pauli string length {len(pauli)} != len(qubits) {len(qubits)}; "
+                    "both must have the same number of elements."
+                )
+            pauli_map: list[tuple[str, int]] = list(zip(pauli, qubits))
+        else:
+            if len(pauli) != self._n:
+                raise ValueError(
+                    f"Pauli string length {len(pauli)} != n_qubits {self._n}. "
+                    "Pass qubits= to specify which qubits the string acts on."
+                )
+            pauli_map = list(zip(pauli, range(self._n)))
+
+        # Apply each non-identity Pauli factor to a working copy of the state.
+        # This scales as O(n × 2^n) instead of the O(4^n) kron-matrix approach,
+        # enabling the full 25-qubit range without OOM.
+        ket = self._state.copy()
+        for p, q in pauli_map:
+            if p != "I":
+                ket = _apply_single(ket, self._n, _PAULI_MATRIX[p], q)
+        return float((self._state.conj() @ ket).real)
 
     # ── Utility ───────────────────────────────────────────────────────────────
 
