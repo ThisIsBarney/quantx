@@ -9,6 +9,50 @@ PATCH increments are bug-fixes and packaging corrections only.
 
 ---
 
+## [Unreleased]
+
+*(No changes yet)*
+
+---
+
+## [0.4.0] — 2026-05-25  *(Phase 2 Track M — SDK Usability)*
+
+### Added
+
+- **M162** — Test coverage hardening: skip rate reduced to < 1.4 % (49 / 3 699).
+  Pure-Python Lindblad steady-state solver via Kronecker-product superoperator + SVD
+  null-space; `JumpOperator(matrix)` matrix-form constructor; `GroverWalk` uniform
+  initial superposition; `GKPState.norm()`, `CatQubit.energy_spectrum()`,
+  `TeleportationResult.fidelity`, `QLDPCCode.n` alias, `MBQC.fidelity()`,
+  `ZNEMitigator` alias, `RichardsonExtrapolation` class.
+- **M163** — GitHub Pages documentation site: Sphinx + Furo theme, `sphinx-apidoc`
+  auto-generated API stubs, `docs.yml` CI workflow, `sphinx_copybutton` extension,
+  Docs badge in README.
+- **M164** — Binder + Colab notebook compatibility: `notebooks/requirements.txt`,
+  Colab/Binder launch badges in all 7 tutorial notebooks (01–07), pip-install guard
+  cells, `scripts/add_notebook_badges.py` with dynamic branch detection,
+  updated `notebooks-ci.yml`.
+- **M165** — Interactive examples gallery: two new tutorial notebooks —
+  `08_quantum_walk_algorithms.ipynb` (DTQW, CTQW, Grover walk, walk spectrum)
+  and `09_noise_mitigation.ipynb` (ZNE, Richardson extrapolation, PEC, RB).
+- **M166** — Versioned changelog + deprecation policy (this release):
+  `CHANGELOG.md` updated, `quantx_engine._deprecation.warn()` helper,
+  `@deprecated` decorator, version bumped to **0.4.0**.
+
+### Fixed
+
+- `GroverWalk.run()`: AttributeError `_walk._walk_op` → `_walk._W` (Codex P1).
+- `KrylovEvolver.run()`: off-by-one `n_steps+1` → `n_steps` snapshot count (Codex P2).
+- `sphinx-build | tail -20` masked Sphinx exit code; replaced with explicit `if !` guard.
+- `add_notebook_badges.py`: hardcoded `BRANCH = "master"` → dynamic `_default_branch()`.
+
+### Deprecated
+
+- Nothing deprecated in this release.  The deprecation framework (`_deprecation.warn`)
+  is in place for future cycles.
+
+---
+
 ## [0.2.0] — 2026-05-20
 
 ### Added
@@ -108,5 +152,7 @@ Initial release covering M1–M118 (133 modules, 2000+ tests).
 
 ---
 
+[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ThisIsBarney/quantx/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/ThisIsBarney/quantx/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0

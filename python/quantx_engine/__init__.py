@@ -1,6 +1,6 @@
 """Public Python SDK exports for QuantX."""
 
-__version__ = "0.2.0"
+__version__ = "0.4.0"
 
 
 def backend_info() -> dict:
