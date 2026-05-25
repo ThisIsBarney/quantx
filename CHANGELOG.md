@@ -15,6 +15,44 @@ PATCH increments are bug-fixes and packaging corrections only.
 
 ---
 
+## [1.0.0] — 2026-05-25  *(Phase 2 complete — first stable release)*
+
+### Added
+
+- **M167** — Benchmark suite: `benchmarks/compare_backends.py` covering Lanczos,
+  Lindblad, DMRG, TEBD, VQE, QEC; JSON result artefacts; `benchmarks-ci.yml` workflow.
+- **M168** — GPU wheels: `quantx-engine[gpu]` optional extra (CuPy-cuda12x runtime);
+  `gpu-wheels.yml` CI with mock unit tests and optional self-hosted CUDA smoke test.
+- **M169** — IBM Quantum real hardware round-trip: `IBMHardwareBackend.submit`,
+  `HardwareJob.fetch`; `examples/ibm_hardware_demo.py`; 17 mock tests;
+  `hardware-tests.yml` CI with gated real-hardware job (requires `QISKIT_IBM_TOKEN`).
+- **M170** — `quantx_engine.ibm`: `circuit_to_qasm3`, QASM 3.0 serialisation
+  compatible with Qiskit 1.x Primitives V2.
+- **M171** — Community infrastructure: GitHub issue templates (bug, feature, question),
+  PR template, `SECURITY.md` (private vulnerability reporting), `CODE_OF_CONDUCT_CN.md`
+  (Contributor Covenant 2.1), expanded `CONTRIBUTING.md`, `docs/add_your_hamiltonian.md`
+  contributor guide.
+- **M172** — v1.0.0 release: version bump to 1.0.0, `release.yml` automated PyPI +
+  GitHub Release workflow, API stability guarantee (see table below).
+
+### API stability guarantee (v1.0+)
+
+The following symbols are **stable** and will not change without a deprecation cycle:
+
+| Module | Stable symbols |
+|--------|---------------|
+| `quantx_engine` | `backend_info`, `Engine`, `LanczosSolver`, `MPSSimulator`, `CachedDMRG` |
+| `quantx_engine.gpu` | `GpuBackend`, `GpuStatevector`, `gpu_info` |
+| `quantx_engine.hardware` | `HardwareJob`, `HardwareJobResult`, `IBMHardwareBackend`, `HardwareError` |
+| `quantx_engine.ibm` | `circuit_to_qasm3` |
+| `quantx_engine.lindblad` | `LindbladSolver`, `JumpOperator`, `LindbladResult` |
+| `quantx_engine.tensor_network` | `MPO` |
+| `quantx_engine.pennylane_plugin` | `QuantXDevice` |
+
+Internal modules (prefixed `_`) and modules noted as experimental are exempt.
+
+---
+
 ## [0.4.0] — 2026-05-25  *(Phase 2 Track M — SDK Usability)*
 
 ### Added
@@ -152,7 +190,8 @@ Initial release covering M1–M118 (133 modules, 2000+ tests).
 
 ---
 
-[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/ThisIsBarney/quantx/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/ThisIsBarney/quantx/compare/v0.2.0...v0.4.0
 [0.2.0]: https://github.com/ThisIsBarney/quantx/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0
