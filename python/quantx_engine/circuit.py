@@ -22,6 +22,7 @@ Parametric gates (for VQE etc.)
 """
 from __future__ import annotations
 
+import ast as _ast
 import dataclasses
 import math
 import re
@@ -154,12 +155,58 @@ def _fmt_angle(v: _Param) -> str:
     return repr(x)
 
 
+def _eval_ast_expr(node: _ast.expr) -> float:
+    """Recursively evaluate a pure-arithmetic AST node to float.
+
+    Supports numeric literals, unary +/-, and binary +/-/*//.
+    No function calls, attribute access, or other constructs are permitted,
+    so this is safe to use on untrusted QASM3 source.
+    """
+    if isinstance(node, _ast.Constant):
+        return float(node.value)
+    if isinstance(node, _ast.UnaryOp):
+        operand = _eval_ast_expr(node.operand)
+        if isinstance(node.op, _ast.USub):
+            return -operand
+        if isinstance(node.op, _ast.UAdd):
+            return operand
+    if isinstance(node, _ast.BinOp):
+        left = _eval_ast_expr(node.left)
+        right = _eval_ast_expr(node.right)
+        if isinstance(node.op, _ast.Add):
+            return left + right
+        if isinstance(node.op, _ast.Sub):
+            return left - right
+        if isinstance(node.op, _ast.Mult):
+            return left * right
+        if isinstance(node.op, _ast.Div):
+            if right == 0:
+                raise ValueError("Division by zero in angle expression.")
+            return left / right
+        if isinstance(node.op, _ast.Pow):
+            return left ** right
+    raise ValueError(
+        f"Unsupported expression node {type(node).__name__!r} in angle. "
+        "Only numeric literals and +/-/*// operators are allowed."
+    )
+
+
 def _parse_angle(tok: str) -> float:
-    """Parse a QASM3 angle token (may contain 'pi') to float."""
+    """Parse a QASM3 angle expression to float.
+
+    Supports numeric literals, the ``pi`` constant, and the four arithmetic
+    operators (+, -, *, /).  Uses :mod:`ast` for safe parsing — no ``eval``.
+
+    Examples: ``"pi/2"``, ``"-3*pi/4"``, ``"1.5707963267948966"``.
+    """
     tok = tok.strip()
-    safe = {"pi": math.pi, "sqrt": math.sqrt, "cos": math.cos,
-            "sin": math.sin, "tan": math.tan, "exp": math.exp}
-    return float(eval(tok, {"__builtins__": {}}, safe))  # noqa: S307
+    # Replace the symbolic 'pi' with its IEEE 754 double value before parsing.
+    tok = re.sub(r"\bpi\b", repr(math.pi), tok)
+    try:
+        tree = _ast.parse(tok, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError(f"Invalid angle expression: {tok!r}") from exc
+    return _eval_ast_expr(tree.body)
 
 
 def _gate_label(op: _GateOp) -> str:
@@ -509,9 +556,18 @@ class QuantumCircuit:
         -------
         QuantumCircuit
         """
-        n_qubits: int | None = None
+        # qubit_regs maps register_name → global starting offset, so that
+        # multi-register QASM3 programs are correctly flattened into a single
+        # global qubit index space rather than silently re-using index 0.
+        qubit_regs: dict[str, int] = {}
+        n_qubits: int = 0
         ops: list[_GateOp] = []
         measured: list[bool] = []
+
+        def _resolve_qubit(reg_name: str, idx: int) -> int:
+            """Return the global qubit index for register[idx]."""
+            offset = qubit_regs.get(reg_name, 0)
+            return offset + idx
 
         for raw in qasm.splitlines():
             line = raw.split("//")[0].strip().rstrip(";").strip()
@@ -520,10 +576,13 @@ class QuantumCircuit:
             if line.startswith("OPENQASM") or line.startswith("include"):
                 continue
 
-            # qubit[N] name;
-            m = re.match(r"qubit\[(\d+)\]\s+\w+$", line)
+            # qubit[N] regname;  — accumulate; do NOT reset on each declaration
+            m = re.match(r"qubit\[(\d+)\]\s+(\w+)$", line)
             if m:
-                n_qubits = int(m.group(1))
+                count = int(m.group(1))
+                reg_name = m.group(2)
+                qubit_regs[reg_name] = n_qubits   # record global start offset
+                n_qubits += count
                 measured = [False] * n_qubits
                 continue
 
@@ -531,8 +590,8 @@ class QuantumCircuit:
             if re.match(r"bit\[", line):
                 continue
 
-            if n_qubits is None:
-                continue  # ignore gates before qubit declaration
+            if n_qubits == 0:
+                continue  # ignore gates before any qubit declaration
 
             # Measurement:  c = measure q;   or   c[k] = measure q[k];
             if "measure" in line:
@@ -543,11 +602,12 @@ class QuantumCircuit:
                     )
                     measured = [True] * n_qubits
                 else:
-                    m2 = re.search(r"measure\s+\w+\[(\d+)\]", line)
+                    m2 = re.search(r"measure\s+(\w+)\[(\d+)\]", line)
                     if m2:
-                        q = int(m2.group(1))
+                        q = _resolve_qubit(m2.group(1), int(m2.group(2)))
                         ops.append(_GateOp("MEASURE", (q,), (), True))
-                        measured[q] = True
+                        if 0 <= q < len(measured):
+                            measured[q] = True
                 continue
 
             # Gate:  name[(params)]  qubit_args
@@ -569,16 +629,17 @@ class QuantumCircuit:
                     if tok.strip():
                         params_list.append(_parse_angle(tok))
 
-            # Parse qubit indices
+            # Parse qubit indices — respect per-register offsets
             qubit_indices = [
-                int(x) for x in re.findall(r"\[(\d+)\]", qubits_str)
+                _resolve_qubit(qm.group(1), int(qm.group(2)))
+                for qm in re.finditer(r"(\w+)\[(\d+)\]", qubits_str)
             ]
 
             ops.append(
                 _GateOp(internal, tuple(qubit_indices), tuple(params_list))
             )
 
-        if n_qubits is None:
+        if n_qubits == 0:
             raise ValueError("No qubit declaration found in QASM3 source.")
 
         qc = cls(n_qubits)

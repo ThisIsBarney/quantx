@@ -617,6 +617,94 @@ def test_copy_ops_list_is_independent():
     assert len(qc) == 1
 
 
+# ── _parse_angle safe parser (P1 fix: no eval) ───────────────────────────────
+
+
+def test_parse_angle_uses_ast_not_eval():
+    """_parse_angle must not be reachable via dunder traversal (P1 security fix)."""
+    import ast as _ast
+    from quantx_engine.circuit import _parse_angle as _pa
+    import inspect
+    src = inspect.getsource(_pa)
+    # Confirm the implementation uses ast.parse / ast module, not eval
+    assert "eval" not in src or "_ast" in src or "ast.parse" in src
+
+
+def test_parse_angle_rejects_dunder_attack():
+    """Crafted dunder-traversal strings must not execute."""
+    from quantx_engine.circuit import _parse_angle as _pa
+    with pytest.raises((ValueError, SyntaxError)):
+        _pa("().__class__.__bases__[0].__subclasses__()")
+
+
+def test_parse_angle_rejects_function_call():
+    """Unknown function calls in angle expressions must raise ValueError."""
+    from quantx_engine.circuit import _parse_angle as _pa
+    with pytest.raises((ValueError, SyntaxError)):
+        _pa("os.system('echo hi')")
+
+
+# ── from_qasm3 multi-register P1 fix ─────────────────────────────────────────
+
+
+def test_from_qasm3_multi_register_accumulates_qubits():
+    """Multiple qubit[N] declarations should be accumulated, not overwritten."""
+    qasm = """\
+OPENQASM 3.0;
+include "stdgates.inc";
+
+qubit[2] q;
+qubit[1] ancilla;
+
+h q[0];
+cx q[0], q[1];
+x ancilla[0];
+"""
+    qc = QuantumCircuit.from_qasm3(qasm)
+    # Total qubits: 2 + 1 = 3 (not just 1 from the last declaration)
+    assert qc.n_qubits == 3
+    assert len(qc) == 3  # H + CX + X
+
+
+def test_from_qasm3_multi_register_correct_qubit_indices():
+    """ancilla[0] in a multi-register circuit should map to global qubit 2."""
+    qasm = """\
+OPENQASM 3.0;
+include "stdgates.inc";
+
+qubit[2] q;
+qubit[1] ancilla;
+
+x ancilla[0];
+"""
+    qc = QuantumCircuit.from_qasm3(qasm)
+    assert qc.n_qubits == 3
+    op = qc.operations[0]
+    assert op.name == "X"
+    # ancilla is the third qubit (global index 2)
+    assert op.qubits == (2,)
+
+
+def test_from_qasm3_multi_register_roundtrip_statevector():
+    """Multi-register circuit should simulate correctly after accumulation fix."""
+    qasm = """\
+OPENQASM 3.0;
+include "stdgates.inc";
+
+qubit[2] q;
+qubit[1] ancilla;
+
+x ancilla[0];
+"""
+    qc = QuantumCircuit.from_qasm3(qasm)
+    sv = qc.run().statevector
+    # X on qubit 2 of a 3-qubit system: |001⟩ → |001⟩ (ancilla bit set)
+    # Index of |001⟩ in little-endian is 4 (qubit 2 is MSB)
+    # Wait: our simulator uses qubit 0 = leftmost = MSB convention
+    # |0 0 1⟩ = index 1 (qubit 2 is the last/LSB)
+    assert abs(sv[1]) == pytest.approx(1.0, abs=1e-10)
+
+
 # ── _fmt_angle / _parse_angle helpers ─────────────────────────────────────────
 
 
