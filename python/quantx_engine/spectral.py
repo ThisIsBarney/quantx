@@ -658,4 +658,4 @@ class KrylovEvolver:
             raise SpectralError("H must be provided via constructor or run()")
         if psi0_use is None:
             raise SpectralError("psi0 must be provided via constructor or run()")
-        return self.evolve_trajectory(H_use, psi0_use, t_max=t, n_steps=n_steps + 1)
+        return self.evolve_trajectory(H_use, psi0_use, t_max=t, n_steps=n_steps)

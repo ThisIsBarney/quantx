@@ -749,6 +749,11 @@ class GroverWalk:
             adj[n - 1, 0] = 1
             adj[0, n - 1] = 1
             graph = DiscreteTimeWalk(adj, coin="grover")
+            # Grover search requires a uniform superposition over all nodes/coins
+            d = graph.coin_dim
+            uniform = np.ones(d * n, dtype=complex) / np.sqrt(d * n)
+            graph._state = uniform.copy()
+            graph._initial_state = uniform.copy()
         if graph is None:
             raise QuantumWalkError("graph (or n_nodes) must be provided")
         if marked is not None and marked_nodes is None:
@@ -833,9 +838,7 @@ class GroverWalk:
         Returns a :class:`GroverWalkResult` with ``probability_history``
         populated (one position-probability array per step).
         """
-        W_G = self._walk._walk_op.copy()
-        for node in self._marked:
-            W_G[node::self._walk.n_nodes, :] *= -1
+        W_G = self._walk._W @ self._oracle
 
         state = self._walk._initial_state.copy()
         n, d = self._walk.n_nodes, self._walk.coin_dim
