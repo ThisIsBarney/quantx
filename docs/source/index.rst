@@ -66,6 +66,8 @@ Features at a Glance
 * :class:`~quantx_engine.advanced_chemistry.VQE` — noise-aware variational eigensolver
 * :class:`~quantx_engine.qsp_qsvt.QSPCircuit` — quantum signal processing / QSVT
 * :class:`~quantx_engine.quantum_walk.ContinuousTimeQuantumWalk` — CTQW simulator
+* :class:`~quantx_engine.quantum_walk.GroverWalk` — Grover walk search (quadratic speedup)
+* :class:`~quantx_engine.mitigation.RichardsonExtrapolation` — Richardson ZNE extrapolation
 
 .. rubric:: Quantum Networking
 
