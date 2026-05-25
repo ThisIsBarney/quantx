@@ -28,6 +28,7 @@ extensions = [
     "sphinx.ext.githubpages",
     "sphinx.ext.todo",
     "myst_parser",
+    "sphinx_copybutton",
 ]
 
 templates_path = ["_templates"]

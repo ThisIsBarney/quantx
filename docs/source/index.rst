@@ -6,6 +6,7 @@ modules — from gate-model circuits and VQE to many-body Hamiltonians, fault-to
 architectures, quantum networks, and machine learning.
 
 .. image:: https://img.shields.io/pypi/v/quantx-engine
+   :target: https://pypi.org/project/quantx-engine/
    :alt: PyPI version
 
 .. image:: https://img.shields.io/badge/python-3.10%2B-blue
@@ -13,6 +14,10 @@ architectures, quantum networks, and machine learning.
 
 .. image:: https://img.shields.io/badge/license-MIT-green
    :alt: MIT License
+
+.. image:: https://github.com/ThisIsBarney/quantx/actions/workflows/docs.yml/badge.svg
+   :target: https://github.com/ThisIsBarney/quantx/actions/workflows/docs.yml
+   :alt: Docs
 
 ----
 

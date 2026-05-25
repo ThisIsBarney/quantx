@@ -4,6 +4,7 @@ QuantX is a C++20 quantum simulation engine with 37 physics solvers, a Python SD
 
 [![CI](https://github.com/ThisIsBarney/quantx/actions/workflows/benchmark-gate.yml/badge.svg)](https://github.com/ThisIsBarney/quantx/actions/workflows/benchmark-gate.yml)
 [![PyPI](https://img.shields.io/pypi/v/quantx-engine)](https://pypi.org/project/quantx-engine/)
+[![Docs](https://github.com/ThisIsBarney/quantx/actions/workflows/docs.yml/badge.svg)](https://thisIsBarney.github.io/quantx/)
 
 ## Features
 
