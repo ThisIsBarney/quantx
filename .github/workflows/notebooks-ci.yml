@@ -1,6 +1,6 @@
 name: Notebook CI
 
-# Executes the five tutorial notebooks on every push/PR to master.
+# Executes all tutorial notebooks on every push/PR to master.
 # Uses nbmake (pytest plugin) so each notebook is a pytest test item.
 
 on:

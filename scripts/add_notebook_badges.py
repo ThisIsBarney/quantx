@@ -51,6 +51,8 @@ NOTEBOOKS = [
     "05_many_body_mps.ipynb",
     "06_qec_research.ipynb",
     "07_bosonic_qec.ipynb",
+    "08_quantum_walk_algorithms.ipynb",
+    "09_noise_mitigation.ipynb",
 ]
 
 INSTALL_CELL = {
