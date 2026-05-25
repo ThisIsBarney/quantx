@@ -84,6 +84,7 @@ __all__ = [
     # Extrapolators
     "Extrapolator",
     "ExtrapolationResult",
+    "RichardsonExtrapolation",
     "RichardsonExtrapolator",
     "PolyExtrapolator",
     "ExpExtrapolator",
@@ -786,3 +787,46 @@ def make_sv_executor(
         return float(observable_fn(sv))
 
     return executor
+
+
+# ---------------------------------------------------------------------------
+# Convenience wrapper: RichardsonExtrapolation
+# ---------------------------------------------------------------------------
+
+class RichardsonExtrapolation:
+    """Simple Richardson extrapolation to zero noise.
+
+    Parameters
+    ----------
+    scale_factors : list of float
+        Noise scale factors λ at which measurements are taken.
+
+    Examples
+    --------
+    >>> extrap = RichardsonExtrapolation(scale_factors=[1.0, 2.0])
+    >>> result = extrap.extrapolate([0.8, 0.6])  # returns float
+    """
+
+    def __init__(self, scale_factors: list) -> None:
+        self._scale_factors = list(scale_factors)
+        self._impl = RichardsonExtrapolator()
+
+    def extrapolate(self, noisy_values: list) -> float:
+        """Extrapolate to zero noise.
+
+        Parameters
+        ----------
+        noisy_values : list of float
+            Measured expectation values at the corresponding scale factors.
+
+        Returns
+        -------
+        float
+            Zero-noise extrapolated value.
+        """
+        result = self._impl.extrapolate(self._scale_factors, noisy_values)
+        return float(result.mitigated_value)
+
+
+# Alias
+ZNEMitigator = ZNEResult

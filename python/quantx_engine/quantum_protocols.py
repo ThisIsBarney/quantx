@@ -581,6 +581,11 @@ class TeleportationResult:
     success_rate: float
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    @property
+    def fidelity(self) -> float:
+        """Alias for average_fidelity."""
+        return self.average_fidelity
+
     def __repr__(self) -> str:
         return (
             f"TeleportationResult(n={self.n_teleported}, "
@@ -629,18 +634,22 @@ class TeleportationProtocol:
         self.bsm_fidelity = bsm_fidelity
         self._rng = np.random.default_rng(seed)
 
-    def run(self, n_states: int = 100) -> TeleportationResult:
+    def run(self, n_states: int = 100, *, n_trials: int | None = None) -> TeleportationResult:
         """Teleport n_states random qubit states.
 
         Parameters
         ----------
         n_states : int
             Number of qubit states to teleport.
+        n_trials : int, optional
+            Alias for n_states.
 
         Returns
         -------
         TeleportationResult
         """
+        if n_trials is not None:
+            n_states = n_trials
         if n_states < 1:
             raise ProtocolError(f"n_states must be >= 1, got {n_states}")
 

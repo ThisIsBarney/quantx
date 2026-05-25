@@ -95,6 +95,11 @@ class XEBResult:
     n_qubits: int
     n_trials: int
 
+    @property
+    def xeb_fidelity(self) -> float:
+        """Summary XEB fidelity (alias for mean_fidelity)."""
+        return self.mean_fidelity
+
 
 # ---------------------------------------------------------------------------
 # CrossEntropyBenchmarking
@@ -123,8 +128,12 @@ class CrossEntropyBenchmarking:
         n_qubits: int = 2,
         p_error: float = 0.001,
         seed: "int | None" = None,
+        *,
+        gate_error: "float | None" = None,
     ) -> None:
         _require_numpy()
+        if gate_error is not None:
+            p_error = gate_error  # alias
         if n_qubits < 2:
             raise XEBError(f"n_qubits must be >= 2 for XEB, got {n_qubits}.")
         if not (0.0 <= p_error < 1.0):
@@ -135,9 +144,41 @@ class CrossEntropyBenchmarking:
 
     def run(
         self,
+        depths: "list[int] | None" = None,
+        n_trials: int = 50,
+        *,
+        n_circuits: "int | None" = None,
+        circuit_depth: "int | None" = None,
+    ) -> "XEBResult":
+        """Run the XEB experiment.
+
+        Parameters
+        ----------
+        depths:
+            List of circuit depths. Alternatively, specify a single
+            ``circuit_depth`` (int) together with ``n_circuits``.
+        n_trials:
+            Number of random circuits per depth.
+        n_circuits:
+            Alias for ``n_trials`` (used when ``circuit_depth`` is given).
+        circuit_depth:
+            Single circuit depth; sets ``depths = [circuit_depth]``.
+        """
+        if n_circuits is not None:
+            n_trials = n_circuits  # alias
+        if circuit_depth is not None:
+            depths = [circuit_depth]  # single depth mode
+        if depths is None:
+            depths = [5]  # sensible default
+
+        return self._run_impl(depths, n_trials)
+
+    def _run_impl(
+        self,
         depths: "list[int]",
         n_trials: int = 50,
-    ) -> XEBResult:
+    ) -> "XEBResult":
+        """Internal implementation (original run logic)."""
         """Run the XEB experiment.
 
         Parameters

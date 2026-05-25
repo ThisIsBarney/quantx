@@ -419,15 +419,27 @@ class KrylovEvolver:
     >>> result = evolver.evolve_trajectory(H, psi0, t_max=5.0, n_steps=20)
     """
 
-    def __init__(self, m: int = 30, dt: float = 0.1):
+    def __init__(
+        self,
+        m: int = 30,
+        dt: float = 0.1,
+        *,
+        H: "Any" = None,
+        psi0: "Any" = None,
+        krylov_dim: "Optional[int]" = None,
+    ):
         if not _HAS_NUMPY:
             raise SpectralError("numpy is required for KrylovEvolver")
+        if krylov_dim is not None:
+            m = krylov_dim  # alias
         if m < 1:
             raise SpectralError(f"m must be >= 1, got {m}")
         if dt <= 0.0:
             raise SpectralError(f"dt must be > 0, got {dt}")
         self.m = m
         self.dt = dt
+        self._H_default = H    # stored for run()
+        self._psi0_default = psi0  # stored for run()
 
     def _step(self, matvec: Any, psi: "np.ndarray", t: float) -> "np.ndarray":
         """Single Krylov step: approximate e^{−i·t·H}|ψ⟩."""
@@ -617,3 +629,33 @@ class KrylovEvolver:
             auto.append(float(overlap))
 
         return KrylovResult(times=times, states=states, autocorrelation=auto)
+
+    def run(
+        self,
+        t: float,
+        n_steps: int = 20,
+        H: "Any" = None,
+        psi0: "Any" = None,
+    ) -> KrylovResult:
+        """Convenience wrapper for :meth:`evolve_trajectory`.
+
+        Uses ``H`` and ``psi0`` from constructor if not provided here.
+
+        Parameters
+        ----------
+        t : float
+            Maximum evolution time.
+        n_steps : int
+            Number of time snapshots (including t=0).
+        H : array-like or callable, optional
+            Hamiltonian (overrides constructor kwarg).
+        psi0 : array-like, optional
+            Initial state (overrides constructor kwarg).
+        """
+        H_use = H if H is not None else self._H_default
+        psi0_use = psi0 if psi0 is not None else self._psi0_default
+        if H_use is None:
+            raise SpectralError("H must be provided via constructor or run()")
+        if psi0_use is None:
+            raise SpectralError("psi0 must be provided via constructor or run()")
+        return self.evolve_trajectory(H_use, psi0_use, t_max=t, n_steps=n_steps + 1)

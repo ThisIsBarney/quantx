@@ -235,7 +235,19 @@ class CatQubit:
         eps2: float = 4.0,
         N_max: int = 30,
         noise: Optional[CatNoiseModel] = None,
+        *,
+        alpha: Optional[float] = None,
+        kerr: Optional[float] = None,
+        truncation: Optional[int] = None,
     ) -> None:
+        # Alias resolution
+        if kerr is not None:
+            K = float(kerr)
+        if alpha is not None:
+            # alpha = sqrt(eps2/K), so eps2 = alpha^2 * K
+            eps2 = float(alpha) ** 2 * float(K)
+        if truncation is not None:
+            N_max = int(truncation)
         if K <= 0:
             raise BosonicError(f"K must be > 0, got {K}")
         if eps2 <= 0:
@@ -370,6 +382,23 @@ class CatQubit:
         eigvals, eigvecs = np.linalg.eigh(self._H)
         return eigvecs[:, 0]
 
+    def energy_spectrum(self, n_levels: int = 4) -> np.ndarray:
+        """Return the lowest n_levels eigenvalues of the Kerr-cat Hamiltonian.
+
+        Parameters
+        ----------
+        n_levels : int
+            Number of energy levels to return (default 4).
+
+        Returns
+        -------
+        np.ndarray
+            Sorted eigenvalues, shape (n_levels,).
+        """
+        eigvals = np.linalg.eigvalsh(self._H)
+        eigvals = np.sort(eigvals.real)
+        return eigvals[:n_levels]
+
     # ── Private helpers ───────────────────────────────────────────────────────
 
     def _displacement(self, beta: float) -> np.ndarray:
@@ -424,7 +453,9 @@ class GKPState:
 
     _SQRT_PI = math.sqrt(math.pi)
 
-    def __init__(self, delta: float = 0.3, N_max: int = 60) -> None:
+    def __init__(self, delta: float = 0.3, N_max: int = 60, *, truncation: Optional[int] = None) -> None:
+        if truncation is not None:
+            N_max = int(truncation)
         if delta <= 0 or delta >= 1:
             raise BosonicError(
                 f"delta must be in (0, 1) for a valid GKP state, got {delta}"
@@ -527,6 +558,11 @@ class GKPState:
         """Fidelity |⟨logical_L|noisy⟩|² after a shift error."""
         target = self.code_word_0() if logical == 0 else self.code_word_1()
         return float(abs(self.overlap(target, noisy_state)) ** 2)
+
+    def norm(self) -> float:
+        """Return the norm of the logical |0_L⟩ code word (should be 1.0)."""
+        psi = self.code_word_0()
+        return float(np.linalg.norm(psi))
 
     def __repr__(self) -> str:
         return f"GKPState(delta={self.delta}, N_max={self.N_max}, squeezing={self.squeezing_db():.1f} dB)"

@@ -192,6 +192,15 @@ class QAOAResult:
     alpha: float
     n_qubits: int
 
+    @property
+    def best_cost(self) -> float:
+        """Best (maximum) objective value found.
+
+        For MaxCut problems where cost_diagonal = -cut_value, this returns
+        -optimal_value (a positive cut value).
+        """
+        return -float(self.optimal_value)
+
     def to_dict(self) -> dict:
         return {
             "optimal_params": self.optimal_params.tolist(),
@@ -489,12 +498,30 @@ class CVaRQAOA:
 
     def __init__(
         self,
-        cost_diagonal: np.ndarray,
-        n_qubits: int,
+        cost_diagonal: "Optional[np.ndarray]" = None,
+        n_qubits: "Optional[int]" = None,
         n_layers: int = 1,
         alpha: float = 0.25,
-        exact_optimum: Optional[float] = None,
+        exact_optimum: "Optional[float]" = None,
+        *,
+        problem: "Any" = None,
+        p: "Optional[int]" = None,
+        seed: "Optional[int]" = None,
     ) -> None:
+        # ``problem`` kwarg: accept a MaxCutProblem (or duck-typed equivalent)
+        if problem is not None:
+            if cost_diagonal is None:
+                cost_diagonal = problem.cost_diagonal()
+            if n_qubits is None:
+                n_qubits = problem.n_nodes
+        if p is not None:
+            n_layers = p  # alias
+
+        if cost_diagonal is None:
+            raise CVaRQAOAError("cost_diagonal (or problem) must be provided")
+        if n_qubits is None:
+            raise CVaRQAOAError("n_qubits (or problem) must be provided")
+
         cost_diagonal = np.asarray(cost_diagonal, dtype=float)
         if cost_diagonal.shape != (1 << n_qubits,):
             raise CVaRQAOAError(
@@ -511,6 +538,7 @@ class CVaRQAOA:
         self.n_layers = n_layers
         self.alpha = alpha
         self.exact_optimum = exact_optimum
+        self._seed = seed
 
     def objective(self, params: np.ndarray) -> float:
         """Compute CVaR_α at given parameters.
@@ -587,6 +615,15 @@ class CVaRQAOA:
             alpha=self.alpha,
             n_qubits=self.n_qubits,
         )
+
+    def run(
+        self,
+        max_iter: int = 200,
+        **kwargs,
+    ) -> QAOAResult:
+        """Alias for :meth:`optimize`."""
+        seed = kwargs.pop("seed", self._seed)
+        return self.optimize(max_iter=max_iter, seed=seed, **kwargs)
 
     def _optimize_grid(
         self,

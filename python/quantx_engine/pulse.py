@@ -242,6 +242,34 @@ class PulseSchedule:
         return self
 
     # ------------------------------------------------------------------
+    def add_gaussian(
+        self,
+        qubit: int,
+        amplitude: float,
+        sigma: float,
+        duration: float,
+        t_start: float = 0.0,
+    ) -> "PulseSchedule":
+        """Add a Gaussian pulse on *qubit*'s drive channel.
+
+        Parameters
+        ----------
+        qubit : int
+            Target qubit index.
+        amplitude : float
+            Peak amplitude of the Gaussian envelope.
+        sigma : float
+            Standard deviation (width) of the Gaussian in seconds.
+        duration : float
+            Total pulse duration in seconds.
+        t_start : float
+            Start time of the pulse (default 0.0).
+        """
+        waveform = GaussianWaveform(duration=duration, amp=amplitude, sigma=sigma)
+        channel = DriveChannel(qubit)
+        return self.add(channel, waveform, t_start=t_start)
+
+    # ------------------------------------------------------------------
     @property
     def instructions(self) -> list[PulseInstruction]:
         return list(self._instructions)

@@ -130,6 +130,15 @@ class QSPAnglesResult:
     poly_name: str
     max_error: float
 
+    def polynomial_values(self, x_vals: "np.ndarray") -> "np.ndarray":
+        """Evaluate the QSP-realised polynomial at *x_vals*.
+
+        Returns real part of the top-left element of the QSP unitary.
+        """
+        return np.array(
+            [_qsp_matrix(float(x), self.phases)[0, 0].real for x in x_vals]
+        )
+
 
 class QSPAnglesFinder:
     """Compute QSP phase angles for standard polynomial targets.
@@ -153,18 +162,46 @@ class QSPAnglesFinder:
         Number of grid points used for error estimation.
     """
 
-    def __init__(self, degree: int, n_grid: int = 200) -> None:
+    def __init__(
+        self,
+        degree: int,
+        n_grid: int = 200,
+        *,
+        target: "Optional[str]" = None,
+    ) -> None:
         if degree < 1:
             raise QSPError("degree must be at least 1.")
         if n_grid < 2:
             raise QSPError("n_grid must be at least 2.")
         self.degree = degree
         self.n_grid = n_grid
+        self._target = target  # optional target name for run()
         self._xs = np.linspace(-1.0, 1.0, n_grid)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def run(self) -> QSPAnglesResult:
+        """Compute phase angles for the configured target polynomial.
+
+        Dispatches based on the ``target`` kwarg passed to ``__init__``:
+        - ``"chebyshev"`` → :meth:`chebyshev` with k = degree
+        - ``"sign"``      → :meth:`sign_function`
+        - ``"threshold"`` → :meth:`threshold`
+        - ``None``        → :meth:`chebyshev` (default)
+        """
+        target = self._target or "chebyshev"
+        if target == "chebyshev":
+            return self.chebyshev(self.degree)
+        elif target == "sign":
+            return self.sign_function()
+        elif target == "threshold":
+            return self.threshold()
+        else:
+            raise QSPError(
+                f"Unknown target {target!r}. Supported: 'chebyshev', 'sign', 'threshold'."
+            )
 
     def chebyshev(self, k: int) -> QSPAnglesResult:
         """Return phase angles that realise the Chebyshev polynomial T_k(x).

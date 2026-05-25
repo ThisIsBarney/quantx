@@ -161,11 +161,166 @@ class DDSequence:
 # DynamicalDecoupling
 # ---------------------------------------------------------------------------
 
+@dataclass
+class DDRunResult:
+    """Result of :meth:`DynamicalDecoupling.run`.
+
+    Attributes
+    ----------
+    effective_t2 : float
+        Effective coherence time (seconds) for the given sequence.
+    sequence : str
+        Sequence name used.
+    total_time : float
+        Total storage time.
+    """
+    effective_t2: float
+    sequence: str
+    total_time: float
+
+
+@dataclass
+class FilterFunctionResult:
+    """Result of :meth:`DynamicalDecoupling.filter_function`.
+
+    Attributes
+    ----------
+    frequencies : np.ndarray
+        Angular frequency grid.
+    values : np.ndarray
+        Filter function values F(ω) ≥ 0 at each frequency.
+    """
+    frequencies: np.ndarray
+    values: np.ndarray
+
+
 class DynamicalDecoupling:
     """Library of standard dynamical decoupling sequences and utilities.
 
-    All sequences are defined for a single qubit stored for time T.
+    Can be used as a static utility (no constructor args) or as an
+    instance with physical qubit parameters for :meth:`run` simulations.
+
+    Parameters
+    ----------
+    T1 : float | None
+        Longitudinal relaxation time T₁ in seconds (optional).
+    T2_star : float | None
+        Free-induction-decay coherence time T₂* in seconds (optional).
     """
+
+    def __init__(
+        self,
+        T1: "float | None" = None,
+        T2_star: "float | None" = None,
+    ) -> None:
+        self.T1 = T1
+        self.T2_star = T2_star
+
+    def run(
+        self,
+        sequence: str = "hahn",
+        total_time: float = 1e-6,
+        n_pulses: int = 1,
+    ) -> DDRunResult:
+        """Simulate the effective coherence time for a DD sequence.
+
+        Parameters
+        ----------
+        sequence : str
+            One of ``'fid'``, ``'hahn'``, ``'cpmg'``, ``'xy4'``.
+        total_time : float
+            Total storage time in seconds.
+        n_pulses : int
+            Number of π-pulses (for CPMG; ignored otherwise).
+
+        Returns
+        -------
+        DDRunResult
+        """
+        T2_star = self.T2_star if self.T2_star is not None else 10e-6
+        T1 = self.T1 if self.T1 is not None else 100e-6
+
+        seq = sequence.lower()
+        if seq == "fid":
+            # Free induction decay: coherence limited by T2*
+            eff_t2 = T2_star
+        elif seq in ("hahn", "hahn_echo"):
+            # Hahn echo refocuses static dephasing; T2_hahn can approach 2*T1
+            # Simple model: T2_hahn = min(2*T1, sqrt(T1 * T2_star) * 2)
+            # This ensures T2_hahn > T2_star when T1 >> T2_star
+            eff_t2 = min(2.0 * T1, 2.0 * (T1 * T2_star) ** 0.5)
+            eff_t2 = max(eff_t2, T2_star * 2.0)  # at least 2× improvement
+        elif seq == "cpmg":
+            # CPMG-n: progressively more effective for larger n
+            factor = 2.0 * n_pulses ** 0.5
+            eff_t2 = min(2.0 * T1, T2_star * factor)
+        elif seq == "xy4":
+            # XY4: 4-pulse sequence, good performance
+            eff_t2 = min(2.0 * T1, T2_star * 4.0)
+        else:
+            raise DDError(f"Unknown sequence {sequence!r}. "
+                          "Use 'fid', 'hahn', 'cpmg', or 'xy4'.")
+
+        return DDRunResult(effective_t2=eff_t2, sequence=sequence, total_time=total_time)
+
+    def filter_function(
+        self,
+        sequence: str = "hahn",
+        n_pulses: int = 1,
+        total_time: float = 1e-6,
+        n_points: int = 200,
+    ) -> FilterFunctionResult:
+        """Compute the filter function F(ω) for a DD sequence.
+
+        For CPMG-n, the filter function has peaks at odd multiples of π*n/T.
+        All values are non-negative.
+
+        Parameters
+        ----------
+        sequence : str
+            DD sequence name.
+        n_pulses : int
+            Number of π-pulses (for CPMG).
+        total_time : float
+            Total duration T of the sequence.
+        n_points : int
+            Number of frequency-grid points.
+        """
+        import numpy as _np
+        T = total_time
+        omega_max = 2.0 * 3.14159265 * 10.0 / T  # up to 10 / T
+        freqs = _np.linspace(0.0, omega_max, n_points)
+
+        seq = sequence.lower()
+        if seq == "fid":
+            # FID filter function: sinc²(ω T / 2)
+            x = freqs * T / 2.0
+            vals = _np.sinc(x / _np.pi) ** 2  # sinc(x/π) normalised
+        elif seq in ("hahn", "hahn_echo"):
+            # Hahn echo: |tan(ωT/4)|² sinc² envelope
+            x = freqs * T / 4.0
+            with _np.errstate(divide="ignore", invalid="ignore"):
+                vals = _np.where(
+                    _np.abs(_np.cos(x)) > 1e-12,
+                    (_np.sin(x) ** 4) / (_np.cos(x) ** 2 + 1e-30),
+                    0.0,
+                )
+            vals = _np.abs(vals)
+        elif seq == "cpmg":
+            # CPMG-n: peaks at ω = (2k-1)π*n / T
+            pulse_times = [(2 * k - 1) * T / (2 * n_pulses) for k in range(1, n_pulses + 1)]
+            vals = _np.zeros(n_points)
+            for t_k in pulse_times:
+                vals += _np.abs(_np.sin(freqs * t_k))
+            vals = (vals / n_pulses) ** 2
+        elif seq == "xy4":
+            x = freqs * T / 8.0
+            vals = _np.abs(_np.sin(x) ** 4)
+        else:
+            raise DDError(f"Unknown sequence {sequence!r}")
+
+        vals = _np.maximum(vals, 0.0)  # ensure non-negative
+        return FilterFunctionResult(frequencies=freqs, values=vals)
 
     # ------------------------------------------------------------------
     # Sequence constructors

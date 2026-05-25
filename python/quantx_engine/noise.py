@@ -56,6 +56,8 @@ __all__ = [
     "ReadoutNoise",
     "CompositeNoise",
     "NoiseModelError",
+    "DepolarizingChannel",
+    "AmplitudeDampingChannel",
 ]
 
 
@@ -271,3 +273,72 @@ class CompositeNoise(NoiseModel):
 
     def __add__(self, other: NoiseModel) -> "CompositeNoise":
         return CompositeNoise(self._models + [other])
+
+
+# ---------------------------------------------------------------------------
+# Quantum-channel wrappers (operate directly on density matrices)
+# These are separate from the engine-payload noise models above.
+# ---------------------------------------------------------------------------
+
+try:
+    import numpy as _np
+    _HAS_NP = True
+except ImportError:  # pragma: no cover
+    _HAS_NP = False
+
+
+class DepolarizingChannel:
+    """Depolarizing channel Φ(ρ) = (1-p)ρ + p·I/d applied to a density matrix.
+
+    Parameters
+    ----------
+    p : float
+        Depolarizing probability ∈ [0, 1].
+    """
+
+    def __init__(self, p: float) -> None:
+        if not (0.0 <= p <= 1.0):
+            raise NoiseModelError(f"p must be in [0, 1], got {p}")
+        self.p = float(p)
+
+    def apply(self, rho: "Any") -> "Any":
+        """Apply channel to density matrix rho."""
+        if not _HAS_NP:  # pragma: no cover
+            raise NoiseModelError("numpy is required for DepolarizingChannel.apply()")
+        rho = _np.asarray(rho, dtype=complex)
+        d = rho.shape[0]
+        return (1.0 - self.p) * rho + self.p / d * _np.eye(d, dtype=complex)
+
+    def __repr__(self) -> str:
+        return f"DepolarizingChannel(p={self.p})"
+
+
+class AmplitudeDampingChannel:
+    """Amplitude-damping (T1-relaxation) channel for a qubit density matrix.
+
+    Kraus operators:
+        K₀ = [[1, 0], [0, √(1-γ)]],  K₁ = [[0, √γ], [0, 0]]
+
+    Parameters
+    ----------
+    gamma : float
+        Amplitude-damping probability γ ∈ [0, 1].
+    """
+
+    def __init__(self, gamma: float) -> None:
+        if not (0.0 <= gamma <= 1.0):
+            raise NoiseModelError(f"gamma must be in [0, 1], got {gamma}")
+        self.gamma = float(gamma)
+
+    def apply(self, rho: "Any") -> "Any":
+        """Apply channel to a 2×2 density matrix."""
+        if not _HAS_NP:  # pragma: no cover
+            raise NoiseModelError("numpy is required for AmplitudeDampingChannel.apply()")
+        rho = _np.asarray(rho, dtype=complex)
+        g = self.gamma
+        K0 = _np.array([[1.0, 0.0], [0.0, _np.sqrt(1.0 - g)]], dtype=complex)
+        K1 = _np.array([[0.0, _np.sqrt(g)], [0.0, 0.0]], dtype=complex)
+        return K0 @ rho @ K0.conj().T + K1 @ rho @ K1.conj().T
+
+    def __repr__(self) -> str:
+        return f"AmplitudeDampingChannel(gamma={self.gamma})"

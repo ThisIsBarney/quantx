@@ -65,6 +65,7 @@ class FloquetSystem:
     ----------
     H_static : ndarray, shape (d, d)
         Time-independent part of the Hamiltonian (Hermitian).
+        Also accepted as ``H0`` (alias).
     H_drive : ndarray, shape (d, d)
         Coupling operator of the periodic drive (Hermitian).
     omega : float
@@ -74,15 +75,27 @@ class FloquetSystem:
         The full Hamiltonian is H_static + H_drive * drive_func(t).
     n_steps : int
         Number of Runge-Kutta steps per period for U(T) integration.
+    H0 : ndarray, optional
+        Alias for ``H_static``.
     """
 
-    H_static: np.ndarray
-    H_drive: np.ndarray
-    omega: float
+    H_static: Optional[np.ndarray] = None
+    H_drive: Optional[np.ndarray] = None
+    omega: float = 0.0
     drive_func: Optional[Callable] = None
     n_steps: int = 200
+    H0: Optional[np.ndarray] = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
+        # Resolve H0 alias
+        if self.H0 is not None and self.H_static is None:
+            self.H_static = self.H0
+        if self.H_static is None:
+            raise FloquetError("H_static (or H0) must be provided")
+        if self.H_drive is None:
+            raise FloquetError("H_drive must be provided")
+        if self.omega <= 0:
+            raise FloquetError("omega must be positive")
         self.H_static = np.asarray(self.H_static, dtype=complex)
         self.H_drive = np.asarray(self.H_drive, dtype=complex)
         d = self.H_static.shape[0]
@@ -90,8 +103,6 @@ class FloquetSystem:
             raise FloquetError("H_static must be a square 2-D matrix")
         if self.H_drive.shape != (d, d):
             raise FloquetError("H_drive must have the same shape as H_static")
-        if self.omega <= 0:
-            raise FloquetError("omega must be positive")
         if self.n_steps < 4:
             raise FloquetError("n_steps must be >= 4")
         if self.drive_func is None:

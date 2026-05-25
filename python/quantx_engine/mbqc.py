@@ -225,14 +225,21 @@ class GraphState:
         rho = rho.reshape(1 << k, 1 << k)
         return rho
 
-    def entanglement_entropy(self, partition: Sequence[int]) -> float:
+    def entanglement_entropy(self, partition: Sequence[int] | None = None, *, bond: int | None = None) -> float:
         """Von Neumann entanglement entropy S(ρ_A) for bipartition *partition*.
 
         Parameters
         ----------
-        partition : sequence of int
+        partition : sequence of int, optional
             Indices of qubits in subsystem A.
+        bond : int, optional
+            Alternative to *partition*: cut after qubit index *bond*,
+            i.e. subsystem A = qubits 0…bond, B = qubits bond+1…n-1.
         """
+        if bond is not None:
+            partition = list(range(bond + 1))
+        if partition is None:
+            raise MBQCError("Either 'partition' or 'bond' must be provided.")
         rho = self.reduced_density_matrix(partition)
         eigvals = np.linalg.eigvalsh(rho)
         eigvals = np.maximum(eigvals, 0.0)  # clip numerical noise
@@ -244,6 +251,10 @@ class GraphState:
         if self.n_qubits != other.n_qubits:
             raise MBQCError("Cannot compute fidelity between states of different sizes.")
         return float(abs(self._state.conj() @ other._state) ** 2)
+
+    def fidelity(self, other: "GraphState") -> float:
+        """Alias for fidelity_with."""
+        return self.fidelity_with(other)
 
     def __repr__(self) -> str:
         return f"GraphState(n_qubits={self.n_qubits}, n_edges={self.n_edges})"

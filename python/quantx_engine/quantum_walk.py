@@ -97,6 +97,11 @@ class WalkResult:
     metadata: dict = field(default_factory=dict)
 
     @property
+    def state_vector(self) -> np.ndarray:
+        """Alias for state."""
+        return self.state
+
+    @property
     def n_nodes(self) -> int:
         return len(self.position_probs)
 
@@ -130,6 +135,7 @@ class GroverWalkResult:
     max_marked_prob: float
     step_probs: list[float]
     position_probs: np.ndarray
+    probability_history: "list[np.ndarray]" = field(default_factory=list)
 
 
 # ── Coin operators ─────────────────────────────────────────────────────────────
@@ -208,11 +214,25 @@ class DiscreteTimeWalk:
 
     def __init__(
         self,
-        adjacency: np.ndarray,
-        coin: str | np.ndarray = "hadamard",
+        adjacency: "Optional[np.ndarray]" = None,
+        coin: "str | np.ndarray" = "hadamard",
         initial_pos: int = 0,
-        initial_coin_state: Optional[np.ndarray] = None,
+        initial_coin_state: "Optional[np.ndarray]" = None,
+        *,
+        n_positions: "Optional[int]" = None,
     ) -> None:
+        # ``n_positions`` convenience kwarg: build a path graph of this length
+        if n_positions is not None and adjacency is None:
+            n = int(n_positions)
+            if n < 2:
+                raise QuantumWalkError("n_positions must be >= 2")
+            adj = np.zeros((n, n), dtype=int)
+            for i in range(n - 1):
+                adj[i, i + 1] = 1
+                adj[i + 1, i] = 1
+            adjacency = adj
+        if adjacency is None:
+            raise QuantumWalkError("adjacency (or n_positions) must be provided")
         adj = np.asarray(adjacency, dtype=int)
         if adj.ndim != 2 or adj.shape[0] != adj.shape[1]:
             raise QuantumWalkError("adjacency must be a square 2-D array")
@@ -381,9 +401,11 @@ class DiscreteTimeWalk:
 
     def run(
         self,
-        steps: int,
+        steps: "int | None" = None,
         track_mixing: bool = False,
         mixing_eps: float = 0.01,
+        *,
+        n_steps: "int | None" = None,
     ) -> WalkResult:
         """Evolve for *steps* steps.
 
@@ -391,6 +413,8 @@ class DiscreteTimeWalk:
         ----------
         steps : int
             Number of walk steps to apply.
+        n_steps : int
+            Alias for *steps*.
         track_mixing : bool
             If True, record the first step where TVD from uniform < *mixing_eps*.
         mixing_eps : float
@@ -400,21 +424,27 @@ class DiscreteTimeWalk:
         -------
         WalkResult
         """
+        if n_steps is not None and steps is None:
+            steps = n_steps
+        if steps is None:
+            steps = 0
         if steps < 0:
             raise QuantumWalkError(f"steps must be non-negative, got {steps}")
 
         mixing_time: Optional[int] = None
         uniform = np.ones(self._n) / self._n
+        prob_history: "list[np.ndarray]" = []
 
         for t in range(steps):
             self._state = self._W @ self._state
+            prob_history.append(self.position_probs().copy())
             if track_mixing and mixing_time is None:
-                pp = self.position_probs()
+                pp = prob_history[-1]
                 if 0.5 * np.sum(np.abs(pp - uniform)) < mixing_eps:
                     mixing_time = t + 1
 
         probs = self.position_probs()
-        return WalkResult(
+        result = WalkResult(
             position_probs=probs,
             state=self._state.copy(),
             steps_or_time=float(steps),
@@ -425,6 +455,8 @@ class DiscreteTimeWalk:
                 "coin": "custom" if isinstance(self._coin_op, np.ndarray) else "ndarray",
             },
         )
+        result.probability_history = prob_history  # type: ignore[attr-defined]
+        return result
 
 
 # ── ContinuousTimeQuantumWalk ─────────────────────────────────────────────────
@@ -446,9 +478,23 @@ class ContinuousTimeQuantumWalk:
 
     def __init__(
         self,
-        hamiltonian: np.ndarray,
-        initial_state: Optional[np.ndarray] = None,
+        hamiltonian: "Optional[np.ndarray]" = None,
+        initial_state: "Optional[np.ndarray]" = None,
+        *,
+        n_nodes: "Optional[int]" = None,
     ) -> None:
+        # ``n_nodes`` convenience kwarg: build a path-graph adjacency Hamiltonian
+        if n_nodes is not None and hamiltonian is None:
+            n = int(n_nodes)
+            if n < 2:
+                raise QuantumWalkError("n_nodes must be >= 2")
+            H_adj = np.zeros((n, n), dtype=complex)
+            for i in range(n - 1):
+                H_adj[i, i + 1] = 1.0
+                H_adj[i + 1, i] = 1.0
+            hamiltonian = H_adj
+        if hamiltonian is None:
+            raise QuantumWalkError("hamiltonian (or n_nodes) must be provided")
         H = np.asarray(hamiltonian, dtype=complex)
         if H.ndim != 2 or H.shape[0] != H.shape[1]:
             raise QuantumWalkError("Hamiltonian must be a square 2-D array")
@@ -683,10 +729,32 @@ class GroverWalk:
 
     def __init__(
         self,
-        graph: DiscreteTimeWalk,
-        marked_nodes: Sequence[int],
+        graph: "Optional[DiscreteTimeWalk]" = None,
+        marked_nodes: "Optional[Sequence[int]]" = None,
         threshold: float = 0.5,
+        *,
+        n_nodes: "Optional[int]" = None,
+        marked: "Optional[Sequence[int]]" = None,
     ) -> None:
+        # ``n_nodes`` + ``marked`` convenience kwargs
+        if n_nodes is not None and graph is None:
+            n = int(n_nodes)
+            if n < 2:
+                raise QuantumWalkError("n_nodes must be >= 2")
+            adj = np.zeros((n, n), dtype=int)
+            for i in range(n - 1):
+                adj[i, i + 1] = 1
+                adj[i + 1, i] = 1
+            # Also connect last to first (cycle) for better search performance
+            adj[n - 1, 0] = 1
+            adj[0, n - 1] = 1
+            graph = DiscreteTimeWalk(adj, coin="grover")
+        if graph is None:
+            raise QuantumWalkError("graph (or n_nodes) must be provided")
+        if marked is not None and marked_nodes is None:
+            marked_nodes = marked
+        if marked_nodes is None:
+            marked_nodes = []
         for node in marked_nodes:
             if not (0 <= node < graph.n_nodes):
                 raise QuantumWalkError(
@@ -757,6 +825,47 @@ class GroverWalk:
             max_marked_prob=best_prob,
             step_probs=step_probs,
             position_probs=best_probs,
+        )
+
+    def run(self, n_steps: int = 100) -> GroverWalkResult:
+        """Run the Grover walk for exactly *n_steps* steps.
+
+        Returns a :class:`GroverWalkResult` with ``probability_history``
+        populated (one position-probability array per step).
+        """
+        W_G = self._walk._walk_op.copy()
+        for node in self._marked:
+            W_G[node::self._walk.n_nodes, :] *= -1
+
+        state = self._walk._initial_state.copy()
+        n, d = self._walk.n_nodes, self._walk.coin_dim
+        step_probs: "list[float]" = []
+        prob_history: "list[np.ndarray]" = []
+        hitting_time: "Optional[int]" = None
+        best_prob = 0.0
+        best_probs = np.zeros(n)
+
+        for step in range(1, n_steps + 1):
+            state = W_G @ state
+            pos_probs = np.zeros(n)
+            for c in range(d):
+                pos_probs += np.abs(state[c * n:(c + 1) * n]) ** 2
+            prob_history.append(pos_probs.copy())
+            marked_prob = float(np.sum(pos_probs[self._marked]))
+            step_probs.append(marked_prob)
+            if marked_prob > best_prob:
+                best_prob = marked_prob
+                best_probs = pos_probs.copy()
+            if hitting_time is None and marked_prob >= self._threshold:
+                hitting_time = step
+
+        return GroverWalkResult(
+            marked_nodes=list(self._marked),
+            hitting_time=hitting_time,
+            max_marked_prob=best_prob,
+            step_probs=step_probs,
+            position_probs=best_probs,
+            probability_history=prob_history,
         )
 
 
