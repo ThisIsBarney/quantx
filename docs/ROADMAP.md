@@ -702,7 +702,7 @@ Add `quantx_engine/circuit.py`: Pythonic circuit construction layer.
   - `.to_qasm3()` and `.from_qasm3()` round-trip
   - `.draw()` → ASCII diagram (no matplotlib required)
   - Export `QuantumCircuit`, `CircuitResult` from top-level `__init__`
-Status: pending
+Status: complete
 
 ### Track M — SDK usability: close the UX gap (M162–M166)
 
