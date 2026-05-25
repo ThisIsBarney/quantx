@@ -16,6 +16,7 @@ name: GPU Wheels (M168)
 on:
   push:
     branches: ["master", "main"]
+    tags: ["v*"]
     paths:
       - "python/quantx_engine/gpu.py"
       - "python/quantx_engine/mps_simulator.py"
@@ -23,8 +24,6 @@ on:
       - "python/quantx_engine/tests/test_gpu_wheel.py"
       - "python/pyproject.toml"
       - ".github/workflows/gpu-wheels.yml"
-  push:
-    tags: ["v*"]
   pull_request:
     branches: ["master", "main"]
     paths:
@@ -183,7 +182,6 @@ jobs:
         with:
           packages-dir: dist/
           verbose: true
-        continue-on-error: true
 
   # ── Real CUDA hardware test (self-hosted NVIDIA runner, optional) ────────────
 
