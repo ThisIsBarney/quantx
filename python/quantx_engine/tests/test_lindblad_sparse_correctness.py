@@ -67,8 +67,14 @@ def solver():
         from quantx_engine import Engine
         from quantx_engine.lindblad import LindbladSolver
         return LindbladSolver(Engine())
-    except Exception:
-        pytest.skip("LindbladSolver not available")
+    except (ImportError, FileNotFoundError, OSError) as e:
+        pytest.skip(f"LindbladSolver not available: {e}")
+    except Exception as e:
+        # Also skip for QuantXNativeUnavailable (native .dll/.so not built yet)
+        # but only if the class name indicates a known availability error.
+        if "NativeUnavailable" in type(e).__name__ or "native" in str(e).lower():
+            pytest.skip(f"Native library not built: {e}")
+        raise  # Re-raise unexpected errors so CI catches them
 
 
 @pytest.fixture()
@@ -336,11 +342,15 @@ class TestPauliLabelParsing:
 class TestSparseRouting:
 
     def test_entanglement_cut_with_large_n_raises(self, solver, JumpOp):
-        """Requesting entanglement_cut for n > 10 raises LindbladError."""
+        """Requesting entanglement_cut for n > 10 raises LindbladError.
+
+        This only applies when the sparse backend is loaded (n=11 exceeds
+        the dense backend's 10-qubit limit).  When the native lib is absent
+        the solver raises LindbladError for a different reason (n > limit),
+        which still satisfies the negative-path contract.
+        """
         from quantx_engine.lindblad import LindbladError
-        # Only relevant when sparse lib is loaded; if n<=10 dense handles it fine
-        # We test n=11 which would require sparse + entanglement (unsupported)
-        try:
+        with pytest.raises(LindbladError) as exc_info:
             solver.solve(
                 n_qubits=11,
                 hamiltonian_terms=[],
@@ -349,11 +359,12 @@ class TestSparseRouting:
                 dt=0.1,
                 entanglement_cut=5,
             )
-        except LindbladError as e:
-            assert "entanglement_cut" in str(e).lower() or "dense" in str(e).lower()
-        except Exception:
-            # Native lib not loaded — skip silently
-            pass
+        # The error must mention either the entanglement restriction or the
+        # qubit limit — both are valid rejection reasons.
+        msg = str(exc_info.value).lower()
+        assert "entanglement" in msg or "qubit" in msg or "dense" in msg, (
+            f"Unexpected LindbladError message: {exc_info.value}"
+        )
 
     def test_small_n_uses_correct_hamiltonian(self, solver, JumpOp):
         """Hamiltonian with indexed labels produces physically correct dynamics."""
