@@ -283,80 +283,116 @@ struct Env {
     }
 };
 
-// Left environment: L_new[m2, b, m2'] = Σ_{m1,a,s,s'} conj(A[s*chi_L+m1, m2]) * W[a,b][s,s'] * L[m1,a,m1'] * A[s'*chi_L+m1', m2']
-static Env update_left(const Env& L, const Mat& A, const MPOSite& W) {
-    int chi_l = A.cols();                       // new left bond = chi_R of A
-    int chi_l_old = A.rows() / 2;               // old left bond = chi_L of A
-    int chi_w_new = W.chi_r;
-    Env L_new(chi_l, chi_w_new, chi_l);
+// ── Optimised environment contractions (M177) ──────────────────────────────
+//
+// All three contractions (update_left, update_right, apply_heff) are
+// rewritten to use Eigen matrix-matrix multiplications (DGEMM) instead of
+// raw nested loops.  This reduces the dominant cost from O(χ⁵·χ_W²·d⁴) to
+// O(nnz_W · χ³ · d²), where nnz_W is the number of non-zero 2×2 blocks in
+// the MPO tensor W (≈ 8 for the Heisenberg MPO with χ_W = 5).
+//
+// Reference: Schollwöck (2011), Sec. VI.C (environment update tensor network).
 
-    for (int m2 = 0; m2 < chi_l; ++m2) {
-        for (int b = 0; b < chi_w_new; ++b) {
-            for (int m2p = 0; m2p < chi_l; ++m2p) {
-                Cx val(0);
-                for (int m1 = 0; m1 < chi_l_old; ++m1) {
-                    for (int a = 0; a < W.chi_l; ++a) {
-                        const Cx L_ma = L.at(m1, a, 0); // will fix indexing below
-                        // Actually L has chi1 = chi_l_old, chi2 = chi_l_old
-                        // L.at(m1, a, m1') for the old env
-                        (void)L_ma;
-                        for (int m1p = 0; m1p < chi_l_old; ++m1p) {
-                            Cx Lval = L.at(m1, a, m1p);
-                            if (Lval == Cx(0)) continue;
-                            const Mat2& Wab = W.W(a, b);
-                            for (int s = 0; s < 2; ++s) {
-                                Cx Aconj = std::conj(A(s * chi_l_old + m1, m2));
-                                if (Aconj == Cx(0)) continue;
-                                for (int sp = 0; sp < 2; ++sp) {
-                                    Cx Wval = Wab(s, sp);
-                                    if (Wval == Cx(0)) continue;
-                                    Cx Aval = A(sp * chi_l_old + m1p, m2p);
-                                    val += Aconj * Wval * Lval * Aval;
-                                }
-                            }
-                        }
-                    }
+// Left environment update:
+//   L_new[m2, b, m2'] = Σ_{m1,a,s,s'} conj(A[s·χ+m1, m2]) W[a,b][s,s'] L[m1,a,m1'] A[s'·χ+m1', m2']
+//
+// Algorithm:
+//   Phase 1: For each spin s, compute T1_s = conj(A_s)ᵀ @ L_flat  [χ_new × χ_W·χ_old]
+//   Phase 2: For each (a,b,s,sp) with W[a,b][s,sp] ≠ 0,
+//            L_new[b] += w × T1_s_block(a) @ A_sp
+//            where T1_s_block(a) = T1_s[:, a·χ_old:(a+1)·χ_old] [χ_new × χ_old]
+static Env update_left(const Env& L, const Mat& A, const MPOSite& W) {
+    const int chi_new = A.cols();       // new MPS bond (= chi_R of A)
+    const int chi_old = A.rows() / 2;  // old MPS bond (= chi_L of A)
+    const int chi_wl  = W.chi_l;
+    const int chi_wr  = W.chi_r;
+    Env L_new(chi_new, chi_wr, chi_new);  // zero-initialised
+
+    // L_flat[m1, a·chi_old + m1'] = L.at(m1, a, m1')
+    Mat L_flat(chi_old, chi_wl * chi_old);
+    for (int m1 = 0; m1 < chi_old; ++m1)
+        for (int a = 0; a < chi_wl; ++a)
+            for (int m1p = 0; m1p < chi_old; ++m1p)
+                L_flat(m1, a * chi_old + m1p) = L.at(m1, a, m1p);
+
+    // Phase 1: T1[s][m2, a·chi_old + m1'] = Σ_{m1} conj(A[s·chi_old+m1, m2]) × L[m1, a, m1']
+    std::array<Mat, 2> T1;
+    for (int s = 0; s < 2; ++s) {
+        Mat A_s_conj = A.block(s * chi_old, 0, chi_old, chi_new).conjugate();
+        T1[s] = A_s_conj.transpose() * L_flat;  // [chi_new, chi_wl · chi_old]
+    }
+
+    // Phase 2: accumulate into L_new
+    for (int a = 0; a < chi_wl; ++a) {
+        for (int b = 0; b < chi_wr; ++b) {
+            const Mat2& Wab = W.W(a, b);
+            for (int s = 0; s < 2; ++s) {
+                // T1[s] block for this a: [chi_new, chi_old]
+                Mat T1_a_s = T1[s].block(0, a * chi_old, chi_new, chi_old);
+                for (int sp = 0; sp < 2; ++sp) {
+                    Cx w = Wab(s, sp);
+                    if (std::abs(w) < 1e-15) continue;
+                    // A_sp: [chi_old, chi_new]
+                    Mat A_sp = A.block(sp * chi_old, 0, chi_old, chi_new);
+                    // contrib[m2, m2'] = w × Σ_{m1'} T1_a_s[m2, m1'] × A_sp[m1', m2']
+                    Mat contrib = w * (T1_a_s * A_sp);  // O(chi^3) DGEMM
+                    for (int m2 = 0; m2 < chi_new; ++m2)
+                        for (int m2p = 0; m2p < chi_new; ++m2p)
+                            L_new.at(m2, b, m2p) += contrib(m2, m2p);
                 }
-                L_new.at(m2, b, m2p) += val;
             }
         }
     }
     return L_new;
 }
 
-// Right environment: R_new[m1, a, m1'] = Σ_{m2,b,s,s'} A[s*chi_L+m1, m2] * W[a,b][s,s'] * R[m2,b,m2'] * conj(A[s'*chi_L+m1', m2'])
+// Right environment update:
+//   R_new[m1, a, m1'] = Σ_{m2,b,s,sp} A[s·χ+m1, m2] W[a,b][s,sp] R[m2,b,m2'] conj(A[sp·χ+m1', m2'])
+//
+// Algorithm:
+//   Phase 1: For each spin sp, T1_sp = conj(A_sp) @ R_flat^T  [chi_L × chi_W·chi_R_old]
+//            where R_flat_T[m2', b·chi_R_old + m2] = R[m2, b, m2']
+//   Phase 2: For each (a,b,s,sp) with W[a,b][s,sp] ≠ 0,
+//            R_new[a] += w × A_s @ T1_sp_block(b)ᵀ
 static Env update_right(const Env& R, const Mat& A, const MPOSite& W) {
-    int chi_r_old = A.cols();    // right bond of current site = chi_R of A
-    int chi_l    = A.rows() / 2; // left bond
-    int chi_w_new = W.chi_l;
-    Env R_new(chi_l, chi_w_new, chi_l);
+    const int chi_r = A.cols();       // MPS right bond
+    const int chi_l = A.rows() / 2;  // MPS left bond (new env bond)
+    const int chi_wl = W.chi_l;
+    const int chi_wr = W.chi_r;
+    Env R_new(chi_l, chi_wl, chi_l);  // zero-initialised
 
-    for (int m1 = 0; m1 < chi_l; ++m1) {
-        for (int a = 0; a < chi_w_new; ++a) {
-            for (int m1p = 0; m1p < chi_l; ++m1p) {
-                Cx val(0);
-                for (int m2 = 0; m2 < chi_r_old; ++m2) {
-                    for (int b = 0; b < W.chi_r; ++b) {
-                        Cx Rval = R.at(m2, b, 0); // fix below
-                        (void)Rval;
-                        for (int m2p = 0; m2p < chi_r_old; ++m2p) {
-                            Cx Rv = R.at(m2, b, m2p);
-                            if (Rv == Cx(0)) continue;
-                            const Mat2& Wab = W.W(a, b);
-                            for (int s = 0; s < 2; ++s) {
-                                Cx Aval = A(s * chi_l + m1, m2);
-                                if (Aval == Cx(0)) continue;
-                                for (int sp = 0; sp < 2; ++sp) {
-                                    Cx Wval = Wab(s, sp);
-                                    if (Wval == Cx(0)) continue;
-                                    Cx Aconj = std::conj(A(sp * chi_l + m1p, m2p));
-                                    val += Aval * Wval * Rv * Aconj;
-                                }
-                            }
-                        }
-                    }
+    // R_flat_T[m2', b·chi_r + m2] = R.at(m2, b, m2')
+    Mat R_flat_T(chi_r, chi_wr * chi_r);
+    for (int m2 = 0; m2 < chi_r; ++m2)
+        for (int b = 0; b < chi_wr; ++b)
+            for (int m2p = 0; m2p < chi_r; ++m2p)
+                R_flat_T(m2p, b * chi_r + m2) = R.at(m2, b, m2p);
+
+    // Phase 1: T1_sp[m1', b·chi_r + m2] = Σ_{m2'} conj(A_sp[m1', m2']) × R_flat_T[m2', b·chi_r+m2]
+    std::array<Mat, 2> T1;
+    for (int sp = 0; sp < 2; ++sp) {
+        Mat A_sp_conj = A.block(sp * chi_l, 0, chi_l, chi_r).conjugate();
+        T1[sp] = A_sp_conj * R_flat_T;  // [chi_l, chi_wr · chi_r]
+    }
+
+    // Phase 2: accumulate into R_new
+    for (int a = 0; a < chi_wl; ++a) {
+        for (int b = 0; b < chi_wr; ++b) {
+            const Mat2& Wab = W.W(a, b);
+            for (int s = 0; s < 2; ++s) {
+                Mat A_s = A.block(s * chi_l, 0, chi_l, chi_r);
+                for (int sp = 0; sp < 2; ++sp) {
+                    Cx w = Wab(s, sp);
+                    if (std::abs(w) < 1e-15) continue;
+                    // T1_sp block for this b: [chi_l, chi_r]
+                    Mat T1_sp_b = T1[sp].block(0, b * chi_r, chi_l, chi_r);
+                    // contrib[m1, m1'] = w × Σ_{m2} A_s[m1, m2] × T1_sp_b[m1', m2]
+                    //                  = w × A_s @ T1_sp_b.T
+                    Mat contrib = w * (A_s * T1_sp_b.transpose());  // O(chi^3) DGEMM
+                    for (int m1 = 0; m1 < chi_l; ++m1)
+                        for (int m1p = 0; m1p < chi_l; ++m1p)
+                            R_new.at(m1, a, m1p) += contrib(m1, m1p);
                 }
-                R_new.at(m1, a, m1p) += val;
             }
         }
     }
@@ -364,50 +400,95 @@ static Env update_right(const Env& R, const Mat& A, const MPOSite& W) {
 }
 
 // ── Effective Hamiltonian ────────────────────────────────────────────────────
-
-// theta: length chi_L * 2 * 2 * chi_R
-// index: m1 * (4 * chi_R) + s1 * (2 * chi_R) + s2 * chi_R + m2
+//
+// Applies H_eff to the two-site tensor theta:
+//   (H_eff |θ⟩)[m1', s1', s2', m2'] =
+//     Σ_{m1,m2,a,b,c,s1,s2} L[m1,a,m1'] Wi[a,b][s1',s1] Wj[b,c][s2',s2] R[m2,c,m2'] θ[m1,s1,s2,m2]
+//
+// Algorithm (O(nnz_ac · χ³ · d²)):
+//   Precompute W_comb[a][c][sp12, s12] = Σ_b Wi[a,b][s1p,s1] × Wj[b,c][s2p,s2]  (4×4 matrix)
+//   Step 1: T1 = θ_mat @ R_mat  [chi_L·4, chi_Wj·chi_R]  O(chi²·chi_W·d²) DGEMM
+//   Step 2: For each (a,c) with W_comb[a][c] ≠ 0:
+//           T2_perm = W_comb[a][c] @ T1_c_perm          O(d⁴·chi²) small
+//           out += L_a.T @ T2_flat                       O(chi³·d²) DGEMM  ← dominant
+//   Total: O(nnz_ac · chi³ · d²) ≈ O(8 · chi³ · 4) for Heisenberg
 static Vec apply_heff(const Env& L, const MPOSite& Wi, const MPOSite& Wj,
                       const Env& R, const Vec& theta, int chi_L, int chi_R) {
-    const int d = 2;
-    Vec out = Vec::Zero(chi_L * d * d * chi_R);
+    const int d2     = 4;    // d*d = 2*2
+    const int chi_Wl = Wi.chi_l;
+    const int chi_Wm = Wi.chi_r;  // = Wj.chi_l
+    const int chi_Wr = Wj.chi_r;
 
-    auto idx = [&](int m, int s1, int s2, int r) {
-        return m * (d * d * chi_R) + s1 * (d * chi_R) + s2 * chi_R + r;
-    };
+    // Precompute 2-site MPO: W_comb[a][c] is a 4×4 complex matrix
+    // W_comb[a][c][s1p*2+s2p, s1*2+s2] = Σ_b Wi[a,b][s1p,s1] × Wj[b,c][s2p,s2]
+    using Mat4 = Eigen::Matrix<Cx, 4, 4>;
+    std::vector<std::vector<Mat4>> W_comb(chi_Wl, std::vector<Mat4>(chi_Wr, Mat4::Zero()));
+    for (int a = 0; a < chi_Wl; ++a)
+        for (int b = 0; b < chi_Wm; ++b)
+            for (int c = 0; c < chi_Wr; ++c)
+                for (int s1p = 0; s1p < 2; ++s1p)
+                    for (int s2p = 0; s2p < 2; ++s2p)
+                        for (int s1 = 0; s1 < 2; ++s1)
+                            for (int s2 = 0; s2 < 2; ++s2)
+                                W_comb[a][c](s1p*2+s2p, s1*2+s2) +=
+                                    Wi.W(a,b)(s1p,s1) * Wj.W(b,c)(s2p,s2);
 
-    for (int m1p = 0; m1p < chi_L; ++m1p) {
-        for (int s1p = 0; s1p < d; ++s1p) {
-            for (int s2p = 0; s2p < d; ++s2p) {
-                for (int m2p = 0; m2p < chi_R; ++m2p) {
-                    Cx val(0);
-                    for (int m1 = 0; m1 < chi_L; ++m1) {
-                        for (int m2 = 0; m2 < chi_R; ++m2) {
-                            for (int a = 0; a < Wi.chi_l; ++a) {
-                                for (int b = 0; b < Wi.chi_r; ++b) {
-                                    for (int c = 0; c < Wj.chi_r; ++c) {
-                                        Cx Lval = L.at(m1, a, m1p);
-                                        if (Lval == Cx(0)) continue;
-                                        Cx Rval = R.at(m2, c, m2p);
-                                        if (Rval == Cx(0)) continue;
-                                        for (int s1 = 0; s1 < d; ++s1) {
-                                            Cx Wival = Wi.W(a,b)(s1p, s1);
-                                            if (Wival == Cx(0)) continue;
-                                            for (int s2 = 0; s2 < d; ++s2) {
-                                                Cx Wjval = Wj.W(b,c)(s2p, s2);
-                                                if (Wjval == Cx(0)) continue;
-                                                val += Lval * Wival * Wjval * Rval
-                                                       * theta[idx(m1, s1, s2, m2)];
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    out[idx(m1p, s1p, s2p, m2p)] += val;
-                }
-            }
+    // Step 1: theta_mat[m1*4+phys, m2], R_mat[m2, c*chi_R+m2']
+    //         T1 = theta_mat @ R_mat  → [chi_L*4, chi_Wr*chi_R]
+    Mat theta_mat(chi_L * d2, chi_R);
+    for (int m1 = 0; m1 < chi_L; ++m1)
+        for (int p = 0; p < d2; ++p)
+            for (int m2 = 0; m2 < chi_R; ++m2)
+                theta_mat(m1*d2 + p, m2) = theta[m1*d2*chi_R + p*chi_R + m2];
+
+    Mat R_mat(chi_R, chi_Wr * chi_R);
+    for (int m2 = 0; m2 < chi_R; ++m2)
+        for (int c = 0; c < chi_Wr; ++c)
+            for (int m2p = 0; m2p < chi_R; ++m2p)
+                R_mat(m2, c*chi_R + m2p) = R.at(m2, c, m2p);
+
+    Mat T1 = theta_mat * R_mat;  // [chi_L*4, chi_Wr*chi_R]
+
+    Vec out = Vec::Zero(chi_L * d2 * chi_R);
+
+    // Step 2: for each non-zero (a,c) pair
+    for (int a = 0; a < chi_Wl; ++a) {
+        // L_a[m1, m1'] = L.at(m1, a, m1')
+        Mat L_a(chi_L, chi_L);
+        for (int m1 = 0; m1 < chi_L; ++m1)
+            for (int m1p = 0; m1p < chi_L; ++m1p)
+                L_a(m1, m1p) = L.at(m1, a, m1p);
+
+        for (int c = 0; c < chi_Wr; ++c) {
+            if (W_comb[a][c].isZero(1e-15)) continue;
+
+            // T1_c: column block for this c → [chi_L*4, chi_R]
+            Mat T1_c = T1.block(0, c*chi_R, chi_L*d2, chi_R);
+
+            // Permute T1_c to T1_c_perm[phys, m1*chi_R+m2'] for W application
+            Mat T1_c_perm(d2, chi_L * chi_R);
+            for (int m1 = 0; m1 < chi_L; ++m1)
+                for (int p = 0; p < d2; ++p)
+                    for (int m2p = 0; m2p < chi_R; ++m2p)
+                        T1_c_perm(p, m1*chi_R + m2p) = T1_c(m1*d2 + p, m2p);
+
+            // Apply W_comb[a][c]: T2_perm = W_comb[a][c] @ T1_c_perm
+            Mat T2_perm = W_comb[a][c] * T1_c_perm;  // [4, chi_L*chi_R]
+
+            // Permute back: T2_flat[m1, phys*chi_R+m2']
+            Mat T2_flat(chi_L, d2 * chi_R);
+            for (int m1 = 0; m1 < chi_L; ++m1)
+                for (int p = 0; p < d2; ++p)
+                    for (int m2p = 0; m2p < chi_R; ++m2p)
+                        T2_flat(m1, p*chi_R + m2p) = T2_perm(p, m1*chi_R + m2p);
+
+            // Contract with L_a: out_contrib = L_a.T @ T2_flat  [chi_L, d2*chi_R]
+            Mat out_contrib = L_a.transpose() * T2_flat;  // O(chi^3) DGEMM
+
+            for (int m1p = 0; m1p < chi_L; ++m1p)
+                for (int p = 0; p < d2; ++p)
+                    for (int m2p = 0; m2p < chi_R; ++m2p)
+                        out[m1p*d2*chi_R + p*chi_R + m2p] += out_contrib(m1p, p*chi_R + m2p);
         }
     }
     return out;

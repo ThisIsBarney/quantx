@@ -897,7 +897,7 @@ Status: pending
 
 **依赖**：Eigen（张量表示）+ OpenBLAS 或 MKL（DGEMM/DGESDD）+ ARPACK（Lanczos）
 
-Status: pending
+Status: ✅ complete (2026-05-26, PR #136)
 
 ---
 
@@ -916,7 +916,7 @@ Status: pending
 - Heisenberg n=100, χ=500：内存 < 4 GB
 - 单元测试 ≥ 25 个
 
-Status: pending
+Status: 🔄 in progress (2026-05-26, PR #137)
 
 ---
 
