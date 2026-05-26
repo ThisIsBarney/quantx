@@ -916,7 +916,7 @@ Status: ✅ complete (2026-05-26, PR #136)
 - Heisenberg n=100, χ=500：内存 < 4 GB
 - 单元测试 ≥ 25 个
 
-Status: 🔄 in progress (2026-05-26, PR #137)
+Status: ✅ complete (2026-05-26, PR #137)
 
 ---
 
@@ -924,15 +924,16 @@ Status: 🔄 in progress (2026-05-26, PR #137)
 **动机**：证明 Python 用户不需要学 Julia 也能用最好的 DMRG。
 
 - `benchmarks/dmrg_vs_itensor.py`：
-  - 问题：1D Heisenberg 链，n=50/100/200，χ=100/200/500
+  - 问题：1D Heisenberg 链，n=20/50/100，χ=50/100/200
   - 工具：QuantX C++ / tenpy（Python）/ ITensor（Julia，subprocess 调用）
   - 测量：wall time、内存、与 Bethe ansatz 精确解的能量误差
-- 输出：`benchmarks/results/dmrg_scaling.json` + 对比图
+- 输出：`benchmarks/results/dmrg_scaling.json` + 对比图 `dmrg_scaling.png`
+- CI：push/PR 触发 smoke（n=8,10 QuantX-only）；`workflow_dispatch` 全量 benchmark
 - 预期结果：
   - QuantX vs tenpy：快 3-5x（同是 Python 生态，更容易安装）
   - QuantX vs ITensor：同量级（差距 < 2x），无需 Julia
 
-Status: pending
+Status: 🔄 in progress (2026-05-26, PR #138)
 
 ---
 
