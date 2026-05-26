@@ -583,8 +583,11 @@ static DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
     }
 
     DMRGResult result;
-    result.truncation_error = 0;
-    double prev_energy = 0;
+    result.energy           = 0.0;
+    result.truncation_error = 0.0;
+    result.n_sweeps_done    = 0;
+    result.wall_time_s      = 0.0;
+    double prev_energy = 0.0;
 
     for (int sweep = 0; sweep < n_sweeps; ++sweep) {
         double sweep_trunc = 0;
@@ -801,8 +804,9 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         int  n_sweeps = opts.value("n_sweeps",  10);
         double tol    = opts.value("tol",       1e-10);
 
-        if (n < 2)  return dmrg_error("n_qubits must be >= 2");
-        if (n > 200) return dmrg_error("n_qubits exceeds max (200)");
+        if (n < 2)        return dmrg_error("n_qubits must be >= 2");
+        if (n > 200)      return dmrg_error("n_qubits exceeds max (200)");
+        if (n_sweeps < 1) return dmrg_error("n_sweeps must be >= 1");
 
         auto mpo = parse_ham(prob, n);
         DMRGResult res = run_dmrg(mpo, n, max_bond, cutoff, n_sweeps, tol);

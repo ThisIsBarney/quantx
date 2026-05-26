@@ -237,6 +237,15 @@ class TestDMRGErrors:
             solver.solve(n_qubits=4, hamiltonian_type="pauli_sum",
                          hamiltonian_terms=None)
 
+    def test_n_sweeps_zero_raises(self, solver):
+        """n_sweeps=0 must raise DMRGError, not return garbage energy."""
+        from quantx_engine.dmrg import DMRGError
+        # Python layer rejects n_sweeps < 1 before calling C++
+        # (C++ also rejects it, but Python should guard too)
+        with pytest.raises((DMRGError, ValueError)):
+            solver.solve(n_qubits=4, hamiltonian_type="heisenberg",
+                         n_sweeps=0)
+
 
 # ── Group 5: Truncation error ─────────────────────────────────────────────────
 

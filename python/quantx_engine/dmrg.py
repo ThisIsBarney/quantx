@@ -109,7 +109,11 @@ def _get_dmrg_lib(engine) -> Any | None:
         return None
 
 
-# ── Pure-Python DMRG fallback (via tdmrg module) ─────────────────────────────
+# ── Pure-Python fallback: exact diagonalisation ───────────────────────────────
+# The C++ DMRG is the only DMRG implementation.  Without the native library
+# we fall back to exact diagonalisation (numpy eigvalsh), which is only feasible
+# for small systems (n ≤ 20, Hilbert space ≤ 2^20 = 1M).  For larger systems
+# a DMRGError is raised, asking the user to build the native extension.
 
 def _run_python_dmrg(n_qubits: int,
                      hamiltonian_type: str,
@@ -119,41 +123,11 @@ def _run_python_dmrg(n_qubits: int,
                      cutoff: float,
                      n_sweeps: int,
                      tol: float) -> DMRGResult:
-    """Pure-Python DMRG using the existing tdmrg module as a fallback."""
-    import time
-    try:
-        from quantx_engine import tdmrg as _tdmrg
+    """Exact-diagonalisation fallback when the C++ native library is absent.
 
-        t0 = time.perf_counter()
-        if hamiltonian_type == "heisenberg":
-            terms_py = []
-            for i in range(n_qubits - 1):
-                for gate in ("X", "Y", "Z"):
-                    terms_py.append((J, f"{gate}{i}{gate}{i+1}"))
-        else:
-            terms_py = list(hamiltonian_terms)
-
-        res_py = _tdmrg.dmrg_ground_state(
-            n_sites=n_qubits,
-            ham_terms=terms_py,
-            max_bond=max_bond,
-            cutoff=cutoff,
-            n_sweeps=n_sweeps,
-            tol=tol,
-        )
-        elapsed = time.perf_counter() - t0
-        return DMRGResult(
-            energy=float(res_py.energy),
-            truncation_error=float(getattr(res_py, "truncation_error", 0.0)),
-            n_sweeps_done=int(getattr(res_py, "n_sweeps", n_sweeps)),
-            sweep_energies=list(getattr(res_py, "sweep_energies", [])),
-            wall_time_s=elapsed,
-            backend="python",
-        )
-    except (ImportError, AttributeError):
-        pass
-
-    # Last resort: exact diagonalisation for small systems
+    Only viable for n_qubits ≤ 20.  Raises DMRGError for larger systems,
+    directing the user to build the native extension.
+    """
     import time
     import numpy as np
 
@@ -270,6 +244,8 @@ class DMRGSolver:
         """
         if n_qubits < 2:
             raise DMRGError("n_qubits must be ≥ 2")
+        if n_sweeps < 1:
+            raise DMRGError("n_sweeps must be ≥ 1")
         if n_qubits > _MAX_DMRG_QUBITS:
             raise DMRGError(
                 f"n_qubits={n_qubits} exceeds the maximum of {_MAX_DMRG_QUBITS}"
