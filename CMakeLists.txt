@@ -87,6 +87,7 @@ add_library(qx_core
   src/continuous3d_backend.cpp
   src/lindblad_backend.cpp
   src/lindblad_sparse.cpp
+  src/dmrg_sparse.cpp
   src/engine.cpp
   src/vqe.cpp
   src/qpe.cpp

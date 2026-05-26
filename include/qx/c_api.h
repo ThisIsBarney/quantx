@@ -61,6 +61,31 @@ QX_API const char* qx_lindblad_sparse_evolve(const char* problem_json,
 // Steady-state density matrix: returns populations + purity + entropy.
 QX_API const char* qx_lindblad_sparse_steady(const char* problem_json);
 
+// ── M176: C++ MPS tensor contractions + two-site DMRG ────────────────────────
+// Finds the ground state of a 1D spin-1/2 Hamiltonian via two-site DMRG.
+//
+// problem_json fields:
+//   n_qubits          : int
+//   type              : "heisenberg" | "pauli_sum"
+//   J                 : float   (heisenberg only, default 1.0)
+//   terms             : [{coeff: float, pauli: "X0X1"}]  (pauli_sum)
+//   hamiltonian_terms : [[coeff, "pauli"]]               (alternative key)
+//
+// options_json fields:
+//   max_bond  : int    (default 64)
+//   cutoff    : float  (SVD truncation weight cutoff, default 1e-10)
+//   n_sweeps  : int    (max sweeps, default 10)
+//   tol       : float  (energy convergence tolerance, default 1e-10)
+//
+// Returns thread-local JSON: {ok, energy, truncation_error, n_sweeps_done,
+//                             wall_time_s, sweep_energies[]}
+QX_API const char* qx_dmrg_sweep(const char* problem_json,
+                                  const char* options_json);
+
+// Compute <0...0|H|0...0> for the all-zero product state.
+// Returns thread-local JSON: {ok, energy}
+QX_API const char* qx_mps_energy(const char* problem_json);
+
 #ifdef __cplusplus
 }
 #endif
