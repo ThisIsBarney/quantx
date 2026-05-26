@@ -40,7 +40,12 @@ import tracemalloc
 from pathlib import Path
 from typing import Any
 
-BETHE_E_PER_SITE = 1.0 * (0.25 - math.log(2))   # ≈ -0.4431 (J=1)
+# Bethe ansatz for the SPIN-1/2 convention: E/n = J(1/4 - ln2) ≈ -0.4431 J
+# QuantX uses FULL Pauli operators (X,Y,Z with eigenvalues ±1), which are
+# twice the spin-1/2 operators, so the Hamiltonian is 4× larger:
+#   H_QuantX = Σ_i (Xi Xi+1 + Yi Yi+1 + Zi Zi+1) = 4 * H_spin½
+# Reference energy per site in the Pauli convention:
+BETHE_E_PER_SITE = 4.0 * (0.25 - math.log(2))   # ≈ -1.7726 (J=1, Pauli)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 
@@ -73,11 +78,23 @@ def _row(backend: str, n: int, chi: int, energy: float,
 
 # ── QuantX backend ────────────────────────────────────────────────────────────
 
+class _NoNativeEngine:
+    """Minimal stub that makes DMRGSolver use its pure-Python fallback."""
+    _lib = None
+
+
 def run_quantx(n: int, chi: int, n_sweeps: int = 20) -> dict:
-    from quantx_engine import Engine
     from quantx_engine.cached_dmrg import CachedDMRG
 
-    dmrg = CachedDMRG(Engine())
+    # Use the native Engine when the shared library is available; otherwise
+    # fall back to the pure-Python exact-diag path (viable for n ≤ 20).
+    try:
+        from quantx_engine import Engine
+        engine = Engine()
+    except Exception:
+        engine = _NoNativeEngine()  # type: ignore[assignment]
+
+    dmrg = CachedDMRG(engine)
 
     tracemalloc.start()
     t0 = time.perf_counter()
