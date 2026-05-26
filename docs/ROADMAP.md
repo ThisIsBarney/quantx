@@ -933,7 +933,7 @@ Status: ✅ complete (2026-05-26, PR #137)
   - QuantX vs tenpy：快 3-5x（同是 Python 生态，更容易安装）
   - QuantX vs ITensor：同量级（差距 < 2x），无需 Julia
 
-Status: 🔄 in progress (2026-05-26, PR #138)
+Status: ✅ complete (2026-05-26, PR #138)
 
 ---
 
