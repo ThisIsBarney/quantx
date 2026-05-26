@@ -114,11 +114,11 @@ jobs:
           if [ "${{ steps.params.outputs.no_tenpy }}" = "true" ]; then
             EXTRA="$EXTRA --no-tenpy"
           fi
+          # ITensor runs if julia is on PATH; script handles absence gracefully
           python benchmarks/dmrg_vs_itensor.py \
             --sizes ${{ steps.params.outputs.sizes }} \
             --chi   ${{ steps.params.outputs.chi }} \
             --n-sweeps ${{ steps.params.outputs.sweeps }} \
-            --no-itensor \
             --out-dir benchmarks/results \
             $EXTRA
 

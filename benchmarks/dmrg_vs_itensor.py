@@ -105,10 +105,15 @@ def run_tenpy(n: int, chi: int, n_sweeps: int = 20) -> dict:
     from tenpy.models.xxz_chain import XXZChain2
     from tenpy.algorithms import dmrg as tenpy_dmrg
 
+    # XXZChain2 uses spin-1/2 operators (Sx=σx/2, etc.), so the coupling must
+    # be scaled by 4 to match QuantX's full-Pauli convention
+    # (Xi Xi+1 + Yi Yi+1 + Zi Zi+1 where X,Y,Z have eigenvalues ±1).
+    # Without the factor, H_tenpy(J=1) = H_QuantX(J=1) / 4.
+    J_tenpy = 4.0  # = J_pauli (1.0) * 4
     model_params = {
         "L":        n,
-        "Jxx":      1.0,
-        "Jz":       1.0,
+        "Jxx":      J_tenpy,
+        "Jz":       J_tenpy,
         "hz":       0.0,
         "bc_MPS":   "finite",
         "conserve": "Sz",
