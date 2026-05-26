@@ -813,3 +813,184 @@ Ship version 1.0.0 with API stability guarantee. Requirements:
   - Performance benchmarks published
   - At least one external contributor (non-author commit merged)
 Status: pending
+
+---
+
+## Phase 3: Core Acceleration — 两个杀手锏 (M173–M181)
+
+**战略目标**：不再横向扩展，聚焦两个细分领域做到真正最好：
+1. **大规模 Lindblad 开放量子系统** — 超越 QuTiP 的 C++ 稀疏超算符求解器
+2. **Python 原生 DMRG** — 对标 ITensor 性能，服务于不用 Julia 的物理学家
+
+发布时机：等 benchmark 证明价值之后再发布 PyPI，不提前。
+
+---
+
+### Track L — Lindblad at Scale (M173–M175)
+
+#### M173: C++ 稀疏超算符 Lindblad 求解器
+**动机**：QuTiP 用稠密超算符矩阵，n=12 qubit 时内存 > 32 GB，根本跑不动。
+QuantX 用稀疏表示，目标支持 n=16 qubit 稳态求解和时间演化。
+
+**实现**（`src/lindblad/`）：
+- `LiouvillianBuilder`：从 Pauli Hamiltonian 项 + JumpOperator 列表构造
+  稀疏 Liouvillian 超算符 L（4^n × 4^n 稀疏矩阵，CSR 格式，用 Eigen）
+- `SteadyStateSolver_cpp`：求解 L·ρ_vec = 0，用 ARPACK 求最小模特征值
+- `LindbladEvolver_cpp`：时间演化 dρ/dt = L·ρ_vec，用 RK4 + 稀疏矩阵-向量乘
+- C ABI 导出：`qx_lindblad_steady(...)`, `qx_lindblad_evolve(...)`
+
+**Python 桥接**（`python/quantx_engine/lindblad.py`）：
+- `LindbladSolver.solve()` 自动检测 native engine，走 C++ 路径
+- 结果与 pure-Python 路径完全一致（数值精度 < 1e-8）
+
+**验收标准**：
+- n=8 qubit 振幅阻尼噪声稳态：与 QuTiP 结果偏差 < 1e-6
+- n=12 qubit 时间演化：内存 < 8 GB，QuTiP 无法运行
+- 单元测试 ≥ 30 个
+
+Status: pending
+
+---
+
+#### M174: Lindblad 正确性验证套件
+**动机**：性能数据没有正确性做前提毫无意义。
+
+- `tests/test_lindblad_cpp_vs_qutip.py`：
+  - n=2,4,6,8 qubit，多种跳跃算符（振幅阻尼、去极化、相位阻尼）
+  - 稳态密度矩阵逐元素对比（阈值 1e-6）
+  - Tr(ρ)=1、ρ≥0（正定性）验证
+- `tests/test_lindblad_physics.py`：
+  - 单量子比特振幅阻尼：解析稳态 ρ=|0⟩⟨0| 验证
+  - 两量子比特 XXZ 链 + 边界耗散：稳态电流守恒
+  - Lindblad 主方程 GKSL 形式的迹不变性验证
+
+Status: pending
+
+---
+
+#### M175: Lindblad benchmark — QuantX vs QuTiP
+**动机**：可发表的性能对比数据。
+
+- `benchmarks/lindblad_vs_qutip.py`：
+  - 问题：n=6,8,10,12,14,16 qubit Heisenberg 链 + 边界振幅阻尼
+  - 测量：wall time（秒）、峰值内存（MB）、结果精度（vs 解析解）
+  - 工具：QuantX C++ 路径 vs QuTiP `mesolve` / `steadystate`
+- 输出：`benchmarks/results/lindblad_scaling.json` + 对比图
+- 预期结果：n=12 时 QuantX 快 ≥10x，n=14+ 时 QuTiP OOM 而 QuantX 可运行
+
+Status: pending
+
+---
+
+### Track D — Python-Native DMRG (M176–M178)
+
+#### M176: C++ MPS 张量收缩核心
+**动机**：Python 层的张量收缩是 DMRG 性能瓶颈，用 BLAS DGEMM 替换 numpy einsum。
+
+**实现**（`src/mps/`）：
+- `MPSTensor`：三阶张量 (χ_L, d, χ_R) 的 C++ 封装，内存连续布局
+- `contract_left(A, W, L_env)`：左环境更新，调用 DGEMM
+- `contract_right(A, W, R_env)`：右环境更新，调用 DGEMM
+- `two_site_update(Heff, psi2)`：对两站有效 Hamiltonian 做 Lanczos 最低特征值
+- `svd_truncate(psi2, max_bond, cutoff)`：调用 LAPACK DGESDD，截断到 max_bond
+- C ABI 导出：`qx_dmrg_sweep(...)`, `qx_mps_energy(...)`
+
+**依赖**：Eigen（张量表示）+ OpenBLAS 或 MKL（DGEMM/DGESDD）+ ARPACK（Lanczos）
+
+Status: pending
+
+---
+
+#### M177: DMRG 两站更新完整实现
+**动机**：实现可收敛的 DMRG，支持 bond dimension 到 1000。
+
+**实现**：
+- `DMRGEngine_cpp`：左→右→左扫描，每步调用 M176 的张量收缩核
+- 收敛判据：相邻扫描能量差 < `tol`（默认 1e-10）
+- `DMRGResult`：基态能量、MPS 表示、每个 sweep 的能量曲线、截断误差
+- Python 桥接：`CachedDMRG` 自动走 C++ 路径（有 native engine 时）
+- 与 pure-Python 路径结果一致：Heisenberg n=10 能量偏差 < 1e-8
+
+**验收标准**：
+- Heisenberg n=100, χ=100：收敛，能量与 Bethe ansatz 偏差 < 0.1%
+- Heisenberg n=100, χ=500：内存 < 4 GB
+- 单元测试 ≥ 25 个
+
+Status: pending
+
+---
+
+#### M178: DMRG benchmark — QuantX vs ITensor vs tenpy
+**动机**：证明 Python 用户不需要学 Julia 也能用最好的 DMRG。
+
+- `benchmarks/dmrg_vs_itensor.py`：
+  - 问题：1D Heisenberg 链，n=50/100/200，χ=100/200/500
+  - 工具：QuantX C++ / tenpy（Python）/ ITensor（Julia，subprocess 调用）
+  - 测量：wall time、内存、与 Bethe ansatz 精确解的能量误差
+- 输出：`benchmarks/results/dmrg_scaling.json` + 对比图
+- 预期结果：
+  - QuantX vs tenpy：快 3-5x（同是 Python 生态，更容易安装）
+  - QuantX vs ITensor：同量级（差距 < 2x），无需 Julia
+
+Status: pending
+
+---
+
+### Track P — 学术输出 (M179–M181)
+
+#### M179: arXiv 技术论文
+**动机**：学术可信度是 A 目标的核心。有了真实 benchmark 才有资格写。
+
+**内容**（6-8页，quant-ph）：
+1. 架构：C++ core → pybind11 → Python SDK → REST API
+2. 杀手锏一：Lindblad@scale（M175 数据）
+3. 杀手锏二：Python-native DMRG（M178 数据）
+4. 与 Qiskit/PennyLane/QuTiP/ITensor 的对比表
+5. 应用示例：量子器件噪声建模 + 强关联基态求解
+
+**前置条件**：M175 + M178 benchmark 数据完成
+
+Status: pending
+
+---
+
+#### M180: PyPI 正式发布 v1.0.0
+**动机**：有了 benchmark 证明价值，有了论文建立可信度，再发布。
+
+- 发布前检查清单：
+  - [ ] M173-M178 所有测试绿色
+  - [ ] benchmark 数据已在 arXiv 论文中公开
+  - [ ] `pip install quantx-engine` 在 Linux/macOS/Windows 三平台测试通过
+  - [ ] 文档站有 Lindblad 和 DMRG 的完整教程
+- 发布：触发 `release.yml` workflow（publish=true）
+- 宣传：QuTiP GitHub Discussions + 凝聚态物理论坛 + Twitter/X
+
+Status: pending
+
+---
+
+#### M181: 第一个外部用户 / 合作者
+**动机**：从 0 到 1 的社区突破。
+
+- 目标：找到 1 名研究者（同学、导师、合作者）在真实科研中使用 QuantX
+- 用 Lindblad 或 DMRG 解决他们的实际物理问题
+- 将使用案例写入文档（经对方同意）
+- 理想情况：对方在论文致谢或参考文献中引用 QuantX
+
+Status: pending
+
+---
+
+## 实施顺序
+
+```
+Track L:  M173 → M174 → M175
+Track D:  M176 → M177 → M178
+Track P:  M179 (需要 M175+M178) → M180 → M181
+
+M173 和 M176 可以并行开始，但优先 M173（Lindblad 实现相对简单，
+可以更快验证整个 C++→Python 管道是否通畅）
+```
+
+每个里程碑：`feat/mNNN-short-name` 分支 → 实现 → 测试绿色 →
+开 PR → 等 Codex review → 修复问题 → squash merge。
