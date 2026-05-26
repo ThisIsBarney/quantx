@@ -98,6 +98,7 @@ class CachedDMRG:
     def __init__(self, engine) -> None:
         self._solver = DMRGSolver(engine)
         self._cache: dict[str, DMRGResult] = {}
+        self._inflight: dict[str, threading.Event] = {}  # per-key in-flight guard
         self._hits = 0
         self._misses = 0
         self._lock = threading.Lock()
@@ -120,6 +121,11 @@ class CachedDMRG:
 
         All parameters are identical to :meth:`DMRGSolver.solve`.
 
+        Concurrent calls with the same key are deduplicated: only the first
+        thread runs the solver; subsequent threads wait on a per-key
+        ``threading.Event`` and return the single cached result once it is
+        ready.
+
         Returns
         -------
         DMRGResult
@@ -131,34 +137,55 @@ class CachedDMRG:
             n_qubits, hamiltonian_type, J, terms,
             max_bond, cutoff, n_sweeps, tol,
         )
+
+        # ── Fast path: already cached ──────────────────────────────────────
         with self._lock:
             if key in self._cache:
                 self._hits += 1
                 return self._cache[key]
 
-        # Compute outside the lock (the solver may be slow)
-        result = self._solver.solve(
-            n_qubits,
-            hamiltonian_type=hamiltonian_type,
-            J=J,
-            hamiltonian_terms=terms or None,
-            max_bond=max_bond,
-            cutoff=cutoff,
-            n_sweeps=n_sweeps,
-            tol=tol,
-        )
+            # ── Register or wait on in-flight guard ───────────────────────
+            if key in self._inflight:
+                # Another thread is already solving — wait for it.
+                wait_event = self._inflight[key]
+            else:
+                # We are the solver thread for this key.
+                wait_event = None
+                self._inflight[key] = threading.Event()
 
-        with self._lock:
-            # Double-checked locking: another thread might have computed the
-            # same key concurrently; prefer the already-stored value.
-            if key not in self._cache:
+        if wait_event is not None:
+            wait_event.wait()
+            with self._lock:
+                self._hits += 1
+                return self._cache[key]
+
+        # ── Solver thread: compute and populate cache ──────────────────────
+        try:
+            result = self._solver.solve(
+                n_qubits,
+                hamiltonian_type=hamiltonian_type,
+                J=J,
+                hamiltonian_terms=terms or None,
+                max_bond=max_bond,
+                cutoff=cutoff,
+                n_sweeps=n_sweeps,
+                tol=tol,
+            )
+            with self._lock:
                 self._cache[key] = result
                 self._misses += 1
-            else:
-                self._hits += 1
-                result = self._cache[key]
-
-        return result
+                done_event = self._inflight.pop(key)
+            done_event.set()   # wake all waiting threads
+            return result
+        except Exception:
+            # On failure: remove in-flight guard and wake waiters so they
+            # don't block forever (they will re-raise their own exceptions
+            # or get a KeyError from the cache — handled by re-entry).
+            with self._lock:
+                done_event = self._inflight.pop(key, None)
+            if done_event is not None:
+                done_event.set()
+            raise
 
     def cache_info(self) -> dict:
         """Return cache statistics.
