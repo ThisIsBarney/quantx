@@ -117,6 +117,39 @@ _CHANNEL_PREFIXES: dict[str, str] = {
 # Sparse backend ctypes helpers (M173)
 # ---------------------------------------------------------------------------
 
+def _parse_pauli_label(label: str, n_qubits: int) -> str:
+    """Convert an indexed Pauli label to a plain per-qubit string.
+
+    The public API uses labels like ``"X0"``, ``"Z0Z1"``, ``"X0X1"``
+    where each letter+digit pair specifies a Pauli on a qubit.  The sparse
+    C++ backend expects a plain string of length n_qubits where character i
+    is the Pauli on qubit i (e.g. ``"XI"`` for X on qubit 0, I on qubit 1).
+
+    Examples
+    --------
+    >>> _parse_pauli_label("X0X1", 2)
+    'XX'
+    >>> _parse_pauli_label("Z0", 3)
+    'ZII'
+    >>> _parse_pauli_label("XXI", 3)   # already plain format — passed through
+    'XXI'
+    """
+    import re
+    # Detect indexed format: contains digits after Pauli letters
+    if re.search(r'[XYZI]\d', label):
+        result = ['I'] * n_qubits
+        for m in re.finditer(r'([XYZI])(\d+)', label):
+            op, q = m.group(1), int(m.group(2))
+            if q < n_qubits:
+                result[q] = op
+        return ''.join(result)
+    # Already plain format (e.g. "XZI") — pad or truncate to n_qubits
+    plain = label.upper().replace(' ', '')
+    if len(plain) < n_qubits:
+        plain = plain + 'I' * (n_qubits - len(plain))
+    return plain[:n_qubits]
+
+
 def _get_sparse_lib(engine: "Engine"):
     """Return the ctypes library handle from *engine* if it exposes the
     sparse Lindblad symbols, otherwise return None."""
@@ -511,17 +544,29 @@ class LindbladSolver:
         # ── Route to sparse or dense backend ─────────────────────────────────
         sparse_lib = _get_sparse_lib(self._engine)
 
+        # The sparse backend does NOT emit entanglement_frames, so whenever
+        # the caller requests entanglement tracking we must use the dense path
+        # (which supports it for n ≤ 10).
+        needs_entanglement = entanglement_cut > 0
+
         if sparse_lib is not None and n_qubits > _MAX_LINDBLAD_QUBITS_DENSE:
             # Must use sparse — dense backend cannot handle this many qubits.
+            if needs_entanglement:
+                raise LindbladError(
+                    f"entanglement_cut tracking is only supported for n_qubits ≤ "
+                    f"{_MAX_LINDBLAD_QUBITS_DENSE} (dense backend limit). "
+                    f"Got n_qubits={n_qubits}."
+                )
             return self._solve_sparse(sparse_lib, n_qubits, hamiltonian_terms,
                                       jump_operators, total_time, dt)
 
-        if sparse_lib is not None and n_qubits > 6:
-            # Prefer sparse for n > 6 even when dense would work — faster.
+        if sparse_lib is not None and n_qubits > 6 and not needs_entanglement:
+            # Prefer sparse for n > 6 when entanglement tracking is not needed.
             return self._solve_sparse(sparse_lib, n_qubits, hamiltonian_terms,
                                       jump_operators, total_time, dt)
 
-        # Fall back to dense C++ backend (n ≤ 10, via engine.run JSON RPC)
+        # Dense C++ backend (n ≤ 10, via engine.run JSON RPC).
+        # Supports entanglement_cut and is used when n ≤ 6 or entanglement requested.
         raw = self._engine.run(problem, options)
         return _parse_result(raw, n_qubits, total_time, dt)
 
@@ -538,8 +583,10 @@ class LindbladSolver:
         """Run time evolution via the sparse matrix-free C++ backend (M173)."""
         import json as _json
 
-        # Build problem dict for sparse backend
-        ham_list = [{"coeff": float(c), "pauli": p}
+        # Build problem dict for sparse backend.
+        # Convert indexed labels ("X0X1") to plain per-qubit strings ("XX").
+        ham_list = [{"coeff": float(c),
+                     "pauli": _parse_pauli_label(p, n_qubits)}
                     for c, p in hamiltonian_terms]
         jop_list = []
         for jop in jump_operators:
@@ -591,7 +638,8 @@ class LindbladSolver:
                 "steady_state() requires the native library with M173 sparse "
                 "Lindblad support. Build with cmake and set QUANTX_LIB_PATH."
             )
-        ham_list = [{"coeff": float(c), "pauli": p}
+        ham_list = [{"coeff": float(c),
+                     "pauli": _parse_pauli_label(p, n_qubits)}
                     for c, p in hamiltonian_terms]
         jop_list = [{"type": j.kind, "qubit": j.qubit, "rate": float(j.rate)}
                     for j in jump_operators]
