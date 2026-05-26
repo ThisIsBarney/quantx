@@ -1,0 +1,72 @@
+name: Lindblad Benchmark (M175)
+
+# Runs a quick smoke benchmark (n=6,8) on every push to master and on PRs
+# that touch the Lindblad solver or benchmark script.
+# Full benchmark (n=6..14 vs QuTiP) is triggered manually via workflow_dispatch.
+
+on:
+  push:
+    branches: ["master", "main"]
+    paths:
+      - "src/lindblad_sparse.cpp"
+      - "python/quantx_engine/lindblad.py"
+      - "benchmarks/lindblad_vs_qutip.py"
+      - ".github/workflows/benchmarks-lindblad.yml"
+  pull_request:
+    branches: ["master", "main"]
+    paths:
+      - "src/lindblad_sparse.cpp"
+      - "python/quantx_engine/lindblad.py"
+      - "benchmarks/lindblad_vs_qutip.py"
+  workflow_dispatch:
+    inputs:
+      full_benchmark:
+        description: "Run full benchmark (n=6..14) including QuTiP comparison"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+jobs:
+  lindblad-benchmark:
+    name: Lindblad benchmark (QuantX only, quick)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - name: Install QuantX SDK
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e "python/[dev]"
+
+      - name: Install QuTiP (full benchmark only)
+        if: github.event.inputs.full_benchmark == 'true'
+        run: pip install qutip matplotlib
+        continue-on-error: true   # QuTiP install may fail on some runners
+
+      - name: Run quick benchmark (n=6,8 — no QuTiP)
+        if: github.event.inputs.full_benchmark != 'true'
+        run: |
+          python benchmarks/lindblad_vs_qutip.py --quick --no-qutip
+        continue-on-error: true   # Native lib not built in CI — QuantX runs pure-Python fallback
+
+      - name: Run full benchmark (n=6..14 with QuTiP)
+        if: github.event.inputs.full_benchmark == 'true'
+        run: |
+          python benchmarks/lindblad_vs_qutip.py --sizes 6 8 10 12 14
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lindblad-benchmark-results
+          path: benchmarks/results/
+          if-no-files-found: ignore
