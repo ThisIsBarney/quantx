@@ -62,11 +62,19 @@ SIZES_QUICK = [6, 8]
 # ── QuantX helpers ───────────────────────────────────────────────────────────
 
 def build_heisenberg_ham(n: int) -> list[tuple[float, str]]:
-    """Build Heisenberg XXX Hamiltonian as (coeff, pauli_label) list."""
+    """Build Heisenberg XXX Hamiltonian as (coeff, indexed_pauli_label) list.
+
+    Uses indexed format ("X0X1", "Y2Y3", ...) so both the dense C++ backend
+    (which parses indexed labels) and the sparse backend (which converts them
+    via _parse_pauli_label) receive the correct operator.
+
+    Convention: full Pauli matrices (not spin-1/2 operators), matching QuTiP
+    path which uses sigmax() = [[0,1],[1,0]] without the 1/2 factor.
+    """
     terms = []
     for i in range(n - 1):
         for gate in ("X", "Y", "Z"):
-            label = "I" * i + gate + gate + "I" * (n - i - 2)
+            label = f"{gate}{i}{gate}{i+1}"   # e.g. "X0X1", "Y2Y3"
             terms.append((J, label))
     return terms
 
@@ -138,9 +146,9 @@ def run_qutip(n: int) -> dict[str, Any]:
 
     try:
         d = 2 ** n
-        sx = qt.sigmax() / 2
-        sy = qt.sigmay() / 2
-        sz = qt.sigmaz() / 2
+        sx = qt.sigmax()
+        sy = qt.sigmay()
+        sz = qt.sigmaz()
         sm = qt.sigmam()
         Id = qt.qeye(2)
 

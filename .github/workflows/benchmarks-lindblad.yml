@@ -60,7 +60,7 @@ jobs:
       - name: Run full benchmark (n=6..14 with QuTiP)
         if: github.event.inputs.full_benchmark == 'true'
         run: |
-          python benchmarks/lindblad_vs_qutip.py --sizes 6 8 10 12
+          python benchmarks/lindblad_vs_qutip.py --sizes 6 8 10 12 14
         continue-on-error: true
 
       - name: Upload benchmark results
