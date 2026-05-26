@@ -95,15 +95,73 @@ __all__ = [
     "LindbladSolver",
 ]
 
-# Maximum qubits supported by the C++ lindblad_backend (dense RK4).
-_MAX_LINDBLAD_QUBITS = 10
+# Maximum qubits supported by the dense C++ lindblad_backend (RK4).
+_MAX_LINDBLAD_QUBITS_DENSE = 10
 
-# Map Python channel names → C++ label prefixes
+# Maximum qubits for the sparse (matrix-free) C++ backend (M173).
+_MAX_LINDBLAD_QUBITS_SPARSE_EVOLVE = 16   # memory: ~32 GB at n=16
+_MAX_LINDBLAD_QUBITS_SPARSE_STEADY = 12   # explicit Liouvillian: ~128 MB at n=12
+
+# Backward-compat alias used throughout existing code.
+_MAX_LINDBLAD_QUBITS = _MAX_LINDBLAD_QUBITS_SPARSE_EVOLVE
+
+# Map Python channel names → C++ label prefixes (dense backend)
 _CHANNEL_PREFIXES: dict[str, str] = {
     "amplitude_damping": "AmplitudeDamping",
     "dephasing":         "Dephasing",
     "depolarizing":      "Depolarizing",
 }
+
+
+# ---------------------------------------------------------------------------
+# Sparse backend ctypes helpers (M173)
+# ---------------------------------------------------------------------------
+
+def _get_sparse_lib(engine: "Engine"):
+    """Return the ctypes library handle from *engine* if it exposes the
+    sparse Lindblad symbols, otherwise return None."""
+    import ctypes
+    from ctypes import c_char_p, c_void_p
+    lib = getattr(engine, "_lib", None)
+    if lib is None:
+        return None
+    # Check that the sparse symbols were compiled in
+    try:
+        fn = lib.qx_lindblad_sparse_evolve
+        fn.argtypes = [c_char_p, c_char_p]
+        fn.restype  = c_char_p   # thread-local, no free needed
+        fn2 = lib.qx_lindblad_sparse_steady
+        fn2.argtypes = [c_char_p]
+        fn2.restype  = c_char_p
+        return lib
+    except AttributeError:
+        return None
+
+
+def _sparse_evolve_raw(lib, problem_dict: dict) -> dict:
+    """Call qx_lindblad_sparse_evolve and return parsed JSON."""
+    import json as _json
+    import ctypes
+    prob_bytes = _json.dumps(problem_dict).encode()
+    opts_bytes = b"{}"
+    raw = lib.qx_lindblad_sparse_evolve(
+        ctypes.c_char_p(prob_bytes),
+        ctypes.c_char_p(opts_bytes),
+    )
+    if raw is None:
+        raise LindbladError("qx_lindblad_sparse_evolve returned NULL")
+    return _json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+
+
+def _sparse_steady_raw(lib, problem_dict: dict) -> dict:
+    """Call qx_lindblad_sparse_steady and return parsed JSON."""
+    import json as _json
+    import ctypes
+    prob_bytes = _json.dumps(problem_dict).encode()
+    raw = lib.qx_lindblad_sparse_steady(ctypes.c_char_p(prob_bytes))
+    if raw is None:
+        raise LindbladError("qx_lindblad_sparse_steady returned NULL")
+    return _json.loads(raw.decode() if isinstance(raw, bytes) else raw)
 
 
 class LindbladError(ValueError):
@@ -410,7 +468,7 @@ class LindbladSolver:
         if n_qubits > _MAX_LINDBLAD_QUBITS:
             raise LindbladError(
                 f"LindbladSolver supports at most {_MAX_LINDBLAD_QUBITS} qubits "
-                f"(dense RK4 requires 2ⁿ × 2ⁿ matrix), got {n_qubits}"
+                f"(sparse matrix-free C++ backend limit), got {n_qubits}"
             )
         if total_time <= 0.0:
             raise LindbladError(f"total_time must be > 0, got {total_time}")
@@ -450,9 +508,102 @@ class LindbladSolver:
         if entanglement_cut > 0:
             options["entanglement_cut"] = entanglement_cut
 
-        # ── Run via Engine ────────────────────────────────────────────────────
+        # ── Route to sparse or dense backend ─────────────────────────────────
+        sparse_lib = _get_sparse_lib(self._engine)
+
+        if sparse_lib is not None and n_qubits > _MAX_LINDBLAD_QUBITS_DENSE:
+            # Must use sparse — dense backend cannot handle this many qubits.
+            return self._solve_sparse(sparse_lib, n_qubits, hamiltonian_terms,
+                                      jump_operators, total_time, dt)
+
+        if sparse_lib is not None and n_qubits > 6:
+            # Prefer sparse for n > 6 even when dense would work — faster.
+            return self._solve_sparse(sparse_lib, n_qubits, hamiltonian_terms,
+                                      jump_operators, total_time, dt)
+
+        # Fall back to dense C++ backend (n ≤ 10, via engine.run JSON RPC)
         raw = self._engine.run(problem, options)
         return _parse_result(raw, n_qubits, total_time, dt)
+
+    # ------------------------------------------------------------------
+    def _solve_sparse(
+        self,
+        lib,
+        n_qubits: int,
+        hamiltonian_terms: list[tuple[float, str]],
+        jump_operators: list["JumpOperator"],
+        total_time: float,
+        dt: float,
+    ) -> "LindbladResult":
+        """Run time evolution via the sparse matrix-free C++ backend (M173)."""
+        import json as _json
+
+        # Build problem dict for sparse backend
+        ham_list = [{"coeff": float(c), "pauli": p}
+                    for c, p in hamiltonian_terms]
+        jop_list = []
+        for jop in jump_operators:
+            jop_list.append({
+                "type":  jop.kind,
+                "qubit": jop.qubit,
+                "rate":  float(jop.rate),
+            })
+
+        prob = {
+            "n_qubits":        n_qubits,
+            "hamiltonian_terms": ham_list,
+            "jump_operators":  jop_list,
+            "total_time":      float(total_time),
+            "dt":              float(dt),
+        }
+
+        raw = _sparse_evolve_raw(lib, prob)
+
+        if "error" in raw:
+            raise LindbladError(f"Sparse Lindblad backend error: {raw['error']}")
+
+        # Convert to LindbladResult via existing frame parser
+        return _parse_result(raw, n_qubits, total_time, dt)
+
+    def steady_state(
+        self,
+        n_qubits: int,
+        hamiltonian_terms: list[tuple[float, str]],
+        jump_operators: list["JumpOperator"],
+    ) -> dict:
+        """Compute the steady-state density matrix ρ_ss via sparse BiCGSTAB.
+
+        Requires the native library with M173 sparse backend compiled in.
+        Supports up to 12 qubits.
+
+        Returns
+        -------
+        dict with keys: purity, entropy, populations (diagonal of ρ_ss)
+        """
+        if n_qubits < 1 or n_qubits > _MAX_LINDBLAD_QUBITS_SPARSE_STEADY:
+            raise LindbladError(
+                f"steady_state() supports 1–{_MAX_LINDBLAD_QUBITS_SPARSE_STEADY} "
+                f"qubits, got {n_qubits}"
+            )
+        sparse_lib = _get_sparse_lib(self._engine)
+        if sparse_lib is None:
+            raise LindbladError(
+                "steady_state() requires the native library with M173 sparse "
+                "Lindblad support. Build with cmake and set QUANTX_LIB_PATH."
+            )
+        ham_list = [{"coeff": float(c), "pauli": p}
+                    for c, p in hamiltonian_terms]
+        jop_list = [{"type": j.kind, "qubit": j.qubit, "rate": float(j.rate)}
+                    for j in jump_operators]
+        prob = {
+            "n_qubits":          n_qubits,
+            "hamiltonian_terms": ham_list,
+            "jump_operators":    jop_list,
+        }
+        raw = _sparse_steady_raw(sparse_lib, prob)
+        if "error" in raw:
+            raise LindbladError(f"Sparse steady-state error: {raw['error']}")
+        return raw
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +616,7 @@ def _parse_lindblad_frame(d: dict[str, Any]) -> LindbladFrame:
         time=float(d.get("time", 0.0)),
         purity=float(d.get("purity", 0.0)),
         entropy=float(d.get("entropy", 0.0)),
-        coherence=float(d.get("coherence", 0.0)),
+        coherence=float(d.get("coherence", 0.0)),   # 0.0 for sparse backend
         populations=[float(p) for p in d.get("populations", [])],
     )
 

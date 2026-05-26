@@ -40,6 +40,27 @@ QX_API const char* qx_run_solver(const char* solver, const char* opts_json);
 // Return a heap-allocated JSON array of all available solver names.
 QX_API const char* qx_list_solvers(void);
 
+// ── M173: Sparse (matrix-free) Lindblad solver ───────────────────────────────
+// Supports up to 16 qubits for time evolution (vs 10 in the dense backend).
+// Steady-state solver supports up to 12 qubits (explicit sparse Liouvillian).
+//
+// problem_json fields:
+//   n_qubits        : int
+//   hamiltonian_terms: [{coeff: float, pauli: "XZI..."}]
+//   jump_operators  : [{type: "amplitude_damping"|"dephasing"|"depolarizing",
+//                       qubit: int, rate: float}]
+//   total_time      : float  (evolve only)
+//   dt              : float  (evolve only)
+//
+// Returns thread-local JSON string (valid until next call on same thread).
+
+// Time evolution: returns lindblad_frames + final_purity + final_entropy.
+QX_API const char* qx_lindblad_sparse_evolve(const char* problem_json,
+                                              const char* options_json);
+
+// Steady-state density matrix: returns populations + purity + entropy.
+QX_API const char* qx_lindblad_sparse_steady(const char* problem_json);
+
 #ifdef __cplusplus
 }
 #endif
