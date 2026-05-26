@@ -1,0 +1,158 @@
+name: DMRG Benchmarks
+
+on:
+  push:
+    branches: [master, main]
+    paths:
+      - "src/dmrg_sparse.cpp"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/cached_dmrg.py"
+      - "benchmarks/dmrg_vs_itensor.py"
+      - ".github/workflows/benchmarks-dmrg.yml"
+  pull_request:
+    paths:
+      - "src/dmrg_sparse.cpp"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/cached_dmrg.py"
+      - "benchmarks/dmrg_vs_itensor.py"
+      - ".github/workflows/benchmarks-dmrg.yml"
+  workflow_dispatch:
+    inputs:
+      sizes:
+        description: "System sizes (space-separated, e.g. '20 50 100')"
+        required: false
+        default: "20 50 100"
+      chi:
+        description: "Bond dimensions (space-separated, e.g. '50 100 200')"
+        required: false
+        default: "50 100 200"
+      n_sweeps:
+        description: "Number of DMRG sweeps"
+        required: false
+        default: "20"
+      no_tenpy:
+        description: "Skip tenpy (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  # ── Quick smoke run (push / PR) ─────────────────────────────────────────────
+  smoke:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy
+          # Install quantx_engine in editable mode (pure-Python fallback)
+          pip install -e python/ --no-build-isolation || pip install -e python/
+
+      - name: Run smoke benchmark (n=8,10; chi=8,16; QuantX only)
+        run: |
+          python benchmarks/dmrg_vs_itensor.py \
+            --sizes 8 10 \
+            --chi 8 16 \
+            --n-sweeps 6 \
+            --no-tenpy \
+            --no-itensor \
+            --out-dir benchmarks/results
+
+      - name: Upload smoke results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dmrg-smoke-results
+          path: benchmarks/results/
+          retention-days: 7
+
+  # ── Full benchmark (workflow_dispatch only) ─────────────────────────────────
+  full:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy matplotlib
+          pip install -e python/ --no-build-isolation || pip install -e python/
+          if [ "${{ inputs.no_tenpy }}" != "true" ]; then
+            pip install tenpy || echo "tenpy install failed — will skip"
+          fi
+
+      - name: Resolve benchmark parameters
+        id: params
+        run: |
+          SIZES="${{ inputs.sizes }}"
+          CHI="${{ inputs.chi }}"
+          SWEEPS="${{ inputs.n_sweeps }}"
+          NO_TENPY="${{ inputs.no_tenpy }}"
+          echo "sizes=$SIZES" >> "$GITHUB_OUTPUT"
+          echo "chi=$CHI"     >> "$GITHUB_OUTPUT"
+          echo "sweeps=$SWEEPS" >> "$GITHUB_OUTPUT"
+          echo "no_tenpy=$NO_TENPY" >> "$GITHUB_OUTPUT"
+
+      - name: Run full DMRG benchmark
+        run: |
+          EXTRA=""
+          if [ "${{ steps.params.outputs.no_tenpy }}" = "true" ]; then
+            EXTRA="$EXTRA --no-tenpy"
+          fi
+          python benchmarks/dmrg_vs_itensor.py \
+            --sizes ${{ steps.params.outputs.sizes }} \
+            --chi   ${{ steps.params.outputs.chi }} \
+            --n-sweeps ${{ steps.params.outputs.sweeps }} \
+            --no-itensor \
+            --out-dir benchmarks/results \
+            $EXTRA
+
+      - name: Upload full results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmrg-full-results-${{ github.run_number }}
+          path: benchmarks/results/
+          retention-days: 30
+
+      - name: Print summary table
+        if: always()
+        run: |
+          python - <<'EOF'
+          import json, pathlib, sys
+          p = pathlib.Path("benchmarks/results/dmrg_scaling.json")
+          if not p.exists():
+              print("No results file found.")
+              sys.exit(0)
+          data = json.loads(p.read_text())
+          rows = data.get("results", [])
+          if not rows:
+              print("No results recorded.")
+              sys.exit(0)
+          hdr = f"{'backend':<22} {'n':>5} {'chi':>6} {'energy':>14} {'wall_s':>10} {'err%':>8}"
+          print(hdr)
+          print("-" * len(hdr))
+          for r in rows:
+              print(f"{r['backend']:<22} {r['n']:>5} {r['chi']:>6} "
+                    f"{r['energy']:>14.6f} {r['wall_s']:>10.3f} "
+                    f"{r['energy_err']*100:>7.3f}%")
+          errs = data.get("errors", [])
+          if errs:
+              print(f"\nErrors ({len(errs)}):")
+              for e in errs:
+                  print(f"  {e}")
+          EOF
