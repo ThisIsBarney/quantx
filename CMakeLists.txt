@@ -86,8 +86,6 @@ add_library(qx_core
   src/continuous2d_backend.cpp
   src/continuous3d_backend.cpp
   src/lindblad_backend.cpp
-  src/lindblad_sparse.cpp
-  src/dmrg_sparse.cpp
   src/engine.cpp
   src/vqe.cpp
   src/qpe.cpp
@@ -169,7 +167,15 @@ function(qx_set_config_output_dirs target_name)
   )
 endfunction()
 
-add_library(qx_capi SHARED src/c_api.cpp)
+# lindblad_sparse.cpp and dmrg_sparse.cpp define QX_API symbols directly.
+# They must be compiled as part of the SHARED library (qx_capi), not the
+# static qx_core, so that QX_CAPI_EXPORTS=1 causes dllexport to take effect
+# and their symbols appear in the exported symbol table of the DLL.
+add_library(qx_capi SHARED
+  src/c_api.cpp
+  src/lindblad_sparse.cpp
+  src/dmrg_sparse.cpp
+)
 target_link_libraries(qx_capi PRIVATE qx_core)
 target_include_directories(qx_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(qx_capi PRIVATE QX_CAPI_EXPORTS=1)

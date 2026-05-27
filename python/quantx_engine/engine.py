@@ -91,6 +91,22 @@ class Engine:
         functionality is unaffected.
     """
     self._lib_path = lib_path or self._default_library_path()
+    # On Windows, ctypes.CDLL cannot find DLL dependencies that live in the
+    # MSYS2/UCRT64 runtime directory (libgomp-1.dll, libstdc++-6.dll, etc.).
+    # Python 3.8+ provides os.add_dll_directory() to register extra search
+    # paths before loading. We probe common MSYS2 locations automatically.
+    if os.name == "nt" and hasattr(os, "add_dll_directory"):
+        _msys2_dirs = [
+            r"C:\msys64\ucrt64\bin",
+            r"C:\msys64\mingw64\bin",
+            r"C:\msys64\mingw32\bin",
+        ]
+        for _d in _msys2_dirs:
+            if os.path.isdir(_d):
+                try:
+                    os.add_dll_directory(_d)
+                except OSError:
+                    pass
     try:
         self._lib = ctypes.CDLL(self._lib_path)
     except OSError as exc:
