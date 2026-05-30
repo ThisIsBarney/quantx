@@ -231,6 +231,19 @@ target_include_directories(qx_dmrg_test PRIVATE
 )
 qx_set_config_output_dirs(qx_dmrg_test)
 
+add_executable(qx_dmrg_bench
+  src/dmrg_bench.cpp
+  src/dmrg_mpo.cpp
+  src/dmrg_dense.cpp
+  src/dmrg_blocks.cpp
+)
+target_link_libraries(qx_dmrg_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+target_include_directories(qx_dmrg_bench PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+qx_set_config_output_dirs(qx_dmrg_bench)
+
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
