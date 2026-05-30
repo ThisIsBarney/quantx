@@ -1103,7 +1103,11 @@ class Engine:
     cwd = os.getcwd()
     if os.name == "nt":
       candidates = [
+          # MinGW/Ninja names the output "libquantx.dll"; check it first so a
+          # fresh build is picked up even when the old quantx.dll is file-locked.
+          os.path.join(cwd, "build", "Release", "libquantx.dll"),
           os.path.join(cwd, "build", "Release", "quantx.dll"),
+          os.path.join(cwd, "build", "Debug", "libquantx.dll"),
           os.path.join(cwd, "build", "Debug", "quantx.dll"),
           os.path.join(cwd, "build-vs", "Release", "quantx.dll"),
           os.path.join(cwd, "build-vs", "Debug", "quantx.dll"),

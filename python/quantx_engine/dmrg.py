@@ -1,6 +1,7 @@
 """M176 — DMRG ground-state solver for the QuantX engine.
 
-Wraps the native C++ two-site DMRG implementation (``src/dmrg_sparse.cpp``)
+Wraps the native C++ two-site DMRG implementation (``src/dmrg_dense.cpp`` +
+``src/dmrg_blocks.cpp`` + ``src/dmrg_mpo.cpp``, exposed via ``src/dmrg_capi.cpp``)
 with a clean Python API.  Falls back to a pure-Python reference DMRG (via
 ``quantx_engine.tdmrg``) when the native library is not available.
 

@@ -167,14 +167,17 @@ function(qx_set_config_output_dirs target_name)
   )
 endfunction()
 
-# lindblad_sparse.cpp and dmrg_sparse.cpp define QX_API symbols directly.
+# lindblad_sparse.cpp and dmrg_capi.cpp define QX_API symbols directly.
 # They must be compiled as part of the SHARED library (qx_capi), not the
 # static qx_core, so that QX_CAPI_EXPORTS=1 causes dllexport to take effect
 # and their symbols appear in the exported symbol table of the DLL.
 add_library(qx_capi SHARED
   src/c_api.cpp
   src/lindblad_sparse.cpp
-  src/dmrg_sparse.cpp
+  src/dmrg_mpo.cpp
+  src/dmrg_dense.cpp
+  src/dmrg_blocks.cpp
+  src/dmrg_capi.cpp
 )
 target_link_libraries(qx_capi PRIVATE qx_core)
 target_include_directories(qx_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -215,9 +218,23 @@ else()
 endif()
 qx_set_config_output_dirs(qx_cli)
 
+add_executable(qx_dmrg_test
+  src/dmrg_test.cpp
+  src/dmrg_mpo.cpp
+  src/dmrg_dense.cpp
+  src/dmrg_blocks.cpp
+)
+target_link_libraries(qx_dmrg_test PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+target_include_directories(qx_dmrg_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+qx_set_config_output_dirs(qx_dmrg_test)
+
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
+add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
 
 if(QX_ENABLE_PYBIND)
   find_package(pybind11 CONFIG REQUIRED)

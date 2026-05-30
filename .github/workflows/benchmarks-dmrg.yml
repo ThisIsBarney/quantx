@@ -4,14 +4,20 @@ on:
   push:
     branches: [master, main]
     paths:
-      - "src/dmrg_sparse.cpp"
+      - "src/dmrg_mpo.cpp"
+      - "src/dmrg_dense.cpp"
+      - "src/dmrg_blocks.cpp"
+      - "src/dmrg_capi.cpp"
       - "python/quantx_engine/dmrg.py"
       - "python/quantx_engine/cached_dmrg.py"
       - "benchmarks/dmrg_vs_itensor.py"
       - ".github/workflows/benchmarks-dmrg.yml"
   pull_request:
     paths:
-      - "src/dmrg_sparse.cpp"
+      - "src/dmrg_mpo.cpp"
+      - "src/dmrg_dense.cpp"
+      - "src/dmrg_blocks.cpp"
+      - "src/dmrg_capi.cpp"
       - "python/quantx_engine/dmrg.py"
       - "python/quantx_engine/cached_dmrg.py"
       - "benchmarks/dmrg_vs_itensor.py"

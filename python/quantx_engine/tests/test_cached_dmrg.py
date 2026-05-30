@@ -148,16 +148,17 @@ class TestCachedDMRGPhysics:
 
     def test_heisenberg_energy_per_site_approaches_bethe(self, cached_solver):
         """Energy per site approaches Bethe ansatz value for moderate n."""
-        # Bethe ansatz: e_∞ = J(1/4 - ln2) ≈ -0.4431
-        bethe = 1.0 * (0.25 - math.log(2))
+        # Bethe ansatz (Pauli convention): sigma.sigma = 4 S.S, so
+        # e_inf = 4 * J(1/4 - ln2) ~= -1.7726 per site.
+        bethe = 4.0 * (0.25 - math.log(2))
         for n in (6, 8, 10):
             r = cached_solver.solve(n_qubits=n, hamiltonian_type="heisenberg", J=1.0,
                                     max_bond=2 ** (n // 2), n_sweeps=20, tol=1e-12)
             e_per_site = r.energy / n
-            # Finite-size corrections are large; check order of magnitude
+            # Finite-size: |e/site| is below the asymptotic magnitude and negative.
             assert e_per_site < 0
-            assert e_per_site > 3 * bethe, (
-                f"n={n}: e/site={e_per_site:.4f} too negative vs Bethe {bethe:.4f}"
+            assert e_per_site > bethe, (
+                f"n={n}: e/site={e_per_site:.4f} below asymptotic Bethe {bethe:.4f}"
             )
 
     def test_cached_result_consistent_with_solver(self, cached_solver):
@@ -200,11 +201,11 @@ class TestScaleTests:
         # Variational: energy must be negative and finite
         assert math.isfinite(r.energy)
         assert r.energy < 0
-        # Energy per site must be in the right ballpark (worse than Bethe,
-        # but better than the trivial zero upper bound)
-        bethe = 1.0 * (0.25 - math.log(2))  # ≈ -0.4431
+        # Energy per site must be in the right ballpark: above the asymptotic
+        # Bethe value (Pauli convention, sigma.sigma = 4 S.S) and below zero.
+        bethe = 4.0 * (0.25 - math.log(2))  # ~= -1.7726 (Pauli units)
         e_per_site = r.energy / n
-        assert e_per_site > 2 * bethe, f"n={n},chi={chi}: e/site={e_per_site:.4f}"
+        assert e_per_site > bethe, f"n={n},chi={chi}: e/site={e_per_site:.4f}"
 
     def test_energy_monotone_in_bond_dim(self, cached_solver):
         """Larger χ gives lower or equal energy (variational)."""

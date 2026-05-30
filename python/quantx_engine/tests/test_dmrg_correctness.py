@@ -153,16 +153,19 @@ class TestDMRGPhysics:
 
     def test_heisenberg_energy_scales_with_n(self, solver):
         """Energy per site converges toward Bethe-ansatz value as n grows."""
-        # Bethe ansatz: e_∞ = J * (1/4 - ln2) ≈ -0.4431 J per site
-        bethe = 1.0 * (0.25 - math.log(2))  # ≈ -0.4431
+        # Bethe ansatz (spin-1/2 S.S convention): e_inf = J * (1/4 - ln2) per site.
+        # The MPO and exact-diag here use Pauli operators (sigma = 2*S), so
+        # sigma.sigma = 4 * S.S and the energy is 4x the spin-convention value:
+        #   e_inf ~= 4 * (0.25 - ln2) ~= -1.7726 J per site.
+        bethe = 4.0 * (0.25 - math.log(2))  # ~= -1.7726 (Pauli units)
         for n in (8, 10):
             result = solver.solve(n_qubits=n, hamiltonian_type="heisenberg", J=1.0,
                                   max_bond=2 ** (n // 2), n_sweeps=20, tol=1e-12)
             e_per_site = result.energy / n
-            # Finite-size corrections are large; just check the sign and order
+            # Finite-size: |e_per_site| is below the asymptotic magnitude and negative.
             assert e_per_site < 0, f"n={n}: energy/site should be negative"
-            assert e_per_site > 2 * bethe, (
-                f"n={n}: energy/site {e_per_site:.4f} too negative vs Bethe {bethe:.4f}"
+            assert e_per_site > bethe, (
+                f"n={n}: energy/site {e_per_site:.4f} below asymptotic Bethe {bethe:.4f}"
             )
 
     def test_energy_decreases_with_bond_dim(self, solver):

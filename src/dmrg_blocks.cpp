@@ -1,0 +1,992 @@
+﻿#include "dmrg_internal.hpp"
+
+#include <algorithm>
+#include <cassert>
+#include <chrono>
+#include <cmath>
+#include <functional>
+#include <map>
+#include <set>
+#include <stdexcept>
+#include <vector>
+
+#include <Eigen/Dense>
+#include <Eigen/SVD>
+
+namespace qx_dmrg {
+
+// =============================================================================
+// Sz-conserving block-sparse DMRG  (M179)
+// =============================================================================
+//
+// For any Hamiltonian that conserves total Sz (e.g. Heisenberg XXX), the MPS
+// and environment tensors are block-diagonal in the Sz quantum number.
+// Exploiting this reduces the dominant O(chi^3) DGEMM to blocks of size O((chi/k)^3)
+// where k = sqrt(number of reachable sectors), giving a 2-4x wall-time speedup.
+//
+// Key conventions
+// ---------------
+// QN = accumulated Sz in sigma-units (up=+1, dn=-1) of the LEFT part of the chain.
+// At bond i (right side of site i): QN = sum_{j<=i} s_j.
+//
+// MPS block layout
+//   block_A[i][q_L] = Mat(dL, dR_up + dR_dn)
+//     q_L    = left-bond QN for site i
+//     rows   = dL = bond_dim[i][q_L]
+//     cols   = [up block: bond_dim[i+1][q_L+1] | dn block: bond_dim[i+1][q_L-1]]
+//
+// Two-site theta block layout (indexed by q_mid = QN of bond between sites i, i+1)
+//   theta[q_mid] = Mat(n_row, n_col)
+//     rows = [s1=up: dL(q_mid-1) rows from q_L=q_mid-1 | s1=dn: dL(q_mid+1) from q_L=q_mid+1]
+//     cols = [s2=up: dR2(q_mid+1) | s2=dn: dR2(q_mid-1)]
+//
+// Environment block layout
+//   BlockEnv.blocks[b][q_ket] = Mat(dim_bra, dim_ket)
+//     bra QN = q_ket + DELTA_QN[b],  DELTA_QN = {0,+2,-2,0,0} for Heisenberg
+// =============================================================================
+
+// -- BondSpace ----------------------------------------------------------------
+
+struct BondSpace {
+    std::vector<int> qns;      // sorted unique QN values
+    std::vector<int> dims;     // dim of each sector
+    std::vector<int> offsets;  // cumulative offset in a dense vector
+    int total_dim = 0;
+
+    int n_sectors() const { return (int)qns.size(); }
+
+    int find_idx(int q) const {
+        auto it = std::lower_bound(qns.begin(), qns.end(), q);
+        if (it == qns.end() || *it != q) return -1;
+        return (int)(it - qns.begin());
+    }
+    int dim(int q) const { int i = find_idx(q); return i >= 0 ? dims[i] : 0; }
+
+    // Build from (sorted) list of (qn, dim) pairs
+    static BondSpace from_pairs(const std::vector<std::pair<int,int>>& pairs) {
+        BondSpace bs;
+        int acc = 0;
+        for (auto& [q,d] : pairs) {
+            if (d <= 0) continue;
+            bs.qns.push_back(q);
+            bs.dims.push_back(d);
+            bs.offsets.push_back(acc);
+            acc += d;
+        }
+        bs.total_dim = acc;
+        return bs;
+    }
+};
+
+// Build the BondSpace at bond i for a length-n chain, total Sz=0, max_bond chi.
+// Distributes chi states proportionally to the number of paths through each sector.
+static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
+    int sites_L = bond_i + 1;   // sites on the left of this bond
+    int sites_R = n - sites_L;  // sites on the right
+
+    // Enumerate reachable QN sectors
+    auto binom = [](int nn, int kk) -> long long {
+        if (kk < 0 || kk > nn) return 0;
+        long long r = 1;
+        for (int j = 0; j < kk; ++j) r = r * (nn - j) / (j + 1);
+        return r;
+    };
+
+    std::vector<std::pair<int,long long>> sectors;
+    int qn_max = std::min(sites_L, sites_R);
+    for (int q = -qn_max; q <= qn_max; q += 2) {
+        int ups_L = (sites_L + q) / 2;
+        int ups_R = (sites_R - q) / 2;
+        if ((sites_L + q) % 2 != 0) continue;
+        long long w = binom(sites_L, ups_L) * binom(sites_R, ups_R);
+        if (w > 0) sectors.emplace_back(q, w);
+    }
+    if (sectors.empty()) {
+        BondSpace bs;
+        bs.qns = {0}; bs.dims = {max_bond}; bs.offsets = {0};
+        bs.total_dim = max_bond;
+        return bs;
+    }
+
+    long long total_w = 0;
+    for (auto& [q,w] : sectors) total_w += w;
+
+    // Proportional allocation, at least 1 per sector
+    std::vector<std::pair<int,int>> raw;
+    int allocated = 0;
+    for (auto& [q,w] : sectors) {
+        int d = std::max(1, (int)std::round((double)w / total_w * max_bond));
+        raw.emplace_back(q, d);
+        allocated += d;
+    }
+    // Trim or pad to exactly max_bond
+    while (allocated > max_bond) {
+        auto it = std::max_element(raw.begin(), raw.end(),
+            [](auto& a, auto& b){ return a.second < b.second; });
+        if (it->second <= 1) break;
+        it->second--; allocated--;
+    }
+    while (allocated < max_bond) {
+        auto it = std::max_element(raw.begin(), raw.end(),
+            [](auto& a, auto& b){ return a.second < b.second; });
+        it->second++; allocated++;
+    }
+    std::sort(raw.begin(), raw.end());
+    return BondSpace::from_pairs(raw);
+}
+
+// -- Block-sparse environment -------------------------------------------------
+//
+// Heisenberg MPO bond -> QN shift of bra vs ket:
+//   b=0 (I)    DeltaQN=0    b=1 (S+/X) DeltaQN=+2   b=2 (S-/X) DeltaQN=-2
+//   b=3 (Sz/Z) DeltaQN=0    b=4 (full) DeltaQN=0
+static constexpr int HB_CHI_W = 5;
+static constexpr int HB_DELTA[5] = {0, +2, -2, 0, 0};
+
+// Map DELTA value to the set of MPO bond indices with that delta
+static std::vector<int> bonds_with_delta(int delta) {
+    std::vector<int> res;
+    for (int b = 0; b < HB_CHI_W; ++b)
+        if (HB_DELTA[b] == delta) res.push_back(b);
+    return res;
+}
+
+struct BlockEnv {
+    // blocks[b][q_ket] = Mat(dim_bra, dim_ket),  bra_qn = q_ket + HB_DELTA[b]
+    std::array<std::map<int,Mat>, HB_CHI_W> blocks;
+    BondSpace bs;  // ket bond space
+};
+
+// Pre-allocate zero blocks for a BlockEnv with a given bond space.
+static void init_block_env(BlockEnv& env, const BondSpace& bs) {
+    env.bs = bs;
+    for (int b = 0; b < HB_CHI_W; ++b) {
+        env.blocks[b].clear();
+        int delta = HB_DELTA[b];
+        for (int qi = 0; qi < bs.n_sectors(); ++qi) {
+            int q_ket = bs.qns[qi], d_ket = bs.dims[qi];
+            int d_bra = bs.dim(q_ket + delta);
+            if (d_bra > 0)
+                env.blocks[b][q_ket] = Mat::Zero(d_bra, d_ket);
+        }
+    }
+}
+
+// -- Block-sparse left environment update -------------------------------------
+//
+// L_new at bond (i+1) from L at bond i, site tensor block_A[i], and MPO W[i].
+//
+// Physics: L_new[b_out][q_ket_R](m_bra_R, m_ket_R)
+//   = sum_{b_in, s, sp} W[b_in][b_out](s, sp)
+//     * A_bra[q_bra_L]^dag_{s} * L[b_in][q_ket_L] * A_ket[q_ket_L]_{sp}
+//
+// where q_bra_L = q_ket_L + HB_DELTA[b_in],
+//       q_ket_R = q_ket_L + spz,  q_bra_R = q_bra_L + sz.
+//
+// Dimension chain: A_bra_{s}^H: (dR_s_bra, dL_bra)
+//                 L[b_in]: (dL_bra, dL_ket)
+//                 A_ket_{sp}: (dL_ket, dR_sp_ket)
+//                 result: (dR_s_bra, dR_sp_ket) = shape of L_new[b_out][q_ket_R]
+static BlockEnv block_update_left(const BlockEnv& L,
+                                  const std::map<int,Mat>& block_A,
+                                  const BondSpace& bs_L,
+                                  const BondSpace& bs_R,
+                                  const MPOSite& W) {
+    BlockEnv L_new;
+    init_block_env(L_new, bs_R);
+
+    for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
+        int q_ket_L = bs_L.qns[qi];
+
+        // Ket A tensor (row sector = q_ket_L)
+        auto it_A_ket = block_A.find(q_ket_L);
+        if (it_A_ket == block_A.end()) continue;
+        const Mat& Ablk_ket = it_A_ket->second;  // (dL_ket, dR_up_ket + dR_dn_ket)
+        int dR_up_ket = bs_R.dim(q_ket_L + 1);
+        int dR_dn_ket = bs_R.dim(q_ket_L - 1);
+
+        for (int b_in = 0; b_in < W.chi_l; ++b_in) {
+            auto it_L = L.blocks[b_in].find(q_ket_L);
+            if (it_L == L.blocks[b_in].end()) continue;
+            const Mat& Lblk = it_L->second;  // (dL_bra, dL_ket), bra_qn = q_ket_L + HB_DELTA[b_in]
+            if (Lblk.size() == 0) continue;
+
+            // Bra A tensor: bra left QN = q_ket_L + HB_DELTA[b_in]
+            int q_bra_L = q_ket_L + HB_DELTA[b_in];
+            auto it_A_bra = block_A.find(q_bra_L);
+            if (it_A_bra == block_A.end()) continue;
+            const Mat& Ablk_bra = it_A_bra->second;  // (dL_bra, dR_up_bra + dR_dn_bra)
+            int dR_up_bra = bs_R.dim(q_bra_L + 1);
+            int dR_dn_bra = bs_R.dim(q_bra_L - 1);
+
+            for (int b_out = 0; b_out < W.chi_r; ++b_out) {
+                const Mat2& Wab = W.W(b_in, b_out);
+
+                for (int s = 0; s < 2; ++s) {   // bra spin (conjugate A)
+                    int sz   = (s == 0) ? +1 : -1;
+                    int dR_s = (sz == +1) ? dR_up_bra : dR_dn_bra;
+                    if (dR_s == 0) continue;
+                    Eigen::Ref<const Mat> A_s_bra = (sz == +1)
+                        ? Ablk_bra.leftCols(dR_up_bra) : Ablk_bra.rightCols(dR_dn_bra);
+
+                    for (int sp = 0; sp < 2; ++sp) {  // ket spin
+                        Cx w = Wab(s, sp);
+                        if (std::abs(w) < 1e-15) continue;
+                        int spz   = (sp == 0) ? +1 : -1;
+                        int dR_sp = (spz == +1) ? dR_up_ket : dR_dn_ket;
+                        if (dR_sp == 0) continue;
+
+                        int q_ket_R = q_ket_L + spz;  // new ket right bond QN
+                        // QN consistency: HB_DELTA[b_out] = HB_DELTA[b_in] + sz - spz
+                        int req_delta = HB_DELTA[b_in] + sz - spz;
+                        if (HB_DELTA[b_out] != req_delta) continue;
+
+                        auto jt = L_new.blocks[b_out].find(q_ket_R);
+                        if (jt == L_new.blocks[b_out].end()) continue;
+
+                        Eigen::Ref<const Mat> A_sp_ket = (spz == +1)
+                            ? Ablk_ket.leftCols(dR_up_ket) : Ablk_ket.rightCols(dR_dn_ket);
+
+                        // L_new(dR_s_bra, dR_sp_ket) += w * A_s_bra^H * Lblk * A_sp_ket
+                        jt->second.noalias() += w * (A_s_bra.adjoint() * (Lblk * A_sp_ket));
+                    }
+                }
+            }
+        }
+    }
+    return L_new;
+}
+
+// -- Block-sparse right environment update ------------------------------------
+//
+// R_new at bond i from R at bond (i+1), site tensor block_A[i], MPO W[i].
+//
+// Physics: R_new[b_out][q_ket_L](m_bra_L, m_ket_L)
+//   = sum_{b_in, s, sp} W[b_out][b_in](sp, s)
+//     * conj(A_bra[q_bra_L]_{sp}) * R[b_in][q_ket_R] * A_ket[q_ket_L]_{s}^T
+//
+// where q_bra_L = q_ket_L + HB_DELTA[b_out],
+//       q_ket_R = q_ket_L + sz,  q_bra_R = q_bra_L + spz,
+//       R[b_in][q_ket_R] has shape (d_bra_R, d_ket_R) with bra_qn = q_ket_R + HB_DELTA[b_in].
+//
+// Dimension chain: conj(A_bra_{sp}): (dL_bra, dR_sp_bra)
+//                 R[b_in]: (dR_sp_bra, dR_s_ket)
+//                 A_ket_{s}^T: (dR_s_ket, dL_ket)
+//                 result: (dL_bra, dL_ket) = shape of R_new[b_out][q_ket_L]
+static BlockEnv block_update_right(const BlockEnv& R,
+                                   const std::map<int,Mat>& block_A,
+                                   const BondSpace& bs_L,
+                                   const BondSpace& bs_R,
+                                   const MPOSite& W) {
+    BlockEnv R_new;
+    init_block_env(R_new, bs_L);
+
+    for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
+        int q_ket_L = bs_L.qns[qi];
+
+        // Ket A tensor (row sector = q_ket_L)
+        auto it_A_ket = block_A.find(q_ket_L);
+        if (it_A_ket == block_A.end()) continue;
+        const Mat& Ablk_ket = it_A_ket->second;  // (dL_ket, dR_up_ket + dR_dn_ket)
+        int dR_up_ket = bs_R.dim(q_ket_L + 1);
+        int dR_dn_ket = bs_R.dim(q_ket_L - 1);
+
+        for (int b_out = 0; b_out < W.chi_l; ++b_out) {
+            auto jt = R_new.blocks[b_out].find(q_ket_L);
+            if (jt == R_new.blocks[b_out].end()) continue;
+
+            // Bra A tensor: bra left QN = q_ket_L + HB_DELTA[b_out]
+            int q_bra_L = q_ket_L + HB_DELTA[b_out];
+            auto it_A_bra = block_A.find(q_bra_L);
+            if (it_A_bra == block_A.end()) continue;
+            const Mat& Ablk_bra = it_A_bra->second;  // (dL_bra, dR_up_bra + dR_dn_bra)
+            int dR_up_bra = bs_R.dim(q_bra_L + 1);
+            int dR_dn_bra = bs_R.dim(q_bra_L - 1);
+
+            for (int b_in = 0; b_in < W.chi_r; ++b_in) {
+                const Mat2& Wab = W.W(b_out, b_in);
+
+                for (int s = 0; s < 2; ++s) {   // ket spin
+                    int sz   = (s == 0) ? +1 : -1;
+                    int dR_s = (sz == +1) ? dR_up_ket : dR_dn_ket;
+                    if (dR_s == 0) continue;
+                    int q_ket_R = q_ket_L + sz;
+                    Eigen::Ref<const Mat> A_s_ket = (sz == +1)
+                        ? Ablk_ket.leftCols(dR_up_ket) : Ablk_ket.rightCols(dR_dn_ket);
+
+                    for (int sp = 0; sp < 2; ++sp) {  // bra spin
+                        Cx w = Wab(sp, s);
+                        if (std::abs(w) < 1e-15) continue;
+                        int spz   = (sp == 0) ? +1 : -1;
+                        int dR_sp = (spz == +1) ? dR_up_bra : dR_dn_bra;
+                        if (dR_sp == 0) continue;
+
+                        // QN consistency: HB_DELTA[b_out] = HB_DELTA[b_in] + sz - spz
+                        // (here s is the KET spin, sp is the BRA spin).
+                        int req_delta = HB_DELTA[b_in] + sz - spz;
+                        if (HB_DELTA[b_out] != req_delta) continue;
+
+                        auto it_R = R.blocks[b_in].find(q_ket_R);
+                        if (it_R == R.blocks[b_in].end()) continue;
+                        const Mat& Rblk = it_R->second;  // (dR_sp_bra, dR_s_ket)
+                        if (Rblk.rows() != dR_sp || Rblk.cols() != dR_s) continue;
+
+                        Eigen::Ref<const Mat> A_sp_bra = (spz == +1)
+                            ? Ablk_bra.leftCols(dR_up_bra) : Ablk_bra.rightCols(dR_dn_bra);
+
+                        // R_new(dL_bra, dL_ket) += w * conj(A_sp_bra) * Rblk * A_s_ket^T
+                        jt->second.noalias() += w * (A_sp_bra.conjugate() * (Rblk * A_s_ket.transpose()));
+                    }
+                }
+            }
+        }
+    }
+    return R_new;
+}
+
+// -- Block-sparse effective Hamiltonian application ---------------------------
+//
+// Applies H_eff to the two-site block tensor theta[q_mid].
+//
+// The effective Hamiltonian is:
+//   out[q_mid_bra] += sum_{bL,bR,s1k,s2k,s1b,s2b,q_mid_ket}
+//       L[bL][q_L_ket] * Wc[bL][bR][s1b,s2b,s1k,s2k] * R[bR][q_R_ket]^T
+//       * theta[q_mid_ket][s1k_rows, s2k_cols]
+//
+// The QN relations:
+//   q_L_ket  = q_mid_ket - s1k_z
+//   q_L_bra  = q_L_ket  + HB_DELTA[bL]
+//   q_mid_bra = q_L_bra + s1b_z  (may differ from q_mid_ket when XY coupling flips site-i spin)
+//   q_R_ket  = q_mid_ket + s2k_z
+//   q_R_bra  = q_mid_bra + s2b_z = q_R_ket + HB_DELTA[bR]  (QN conservation at right end)
+//
+// Crucially, q_mid_bra can differ from q_mid_ket (by +-2) when s1b != s1k.
+// This cross-sector coupling is what mediates the XY term in the Heisenberg Hamiltonian.
+
+static std::map<int,Mat> block_apply_heff(
+    const BlockEnv& L,
+    const MPOSite& Wi, const MPOSite& Wj,
+    const BlockEnv& R,
+    const std::map<int,Mat>& theta,
+    const BondSpace& bs_L,
+    const BondSpace& bs_R2)
+{
+    // Precompute W_comb[bL][bR][(s1b*2+s2b)][(s1k*2+s2k)]
+    using W4 = std::array<std::array<Cx,4>,4>;
+    std::array<std::array<W4,HB_CHI_W>,HB_CHI_W> Wc{};
+    for (int bL = 0; bL < Wi.chi_l; ++bL)
+        for (int bm = 0; bm < Wi.chi_r; ++bm)
+            for (int bR = 0; bR < Wj.chi_r; ++bR) {
+                const Mat2& wi = Wi.W(bL, bm);
+                const Mat2& wj = Wj.W(bm, bR);
+                for (int s1b = 0; s1b < 2; ++s1b)
+                    for (int s2b = 0; s2b < 2; ++s2b)
+                        for (int s1k = 0; s1k < 2; ++s1k)
+                            for (int s2k = 0; s2k < 2; ++s2k)
+                                Wc[bL][bR][s1b*2+s2b][s1k*2+s2k] += wi(s1b,s1k) * wj(s2b,s2k);
+            }
+
+    // Pre-scan all possible bra q_mid values and pre-allocate output blocks.
+    // q_mid_bra = q_mid_ket + HB_DELTA[bL] + s1b_z - s1k_z (from QN relations above).
+    std::map<int, std::pair<int,int>> out_shape;  // q_mid_bra -> (n_row, n_col)
+    for (auto& [q_mid_ket, _] : theta) {
+        for (int bL = 0; bL < Wi.chi_l; ++bL) {
+            for (int s1k = 0; s1k < 2; ++s1k) {
+                int s1kz = (s1k == 0) ? +1 : -1;
+                int q_L_ket = q_mid_ket - s1kz;
+                int q_L_bra = q_L_ket + HB_DELTA[bL];
+                for (int s1b = 0; s1b < 2; ++s1b) {
+                    int s1bz = (s1b == 0) ? +1 : -1;
+                    if (bs_L.dim(q_L_bra) == 0) continue;
+                    int q_mid_bra = q_L_bra + s1bz;
+                    int n_row = bs_L.dim(q_mid_bra - 1) + bs_L.dim(q_mid_bra + 1);
+                    int n_col = bs_R2.dim(q_mid_bra + 1) + bs_R2.dim(q_mid_bra - 1);
+                    if (n_row > 0 && n_col > 0)
+                        out_shape[q_mid_bra] = {n_row, n_col};
+                }
+            }
+        }
+    }
+    std::map<int,Mat> out;
+    for (auto& [q, shape] : out_shape)
+        out[q] = Mat::Zero(shape.first, shape.second);
+
+    // Main loop: iterate over ket sectors and all (bL, bR, s1k, s2k, s1b, s2b)
+    for (auto& [q_mid_ket, theta_q] : theta) {
+        int dL_up_ket = bs_L.dim(q_mid_ket - 1);
+        int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
+        int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
+        int dR_dn_ket = bs_R2.dim(q_mid_ket - 1);
+
+        for (int bL = 0; bL < Wi.chi_l; ++bL) {
+            for (int bR = 0; bR < Wj.chi_r; ++bR) {
+                for (int s1k = 0; s1k < 2; ++s1k) {
+                    int s1kz = (s1k == 0) ? +1 : -1;
+                    int dL_k = (s1k == 0) ? dL_up_ket : dL_dn_ket;
+                    if (dL_k == 0) continue;
+                    int row_k = (s1k == 0) ? 0 : dL_up_ket;
+                    int q_L_ket = q_mid_ket - s1kz;
+                    int q_L_bra = q_L_ket + HB_DELTA[bL];
+                    int dL_bra  = bs_L.dim(q_L_bra);
+                    if (dL_bra == 0) continue;
+
+                    // L environment block: L[bL][q_L_ket] = (dL_bra, dL_k)
+                    auto it_L = L.blocks[bL].find(q_L_ket);
+                    if (it_L == L.blocks[bL].end()) continue;
+                    const Mat& Lblk = it_L->second;
+                    if (Lblk.rows() != dL_bra || Lblk.cols() != dL_k) continue;
+
+                    for (int s2k = 0; s2k < 2; ++s2k) {
+                        int s2kz = (s2k == 0) ? +1 : -1;
+                        int dR_k = (s2k == 0) ? dR_up_ket : dR_dn_ket;
+                        if (dR_k == 0) continue;
+                        int col_k = (s2k == 0) ? 0 : dR_up_ket;
+                        int q_R_ket = q_mid_ket + s2kz;
+
+                        // R environment block: R[bR][q_R_ket] = (dR_bra, dR_k)
+                        auto it_R = R.blocks[bR].find(q_R_ket);
+                        if (it_R == R.blocks[bR].end()) continue;
+                        const Mat& Rblk = it_R->second;
+                        if (Rblk.cols() != dR_k) continue;
+                        int dR_bra = (int)Rblk.rows();  // = bs_R2.dim(q_R_ket + HB_DELTA[bR])
+
+                        // T1 = theta_sub * Rblk^T: shape (dL_k, dR_bra)
+                        Mat T1 = theta_q.block(row_k, col_k, dL_k, dR_k) * Rblk.transpose();
+
+                        for (int s1b = 0; s1b < 2; ++s1b) {
+                            int s1bz = (s1b == 0) ? +1 : -1;
+                            // q_mid_bra is determined by the bra left-bond QN
+                            int q_mid_bra = q_L_bra + s1bz;
+                            // Find this output sector
+                            auto it_out = out.find(q_mid_bra);
+                            if (it_out == out.end()) continue;
+                            Mat& out_q = it_out->second;
+
+                            int dL_up_bra = bs_L.dim(q_mid_bra - 1);
+                            int dL_dn_bra = bs_L.dim(q_mid_bra + 1);
+                            int dR_up_bra = bs_R2.dim(q_mid_bra + 1);
+                            int dR_dn_bra = bs_R2.dim(q_mid_bra - 1);
+
+                            // dL_b must equal dL_bra (the rows of Lblk)
+                            int dL_b = (s1b == 0) ? dL_up_bra : dL_dn_bra;
+                            if (dL_b != dL_bra) continue;
+                            int row_b = (s1b == 0) ? 0 : dL_up_bra;
+
+                            for (int s2b = 0; s2b < 2; ++s2b) {
+                                Cx w = Wc[bL][bR][s1b*2+s2b][s1k*2+s2k];
+                                if (std::abs(w) < 1e-15) continue;
+
+                                int s2bz = (s2b == 0) ? +1 : -1;
+                                int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
+                                if (dR_b == 0) continue;
+                                // QN check: q_R_bra = q_mid_bra + s2bz must equal q_R_ket + HB_DELTA[bR]
+                                if (q_mid_bra + s2bz != q_R_ket + HB_DELTA[bR]) continue;
+                                // Rblk.rows() must equal dR_b
+                                if (dR_bra != dR_b) continue;
+                                int col_b = (s2b == 0) ? 0 : dR_up_bra;
+
+                                // out_q(row_b, col_b, dL_b, dR_b) += Lblk * (w * T1)
+                                out_q.block(row_b, col_b, dL_b, dR_b).noalias()
+                                    += w * (Lblk * T1);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
+// -- Block Lanczos (flat packing) ---------------------------------------------
+
+static int theta_total_dim(const std::map<int,Mat>& theta) {
+    int d = 0;
+    for (auto& [q,blk] : theta) d += (int)(blk.rows() * blk.cols());
+    return d;
+}
+
+static Vec theta_to_vec(const std::map<int,Mat>& theta) {
+    Vec v(theta_total_dim(theta));
+    int off = 0;
+    for (auto& [q, blk] : theta) {
+        int sz = (int)(blk.rows() * blk.cols());
+        std::copy(blk.data(), blk.data() + sz, v.data() + off);
+        off += sz;
+    }
+    return v;
+}
+
+static void vec_to_theta(const Vec& v, const std::map<int,Mat>& ref,
+                         std::map<int,Mat>& out) {
+    int off = 0;
+    for (auto& [q, blk_ref] : ref) {
+        int sz = (int)(blk_ref.rows() * blk_ref.cols());
+        out[q] = Eigen::Map<const Mat>(v.data() + off, blk_ref.rows(), blk_ref.cols());
+        off += sz;
+    }
+}
+
+static std::pair<double, std::map<int,Mat>> block_lanczos(
+    const std::function<std::map<int,Mat>(const std::map<int,Mat>&)>& matvec,
+    const std::map<int,Mat>& init,
+    int max_iter = 100, double tol = 1e-10)
+{
+    int dim = theta_total_dim(init);
+    if (dim == 0) return {0.0, init};
+
+    // Normalised matvec: output has EXACTLY the same sector structure as init.
+    // block_apply_heff may return a strict subset of init sectors (zero coupling), or
+    // extra sectors outside init (Galerkin projection drops those). We project the
+    // result onto init: missing sectors -> zero, extra sectors -> dropped. This keeps
+    // theta_to_vec / the dense H_eff matrix dimensionally consistent with init.
+    auto matvec_normed = [&](const std::map<int,Mat>& v) -> std::map<int,Mat> {
+        auto raw = matvec(v);
+        std::map<int,Mat> out;
+        for (auto& [q, ref] : init) {
+            auto it = raw.find(q);
+            if (it != raw.end() && it->second.rows() == ref.rows()
+                                && it->second.cols() == ref.cols())
+                out[q] = it->second;
+            else
+                out[q] = Mat::Zero(ref.rows(), ref.cols());
+        }
+        return out;
+    };
+
+    // Small dim: full diagonalisation
+    if (dim <= 300) {
+        Mat H(dim, dim);
+        std::map<int,Mat> e_blk;
+        for (auto& [q, ref] : init) e_blk[q] = Mat::Zero(ref.rows(), ref.cols());
+        int col = 0;
+        // Iterate basis elements in COLUMN-MAJOR order (col outer, row inner) to match
+        // theta_to_vec / vec_to_theta, which pack each block column-major (Eigen default).
+        // Iterating row-major here would scramble H's column ordering relative to its rows.
+        for (auto& [q, blk_ref] : init) {
+            for (int c = 0; c < blk_ref.cols(); ++c)
+                for (int r = 0; r < blk_ref.rows(); ++r) {
+                    // Zero ALL sectors before setting the single basis element
+                    for (auto& [qq, blk] : e_blk) blk.setZero();
+                    e_blk[q](r, c) = 1.0;
+                    H.col(col++) = theta_to_vec(matvec_normed(e_blk));
+                }
+        }
+        H = (H + H.adjoint()) * 0.5;
+        Eigen::SelfAdjointEigenSolver<Mat> eig(H);
+        std::map<int,Mat> gs;
+        vec_to_theta(eig.eigenvectors().col(0), init, gs);
+        return {eig.eigenvalues()[0], gs};
+    }
+
+    // Lanczos with Ritz-residual stopping
+    constexpr int MIN_STEPS  = 10;
+    constexpr int CHECK_FREQ =  5;
+
+    auto matvec_flat = [&](const Vec& vf) -> Vec {
+        std::map<int,Mat> tb; vec_to_theta(vf, init, tb);
+        return theta_to_vec(matvec_normed(tb));
+    };
+
+    Vec v0 = theta_to_vec(init);
+    double nrm = v0.norm();
+    if (nrm < 1e-14) { v0.setRandom(); nrm = v0.norm(); }
+    v0 /= nrm;
+
+    int m = std::min(max_iter, dim);
+    std::vector<Vec> q_vecs; q_vecs.reserve(m + 1);
+    q_vecs.push_back(v0);
+    Eigen::VectorXd alpha(m), beta(m);
+    int actual_m = m;
+
+    for (int j = 0; j < m; ++j) {
+        Vec w = matvec_flat(q_vecs[j]);
+        alpha[j] = w.dot(q_vecs[j]).real();
+        w -= alpha[j] * q_vecs[j];
+        if (j > 0) w -= beta[j-1] * q_vecs[j-1];
+        double b = w.norm(); beta[j] = b;
+        if (b < 1e-14) { actual_m = j+1; break; }
+        if (j < m-1) q_vecs.push_back(w / b);
+        int cur = j+1;
+        if (cur >= MIN_STEPS && (cur % CHECK_FREQ == 0 || j == m-1)) {
+            Eigen::MatrixXd T = Eigen::MatrixXd::Zero(cur, cur);
+            for (int k = 0; k < cur;   ++k) T(k,k)   = alpha[k];
+            for (int k = 0; k < cur-1; ++k) { T(k,k+1) = beta[k]; T(k+1,k) = beta[k]; }
+            Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(T);
+            double ritz = b * std::abs(eig.eigenvectors().col(0)[cur-1]);
+            if (ritz < tol) { actual_m = cur; break; }
+        }
+    }
+    m = actual_m;
+    Eigen::MatrixXd T(m,m); T.setZero();
+    for (int j = 0; j < m;   ++j) T(j,j)   = alpha[j];
+    for (int j = 0; j < m-1; ++j) { T(j,j+1) = beta[j]; T(j+1,j) = beta[j]; }
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(T);
+    Vec psi = Vec::Zero(dim);
+    for (int j = 0; j < std::min(m,(int)q_vecs.size()); ++j)
+        psi += eig.eigenvectors()(j,0) * q_vecs[j];
+    psi /= psi.norm();
+    std::map<int,Mat> gs; vec_to_theta(psi, init, gs);
+    return {eig.eigenvalues()[0], gs};
+}
+
+// -- Block-sparse SVD and MPS update ------------------------------------------
+
+struct BlockSVDResult {
+    std::map<int,Mat>  U_up;   // q_mid -> (dL_up(q_mid), n_keep) -- up rows of U
+    std::map<int,Mat>  U_dn;   // q_mid -> (dL_dn(q_mid), n_keep) -- dn rows of U
+    std::map<int,Mat>  Vt;     // q_mid -> (n_keep, n_cols)
+    std::map<int,RVec> sv;
+    BondSpace          new_mid_bs;
+    double             trunc_err;
+};
+
+static BlockSVDResult block_svd_truncate(
+    const std::map<int,Mat>& theta,
+    const BondSpace& bs_L,
+    const BondSpace& bs_R2,
+    int max_bond, double cutoff)
+{
+    // SVD per q_mid sector
+    std::map<int, Eigen::BDCSVD<Mat>> svds;
+    for (auto& [q_mid, blk] : theta) {
+        if (blk.size() == 0) continue;
+        svds[q_mid].compute(blk, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    }
+
+    // Collect all singular values for global truncation
+    struct SVE { double sv; int q; int k; };
+    std::vector<SVE> all_sv;
+    for (auto& [q, s] : svds)
+        for (int k = 0; k < s.singularValues().size(); ++k)
+            all_sv.push_back({s.singularValues()[k], q, k});
+    std::sort(all_sv.begin(), all_sv.end(), [](auto& a, auto& b){ return a.sv > b.sv; });
+
+    // Apply cutoff
+    double sv2_total = 0;
+    for (auto& e : all_sv) sv2_total += e.sv * e.sv;
+    int n_keep = (int)all_sv.size();
+    if (sv2_total > 0 && cutoff > 0) {
+        double discard = 0;
+        for (int k = (int)all_sv.size()-1; k >= 0; --k) {
+            discard += all_sv[k].sv * all_sv[k].sv;
+            if (discard / sv2_total > cutoff * cutoff) { n_keep = k+1; break; }
+        }
+    }
+    n_keep = std::max(1, std::min(n_keep, max_bond));
+
+    std::map<int,int> keep_per_q;
+    for (int k = 0; k < n_keep; ++k) keep_per_q[all_sv[k].q]++;
+
+    BlockSVDResult res;
+    res.trunc_err = 0;
+    for (int k = n_keep; k < (int)all_sv.size(); ++k)
+        res.trunc_err += all_sv[k].sv * all_sv[k].sv;
+
+    // Build new bond space and extract U/Vt blocks
+    std::vector<std::pair<int,int>> new_sectors;
+    for (auto& [q_mid, svd] : svds) {
+        int keep = keep_per_q.count(q_mid) ? keep_per_q[q_mid] : 0;
+        if (keep == 0) continue;
+        int dL_up = bs_L.dim(q_mid - 1);
+        int dL_dn = bs_L.dim(q_mid + 1);
+        const Mat& U = svd.matrixU();
+        res.U_up[q_mid] = U.topRows(dL_up).leftCols(keep);
+        res.U_dn[q_mid] = U.bottomRows(dL_dn).leftCols(keep);
+        res.Vt[q_mid]   = svd.matrixV().adjoint().topRows(keep);
+        res.sv[q_mid]   = svd.singularValues().head(keep);
+        new_sectors.emplace_back(q_mid, keep);
+    }
+    std::sort(new_sectors.begin(), new_sectors.end());
+    res.new_mid_bs = BondSpace::from_pairs(new_sectors);
+    return res;
+}
+
+// -- Build theta from block MPS -----------------------------------------------
+
+static std::map<int,Mat> form_theta(
+    const std::map<int,Mat>& block_Ai,
+    const std::map<int,Mat>& block_Ai1,
+    const std::map<int,RVec>& sv_mid,
+    const BondSpace& bs_L,
+    const BondSpace& bs_mid,
+    const BondSpace& bs_R2,
+    bool absorb_sv_into_Ai1)
+{
+    std::map<int,Mat> theta;
+
+    // Find all q_mid values
+    std::set<int> q_mids;
+    for (auto& [q_L, _] : block_Ai) {
+        int q_up = q_L + 1, q_dn = q_L - 1;
+        if (bs_mid.dim(q_up) > 0) q_mids.insert(q_up);
+        if (bs_mid.dim(q_dn) > 0) q_mids.insert(q_dn);
+    }
+
+    for (int q_mid : q_mids) {
+        int dL_up = bs_L.dim(q_mid - 1);
+        int dL_dn = bs_L.dim(q_mid + 1);
+        int dR_up = bs_R2.dim(q_mid + 1);
+        int dR_dn = bs_R2.dim(q_mid - 1);
+        int n_row = dL_up + dL_dn;
+        int n_col = dR_up + dR_dn;
+        if (n_row == 0 || n_col == 0) continue;
+
+        Mat th = Mat::Zero(n_row, n_col);
+
+        // Get A[i+1][q_mid] with optional sv absorption
+        auto it1 = block_Ai1.find(q_mid);
+        if (it1 == block_Ai1.end()) continue;
+        Mat Ai1 = it1->second;  // (n_keep_mid, dR_up+dR_dn)
+        if (absorb_sv_into_Ai1) {
+            auto it_sv = sv_mid.find(q_mid);
+            if (it_sv != sv_mid.end()) {
+                const RVec& sv = it_sv->second;
+                int sv_len = std::min((int)sv.size(), (int)Ai1.rows());
+                for (int k = 0; k < sv_len; ++k) Ai1.row(k) *= sv[k];
+            }
+        }
+
+        // For each (s1, q_L): A[i][q_L] contributes rows to th
+        for (int s1 = 0; s1 < 2; ++s1) {
+            int s1z = (s1 == 0) ? +1 : -1;
+            int q_L = q_mid - s1z;
+            int dL  = bs_L.dim(q_L);
+            if (dL == 0) continue;
+            auto it0 = block_Ai.find(q_L);
+            if (it0 == block_Ai.end()) continue;
+            const Mat& Ai = it0->second;   // (dL, dR_up_mid + dR_dn_mid)
+            int dR_up_mid = bs_mid.dim(q_L + 1);
+            int dR_dn_mid = bs_mid.dim(q_L - 1);
+            int col_off_Ai = (s1 == 0) ? 0 : dR_up_mid;
+            int n_keep_mid = bs_mid.dim(q_mid);
+            if (col_off_Ai + n_keep_mid > Ai.cols()) continue;
+            Mat Ai_s1 = Ai.block(0, col_off_Ai, dL, n_keep_mid); // (dL, n_keep_mid)
+            if (!absorb_sv_into_Ai1) {
+                // Right sweep: absorb sv into Ai_s1
+                auto it_sv = sv_mid.find(q_mid);
+                if (it_sv != sv_mid.end()) {
+                    const RVec& sv = it_sv->second;
+                    int sv_len = std::min((int)sv.size(), n_keep_mid);
+                    for (int k = 0; k < sv_len; ++k) Ai_s1.col(k) *= sv[k];
+                }
+            }
+            int row_off = (s1 == 0) ? 0 : dL_up;
+            if (row_off + dL > n_row) continue;
+            th.block(row_off, 0, dL, n_col).noalias() += Ai_s1 * Ai1;
+        }
+        if (th.norm() > 1e-14) theta[q_mid] = th;
+    }
+    return theta;
+}
+
+// -- Block-sparse DMRG sweep --------------------------------------------------
+
+DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
+                           int max_bond, double cutoff,
+                           int n_sweeps, double tol) {
+    auto t_start = std::chrono::steady_clock::now();
+
+    // Build bond spaces
+    std::vector<BondSpace> bond(n + 1);
+    bond[0] = BondSpace::from_pairs({{0, 1}});   // left boundary: qn=0, dim=1
+    bond[n] = BondSpace::from_pairs({{0, 1}});   // right boundary: qn=0, dim=1
+    for (int i = 0; i < n - 1; ++i)
+        bond[i + 1] = make_heisenberg_bond_space(i, n, max_bond);
+
+    // Initialize block MPS to the Neel state |up dn up dn ...>.
+    // This matches the strategy used by the dense DMRG (init_neel_state in dmrg_dense.cpp).
+    // Random initialization leads to self-consistent local minima: the random right
+    // environments R[i] bias the first sweep toward an excited state, and the resulting
+    // wrong-subspace MPS is self-consistent under all subsequent sweeps.  Starting from
+    // the Neel state gives physically motivated environments that allow the first L->R sweep
+    // to find the correct subspace.
+    std::vector<std::map<int,Mat>> block_A(n);
+    std::vector<std::map<int,RVec>> block_sv(n - 1);
+
+    {
+        // q_neel: accumulated Sz of the Neel state before site i
+        // Neel: up at even sites, dn at odd sites -> q_neel follows 0, +1, 0, +1, ...
+        int q_neel = 0;
+        for (int i = 0; i < n; ++i) {
+            const BondSpace& bsL = bond[i], &bsR = bond[i + 1];
+            // Zero-initialise all sectors at this site
+            for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+                int q_L = bsL.qns[qi], dL = bsL.dims[qi];
+                int dR = bsR.dim(q_L + 1) + bsR.dim(q_L - 1);
+                block_A[i][q_L] = Mat::Zero(dL, dR);
+            }
+            // Place the Neel amplitude in the correct sector and column
+            int neel_sz = (i % 2 == 0) ? +1 : -1;   // up=+1 at even, dn=-1 at odd
+            if (bsL.dim(q_neel) > 0) {
+                auto it = block_A[i].find(q_neel);
+                if (it != block_A[i].end() && it->second.rows() > 0) {
+                    int dR_up = bsR.dim(q_neel + 1);
+                    int col_off = (neel_sz == +1) ? 0 : dR_up;  // up->leftCols, dn->rightCols
+                    if (col_off < it->second.cols())
+                        it->second(0, col_off) = Cx(1.0);
+                }
+            }
+            q_neel += neel_sz;
+        }
+    }
+    // Initialize singular values to 1 (will be overwritten after first sweep step)
+    for (int i = 0; i < n - 1; ++i) {
+        for (int qi = 0; qi < bond[i+1].n_sectors(); ++qi) {
+            int q = bond[i+1].qns[qi], d = bond[i+1].dims[qi];
+            block_sv[i][q] = RVec::Ones(d);
+        }
+    }
+
+    // Initial right environments
+    std::vector<BlockEnv> R(n + 1), L(n + 1);
+    {
+        BlockEnv Rn;
+        Rn.bs = bond[n];
+        // Right boundary: chi_r=1 at site n-1, so only MPO index b=0 is active.
+        // R[n].blocks[0][q=0] = 1 is the right vacuum (identity scalar environment).
+        Rn.blocks[0][0] = Mat::Constant(1, 1, Cx(1));
+        R[n] = Rn;
+    }
+    for (int i = n - 1; i >= 0; --i)
+        R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+
+    // Initial left environments
+    {
+        BlockEnv L0;
+        L0.bs = bond[0];
+        // Left boundary: chi_l=1 at site 0, only MPO index b=0 is active.
+        L0.blocks[0][0] = Mat::Constant(1, 1, Cx(1));
+        L[0] = L0;
+    }
+
+    // Pre-allocate all valid theta sectors (including those with zero amplitude).
+    // Without this, sectors absent from form_theta output (e.g. because the previous
+    // step's ground state has zero amplitude there) would never enter the Krylov space,
+    // causing the optimization to be stuck in a reduced subspace.
+    // Note: block_apply_heff with input {-2:0, 0:nonzero, +2:0} WILL produce nonzero
+    // output in the +-2 sectors (via XY cross-coupling), so the Lanczos naturally
+    // populates them from the first matvec application.
+    auto expand_theta_sectors = [](std::map<int,Mat>& theta,
+                                   const BondSpace& bs_L, const BondSpace& bs_R2) {
+        for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
+            int q_L = bs_L.qns[qi];
+            for (int s = 0; s < 2; ++s) {
+                int sz = (s == 0) ? +1 : -1;
+                int q_mid = q_L + sz;
+                if (theta.count(q_mid)) continue;
+                int n_row = bs_L.dim(q_mid - 1) + bs_L.dim(q_mid + 1);
+                int n_col = bs_R2.dim(q_mid + 1) + bs_R2.dim(q_mid - 1);
+                if (n_row > 0 && n_col > 0)
+                    theta[q_mid] = Mat::Zero(n_row, n_col);
+            }
+        }
+    };
+
+    DMRGResult result;
+    result.energy = 0; result.truncation_error = 0; result.n_sweeps_done = 0;
+    double prev_energy = 0;
+
+    // Noise schedule: perturb psi before SVD in early sweeps to escape local minima.
+    // Magnitude decays 10x per sweep; zero after sweep 3.  This shifts the Vt subspace
+    // without changing bond dimensions, allowing the algorithm to explore new directions.
+    auto apply_noise = [](std::map<int,Mat>& psi, double amp) {
+        if (amp <= 0.0) return;
+        for (auto& [q, blk] : psi)
+            blk += amp * Mat::Random(blk.rows(), blk.cols());
+        double nrm2 = 0;
+        for (auto& [q, blk] : psi) nrm2 += blk.squaredNorm();
+        double scale = (nrm2 > 1e-30) ? 1.0 / std::sqrt(nrm2) : 0.0;
+        for (auto& [q, blk] : psi) blk *= scale;
+    };
+
+    for (int sweep = 0; sweep < n_sweeps; ++sweep) {
+        double sweep_trunc = 0, E0 = 0;
+        double noise_amp = (sweep < 4) ? 1e-2 * std::pow(0.1, sweep) : 0.0;
+
+        // Left-to-right half sweep
+        for (int i = 0; i < n - 1; ++i) {
+            auto theta = form_theta(block_A[i], block_A[i+1], block_sv[i],
+                                    bond[i], bond[i+1], bond[i+2], true);
+            expand_theta_sectors(theta, bond[i], bond[i+2]);
+            auto mv = [&](const std::map<int,Mat>& v) {
+                return block_apply_heff(L[i], mpo[i], mpo[i+1], R[i+2],
+                                        v, bond[i], bond[i+2]);
+            };
+            auto [E, psi_blk] = block_lanczos(mv, theta);
+            E0 = E;
+            apply_noise(psi_blk, noise_amp);
+
+            auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff);
+            sweep_trunc += svd.trunc_err;
+            bond[i+1] = svd.new_mid_bs;
+
+            // Update A[i]: for each q_mid, U_up/U_dn go into the up/dn blocks of A[i][q_L]
+            for (int qi = 0; qi < bond[i].n_sectors(); ++qi) {
+                int q_L = bond[i].qns[qi], dL = bond[i].dims[qi];
+                int q_up = q_L + 1, q_dn = q_L - 1;
+                int n_up = bond[i+1].dim(q_up), n_dn = bond[i+1].dim(q_dn);
+                Mat blk = Mat::Zero(dL, n_up + n_dn);
+                if (n_up > 0 && svd.U_up.count(q_up))
+                    blk.leftCols(n_up) = svd.U_up.at(q_up);
+                if (n_dn > 0 && svd.U_dn.count(q_dn))
+                    blk.rightCols(n_dn) = svd.U_dn.at(q_dn);
+                block_A[i][q_L] = blk;
+            }
+            block_sv[i] = svd.sv;
+            block_A[i+1] = svd.Vt;
+
+            L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
+        }
+
+        // Right-to-left half sweep
+        for (int i = n - 2; i >= 0; --i) {
+            auto theta = form_theta(block_A[i], block_A[i+1], block_sv[i],
+                                    bond[i], bond[i+1], bond[i+2], false);
+            expand_theta_sectors(theta, bond[i], bond[i+2]);
+            auto mv = [&](const std::map<int,Mat>& v) {
+                return block_apply_heff(L[i], mpo[i], mpo[i+1], R[i+2],
+                                        v, bond[i], bond[i+2]);
+            };
+            auto [E, psi_blk] = block_lanczos(mv, theta);
+            E0 = E;
+            apply_noise(psi_blk, noise_amp);
+
+            auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff);
+            sweep_trunc += svd.trunc_err;
+            bond[i+1] = svd.new_mid_bs;
+
+            for (int qi = 0; qi < bond[i].n_sectors(); ++qi) {
+                int q_L = bond[i].qns[qi], dL = bond[i].dims[qi];
+                int q_up = q_L+1, q_dn = q_L-1;
+                int n_up = bond[i+1].dim(q_up), n_dn = bond[i+1].dim(q_dn);
+                Mat blk = Mat::Zero(dL, n_up + n_dn);
+                if (n_up > 0 && svd.U_up.count(q_up)) blk.leftCols(n_up)  = svd.U_up.at(q_up);
+                if (n_dn > 0 && svd.U_dn.count(q_dn)) blk.rightCols(n_dn) = svd.U_dn.at(q_dn);
+                block_A[i][q_L] = blk;
+            }
+            block_sv[i] = svd.sv;
+            block_A[i+1] = svd.Vt;
+
+            R[i+1] = block_update_right(R[i+2], block_A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
+        }
+
+        result.sweep_energies.push_back(E0);
+        result.truncation_error = sweep_trunc;
+        if (sweep > 0 && std::abs(E0 - prev_energy) < tol) {
+            result.n_sweeps_done = sweep + 1;
+            result.energy = E0;
+            break;
+        }
+        prev_energy = E0;
+        result.energy = E0;
+        result.n_sweeps_done = sweep + 1;
+    }
+
+    auto t_end = std::chrono::steady_clock::now();
+    result.wall_time_s = std::chrono::duration<double>(t_end - t_start).count();
+    return result;
+}
+
+} // namespace qx_dmrg
+

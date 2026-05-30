@@ -139,7 +139,7 @@ def run_tenpy(n: int, chi: int, n_sweeps: int = 20) -> dict:
     model = XXZChain2(model_params)
 
     product_state = ["up", "down"] * (n // 2)
-    psi = MPS.from_lat_product_state(model.lat, product_state)
+    psi = MPS.from_product_state(model.lat.mps_sites(), product_state, bc="finite")
 
     dmrg_params = {
         "trunc_params": {"chi_max": chi, "svd_min": 1e-10},
