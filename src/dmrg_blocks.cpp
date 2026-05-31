@@ -736,12 +736,18 @@ static BlockSVDResult block_svd_truncate(
     const BondSpace& bs_R2,
     int max_bond, double cutoff)
 {
-    // SVD per q_mid sector
+    // SVD per q_mid sector (independent across sectors -> parallelise).
+    std::vector<int> svq;
+    std::vector<const Mat*> svblk;
+    for (auto& [q_mid, blk] : theta)
+        if (blk.size() != 0) { svq.push_back(q_mid); svblk.push_back(&blk); }
+    std::vector<Eigen::BDCSVD<Mat>> svvec(svq.size());
+    #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
+    for (int i = 0; i < (int)svq.size(); ++i)
+        svvec[i].compute(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
     std::map<int, Eigen::BDCSVD<Mat>> svds;
-    for (auto& [q_mid, blk] : theta) {
-        if (blk.size() == 0) continue;
-        svds[q_mid].compute(blk, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    }
+    for (int i = 0; i < (int)svq.size(); ++i)
+        svds[svq[i]] = std::move(svvec[i]);
 
     // Collect all singular values for global truncation
     struct SVE { double sv; int q; int k; };
