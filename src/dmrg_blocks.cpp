@@ -400,15 +400,15 @@ static long long g_block_matvecs = 0;
 // reuse of block_apply_heff: T1 = theta_sub * R^T once per (ket-block, R-block),
 // and LT1 = L * T1 once per L-block.
 struct HeffPlan {
-    std::vector<int>                 out_q;      // out index -> q_mid_bra
-    std::vector<std::pair<int,int>>  out_shape;  // out index -> (rows, cols)
-    double flops = 0;                            // ~GEMM work per matvec (for the par gate)
+    std::vector<int>                 out_q;       // out index -> q_mid_bra
+    std::vector<std::pair<int,int>>  out_shape;   // out index -> (rows, cols)
+    std::vector<int>                 ket_sectors; // ket index -> theta sector key
+    double flops = 0;                             // ~GEMM work per matvec (par gate)
 
     struct Write  { Cx w; int out_idx, row_b, col_b, dL_b, dR_b; };
     struct LGroup { const Mat* Lblk; std::vector<Write> writes; };
     struct T1Group {
-        const Mat* theta_blk;        // resolved each matvec (theta changes); see note
-        int q_ket;                   // theta sector key
+        int ket_idx;                 // index into ket_sectors (theta block resolved once)
         int row_k, col_k, dL_k, dR_k;
         const Mat* Rblk;
         std::vector<LGroup> lgroups;
@@ -436,6 +436,8 @@ static HeffPlan build_heff_plan(
     };
 
     for (int q_mid_ket : ket_keys) {
+        int ket_idx = (int)plan.ket_sectors.size();
+        plan.ket_sectors.push_back(q_mid_ket);
         int dL_up_ket = bs_L.dim(q_mid_ket - 1);
         int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
         int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
@@ -464,8 +466,7 @@ static HeffPlan build_heff_plan(
                     int q_R_bra = q_R_ket + HB_DELTA[bR];
 
                     HeffPlan::T1Group g;
-                    g.theta_blk = nullptr;
-                    g.q_ket = q_mid_ket;
+                    g.ket_idx = ket_idx;
                     g.row_k = row_k; g.col_k = col_k; g.dL_k = dL_k; g.dR_k = dR_k;
                     g.Rblk = &Rblk;
                     plan.flops += 2.0 * dL_k * dR_k * dR_bra;  // T1 = theta_sub * R^T
@@ -530,6 +531,13 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
     // Thread only when the GEMM work outweighs the fork-join + merge overhead.
     const bool par = (plan.flops >= 4.0e6) && (n_grp > 1);
 
+    // Resolve each distinct ket sector's theta block once (not per group).
+    std::vector<const Mat*> theta_blocks(plan.ket_sectors.size(), nullptr);
+    for (size_t k = 0; k < plan.ket_sectors.size(); ++k) {
+        auto it = theta.find(plan.ket_sectors[k]);
+        if (it != theta.end()) theta_blocks[k] = &it->second;
+    }
+
     std::vector<Mat> out(n_out);  // lazily zero-filled
 
     #pragma omp parallel if(par)
@@ -540,10 +548,9 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
         #pragma omp for schedule(dynamic) nowait
         for (int gi = 0; gi < n_grp; ++gi) {
             const HeffPlan::T1Group& g = plan.groups[gi];
-            auto it_t = theta.find(g.q_ket);
-            if (it_t == theta.end()) continue;
-            const Mat& theta_q = it_t->second;
-            Mat T1 = theta_q.block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
+            const Mat* theta_q = theta_blocks[g.ket_idx];
+            if (!theta_q) continue;
+            Mat T1 = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
             for (const auto& lg : g.lgroups) {
                 Mat LT1 = (*lg.Lblk) * T1;
                 for (const auto& wr : lg.writes) {
