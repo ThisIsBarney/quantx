@@ -431,83 +431,108 @@ static std::map<int,Mat> block_apply_heff(
     for (auto& [q, shape] : out_shape)
         out[q] = Mat::Zero(shape.first, shape.second);
 
-    for (auto& [q_mid_ket, theta_q] : theta) {
-        int dL_up_ket = bs_L.dim(q_mid_ket - 1);
-        int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
-        int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
-        int dR_dn_ket = bs_R2.dim(q_mid_ket - 1);
+    // Parallelise over ket sectors. Each thread accumulates into a private map and
+    // merges under a critical section, so there are no write races on `out`.
+    // (OpenMP nested parallelism is off by default, so Eigen's own GEMM threading
+    // does not oversubscribe inside this region.)
+    std::vector<int> ket_keys;
+    ket_keys.reserve(theta.size());
+    long theta_elems = 0;
+    for (auto& [q, m] : theta) { ket_keys.push_back(q); theta_elems += (long)m.rows() * m.cols(); }
+    // Only worth threading when the per-sector GEMMs are large enough that the
+    // fork-join + merge overhead is amortised; small chi runs serially.
+    const bool par = (theta_elems >= 8000) && ((int)ket_keys.size() > 1);
 
-        for (int s1k = 0; s1k < 2; ++s1k) {
-            int s1kz = (s1k == 0) ? +1 : -1;
-            int dL_k = (s1k == 0) ? dL_up_ket : dL_dn_ket;
-            if (dL_k == 0) continue;
-            int row_k = (s1k == 0) ? 0 : dL_up_ket;
-            int q_L_ket = q_mid_ket - s1kz;
+    #pragma omp parallel if(par)
+    {
+        std::map<int,Mat> out_loc;
+        #pragma omp for schedule(dynamic) nowait
+        for (int ki = 0; ki < (int)ket_keys.size(); ++ki) {
+            int q_mid_ket = ket_keys[ki];
+            const Mat& theta_q = theta.at(q_mid_ket);
+            int dL_up_ket = bs_L.dim(q_mid_ket - 1);
+            int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
+            int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
+            int dR_dn_ket = bs_R2.dim(q_mid_ket - 1);
 
-            for (int s2k = 0; s2k < 2; ++s2k) {
-                int s2kz = (s2k == 0) ? +1 : -1;
-                int dR_k = (s2k == 0) ? dR_up_ket : dR_dn_ket;
-                if (dR_k == 0) continue;
-                int col_k = (s2k == 0) ? 0 : dR_up_ket;
-                int q_R_ket = q_mid_ket + s2kz;
+            for (int s1k = 0; s1k < 2; ++s1k) {
+                int s1kz = (s1k == 0) ? +1 : -1;
+                int dL_k = (s1k == 0) ? dL_up_ket : dL_dn_ket;
+                if (dL_k == 0) continue;
+                int row_k = (s1k == 0) ? 0 : dL_up_ket;
+                int q_L_ket = q_mid_ket - s1kz;
 
-                for (int bR = 0; bR < Wj.chi_r; ++bR) {
-                    auto it_R = R.blocks[bR].find(q_R_ket);
-                    if (it_R == R.blocks[bR].end()) continue;
-                    const Mat& Rblk = it_R->second;   // (dR_bra, dR_k)
-                    if (Rblk.cols() != dR_k) continue;
-                    int dR_bra = (int)Rblk.rows();
-                    int q_R_bra = q_R_ket + HB_DELTA[bR];
+                for (int s2k = 0; s2k < 2; ++s2k) {
+                    int s2kz = (s2k == 0) ? +1 : -1;
+                    int dR_k = (s2k == 0) ? dR_up_ket : dR_dn_ket;
+                    if (dR_k == 0) continue;
+                    int col_k = (s2k == 0) ? 0 : dR_up_ket;
+                    int q_R_ket = q_mid_ket + s2kz;
 
-                    // T1 = theta_sub * Rblk^T  -- once per (q_mid_ket, s1k, s2k, bR)
-                    Mat T1 = theta_q.block(row_k, col_k, dL_k, dR_k) * Rblk.transpose();
+                    for (int bR = 0; bR < Wj.chi_r; ++bR) {
+                        auto it_R = R.blocks[bR].find(q_R_ket);
+                        if (it_R == R.blocks[bR].end()) continue;
+                        const Mat& Rblk = it_R->second;   // (dR_bra, dR_k)
+                        if (Rblk.cols() != dR_k) continue;
+                        int dR_bra = (int)Rblk.rows();
+                        int q_R_bra = q_R_ket + HB_DELTA[bR];
 
-                    for (int bL = 0; bL < Wi.chi_l; ++bL) {
-                        int q_L_bra = q_L_ket + HB_DELTA[bL];
-                        int dL_bra  = bs_L.dim(q_L_bra);
-                        if (dL_bra == 0) continue;
-                        auto it_L = L.blocks[bL].find(q_L_ket);
-                        if (it_L == L.blocks[bL].end()) continue;
-                        const Mat& Lblk = it_L->second;   // (dL_bra, dL_k)
-                        if (Lblk.rows() != dL_bra || Lblk.cols() != dL_k) continue;
+                        // T1 = theta_sub * Rblk^T  -- once per (q_mid_ket, s1k, s2k, bR)
+                        Mat T1 = theta_q.block(row_k, col_k, dL_k, dR_k) * Rblk.transpose();
 
-                        // LT1 = Lblk * T1, computed lazily once a valid output exists.
-                        Mat LT1;
-                        bool have_LT1 = false;
+                        for (int bL = 0; bL < Wi.chi_l; ++bL) {
+                            int q_L_bra = q_L_ket + HB_DELTA[bL];
+                            int dL_bra  = bs_L.dim(q_L_bra);
+                            if (dL_bra == 0) continue;
+                            auto it_L = L.blocks[bL].find(q_L_ket);
+                            if (it_L == L.blocks[bL].end()) continue;
+                            const Mat& Lblk = it_L->second;   // (dL_bra, dL_k)
+                            if (Lblk.rows() != dL_bra || Lblk.cols() != dL_k) continue;
 
-                        for (int s1b = 0; s1b < 2; ++s1b) {
-                            int s1bz = (s1b == 0) ? +1 : -1;
-                            int q_mid_bra = q_L_bra + s1bz;
-                            auto it_out = out.find(q_mid_bra);
-                            if (it_out == out.end()) continue;
-                            Mat& out_q = it_out->second;
+                            // LT1 = Lblk * T1, computed lazily once a valid output exists.
+                            Mat LT1;
+                            bool have_LT1 = false;
 
-                            int dL_up_bra = bs_L.dim(q_mid_bra - 1);
-                            int dL_dn_bra = bs_L.dim(q_mid_bra + 1);
-                            int dR_up_bra = bs_R2.dim(q_mid_bra + 1);
-                            int dR_dn_bra = bs_R2.dim(q_mid_bra - 1);
+                            for (int s1b = 0; s1b < 2; ++s1b) {
+                                int s1bz = (s1b == 0) ? +1 : -1;
+                                int q_mid_bra = q_L_bra + s1bz;
+                                auto it_sh = out_shape.find(q_mid_bra);
+                                if (it_sh == out_shape.end()) continue;
 
-                            int dL_b = (s1b == 0) ? dL_up_bra : dL_dn_bra;
-                            if (dL_b != dL_bra) continue;
-                            int row_b = (s1b == 0) ? 0 : dL_up_bra;
+                                int dL_up_bra = bs_L.dim(q_mid_bra - 1);
+                                int dL_dn_bra = bs_L.dim(q_mid_bra + 1);
+                                int dR_up_bra = bs_R2.dim(q_mid_bra + 1);
+                                int dR_dn_bra = bs_R2.dim(q_mid_bra - 1);
 
-                            for (int s2b = 0; s2b < 2; ++s2b) {
-                                Cx w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
-                                if (std::abs(w) < 1e-15) continue;
-                                int s2bz = (s2b == 0) ? +1 : -1;
-                                int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
-                                if (dR_b == 0) continue;
-                                if (q_mid_bra + s2bz != q_R_bra) continue;
-                                if (dR_bra != dR_b) continue;
-                                int col_b = (s2b == 0) ? 0 : dR_up_bra;
+                                int dL_b = (s1b == 0) ? dL_up_bra : dL_dn_bra;
+                                if (dL_b != dL_bra) continue;
+                                int row_b = (s1b == 0) ? 0 : dL_up_bra;
 
-                                if (!have_LT1) { LT1.noalias() = Lblk * T1; have_LT1 = true; }
-                                out_q.block(row_b, col_b, dL_b, dR_b).noalias() += w * LT1;
+                                for (int s2b = 0; s2b < 2; ++s2b) {
+                                    Cx w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
+                                    if (std::abs(w) < 1e-15) continue;
+                                    int s2bz = (s2b == 0) ? +1 : -1;
+                                    int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
+                                    if (dR_b == 0) continue;
+                                    if (q_mid_bra + s2bz != q_R_bra) continue;
+                                    if (dR_bra != dR_b) continue;
+                                    int col_b = (s2b == 0) ? 0 : dR_up_bra;
+
+                                    if (!have_LT1) { LT1.noalias() = Lblk * T1; have_LT1 = true; }
+                                    Mat& out_q = out_loc[q_mid_bra];
+                                    if (out_q.size() == 0)
+                                        out_q = Mat::Zero(it_sh->second.first, it_sh->second.second);
+                                    out_q.block(row_b, col_b, dL_b, dR_b).noalias() += w * LT1;
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+        #pragma omp critical
+        {
+            for (auto& [q, m] : out_loc) out[q] += m;
         }
     }
     return out;

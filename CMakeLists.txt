@@ -225,6 +225,9 @@ add_executable(qx_dmrg_test
   src/dmrg_blocks.cpp
 )
 target_link_libraries(qx_dmrg_test PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_dmrg_test PRIVATE OpenMP::OpenMP_CXX)
+endif()
 target_include_directories(qx_dmrg_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src
@@ -238,6 +241,9 @@ add_executable(qx_dmrg_bench
   src/dmrg_blocks.cpp
 )
 target_link_libraries(qx_dmrg_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_dmrg_bench PRIVATE OpenMP::OpenMP_CXX)
+endif()
 target_include_directories(qx_dmrg_bench PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src
