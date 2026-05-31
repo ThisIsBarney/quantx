@@ -387,156 +387,188 @@ static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
     return wc;
 }
 
-// Profiling counter: total block_apply_heff invocations (matvecs).
+// Profiling counter: total H_eff matvec invocations.
 static long long g_block_matvecs = 0;
 
-// Applies H_eff to theta.  Wc is precomputed once per bond (build_wcomb).
+// -- Precomputed H_eff contraction plan ---------------------------------------
 //
-// Loop nesting is chosen to compute each GEMM the minimal number of times:
-//   T1 = theta_sub * Rblk^T   -> once per (q_mid_ket, s1k, s2k, bR)   (independent of bL)
-//   LT1 = Lblk * T1           -> once per (q_mid_ket, s1k, s2k, bR, bL)
-// The innermost (s1b, s2b) loops only do scaled adds of LT1 into the output blocks.
-static std::map<int,Mat> block_apply_heff(
-    const BlockEnv& L,
-    const MPOSite& Wi, const MPOSite& Wj,
-    const BlockEnv& R,
-    const WComb& Wc,
-    const std::map<int,Mat>& theta,
-    const BondSpace& bs_L,
-    const BondSpace& bs_R2)
+// The environments L, R, the MPO and the bond spaces are fixed for the whole
+// local eigensolve, so all the QN bookkeeping (sector matching, std::map block
+// lookups, dimension/offset arithmetic) can be done ONCE and replayed for every
+// matvec.  This removes the per-matvec map lookups that dominate when there are
+// many small sectors (long chains).  The plan is grouped to keep the two-GEMM
+// reuse of block_apply_heff: T1 = theta_sub * R^T once per (ket-block, R-block),
+// and LT1 = L * T1 once per L-block.
+struct HeffPlan {
+    std::vector<int>                 out_q;      // out index -> q_mid_bra
+    std::vector<std::pair<int,int>>  out_shape;  // out index -> (rows, cols)
+    double flops = 0;                            // ~GEMM work per matvec (for the par gate)
+
+    struct Write  { Cx w; int out_idx, row_b, col_b, dL_b, dR_b; };
+    struct LGroup { const Mat* Lblk; std::vector<Write> writes; };
+    struct T1Group {
+        const Mat* theta_blk;        // resolved each matvec (theta changes); see note
+        int q_ket;                   // theta sector key
+        int row_k, col_k, dL_k, dR_k;
+        const Mat* Rblk;
+        std::vector<LGroup> lgroups;
+    };
+    std::vector<T1Group> groups;
+};
+
+// Build the plan. `ket_keys` are the sectors the input theta will carry (the
+// expanded two-site tensor sectors). L and R must outlive every use of the plan.
+static HeffPlan build_heff_plan(
+    const BlockEnv& L, const MPOSite& Wi, const MPOSite& Wj, const BlockEnv& R,
+    const WComb& Wc, const std::vector<int>& ket_keys,
+    const BondSpace& bs_L, const BondSpace& bs_R2)
 {
-    ++g_block_matvecs;
-    // Pre-scan all possible bra q_mid values and pre-allocate output blocks.
-    // q_mid_bra = q_mid_ket + HB_DELTA[bL] + s1b_z - s1k_z (from QN relations above).
-    std::map<int, std::pair<int,int>> out_shape;  // q_mid_bra -> (n_row, n_col)
-    for (auto& [q_mid_ket, _] : theta) {
-        for (int bL = 0; bL < Wi.chi_l; ++bL) {
-            for (int s1k = 0; s1k < 2; ++s1k) {
-                int s1kz = (s1k == 0) ? +1 : -1;
-                int q_L_ket = q_mid_ket - s1kz;
-                int q_L_bra = q_L_ket + HB_DELTA[bL];
-                for (int s1b = 0; s1b < 2; ++s1b) {
-                    int s1bz = (s1b == 0) ? +1 : -1;
-                    if (bs_L.dim(q_L_bra) == 0) continue;
-                    int q_mid_bra = q_L_bra + s1bz;
-                    int n_row = bs_L.dim(q_mid_bra - 1) + bs_L.dim(q_mid_bra + 1);
-                    int n_col = bs_R2.dim(q_mid_bra + 1) + bs_R2.dim(q_mid_bra - 1);
-                    if (n_row > 0 && n_col > 0)
-                        out_shape[q_mid_bra] = {n_row, n_col};
+    HeffPlan plan;
+    std::map<int,int> out_index;  // q_mid_bra -> out idx
+    auto get_out_idx = [&](int q, int nr, int nc) -> int {
+        auto it = out_index.find(q);
+        if (it != out_index.end()) return it->second;
+        int idx = (int)plan.out_q.size();
+        out_index[q] = idx;
+        plan.out_q.push_back(q);
+        plan.out_shape.push_back({nr, nc});
+        return idx;
+    };
+
+    for (int q_mid_ket : ket_keys) {
+        int dL_up_ket = bs_L.dim(q_mid_ket - 1);
+        int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
+        int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
+        int dR_dn_ket = bs_R2.dim(q_mid_ket - 1);
+
+        for (int s1k = 0; s1k < 2; ++s1k) {
+            int s1kz = (s1k == 0) ? +1 : -1;
+            int dL_k = (s1k == 0) ? dL_up_ket : dL_dn_ket;
+            if (dL_k == 0) continue;
+            int row_k = (s1k == 0) ? 0 : dL_up_ket;
+            int q_L_ket = q_mid_ket - s1kz;
+
+            for (int s2k = 0; s2k < 2; ++s2k) {
+                int s2kz = (s2k == 0) ? +1 : -1;
+                int dR_k = (s2k == 0) ? dR_up_ket : dR_dn_ket;
+                if (dR_k == 0) continue;
+                int col_k = (s2k == 0) ? 0 : dR_up_ket;
+                int q_R_ket = q_mid_ket + s2kz;
+
+                for (int bR = 0; bR < Wj.chi_r; ++bR) {
+                    auto it_R = R.blocks[bR].find(q_R_ket);
+                    if (it_R == R.blocks[bR].end()) continue;
+                    const Mat& Rblk = it_R->second;
+                    if (Rblk.cols() != dR_k) continue;
+                    int dR_bra = (int)Rblk.rows();
+                    int q_R_bra = q_R_ket + HB_DELTA[bR];
+
+                    HeffPlan::T1Group g;
+                    g.theta_blk = nullptr;
+                    g.q_ket = q_mid_ket;
+                    g.row_k = row_k; g.col_k = col_k; g.dL_k = dL_k; g.dR_k = dR_k;
+                    g.Rblk = &Rblk;
+                    plan.flops += 2.0 * dL_k * dR_k * dR_bra;  // T1 = theta_sub * R^T
+
+                    for (int bL = 0; bL < Wi.chi_l; ++bL) {
+                        int q_L_bra = q_L_ket + HB_DELTA[bL];
+                        int dL_bra  = bs_L.dim(q_L_bra);
+                        if (dL_bra == 0) continue;
+                        auto it_L = L.blocks[bL].find(q_L_ket);
+                        if (it_L == L.blocks[bL].end()) continue;
+                        const Mat& Lblk = it_L->second;
+                        if (Lblk.rows() != dL_bra || Lblk.cols() != dL_k) continue;
+
+                        HeffPlan::LGroup lg;
+                        lg.Lblk = &Lblk;
+                        plan.flops += 2.0 * dL_bra * dL_k * dR_bra;  // LT1 = L * T1
+
+                        for (int s1b = 0; s1b < 2; ++s1b) {
+                            int s1bz = (s1b == 0) ? +1 : -1;
+                            int q_mid_bra = q_L_bra + s1bz;
+                            int dL_up_bra = bs_L.dim(q_mid_bra - 1);
+                            int dL_dn_bra = bs_L.dim(q_mid_bra + 1);
+                            int dR_up_bra = bs_R2.dim(q_mid_bra + 1);
+                            int dR_dn_bra = bs_R2.dim(q_mid_bra - 1);
+                            int n_row = dL_up_bra + dL_dn_bra;
+                            int n_col = dR_up_bra + dR_dn_bra;
+                            if (n_row == 0 || n_col == 0) continue;
+                            int dL_b = (s1b == 0) ? dL_up_bra : dL_dn_bra;
+                            if (dL_b != dL_bra) continue;
+                            int row_b = (s1b == 0) ? 0 : dL_up_bra;
+
+                            for (int s2b = 0; s2b < 2; ++s2b) {
+                                Cx w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
+                                if (std::abs(w) < 1e-15) continue;
+                                int s2bz = (s2b == 0) ? +1 : -1;
+                                int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
+                                if (dR_b == 0) continue;
+                                if (q_mid_bra + s2bz != q_R_bra) continue;
+                                if (dR_bra != dR_b) continue;
+                                int col_b = (s2b == 0) ? 0 : dR_up_bra;
+
+                                int idx = get_out_idx(q_mid_bra, n_row, n_col);
+                                lg.writes.push_back({w, idx, row_b, col_b, dL_b, dR_b});
+                            }
+                        }
+                        if (!lg.writes.empty()) g.lgroups.push_back(std::move(lg));
+                    }
+                    if (!g.lgroups.empty()) plan.groups.push_back(std::move(g));
                 }
             }
         }
     }
-    std::map<int,Mat> out;  // built by the per-thread merges below
+    return plan;
+}
 
-    // Parallelise over ket sectors. Each thread accumulates into a private map and
-    // merges under a critical section, so there are no write races on `out`.
-    // (OpenMP nested parallelism is off by default, so Eigen's own GEMM threading
-    // does not oversubscribe inside this region.)
-    std::vector<int> ket_keys;
-    ket_keys.reserve(theta.size());
-    long theta_elems = 0;
-    for (auto& [q, m] : theta) { ket_keys.push_back(q); theta_elems += (long)m.rows() * m.cols(); }
-    // Only worth threading when the per-sector GEMMs are large enough that the
-    // fork-join + merge overhead is amortised; small chi runs serially.
-    const bool par = (theta_elems >= 8000) && ((int)ket_keys.size() > 1);
+// Execute the plan on the current theta, returning out[q_mid_bra].
+static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
+                                         const std::map<int,Mat>& theta) {
+    ++g_block_matvecs;
+    const int n_out = (int)plan.out_q.size();
+    const int n_grp = (int)plan.groups.size();
+    // Thread only when the GEMM work outweighs the fork-join + merge overhead.
+    const bool par = (plan.flops >= 4.0e6) && (n_grp > 1);
+
+    std::vector<Mat> out(n_out);  // lazily zero-filled
 
     #pragma omp parallel if(par)
     {
-        std::map<int,Mat> out_loc;
+        std::vector<Mat> out_loc(par ? n_out : 0);
+        std::vector<Mat>& dst = par ? out_loc : out;
+
         #pragma omp for schedule(dynamic) nowait
-        for (int ki = 0; ki < (int)ket_keys.size(); ++ki) {
-            int q_mid_ket = ket_keys[ki];
-            const Mat& theta_q = theta.at(q_mid_ket);
-            int dL_up_ket = bs_L.dim(q_mid_ket - 1);
-            int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
-            int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
-            int dR_dn_ket = bs_R2.dim(q_mid_ket - 1);
-
-            for (int s1k = 0; s1k < 2; ++s1k) {
-                int s1kz = (s1k == 0) ? +1 : -1;
-                int dL_k = (s1k == 0) ? dL_up_ket : dL_dn_ket;
-                if (dL_k == 0) continue;
-                int row_k = (s1k == 0) ? 0 : dL_up_ket;
-                int q_L_ket = q_mid_ket - s1kz;
-
-                for (int s2k = 0; s2k < 2; ++s2k) {
-                    int s2kz = (s2k == 0) ? +1 : -1;
-                    int dR_k = (s2k == 0) ? dR_up_ket : dR_dn_ket;
-                    if (dR_k == 0) continue;
-                    int col_k = (s2k == 0) ? 0 : dR_up_ket;
-                    int q_R_ket = q_mid_ket + s2kz;
-
-                    for (int bR = 0; bR < Wj.chi_r; ++bR) {
-                        auto it_R = R.blocks[bR].find(q_R_ket);
-                        if (it_R == R.blocks[bR].end()) continue;
-                        const Mat& Rblk = it_R->second;   // (dR_bra, dR_k)
-                        if (Rblk.cols() != dR_k) continue;
-                        int dR_bra = (int)Rblk.rows();
-                        int q_R_bra = q_R_ket + HB_DELTA[bR];
-
-                        // T1 = theta_sub * Rblk^T  -- once per (q_mid_ket, s1k, s2k, bR)
-                        Mat T1 = theta_q.block(row_k, col_k, dL_k, dR_k) * Rblk.transpose();
-
-                        for (int bL = 0; bL < Wi.chi_l; ++bL) {
-                            int q_L_bra = q_L_ket + HB_DELTA[bL];
-                            int dL_bra  = bs_L.dim(q_L_bra);
-                            if (dL_bra == 0) continue;
-                            auto it_L = L.blocks[bL].find(q_L_ket);
-                            if (it_L == L.blocks[bL].end()) continue;
-                            const Mat& Lblk = it_L->second;   // (dL_bra, dL_k)
-                            if (Lblk.rows() != dL_bra || Lblk.cols() != dL_k) continue;
-
-                            // LT1 = Lblk * T1, computed lazily once a valid output exists.
-                            Mat LT1;
-                            bool have_LT1 = false;
-
-                            for (int s1b = 0; s1b < 2; ++s1b) {
-                                int s1bz = (s1b == 0) ? +1 : -1;
-                                int q_mid_bra = q_L_bra + s1bz;
-                                auto it_sh = out_shape.find(q_mid_bra);
-                                if (it_sh == out_shape.end()) continue;
-
-                                int dL_up_bra = bs_L.dim(q_mid_bra - 1);
-                                int dL_dn_bra = bs_L.dim(q_mid_bra + 1);
-                                int dR_up_bra = bs_R2.dim(q_mid_bra + 1);
-                                int dR_dn_bra = bs_R2.dim(q_mid_bra - 1);
-
-                                int dL_b = (s1b == 0) ? dL_up_bra : dL_dn_bra;
-                                if (dL_b != dL_bra) continue;
-                                int row_b = (s1b == 0) ? 0 : dL_up_bra;
-
-                                for (int s2b = 0; s2b < 2; ++s2b) {
-                                    Cx w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
-                                    if (std::abs(w) < 1e-15) continue;
-                                    int s2bz = (s2b == 0) ? +1 : -1;
-                                    int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
-                                    if (dR_b == 0) continue;
-                                    if (q_mid_bra + s2bz != q_R_bra) continue;
-                                    if (dR_bra != dR_b) continue;
-                                    int col_b = (s2b == 0) ? 0 : dR_up_bra;
-
-                                    if (!have_LT1) { LT1.noalias() = Lblk * T1; have_LT1 = true; }
-                                    Mat& out_q = out_loc[q_mid_bra];
-                                    if (out_q.size() == 0)
-                                        out_q = Mat::Zero(it_sh->second.first, it_sh->second.second);
-                                    out_q.block(row_b, col_b, dL_b, dR_b).noalias() += w * LT1;
-                                }
-                            }
-                        }
-                    }
+        for (int gi = 0; gi < n_grp; ++gi) {
+            const HeffPlan::T1Group& g = plan.groups[gi];
+            auto it_t = theta.find(g.q_ket);
+            if (it_t == theta.end()) continue;
+            const Mat& theta_q = it_t->second;
+            Mat T1 = theta_q.block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
+            for (const auto& lg : g.lgroups) {
+                Mat LT1 = (*lg.Lblk) * T1;
+                for (const auto& wr : lg.writes) {
+                    Mat& o = dst[wr.out_idx];
+                    if (o.size() == 0)
+                        o = Mat::Zero(plan.out_shape[wr.out_idx].first,
+                                      plan.out_shape[wr.out_idx].second);
+                    o.block(wr.row_b, wr.col_b, wr.dL_b, wr.dR_b).noalias() += wr.w * LT1;
                 }
             }
         }
-        #pragma omp critical
-        {
-            for (auto& [q, m] : out_loc) {
-                auto& o = out[q];
-                if (o.size() == 0) o = m; else o += m;
+        if (par) {
+            #pragma omp critical
+            for (int i = 0; i < n_out; ++i) {
+                if (out_loc[i].size() == 0) continue;
+                if (out[i].size() == 0) out[i] = out_loc[i];
+                else out[i] += out_loc[i];
             }
         }
     }
-    return out;
+
+    std::map<int,Mat> res;
+    for (int i = 0; i < n_out; ++i)
+        if (out[i].size() != 0) res[plan.out_q[i]] = std::move(out[i]);
+    return res;
 }
 
 // -- Block Lanczos (flat packing) ---------------------------------------------
@@ -965,10 +997,13 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                                     bond[i], bond[i+1], bond[i+2], true);
             expand_theta_sectors(theta, bond[i], bond[i+2]);
             WComb wc = build_wcomb(mpo[i], mpo[i+1]);  // fixed per bond
+            std::vector<int> ket_keys; ket_keys.reserve(theta.size());
+            for (auto& [q, _] : theta) ket_keys.push_back(q);
+            HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2],
+                                            wc, ket_keys, bond[i], bond[i+2]);
             tick(t_theta, tt);
             auto mv = [&](const std::map<int,Mat>& v) {
-                return block_apply_heff(L[i], mpo[i], mpo[i+1], R[i+2],
-                                        wc, v, bond[i], bond[i+2]);
+                return apply_heff_plan(plan, v);
             };
             tt = clk::now();
             auto [E, psi_blk] = block_lanczos(mv, theta);
@@ -1008,10 +1043,13 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                                     bond[i], bond[i+1], bond[i+2], false);
             expand_theta_sectors(theta, bond[i], bond[i+2]);
             WComb wc = build_wcomb(mpo[i], mpo[i+1]);  // fixed per bond
+            std::vector<int> ket_keys; ket_keys.reserve(theta.size());
+            for (auto& [q, _] : theta) ket_keys.push_back(q);
+            HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2],
+                                            wc, ket_keys, bond[i], bond[i+2]);
             tick(t_theta, tt);
             auto mv = [&](const std::map<int,Mat>& v) {
-                return block_apply_heff(L[i], mpo[i], mpo[i+1], R[i+2],
-                                        wc, v, bond[i], bond[i+2]);
+                return apply_heff_plan(plan, v);
             };
             tt = clk::now();
             auto [E, psi_blk] = block_lanczos(mv, theta);
