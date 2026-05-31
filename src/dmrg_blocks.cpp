@@ -698,7 +698,12 @@ static std::pair<double, std::map<int,Mat>> block_lanczos(
             for (int k = 0; k < cur-1; ++k) { T(k,k+1) = beta[k]; T(k+1,k) = beta[k]; }
             Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> eig(T);
             double ritz = b * std::abs(eig.eigenvectors().col(0)[cur-1]);
-            if (ritz < tol) { actual_m = cur; break; }
+            // Stop on an absolute OR a relative residual: the local eigensolve only
+            // needs to be accurate to well below the SVD truncation, so converging it
+            // to ~1e-12 relative (as a fixed 1e-10 absolute does for large |E|) just
+            // wastes matvecs. The overall accuracy is recovered over the sweeps.
+            double e0 = std::abs(eig.eigenvalues()[0]);
+            if (ritz < tol || ritz < 1e-7 * e0) { actual_m = cur; break; }
         }
     }
     m = actual_m;
