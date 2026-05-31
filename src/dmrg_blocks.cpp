@@ -4,6 +4,8 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <set>
@@ -385,6 +387,9 @@ static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
     return wc;
 }
 
+// Profiling counter: total block_apply_heff invocations (matvecs).
+static long long g_block_matvecs = 0;
+
 // Applies H_eff to theta.  Wc is precomputed once per bond (build_wcomb).
 //
 // Loop nesting is chosen to compute each GEMM the minimal number of times:
@@ -400,6 +405,7 @@ static std::map<int,Mat> block_apply_heff(
     const BondSpace& bs_L,
     const BondSpace& bs_R2)
 {
+    ++g_block_matvecs;
     // Pre-scan all possible bra q_mid values and pre-allocate output blocks.
     // q_mid_bra = q_mid_ket + HB_DELTA[bL] + s1b_z - s1k_z (from QN relations above).
     std::map<int, std::pair<int,int>> out_shape;  // q_mid_bra -> (n_row, n_col)
@@ -563,8 +569,10 @@ static std::pair<double, std::map<int,Mat>> block_lanczos(
         return out;
     };
 
-    // Small dim: full diagonalisation
-    if (dim <= 300) {
+    // Small dim: full diagonalisation. Building H costs `dim` matvecs, so this only
+    // pays off when dim is below a typical Lanczos iteration count; keep the threshold
+    // small (larger problems use the iterative path, which exploits the good initial guess).
+    if (dim <= 24) {
         Mat H(dim, dim);
         std::map<int,Mat> e_blk;
         for (auto& [q, ref] : init) e_blk[q] = Mat::Zero(ref.rows(), ref.cols());
@@ -588,9 +596,11 @@ static std::pair<double, std::map<int,Mat>> block_lanczos(
         return {eig.eigenvalues()[0], gs};
     }
 
-    // Lanczos with Ritz-residual stopping
-    constexpr int MIN_STEPS  = 10;
-    constexpr int CHECK_FREQ =  5;
+    // Lanczos with Ritz-residual stopping. The initial vector is the current two-site
+    // state, which in converged sweeps is already (close to) the eigenvector, so check
+    // the residual every iteration and allow a very early exit.
+    constexpr int MIN_STEPS  = 2;
+    constexpr int CHECK_FREQ = 1;
 
     auto matvec_flat = [&](const Vec& vf) -> Vec {
         std::map<int,Mat> tb; vec_to_theta(vf, init, tb);
@@ -902,23 +912,38 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
     // only inflated bond dimensions (and thus wall time) without improving accuracy;
     // if a harder Hamiltonian ever needs it, add a proper density-matrix perturbation
     // (White's correction) that is truncated together with the kept states.
+    // Optional phase profiling (set env QX_DMRG_PROFILE=1).
+    const bool prof = (std::getenv("QX_DMRG_PROFILE") != nullptr);
+    if (prof) g_block_matvecs = 0;
+    double t_theta = 0, t_lanczos = 0, t_svd = 0, t_env = 0;
+    using clk = std::chrono::steady_clock;
+    auto tick = [&](double& acc, clk::time_point t0) {
+        if (prof) acc += std::chrono::duration<double>(clk::now() - t0).count();
+    };
+
     for (int sweep = 0; sweep < n_sweeps; ++sweep) {
         double sweep_trunc = 0, E0 = 0;
 
         // Left-to-right half sweep
         for (int i = 0; i < n - 1; ++i) {
+            auto tt = clk::now();
             auto theta = form_theta(block_A[i], block_A[i+1], block_sv[i],
                                     bond[i], bond[i+1], bond[i+2], true);
             expand_theta_sectors(theta, bond[i], bond[i+2]);
             WComb wc = build_wcomb(mpo[i], mpo[i+1]);  // fixed per bond
+            tick(t_theta, tt);
             auto mv = [&](const std::map<int,Mat>& v) {
                 return block_apply_heff(L[i], mpo[i], mpo[i+1], R[i+2],
                                         wc, v, bond[i], bond[i+2]);
             };
+            tt = clk::now();
             auto [E, psi_blk] = block_lanczos(mv, theta);
+            tick(t_lanczos, tt);
             E0 = E;
 
+            tt = clk::now();
             auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff);
+            tick(t_svd, tt);
             sweep_trunc += svd.trunc_err;
             bond[i+1] = svd.new_mid_bs;
 
@@ -937,23 +962,31 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
             block_sv[i] = svd.sv;
             block_A[i+1] = svd.Vt;
 
+            tt = clk::now();
             L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
+            tick(t_env, tt);
         }
 
         // Right-to-left half sweep
         for (int i = n - 2; i >= 0; --i) {
+            auto tt = clk::now();
             auto theta = form_theta(block_A[i], block_A[i+1], block_sv[i],
                                     bond[i], bond[i+1], bond[i+2], false);
             expand_theta_sectors(theta, bond[i], bond[i+2]);
             WComb wc = build_wcomb(mpo[i], mpo[i+1]);  // fixed per bond
+            tick(t_theta, tt);
             auto mv = [&](const std::map<int,Mat>& v) {
                 return block_apply_heff(L[i], mpo[i], mpo[i+1], R[i+2],
                                         wc, v, bond[i], bond[i+2]);
             };
+            tt = clk::now();
             auto [E, psi_blk] = block_lanczos(mv, theta);
+            tick(t_lanczos, tt);
             E0 = E;
 
+            tt = clk::now();
             auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff);
+            tick(t_svd, tt);
             sweep_trunc += svd.trunc_err;
             bond[i+1] = svd.new_mid_bs;
 
@@ -969,7 +1002,9 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
             block_sv[i] = svd.sv;
             block_A[i+1] = svd.Vt;
 
+            auto te = clk::now();
             R[i+1] = block_update_right(R[i+2], block_A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
+            tick(t_env, te);
         }
 
         result.sweep_energies.push_back(E0);
@@ -986,6 +1021,15 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
 
     auto t_end = std::chrono::steady_clock::now();
     result.wall_time_s = std::chrono::duration<double>(t_end - t_start).count();
+    if (prof) {
+        double tot = t_theta + t_lanczos + t_svd + t_env;
+        printf("[QX_DMRG_PROFILE n=%d chi=%d] total=%.3fs  theta=%.3f(%.0f%%)  "
+               "lanczos=%.3f(%.0f%%)  svd=%.3f(%.0f%%)  env=%.3f(%.0f%%)  matvecs=%lld\n",
+               n, max_bond, tot,
+               t_theta, 100*t_theta/tot, t_lanczos, 100*t_lanczos/tot,
+               t_svd, 100*t_svd/tot, t_env, 100*t_env/tot, g_block_matvecs);
+        fflush(stdout);
+    }
     return result;
 }
 
