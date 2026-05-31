@@ -427,9 +427,7 @@ static std::map<int,Mat> block_apply_heff(
             }
         }
     }
-    std::map<int,Mat> out;
-    for (auto& [q, shape] : out_shape)
-        out[q] = Mat::Zero(shape.first, shape.second);
+    std::map<int,Mat> out;  // built by the per-thread merges below
 
     // Parallelise over ket sectors. Each thread accumulates into a private map and
     // merges under a critical section, so there are no write races on `out`.
@@ -532,7 +530,10 @@ static std::map<int,Mat> block_apply_heff(
         }
         #pragma omp critical
         {
-            for (auto& [q, m] : out_loc) out[q] += m;
+            for (auto& [q, m] : out_loc) {
+                auto& o = out[q];
+                if (o.size() == 0) o = m; else o += m;
+            }
         }
     }
     return out;
@@ -718,6 +719,14 @@ static BlockSVDResult block_svd_truncate(
         }
     }
     n_keep = std::max(1, std::min(n_keep, max_bond));
+    // Per-value floor (matches e.g. tenpy's svd_min): drop Schmidt values below
+    // cutoff*||theta||.  Without this, the cumulative criterion above keeps a long
+    // tail of negligible states, inflating the bond dimension and doing wasted
+    // O(chi^3) work when the physical entanglement is far below max_bond.
+    if (cutoff > 0 && !all_sv.empty()) {
+        double floor = cutoff * std::sqrt(sv2_total);
+        while (n_keep > 1 && all_sv[n_keep - 1].sv < floor) --n_keep;
+    }
 
     std::map<int,int> keep_per_q;
     for (int k = 0; k < n_keep; ++k) keep_per_q[all_sv[k].q]++;
