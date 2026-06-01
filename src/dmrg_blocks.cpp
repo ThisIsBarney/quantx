@@ -10,6 +10,7 @@
 #include <map>
 #include <set>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 #include <Eigen/Dense>
@@ -23,6 +24,17 @@ static inline int omp_get_max_threads() { return 1; }
 #endif
 
 namespace qx_dmrg {
+
+// Scalar-templated dense matrix/vector aliases. The block-sparse DMRG core below
+// is templated on the scalar type S: it runs in real (double) arithmetic for real
+// Hamiltonians (e.g. Heisenberg) -- ~4x faster than complex -- and in complex
+// (std::complex<double>) arithmetic otherwise. run_dmrg_blocks dispatches on whether
+// the MPO is real.
+template<typename S> using MatX = Eigen::Matrix<S, Eigen::Dynamic, Eigen::Dynamic>;
+template<typename S> using VecX = Eigen::Matrix<S, Eigen::Dynamic, 1>;
+
+// Matvec profiling counter (shared across instantiations).
+static long long g_block_matvecs = 0;
 
 // =============================================================================
 // Sz-conserving block-sparse DMRG  (M179)
@@ -160,6 +172,24 @@ static std::vector<int> bonds_with_delta(int delta) {
     return res;
 }
 
+// =============================================================================
+// Scalar-templated core. Everything below uses the member aliases Mat/Vec, so
+// the same code runs in real or complex arithmetic; S=double for real
+// Hamiltonians (~4x faster), S=complex<double> otherwise.
+// =============================================================================
+template<typename S>
+struct BlockDMRG {
+    using Mat = MatX<S>;
+    using Vec = VecX<S>;
+    // Cast a (possibly complex) MPO scalar to S; for S=double take the real part.
+    static S mscal(const Cx& c) {
+        if constexpr (std::is_same_v<S, Cx>) return c; else return c.real();
+    }
+    // Real part of a block scalar (identity for S=double).
+    static double rp(const S& x) {
+        if constexpr (std::is_same_v<S, Cx>) return x.real(); else return x;
+    }
+
 struct BlockEnv {
     // blocks[b][q_ket] = Mat(dim_bra, dim_ket),  bra_qn = q_ket + HB_DELTA[b]
     std::array<std::map<int,Mat>, HB_CHI_W> blocks;
@@ -239,7 +269,7 @@ static BlockEnv block_update_left(const BlockEnv& L,
                         ? Ablk_bra.leftCols(dR_up_bra) : Ablk_bra.rightCols(dR_dn_bra);
 
                     for (int sp = 0; sp < 2; ++sp) {  // ket spin
-                        Cx w = Wab(s, sp);
+                        S w = mscal(Wab(s, sp));
                         if (std::abs(w) < 1e-15) continue;
                         int spz   = (sp == 0) ? +1 : -1;
                         int dR_sp = (spz == +1) ? dR_up_ket : dR_dn_ket;
@@ -324,7 +354,7 @@ static BlockEnv block_update_right(const BlockEnv& R,
                         ? Ablk_ket.leftCols(dR_up_ket) : Ablk_ket.rightCols(dR_dn_ket);
 
                     for (int sp = 0; sp < 2; ++sp) {  // bra spin
-                        Cx w = Wab(sp, s);
+                        S w = mscal(Wab(sp, s));
                         if (std::abs(w) < 1e-15) continue;
                         int spz   = (sp == 0) ? +1 : -1;
                         int dR_sp = (spz == +1) ? dR_up_bra : dR_dn_bra;
@@ -375,7 +405,7 @@ static BlockEnv block_update_right(const BlockEnv& R,
 // Combined two-site MPO weights, fixed per bond:
 //   Wc[bL][bR][s1b*2+s2b][s1k*2+s2k] = sum_bm Wi(bL,bm)(s1b,s1k) * Wj(bm,bR)(s2b,s2k)
 struct WComb {
-    std::array<std::array<std::array<std::array<Cx,4>,4>,HB_CHI_W>,HB_CHI_W> w{};
+    std::array<std::array<std::array<std::array<S,4>,4>,HB_CHI_W>,HB_CHI_W> w{};
 };
 
 static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
@@ -389,13 +419,10 @@ static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
                     for (int s2b = 0; s2b < 2; ++s2b)
                         for (int s1k = 0; s1k < 2; ++s1k)
                             for (int s2k = 0; s2k < 2; ++s2k)
-                                wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k] += wi(s1b,s1k) * wj(s2b,s2k);
+                                wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k] += mscal(wi(s1b,s1k) * wj(s2b,s2k));
             }
     return wc;
 }
-
-// Profiling counter: total H_eff matvec invocations.
-static long long g_block_matvecs = 0;
 
 // -- Precomputed H_eff contraction plan ---------------------------------------
 //
@@ -414,7 +441,7 @@ struct HeffPlan {
     int    max_t1 = 1;                            // max elements of any T1 = theta*R^T
     int    max_lt1 = 1;                           // max elements of any LT1 = L*T1
 
-    struct Write  { Cx w; int out_idx, row_b, col_b, dL_b, dR_b; };
+    struct Write  { S w; int out_idx, row_b, col_b, dL_b, dR_b; };
     struct LGroup { const Mat* Lblk; std::vector<Write> writes; };
     struct T1Group {
         int ket_idx;                 // index into ket_sectors (theta block resolved once)
@@ -480,7 +507,7 @@ static HeffPlan build_heff_plan(
                     int dR_bra = (int)Rblk.rows();
                     int q_R_bra = q_R_ket + HB_DELTA[bR];
 
-                    HeffPlan::T1Group g;
+                    typename HeffPlan::T1Group g;
                     g.ket_idx = ket_idx;
                     g.row_k = row_k; g.col_k = col_k; g.dL_k = dL_k; g.dR_k = dR_k;
                     g.Rblk = &Rblk;
@@ -496,7 +523,7 @@ static HeffPlan build_heff_plan(
                         const Mat& Lblk = it_L->second;
                         if (Lblk.rows() != dL_bra || Lblk.cols() != dL_k) continue;
 
-                        HeffPlan::LGroup lg;
+                        typename HeffPlan::LGroup lg;
                         lg.Lblk = &Lblk;
                         plan.flops += 2.0 * dL_bra * dL_k * dR_bra;  // LT1 = L * T1
                         plan.max_lt1 = std::max(plan.max_lt1, dL_bra * dR_bra);
@@ -516,7 +543,7 @@ static HeffPlan build_heff_plan(
                             int row_b = (s1b == 0) ? 0 : dL_up_bra;
 
                             for (int s2b = 0; s2b < 2; ++s2b) {
-                                Cx w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
+                                S w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
                                 if (std::abs(w) < 1e-15) continue;
                                 int s2bz = (s2b == 0) ? +1 : -1;
                                 int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
@@ -567,9 +594,9 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
     if (!par) {
         // Serial: accumulate straight into `out`, using reusable scratch for the two
         // GEMM temporaries (no per-group heap allocation).
-        std::vector<Cx> t1buf(plan.max_t1), lt1buf(plan.max_lt1);
+        std::vector<S> t1buf(plan.max_t1), lt1buf(plan.max_lt1);
         for (int gi = 0; gi < n_grp; ++gi) {
-            const HeffPlan::T1Group& g = plan.groups[gi];
+            const typename HeffPlan::T1Group& g = plan.groups[gi];
             const Mat* theta_q = theta_blocks[g.ket_idx];
             if (!theta_q) continue;
             int dRb = (int)g.Rblk->rows();
@@ -603,10 +630,10 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
             int tid = omp_get_thread_num();
             std::vector<Mat>& dst = tls[tid];
             dst.assign(n_out, Mat());
-            std::vector<Cx> t1buf(plan.max_t1), lt1buf(plan.max_lt1);  // per-thread scratch
+            std::vector<S> t1buf(plan.max_t1), lt1buf(plan.max_lt1);  // per-thread scratch
             #pragma omp for schedule(dynamic) nowait
             for (int gi = 0; gi < n_grp; ++gi) {
-                const HeffPlan::T1Group& g = plan.groups[gi];
+                const typename HeffPlan::T1Group& g = plan.groups[gi];
                 const Mat* theta_q = theta_blocks[g.ket_idx];
                 if (!theta_q) continue;
                 int dRb = (int)g.Rblk->rows();
@@ -767,7 +794,7 @@ static std::pair<double, std::map<int,Mat>> block_lanczos(
 
     for (int j = 0; j < m; ++j) {
         Vec w = matvec_flat(q_vecs[j]);
-        alpha[j] = w.dot(q_vecs[j]).real();
+        alpha[j] = rp(w.dot(q_vecs[j]));
         w -= alpha[j] * q_vecs[j];
         if (j > 0) w -= beta[j-1] * q_vecs[j-1];
         double b = w.norm(); beta[j] = b;
@@ -967,9 +994,9 @@ static std::map<int,Mat> form_theta(
 
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
-DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
-                           int max_bond, double cutoff,
-                           int n_sweeps, double tol) {
+static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
+                      int max_bond, double cutoff,
+                      int n_sweeps, double tol) {
     auto t_start = std::chrono::steady_clock::now();
 
     // Build bond spaces
@@ -1009,7 +1036,7 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                     int dR_up = bsR.dim(q_neel + 1);
                     int col_off = (neel_sz == +1) ? 0 : dR_up;  // up->leftCols, dn->rightCols
                     if (col_off < it->second.cols())
-                        it->second(0, col_off) = Cx(1.0);
+                        it->second(0, col_off) = S(1.0);
                 }
             }
             q_neel += neel_sz;
@@ -1030,7 +1057,7 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
         Rn.bs = bond[n];
         // Right boundary: chi_r=1 at site n-1, so only MPO index b=0 is active.
         // R[n].blocks[0][q=0] = 1 is the right vacuum (identity scalar environment).
-        Rn.blocks[0][0] = Mat::Constant(1, 1, Cx(1));
+        Rn.blocks[0][0] = Mat::Constant(1, 1, S(1));
         R[n] = Rn;
     }
     for (int i = n - 1; i >= 0; --i)
@@ -1041,7 +1068,7 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
         BlockEnv L0;
         L0.bs = bond[0];
         // Left boundary: chi_l=1 at site 0, only MPO index b=0 is active.
-        L0.blocks[0][0] = Mat::Constant(1, 1, Cx(1));
+        L0.blocks[0][0] = Mat::Constant(1, 1, S(1));
         L[0] = L0;
     }
 
@@ -1203,6 +1230,27 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
         fflush(stdout);
     }
     return result;
+}
+
+};  // template<typename S> struct BlockDMRG
+
+// True if every MPO matrix element is real (within tolerance).
+static bool mpo_is_real(const std::vector<MPOSite>& mpo) {
+    for (const auto& site : mpo)
+        for (const auto& op : site.ops)
+            for (int a = 0; a < 2; ++a)
+                for (int b = 0; b < 2; ++b)
+                    if (std::abs(op(a, b).imag()) > 1e-13) return false;
+    return true;
+}
+
+// Entry point: dispatch to the real or complex block-sparse core.
+DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
+                           int max_bond, double cutoff,
+                           int n_sweeps, double tol) {
+    if (mpo_is_real(mpo))
+        return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
+    return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
 }
 
 } // namespace qx_dmrg
