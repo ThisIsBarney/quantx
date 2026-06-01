@@ -273,6 +273,11 @@ target_link_libraries(qx_su2_run_test PRIVATE qx_eigen)
 target_include_directories(qx_su2_run_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_su2_run_test)
 
+add_executable(qx_su2_bench src/dmrg_su2_bench.cpp)
+target_link_libraries(qx_su2_bench PRIVATE qx_eigen)
+target_include_directories(qx_su2_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+qx_set_config_output_dirs(qx_su2_bench)
+
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
 add_test(NAME qx_su2_test COMMAND qx_su2_test)

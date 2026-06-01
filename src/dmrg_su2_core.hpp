@@ -74,7 +74,7 @@ struct Env {
 // recoup_left: absorb a site into the left env, old legs (kl,wl,bl) [INPUT,
 // "old coupling"] -> new legs (kr,wr,br) [projected, "new coupling"]. Returns R:
 //   Lnew_red[jkr,wr,jbr] += R * r_mpo * (Aket^T Lold_red Abra).
-inline double recoup_left(int tjkl, int twl, int tjbl,
+inline double recoup_left_impl(int tjkl, int twl, int tjbl,
                           int tk,                       // operator rank (MPO)
                           int tjkr, int twr, int tjbr) {
     const int tphys = 1;
@@ -114,10 +114,21 @@ inline double recoup_left(int tjkl, int twl, int tjbl,
     }
     return den > 0 ? num / den : 0.0;
 }
+// memoized wrapper (labels-only; recoupling is reused across sweeps)
+inline double recoup_left(int tjkl, int twl, int tjbl, int tk,
+                          int tjkr, int twr, int tjbr) {
+    static std::map<std::array<int,7>, double> cache;
+    std::array<int,7> key{tjkl, twl, tjbl, tk, tjkr, twr, tjbr};
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second;
+    double r = recoup_left_impl(tjkl, twl, tjbl, tk, tjkr, twr, tjbr);
+    cache.emplace(key, r);
+    return r;
+}
 
 // recoup_right: absorb a site into the right env, old legs (kr,wr,br) [INPUT] ->
 // new legs (kl,wl,bl) [projected]. Same coupling jk (x) w -> jb throughout.
-inline double recoup_right(int tjkr, int twr, int tjbr,
+inline double recoup_right_impl(int tjkr, int twr, int tjbr,
                            int tk,
                            int tjkl, int twl, int tjbl) {
     const int tphys = 1;
@@ -156,6 +167,16 @@ inline double recoup_right(int tjkr, int twr, int tjbr,
         den += cg_new * cg_new;
     }
     return den > 0 ? num / den : 0.0;
+}
+inline double recoup_right(int tjkr, int twr, int tjbr, int tk,
+                           int tjkl, int twl, int tjbl) {
+    static std::map<std::array<int,7>, double> cache;
+    std::array<int,7> key{tjkr, twr, tjbr, tk, tjkl, twl, tjbl};
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second;
+    double r = recoup_right_impl(tjkr, twr, tjbr, tk, tjkl, twl, tjbl);
+    cache.emplace(key, r);
+    return r;
 }
 
 // ----- grow left environment by absorbing one site -------------------------
@@ -230,7 +251,7 @@ using Theta = std::map<Key3, Mat>;
 //   left env (jl (x) wl -> jl'), W1 (wl->wm, rank k1) on site1,
 //   W2 (wm->wr, rank k2) on site2, right env (jr (x) wr -> jr').
 // Input fusion tree (jl,jc,jr) -> output fusion tree (jl',jc',jr').
-inline double recoup_2site(int tjl, int tjc, int tjr,
+inline double recoup_2site_impl(int tjl, int tjc, int tjr,
                            int tjlp, int tjcp, int tjrp,
                            int twl, int twm, int twr,
                            int tk1, int tk2) {
@@ -289,6 +310,17 @@ inline double recoup_2site(int tjl, int tjc, int tjr,
         }
     }
     return den > 0 ? num / den : 0.0;
+}
+inline double recoup_2site(int tjl, int tjc, int tjr,
+                           int tjlp, int tjcp, int tjrp,
+                           int twl, int twm, int twr, int tk1, int tk2) {
+    static std::map<std::array<int,11>, double> cache;
+    std::array<int,11> key{tjl, tjc, tjr, tjlp, tjcp, tjrp, twl, twm, twr, tk1, tk2};
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second;
+    double r = recoup_2site_impl(tjl, tjc, tjr, tjlp, tjcp, tjrp, twl, twm, twr, tk1, tk2);
+    cache.emplace(key, r);
+    return r;
 }
 
 // Two-site effective Hamiltonian matvec: Theta' = H_eff Theta.

@@ -13,6 +13,7 @@
 #include <vector>
 #include <random>
 #include <algorithm>
+#include <functional>
 
 namespace qx_su2 {
 
@@ -70,6 +71,7 @@ inline Env boundary_right() { Env R; R.blk[{0, SU2Heisenberg::DONE, 0}] = (Mat(1
 struct ThetaSpace {
     struct Blk { int tjl, tjc, tjr, dl, dr, off; };
     std::vector<Blk> blks;
+    std::map<Key3,int> idx;     // (jl,jc,jr) -> index into blks
     int dim = 0;
     // enumerate (jl,jc,jr) with deg from bondL (jl) and bondR (jr)
     void build(const SpinBond& bondL, const SpinBond& bondR) {
@@ -80,11 +82,15 @@ struct ThetaSpace {
             int hi = std::min(tjl + 1, tjr + 1);
             for (int tjc = lo; tjc <= hi; tjc += 2) {
                 if (!tri_ok(tjl, 1, tjc) || !tri_ok(tjc, 1, tjr)) continue;
-                Blk b{tjl, tjc, tjr, bondL.deg[li], bondR.deg[ri], dim};
-                blks.push_back(b);
-                dim += b.dl * b.dr;
+                idx[{tjl, tjc, tjr}] = (int)blks.size();
+                blks.push_back(Blk{tjl, tjc, tjr, bondL.deg[li], bondR.deg[ri], dim});
+                dim += bondL.deg[li] * bondR.deg[ri];
             }
         }
+    }
+    const Blk* find(int tjl, int tjc, int tjr) const {
+        auto it = idx.find({tjl, tjc, tjr});
+        return it == idx.end() ? nullptr : &blks[it->second];
     }
     Theta to_theta(const Eigen::VectorXd& v) const {
         Theta th;
@@ -106,32 +112,152 @@ struct ThetaSpace {
     }
 };
 
-// solve lowest eigenpair of H_eff; returns energy, fills theta_out
+// contract two adjacent site tensors into a two-site Theta (warm-start guess)
+inline Theta form_theta(const Site& Ai, const Site& Aj) {
+    Theta th;
+    for (auto& [ka, Ma] : Ai.blk) {
+        int jl = ka.first, jc = ka.second;
+        for (auto& [kb, Mb] : Aj.blk) {
+            if (kb.first != jc) continue;
+            Key3 k{jl, jc, kb.second};
+            Mat prod = Ma * Mb;
+            auto it = th.find(k);
+            if (it == th.end()) th[k] = prod; else it->second += prod;
+        }
+    }
+    return th;
+}
+
+// ----- precomputed two-site H_eff contraction plan -------------------------
+// Each op replays as  Y_out += coeff * (L^T * Th_in * R). Recoupling computed
+// once at build (cached), reused across every Lanczos matvec.
+struct Heff2Plan {
+    struct Op { const Mat* L; const Mat* R; double coeff;
+                int in_off, in_dl, in_dr, out_off, out_dl, out_dr; };
+    std::vector<Op> ops;
+    int dim = 0;
+    using RMap  = Eigen::Map<Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>>;
+    using cRMap = Eigen::Map<const Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>>;
+    void matvec(const Eigen::VectorXd& x, Eigen::VectorXd& y) const {
+        y.setZero(dim);
+        for (auto& op : ops) {
+            cRMap Th(x.data() + op.in_off, op.in_dl, op.in_dr);
+            RMap  Y (y.data() + op.out_off, op.out_dl, op.out_dr);
+            Y.noalias() += op.coeff * (op.L->transpose() * Th * (*op.R));
+        }
+    }
+};
+
+inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
+                            const std::vector<SU2Heisenberg::Trans>& trans) {
+    Heff2Plan p; p.dim = sp.dim;
+    for (auto& inb : sp.blks) {
+        int tjl = inb.tjl, tjc = inb.tjc, tjr = inb.tjr;
+        for (auto& [kL, Lb] : L.blk) {
+            if (std::get<0>(kL) != tjl) continue;
+            int wl = std::get<1>(kL), tjlp = std::get<2>(kL);
+            int twl = SU2Heisenberg::bond_tS(wl);
+            for (auto& [kR, Rb] : R.blk) {
+                if (std::get<0>(kR) != tjr) continue;
+                int wr = std::get<1>(kR), tjrp = std::get<2>(kR);
+                int twr = SU2Heisenberg::bond_tS(wr);
+                for (auto& t1 : trans) {
+                    if (t1.a != wl) continue;
+                    int wm = t1.b, twm = SU2Heisenberg::bond_tS(wm);
+                    for (auto& t2 : trans) {
+                        if (t2.a != wm || t2.b != wr) continue;
+                        int lo = std::max(std::abs(tjlp - 1), std::abs(tjrp - 1));
+                        int hi = std::min(tjlp + 1, tjrp + 1);
+                        for (int tjcp = lo; tjcp <= hi; tjcp += 2) {
+                            const ThetaSpace::Blk* outb = sp.find(tjlp, tjcp, tjrp);
+                            if (!outb) continue;
+                            double Rc = recoup_2site(tjl, tjc, tjr, tjlp, tjcp, tjrp,
+                                                     twl, twm, twr, t1.tk, t2.tk);
+                            if (Rc == 0.0) continue;
+                            p.ops.push_back({&Lb, &Rb, Rc * t1.r * t2.r,
+                                             inb.off, inb.dl, inb.dr,
+                                             outb->off, outb->dl, outb->dr});
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return p;
+}
+
+// Lanczos for the lowest eigenpair of a symmetric operator (full reorthog).
+inline double lanczos_lowest(const std::function<Eigen::VectorXd(const Eigen::VectorXd&)>& applyH,
+                             Eigen::VectorXd v, Eigen::VectorXd& ground) {
+    int dim = (int)v.size();
+    if (v.norm() < 1e-300) v.setRandom();
+    v /= v.norm();
+    std::vector<Eigen::VectorXd> V; V.push_back(v);
+    std::vector<double> alpha, beta;
+    Eigen::VectorXd w = applyH(v);
+    alpha.push_back(w.dot(v));
+    w -= alpha[0] * v;
+    double Eprev = alpha[0];
+    int maxit = std::min(dim, 200);
+    for (int it = 1; it < maxit; ++it) {
+        for (auto& vv : V) w -= w.dot(vv) * vv;   // full reorthogonalization
+        double b = w.norm();
+        if (b < 1e-12) break;
+        beta.push_back(b);
+        v = w / b; V.push_back(v);
+        w = applyH(v);
+        alpha.push_back(w.dot(v));
+        w -= alpha.back() * v + b * V[V.size()-2];
+        int m = (int)alpha.size();
+        Eigen::MatrixXd T = Eigen::MatrixXd::Zero(m, m);
+        for (int i = 0; i < m; ++i) { T(i,i) = alpha[i];
+            if (i+1 < m) { T(i,i+1) = beta[i]; T(i+1,i) = beta[i]; } }
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(T);
+        double E0 = es.eigenvalues()(0);
+        if (it >= 2 && std::abs(E0 - Eprev) < 1e-12 * std::max(1.0, std::abs(E0))) {
+            Eigen::VectorXd z = es.eigenvectors().col(0);
+            ground = Eigen::VectorXd::Zero(dim);
+            for (int k = 0; k < m; ++k) ground += z(k) * V[k];
+            return E0;
+        }
+        Eprev = E0;
+    }
+    int m = (int)alpha.size();
+    Eigen::MatrixXd T = Eigen::MatrixXd::Zero(m, m);
+    for (int i = 0; i < m; ++i) { T(i,i) = alpha[i];
+        if (i+1 < m) { T(i,i+1) = beta[i]; T(i+1,i) = beta[i]; } }
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(T);
+    Eigen::VectorXd z = es.eigenvectors().col(0);
+    ground = Eigen::VectorXd::Zero(dim);
+    for (int k = 0; k < m; ++k) ground += z(k) * V[k];
+    return es.eigenvalues()(0);
+}
+
+// solve lowest eigenpair of H_eff via Lanczos on the plan; warm-started from
+// the current MPS Theta if provided. Works in the (2jr+1)-rescaled basis where
+// H_eff is plain-symmetric.
 inline double solve_2site(const ThetaSpace& sp, const Env& L, const Env& R,
                           const std::vector<SU2Heisenberg::Trans>& trans,
-                          Theta& theta_out) {
+                          Theta& theta_out, const Theta* warm = nullptr) {
     int n = sp.dim;
-    Eigen::VectorXd w(n);                 // sqrt weight per coordinate, w=2jr+1
+    if (n == 0) { theta_out = Theta{}; return 0.0; }
+    Heff2Plan plan = build_plan(sp, L, R, trans);
+    Eigen::VectorXd sw(n);                 // sqrt weight per coordinate, w = 2jr+1
     for (auto& b : sp.blks) {
-        double wv = std::sqrt((double)(b.tjr + 1));
-        for (int k = 0; k < b.dl*b.dr; ++k) w(b.off + k) = wv;
+        double s = std::sqrt((double)(b.tjr + 1));
+        for (int k = 0; k < b.dl*b.dr; ++k) sw(b.off + k) = s;
     }
-    Eigen::MatrixXd H(n, n);
-    for (int J = 0; J < n; ++J) {
-        Eigen::VectorXd e = Eigen::VectorXd::Zero(n); e(J) = 1.0;
-        Theta col = apply_heff_2site(sp.to_theta(e), L, R, trans);
-        H.col(J) = sp.to_vec(col);
-    }
-    // symmetrize in the weighted inner product: S = W^{1/2} H W^{-1/2}
-    Eigen::MatrixXd S(n, n);
-    for (int I = 0; I < n; ++I) for (int J = 0; J < n; ++J)
-        S(I,J) = w(I) * H(I,J) / w(J);
-    Eigen::MatrixXd Ssym = 0.5 * (S + S.transpose());
-    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(Ssym);
-    double E = es.eigenvalues()(0);
-    Eigen::VectorXd u = es.eigenvectors().col(0);
-    Eigen::VectorXd th = u.array() / w.array();   // Theta = W^{-1/2} u
-    theta_out = sp.to_theta(th);
+    auto applyH = [&](const Eigen::VectorXd& u) -> Eigen::VectorXd {
+        Eigen::VectorXd x = u.cwiseQuotient(sw), y;
+        plan.matvec(x, y);
+        return y.cwiseProduct(sw);
+    };
+    Eigen::VectorXd v0;
+    if (warm) v0 = sp.to_vec(*warm).cwiseProduct(sw);
+    else { v0 = Eigen::VectorXd::Random(n); }
+    Eigen::VectorXd ground;
+    double E = lanczos_lowest(applyH, v0, ground);
+    theta_out = sp.to_theta(ground.cwiseQuotient(sw));
     return E;
 }
 
@@ -257,8 +383,8 @@ inline double run_su2_dmrg(int N, double J, int max_mult, int n_sweeps,
         // left -> right
         for (int i = 0; i < N - 1; ++i) {
             ThetaSpace sp; sp.build(A[i].left, A[i+1].right);
-            Theta th;
-            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th);
+            Theta warm = form_theta(A[i], A[i+1]), th;
+            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm);
             SpinBond mid;
             svd_split(th, A[i].left, A[i+1].right, +1,
                       (i==0||i==N-2)?0:max_mult, 1e-12, A[i], A[i+1], mid);
@@ -267,8 +393,8 @@ inline double run_su2_dmrg(int N, double J, int max_mult, int n_sweeps,
         // right -> left
         for (int i = N - 2; i >= 0; --i) {
             ThetaSpace sp; sp.build(A[i].left, A[i+1].right);
-            Theta th;
-            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th);
+            Theta warm = form_theta(A[i], A[i+1]), th;
+            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm);
             SpinBond mid;
             svd_split(th, A[i].left, A[i+1].right, -1,
                       (i==0||i==N-2)?0:max_mult, 1e-12, A[i], A[i+1], mid);
