@@ -829,6 +829,28 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
     return mv;
 }
 
+// R->L: split the one-site centre tensor M into a RIGHT-canonical B[i] (stored in
+// mv.A) and centre matrices C[q_L] = U*S (stored in mv.C, to be absorbed into the
+// previous site). Per left-bond sector -- the physical+right index stays together.
+// mv.new_mid is the new LEFT bond space (bond[i]).
+static SiteMove singlesite_split_RL(const std::map<int,Mat>& M) {
+    SiteMove mv;
+    std::vector<std::pair<int,int>> new_sectors;
+    for (auto& [q_L, Mblk] : M) {
+        if (Mblk.size() == 0) continue;
+        Eigen::BDCSVD<Mat> svd(Mblk, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        int keep = (int)svd.singularValues().size();
+        mv.A[q_L] = svd.matrixV().adjoint().topRows(keep);   // keep x cols (right-canonical)
+        Mat Cp = svd.matrixU().leftCols(keep);               // dL x keep
+        for (int k = 0; k < keep; ++k) Cp.col(k) *= svd.singularValues()[k];
+        mv.C[q_L] = Cp;                                      // U S
+        new_sectors.emplace_back(q_L, keep);
+    }
+    std::sort(new_sectors.begin(), new_sectors.end());
+    mv.new_mid = BondSpace::from_pairs(new_sectors);
+    return mv;
+}
+
 // -- Block Lanczos (flat packing) ---------------------------------------------
 
 static int theta_total_dim(const std::map<int,Mat>& theta) {
@@ -1256,7 +1278,19 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         if (prof) acc += std::chrono::duration<double>(clk::now() - t0).count();
     };
 
-    for (int sweep = 0; sweep < n_sweeps; ++sweep) {
+    // Hybrid mode: a few two-site warm-up sweeps (to set the bond dimensions), then
+    // cheaper single-site refinement sweeps. Gated by QX_DMRG_SINGLESITE while it is
+    // being validated; the default remains pure two-site.
+    // Hybrid: two-site warm-up until the bond dimensions stabilise (the bond
+    // distribution across QN sectors is what single-site can't adapt), then switch
+    // to cheaper single-site refinement. Gated by QX_DMRG_SINGLESITE while validating.
+    const bool use_ss = (std::getenv("QX_DMRG_NO_SINGLESITE") == nullptr);
+    int min_warmup = 2, max_warmup = n_sweeps;
+    if (const char* w = std::getenv("QX_DMRG_WARMUP")) min_warmup = std::atoi(w);
+    bool do_ss = false;
+    int  ss_start = n_sweeps;
+
+    for (int sweep = 0; sweep < max_warmup; ++sweep) {
         double sweep_trunc = 0, E0 = 0;
 
         // Left-to-right half sweep
@@ -1350,14 +1384,113 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 
         result.sweep_energies.push_back(E0);
         result.truncation_error = sweep_trunc;
-        if (sweep > 0 && std::abs(E0 - prev_energy) < tol) {
-            result.n_sweeps_done = sweep + 1;
-            result.energy = E0;
-            break;
+        double dE = (sweep > 0) ? std::abs(E0 - prev_energy) : 1e30;
+        result.n_sweeps_done = sweep + 1;
+        result.energy = E0;
+        if (dE < tol) break;                       // fully converged (no single-site needed)
+        // Switch to single-site once the two-site energy has nearly plateaued: the
+        // bond distribution is then essentially set, and the cheaper single-site
+        // sweeps polish the energy the rest of the way.
+        if (use_ss && sweep + 1 >= min_warmup && dE < 1e-4 * std::abs(E0)) {
+            do_ss = true; ss_start = sweep + 1; prev_energy = E0; break;
         }
         prev_energy = E0;
-        result.energy = E0;
-        result.n_sweeps_done = sweep + 1;
+    }
+
+    // ---- Single-site refinement phase (hybrid) ------------------------------
+    if (do_ss && ss_start < n_sweeps) {
+        // Centre on site 0 (after the warm-up's final R->L it sits at bond 1).
+        std::map<int,Mat> M = block_A[0];
+        for (auto& [q_L, blk] : M) {
+            int dR_up = bond[1].dim(q_L + 1), dR_dn = bond[1].dim(q_L - 1);
+            if (dR_up > 0 && block_sv[0].count(q_L + 1)) {
+                const RVec& s = block_sv[0].at(q_L + 1);
+                for (int c = 0; c < dR_up && c < s.size(); ++c) blk.col(c) *= s[c];
+            }
+            if (dR_dn > 0 && block_sv[0].count(q_L - 1)) {
+                const RVec& s = block_sv[0].at(q_L - 1);
+                for (int c = 0; c < dR_dn && c < s.size(); ++c) blk.col(dR_up + c) *= s[c];
+            }
+        }
+
+        for (int sweep = ss_start; sweep < n_sweeps; ++sweep) {
+            double E0 = 0;
+            // L->R: optimise each site, move the centre rightward.
+            for (int i = 0; i < n; ++i) {
+                auto mv = [&](const std::map<int,Mat>& v) {
+                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1]);
+                };
+                auto tt = clk::now();
+                auto [E, Mopt] = block_lanczos(mv, M);
+                tick(t_lanczos, tt);
+                E0 = E;
+                if (i < n - 1) {
+                    tt = clk::now();
+                    SiteMove sp = singlesite_split_LR(Mopt, bond[i], bond[i+1]);
+                    tick(t_svd, tt);
+                    block_A[i] = sp.A;
+                    bond[i+1] = sp.new_mid;
+                    std::map<int,Mat> Mn;   // absorb centre into the next site
+                    for (auto& [q_R, Cb] : sp.C) {
+                        auto it = block_A[i+1].find(q_R);
+                        if (it != block_A[i+1].end()) Mn[q_R] = Cb * it->second;
+                    }
+                    M = std::move(Mn);
+                    tt = clk::now();
+                    L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
+                    tick(t_env, tt);
+                } else {
+                    M = std::move(Mopt);
+                }
+            }
+            // R->L: optimise each site, move the centre leftward.
+            for (int i = n - 1; i >= 0; --i) {
+                auto mv = [&](const std::map<int,Mat>& v) {
+                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1]);
+                };
+                auto tt = clk::now();
+                auto [E, Mopt] = block_lanczos(mv, M);
+                tick(t_lanczos, tt);
+                E0 = E;
+                if (i > 0) {
+                    BondSpace old_bond_i = bond[i];
+                    tt = clk::now();
+                    SiteMove sp = singlesite_split_RL(Mopt);
+                    tick(t_svd, tt);
+                    block_A[i] = sp.A;          // right-canonical
+                    bond[i] = sp.new_mid;       // new LEFT bond of site i
+                    std::map<int,Mat> Mp;       // absorb centre into the previous site
+                    for (auto& [q_Lp, Ab] : block_A[i-1]) {
+                        int dLp = bond[i-1].dim(q_Lp);
+                        int oldRup = old_bond_i.dim(q_Lp + 1);  // up-block width of A[i-1]
+                        int ku = sp.new_mid.dim(q_Lp + 1), kd = sp.new_mid.dim(q_Lp - 1);
+                        Mat Mb = Mat::Zero(dLp, ku + kd);
+                        if (ku > 0 && sp.C.count(q_Lp + 1))
+                            Mb.leftCols(ku)  = Ab.leftCols(oldRup) * sp.C[q_Lp + 1];
+                        if (kd > 0 && sp.C.count(q_Lp - 1))
+                            Mb.rightCols(kd) = Ab.middleCols(oldRup, old_bond_i.dim(q_Lp - 1)) * sp.C[q_Lp - 1];
+                        Mp[q_Lp] = Mb;
+                    }
+                    M = std::move(Mp);
+                    tt = clk::now();
+                    R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+                    tick(t_env, tt);
+                } else {
+                    M = std::move(Mopt);
+                }
+            }
+            // Leave the centre on site 0 so the state is consistent.
+            block_A[0] = M;
+            for (auto& [q, blk] : block_sv[0]) blk = RVec::Ones(blk.size());
+
+            result.sweep_energies.push_back(E0);
+            if (std::abs(E0 - prev_energy) < tol) {
+                result.energy = E0; result.n_sweeps_done = sweep + 1; break;
+            }
+            prev_energy = E0;
+            result.energy = E0;
+            result.n_sweeps_done = sweep + 1;
+        }
     }
 
     // Validation of the single-site H_eff: after the final R->L half-sweep the
