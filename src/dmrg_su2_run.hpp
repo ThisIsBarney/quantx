@@ -14,8 +14,19 @@
 #include <random>
 #include <algorithm>
 #include <functional>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 
 namespace qx_su2 {
+
+// coarse phase profiling (printed by run_su2_dmrg when QX_SU2_PROFILE is set)
+struct SU2Prof { double build = 0, lanczos = 0, svd = 0, grow = 0, warm = 0; };
+inline SU2Prof& su2_prof() { static SU2Prof p; return p; }
+inline double su2_ms() {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 // number of fusion paths from spin 0 to each multiplet after k spin-1/2's
 inline std::vector<std::map<int,long long>> left_paths(int N) {
@@ -144,21 +155,39 @@ inline Theta form_theta(const Site& Ai, const Site& Aj) {
 }
 
 // ----- precomputed two-site H_eff contraction plan -------------------------
-// Each op replays as  Y_out += coeff * (L^T * Th_in * R). Recoupling computed
-// once at build (cached), reused across every Lanczos matvec.
+// Recoupling computed once at build (cached), reused across every Lanczos
+// matvec. Ops are grouped BY OUTPUT BLOCK: each group writes a distinct output
+// region, so the matvec parallelizes over groups with no write races.
 struct Heff2Plan {
-    struct Op { const Mat* L; const Mat* R; double coeff;
-                int in_off, in_dl, in_dr, out_off, out_dl, out_dr; };
-    std::vector<Op> ops;
+    struct Term { const Mat* L; const Mat* R; double coeff; int in_off, in_dl, in_dr; };
+    struct Group { int out_off, out_dl, out_dr; std::vector<Term> terms; };
+    std::vector<Group> groups;
     int dim = 0;
     using RMap  = Eigen::Map<Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>>;
     using cRMap = Eigen::Map<const Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>>;
     void matvec(const Eigen::VectorXd& x, Eigen::VectorXd& y) const {
         y.setZero(dim);
-        for (auto& op : ops) {
-            cRMap Th(x.data() + op.in_off, op.in_dl, op.in_dr);
-            RMap  Y (y.data() + op.out_off, op.out_dl, op.out_dr);
-            Y.noalias() += op.coeff * (op.L->transpose() * Th * (*op.R));
+        const double* xd = x.data();
+        double* yd = y.data();
+        const int ng = (int)groups.size();
+        // Per-thread reusable scratch keeps the hot loop allocation-free -- with
+        // heap allocs inside, many threads serialize on the malloc lock and the
+        // parallel matvec runs *slower* than serial (catastrophically so at
+        // large chi). Eigen GEMM is pinned to 1 thread; we parallelize over
+        // output groups (each writes a disjoint region, so no write races).
+        #pragma omp parallel if(ng > 16)
+        {
+            Mat scratch;
+            #pragma omp for schedule(dynamic)
+            for (int gi = 0; gi < ng; ++gi) {
+                const Group& g = groups[gi];
+                RMap Y(yd + g.out_off, g.out_dl, g.out_dr);
+                for (auto& t : g.terms) {
+                    cRMap Th(xd + t.in_off, t.in_dl, t.in_dr);
+                    scratch.noalias() = Th * (*t.R);                 // (in_dl x out_dr)
+                    Y.noalias() += t.coeff * (t.L->transpose() * scratch);
+                }
+            }
         }
     }
 };
@@ -166,6 +195,7 @@ struct Heff2Plan {
 inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
                             const std::vector<SU2Heisenberg::Trans>& trans) {
     Heff2Plan p; p.dim = sp.dim;
+    std::map<int,int> grp;       // out_off -> group index
     for (auto& inb : sp.blks) {
         int tjl = inb.tjl, tjc = inb.tjc, tjr = inb.tjr;
         for (auto& [kL, Lb] : L.blk) {
@@ -189,9 +219,15 @@ inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
                             double Rc = recoup_2site(tjl, tjc, tjr, tjlp, tjcp, tjrp,
                                                      twl, twm, twr, t1.tk, t2.tk);
                             if (Rc == 0.0) continue;
-                            p.ops.push_back({&Lb, &Rb, Rc * t1.r * t2.r,
-                                             inb.off, inb.dl, inb.dr,
-                                             outb->off, outb->dl, outb->dr});
+                            auto it = grp.find(outb->off);
+                            int gi;
+                            if (it == grp.end()) {
+                                gi = (int)p.groups.size();
+                                grp[outb->off] = gi;
+                                p.groups.push_back({outb->off, outb->dl, outb->dr, {}});
+                            } else gi = it->second;
+                            p.groups[gi].terms.push_back(
+                                {&Lb, &Rb, Rc * t1.r * t2.r, inb.off, inb.dl, inb.dr});
                         }
                     }
                 }
@@ -256,7 +292,9 @@ inline double solve_2site(const ThetaSpace& sp, const Env& L, const Env& R,
                           Theta& theta_out, const Theta* warm = nullptr) {
     int n = sp.dim;
     if (n == 0) { theta_out = Theta{}; return 0.0; }
+    double t0 = su2_ms();
     Heff2Plan plan = build_plan(sp, L, R, trans);
+    su2_prof().build += su2_ms() - t0;
     Eigen::VectorXd sw(n);                 // sqrt weight per coordinate, w = 2jr+1
     for (auto& b : sp.blks) {
         double s = std::sqrt((double)(b.tjr + 1));
@@ -271,7 +309,9 @@ inline double solve_2site(const ThetaSpace& sp, const Env& L, const Env& R,
     if (warm) v0 = sp.to_vec(*warm).cwiseProduct(sw);
     else { v0 = Eigen::VectorXd::Random(n); }
     Eigen::VectorXd ground;
+    double t1 = su2_ms();
     double E = lanczos_lowest(applyH, v0, ground);
+    su2_prof().lanczos += su2_ms() - t1;
     theta_out = sp.to_theta(ground.cwiseQuotient(sw));
     return E;
 }
@@ -311,20 +351,31 @@ inline void svd_split(const Theta& th, SpinBond bondL, SpinBond bondR,
             M[tjc](rowpos[tjc][{tjl,a}], colpos[tjc][{tjr,c}]) = scale * blk(a,c);
     }
 
-    // SVD each jc; store U,V,s in plain matrices; collect singular values
+    // SVD each jc (independent sectors -> parallel). BDCSVD (divide & conquer)
+    // is much faster than JacobiSVD for the larger blocks.
     struct SV { int tjc; int idx; double s; };
+    std::vector<int> jcs; std::vector<Mat*> Mptr;
+    for (auto& [tjc, m] : M) { jcs.push_back(tjc); Mptr.push_back(&m); }
+    int nj = (int)jcs.size();
+    std::vector<Mat> Uv(nj), Vv(nj);
+    std::vector<Eigen::VectorXd> Sv(nj);
+    #pragma omp parallel for schedule(dynamic) if(nj > 2)
+    for (int j = 0; j < nj; ++j) {
+        Eigen::BDCSVD<Mat> svd(*Mptr[j], Eigen::ComputeThinU | Eigen::ComputeThinV);
+        Uv[j] = svd.matrixU();
+        Vv[j] = svd.matrixV();
+        Sv[j] = svd.singularValues();
+    }
     std::map<int, Mat> Umap, Vmap;
     std::map<int, Eigen::VectorXd> Smap;
     std::vector<SV> all;
-    for (auto& [tjc, m] : M) {
-        Eigen::JacobiSVD<Mat> svd(m, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        Umap[tjc] = svd.matrixU();
-        Vmap[tjc] = svd.matrixV();
-        Smap[tjc] = svd.singularValues();
-        for (int i = 0; i < svd.singularValues().size(); ++i) {
-            double sv = svd.singularValues()(i);
-            if (sv > tol) all.push_back({tjc, i, sv});
-        }
+    for (int j = 0; j < nj; ++j) {
+        int tjc = jcs[j];
+        for (int i = 0; i < Sv[j].size(); ++i)
+            if (Sv[j](i) > tol) all.push_back({tjc, i, Sv[j](i)});
+        Umap[tjc] = std::move(Uv[j]);
+        Vmap[tjc] = std::move(Vv[j]);
+        Smap[tjc] = std::move(Sv[j]);
     }
     // rank by (2jc+1) s^2 descending (discarded-weight optimal); cap multiplets
     std::sort(all.begin(), all.end(), [](const SV&a, const SV&b){
@@ -382,6 +433,7 @@ inline void svd_split(const Theta& th, SpinBond bondL, SpinBond bondR,
 // ----- full sweep driver ---------------------------------------------------
 inline double run_su2_dmrg(int N, double J, int max_mult, int n_sweeps,
                            unsigned seed = 1) {
+    Eigen::setNbThreads(1);   // we parallelize at the group/sector level; avoid nested GEMM threads
     auto trans = SU2Heisenberg::transitions(J);
     auto bonds = exact_bonds(N);
     for (auto& b : bonds) b = cap_bond(b, max_mult);   // bound the initial MPS size
@@ -395,27 +447,38 @@ inline double run_su2_dmrg(int N, double J, int max_mult, int n_sweeps,
     for (int i = N - 1; i >= 1; --i) Renv[i] = grow_right(Renv[i+1], A[i], trans);
 
     double E = 0;
+    double tt;
     for (int sweep = 0; sweep < n_sweeps; ++sweep) {
         // left -> right
         for (int i = 0; i < N - 1; ++i) {
             ThetaSpace sp; sp.build(A[i].left, A[i+1].right);
-            Theta warm = form_theta(A[i], A[i+1]), th;
+            tt = su2_ms(); Theta warm = form_theta(A[i], A[i+1]), th; su2_prof().warm += su2_ms()-tt;
             E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm);
             SpinBond mid;
+            tt = su2_ms();
             svd_split(th, A[i].left, A[i+1].right, +1,
                       (i==0||i==N-2)?0:max_mult, 1e-12, A[i], A[i+1], mid);
-            Lenv[i+1] = grow_left(Lenv[i], A[i], trans);
+            su2_prof().svd += su2_ms()-tt;
+            tt = su2_ms(); Lenv[i+1] = grow_left(Lenv[i], A[i], trans); su2_prof().grow += su2_ms()-tt;
         }
         // right -> left
         for (int i = N - 2; i >= 0; --i) {
             ThetaSpace sp; sp.build(A[i].left, A[i+1].right);
-            Theta warm = form_theta(A[i], A[i+1]), th;
+            tt = su2_ms(); Theta warm = form_theta(A[i], A[i+1]), th; su2_prof().warm += su2_ms()-tt;
             E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm);
             SpinBond mid;
+            tt = su2_ms();
             svd_split(th, A[i].left, A[i+1].right, -1,
                       (i==0||i==N-2)?0:max_mult, 1e-12, A[i], A[i+1], mid);
-            Renv[i+1] = grow_right(Renv[i+2], A[i+1], trans);
+            su2_prof().svd += su2_ms()-tt;
+            tt = su2_ms(); Renv[i+1] = grow_right(Renv[i+2], A[i+1], trans); su2_prof().grow += su2_ms()-tt;
         }
+    }
+    if (std::getenv("QX_SU2_PROFILE")) {
+        auto& p = su2_prof();
+        fprintf(stderr, "  [prof N=%d] build=%.0f lanczos=%.0f svd=%.0f grow=%.0f warm=%.0f ms\n",
+                N, p.build, p.lanczos, p.svd, p.grow, p.warm);
+        p = SU2Prof{};
     }
     return E;
 }
