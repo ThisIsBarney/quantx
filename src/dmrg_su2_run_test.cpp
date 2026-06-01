@@ -58,6 +58,20 @@ static void run_trunc(int N, int max_mult) {
            N, max_mult, e, ref, err, ok ? "OK" : "FAIL");
 }
 
+// Show the SU(2) payoff: at the middle bond of the exact MPS, how many
+// multiplets SU(2) tracks vs the equivalent U(1) (Sz) state count.
+static void show_reduction(int N) {
+    auto bonds = exact_bonds(N);
+    const SpinBond& b = bonds[N/2];
+    int n_mult = 0, n_u1 = 0;
+    for (int i = 0; i < b.n(); ++i) {
+        n_mult += b.deg[i];                 // reduced multiplets stored
+        n_u1   += b.deg[i] * (b.tS[i] + 1); // each spin-S multiplet = 2S+1 = tS+1 states
+    }
+    printf("  N=%-3d middle bond: %3d SU(2) multiplets  vs %4d U(1) states  (%.2fx fewer)\n",
+           N, n_mult, n_u1, (double)n_u1 / n_mult);
+}
+
 int main() {
     printf("SU(2) two-site DMRG vs dense ED (H = J sum sigma.sigma, OBC):\n");
     run(4);
@@ -66,6 +80,11 @@ int main() {
     printf("Truncated (multiplet cap):\n");
     run_trunc(10, 20);
     run_trunc(12, 30);
+    printf("SU(2) multiplet reduction (exact middle bond):\n");
+    show_reduction(8);
+    show_reduction(16);
+    show_reduction(24);
+    show_reduction(32);
     printf("\n%s\n", failures == 0 ? "ALL PASSED" : "SOME FAILED");
     return failures == 0 ? 0 : 1;
 }
