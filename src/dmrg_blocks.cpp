@@ -15,6 +15,13 @@
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
+#ifdef _OPENMP
+#include <omp.h>
+#else
+static inline int omp_get_thread_num() { return 0; }
+static inline int omp_get_max_threads() { return 1; }
+#endif
+
 namespace qx_dmrg {
 
 // =============================================================================
@@ -414,6 +421,12 @@ struct HeffPlan {
         std::vector<LGroup> lgroups;
     };
     std::vector<T1Group> groups;
+
+    // Row-chunked reduction tasks: summing the per-thread partial outputs is
+    // parallelised over (out sector, row range) so the dominant sector does not
+    // serialise the merge. Built once per bond from out_shape.
+    struct Chunk { int out_idx, r0, rc; };
+    std::vector<Chunk> reduce_chunks;
 };
 
 // Build the plan. `ket_keys` are the sectors the input theta will carry (the
@@ -519,6 +532,13 @@ static HeffPlan build_heff_plan(
             }
         }
     }
+    // Row-chunked reduction tasks (split big sectors so the merge parallelises).
+    constexpr int CH = 48;
+    for (int s = 0; s < (int)plan.out_q.size(); ++s) {
+        int rows = plan.out_shape[s].first;
+        for (int r0 = 0; r0 < rows; r0 += CH)
+            plan.reduce_chunks.push_back({s, r0, std::min(CH, rows - r0)});
+    }
     return plan;
 }
 
@@ -538,14 +558,10 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
         if (it != theta.end()) theta_blocks[k] = &it->second;
     }
 
-    std::vector<Mat> out(n_out);  // lazily zero-filled
+    std::vector<Mat> out(n_out);
 
-    #pragma omp parallel if(par)
-    {
-        std::vector<Mat> out_loc(par ? n_out : 0);
-        std::vector<Mat>& dst = par ? out_loc : out;
-
-        #pragma omp for schedule(dynamic) nowait
+    if (!par) {
+        // Serial: accumulate straight into `out`.
         for (int gi = 0; gi < n_grp; ++gi) {
             const HeffPlan::T1Group& g = plan.groups[gi];
             const Mat* theta_q = theta_blocks[g.ket_idx];
@@ -554,7 +570,7 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
             for (const auto& lg : g.lgroups) {
                 Mat LT1 = (*lg.Lblk) * T1;
                 for (const auto& wr : lg.writes) {
-                    Mat& o = dst[wr.out_idx];
+                    Mat& o = out[wr.out_idx];
                     if (o.size() == 0)
                         o = Mat::Zero(plan.out_shape[wr.out_idx].first,
                                       plan.out_shape[wr.out_idx].second);
@@ -562,12 +578,55 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
                 }
             }
         }
-        if (par) {
-            #pragma omp critical
-            for (int i = 0; i < n_out; ++i) {
-                if (out_loc[i].size() == 0) continue;
-                if (out[i].size() == 0) out[i] = out_loc[i];
-                else out[i] += out_loc[i];
+    } else {
+        // Parallel: each thread builds a private partial output; the partials are
+        // then summed by a row-chunked parallel reduction (no serial critical merge).
+        const int nthreads = omp_get_max_threads();
+        std::vector<std::vector<Mat>> tls(nthreads);
+
+        #pragma omp parallel
+        {
+            int tid = omp_get_thread_num();
+            std::vector<Mat>& dst = tls[tid];
+            dst.assign(n_out, Mat());
+            #pragma omp for schedule(dynamic) nowait
+            for (int gi = 0; gi < n_grp; ++gi) {
+                const HeffPlan::T1Group& g = plan.groups[gi];
+                const Mat* theta_q = theta_blocks[g.ket_idx];
+                if (!theta_q) continue;
+                Mat T1 = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
+                for (const auto& lg : g.lgroups) {
+                    Mat LT1 = (*lg.Lblk) * T1;
+                    for (const auto& wr : lg.writes) {
+                        Mat& o = dst[wr.out_idx];
+                        if (o.size() == 0)
+                            o = Mat::Zero(plan.out_shape[wr.out_idx].first,
+                                          plan.out_shape[wr.out_idx].second);
+                        o.block(wr.row_b, wr.col_b, wr.dL_b, wr.dR_b).noalias() += wr.w * LT1;
+                    }
+                }
+            }
+        }  // implicit barrier
+
+        // Allocate output for touched sectors (every row is rewritten below).
+        for (int s = 0; s < n_out; ++s)
+            for (int t = 0; t < nthreads; ++t)
+                if (!tls[t].empty() && tls[t][s].size() != 0) {
+                    out[s].resize(plan.out_shape[s].first, plan.out_shape[s].second);
+                    break;
+                }
+
+        const int n_chunk = (int)plan.reduce_chunks.size();
+        #pragma omp parallel for schedule(dynamic)
+        for (int ci = 0; ci < n_chunk; ++ci) {
+            const auto& ch = plan.reduce_chunks[ci];
+            if (out[ch.out_idx].size() == 0) continue;  // untouched sector
+            bool first = true;
+            for (int t = 0; t < nthreads; ++t) {
+                if (tls[t].empty() || tls[t][ch.out_idx].size() == 0) continue;
+                auto src = tls[t][ch.out_idx].middleRows(ch.r0, ch.rc);
+                if (first) { out[ch.out_idx].middleRows(ch.r0, ch.rc) = src; first = false; }
+                else       { out[ch.out_idx].middleRows(ch.r0, ch.rc) += src; }
             }
         }
     }
