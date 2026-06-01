@@ -263,11 +263,17 @@ target_link_libraries(qx_su2_env_test PRIVATE qx_eigen)
 target_include_directories(qx_su2_env_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_su2_env_test)
 
+add_executable(qx_su2_heff_test src/dmrg_su2_heff_test.cpp)
+target_link_libraries(qx_su2_heff_test PRIVATE qx_eigen)
+target_include_directories(qx_su2_heff_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+qx_set_config_output_dirs(qx_su2_heff_test)
+
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
 add_test(NAME qx_su2_test COMMAND qx_su2_test)
 add_test(NAME qx_su2_mpo_test COMMAND qx_su2_mpo_test)
 add_test(NAME qx_su2_env_test COMMAND qx_su2_env_test)
+add_test(NAME qx_su2_heff_test COMMAND qx_su2_heff_test)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
 

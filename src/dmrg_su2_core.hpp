@@ -220,4 +220,116 @@ inline Env grow_right(const Env& R, const Site& A,
     return Rnew;
 }
 
+// ----- two-site reduced wavefunction --------------------------------------
+// Theta keyed by (tjl, tjc, tjr): sequential fusion tree jl (x) 1/2 -> jc,
+// jc (x) 1/2 -> jr. Matrix is (deg_l x deg_r) over the outer MPS bond mults.
+using Key3 = std::tuple<int,int,int>;
+using Theta = std::map<Key3, Mat>;
+
+// Recoupling for the two-site H_eff. Computed by CG-sum over the full network:
+//   left env (jl (x) wl -> jl'), W1 (wl->wm, rank k1) on site1,
+//   W2 (wm->wr, rank k2) on site2, right env (jr (x) wr -> jr').
+// Input fusion tree (jl,jc,jr) -> output fusion tree (jl',jc',jr').
+inline double recoup_2site(int tjl, int tjc, int tjr,
+                           int tjlp, int tjcp, int tjrp,
+                           int twl, int twm, int twr,
+                           int tk1, int tk2) {
+    const int tp = 1;
+    double num = 0.0, den = 0.0;
+    for (int mlp = -tjlp; mlp <= tjlp; mlp += 2)
+    for (int mu1p = -tp; mu1p <= tp; mu1p += 2) {
+        int mcp = mlp + mu1p;
+        if (mcp < -tjcp || mcp > tjcp) continue;
+        double cgO1 = clebsch_gordan(tjlp, mlp, tp, mu1p, tjcp, mcp);
+        if (cgO1 == 0.0) continue;
+        for (int mu2p = -tp; mu2p <= tp; mu2p += 2) {
+            int mrp = mcp + mu2p;
+            if (mrp < -tjrp || mrp > tjrp) continue;
+            double cgO2 = clebsch_gordan(tjcp, mcp, tp, mu2p, tjrp, mrp);
+            if (cgO2 == 0.0) continue;
+            double Pout = cgO1 * cgO2;
+            double full = 0.0;
+            for (int ml = -tjl; ml <= tjl; ml += 2)
+            for (int mu1 = -tp; mu1 <= tp; mu1 += 2) {
+                int mc = ml + mu1;
+                if (mc < -tjc || mc > tjc) continue;
+                double cgI1 = clebsch_gordan(tjl, ml, tp, mu1, tjc, mc);
+                if (cgI1 == 0.0) continue;
+                int mwl = mlp - ml;                    // Lenv: ml' = ml + mwl
+                if (mwl < -twl || mwl > twl) continue;
+                double cgL = clebsch_gordan(tjl, ml, twl, mwl, tjlp, mlp);
+                if (cgL == 0.0) continue;
+                int q1 = mu1p - mu1;                   // W1 phys: mu1' = mu1 + q1
+                int mwm = mwl + q1;                    // W1 bond
+                if (mwm < -twm || mwm > twm) continue;
+                double cgWb1 = clebsch_gordan(twl, mwl, tk1, q1, twm, mwm);
+                if (cgWb1 == 0.0) continue;
+                double cgWp1 = clebsch_gordan(tp, mu1, tk1, q1, tp, mu1p);
+                if (cgWp1 == 0.0) continue;
+                for (int mu2 = -tp; mu2 <= tp; mu2 += 2) {
+                    int mr = mc + mu2;
+                    if (mr < -tjr || mr > tjr) continue;
+                    double cgI2 = clebsch_gordan(tjc, mc, tp, mu2, tjr, mr);
+                    if (cgI2 == 0.0) continue;
+                    int q2 = mu2p - mu2;               // W2 phys
+                    int mwr = mwm + q2;                // W2 bond
+                    if (mwr < -twr || mwr > twr) continue;
+                    if (mr + mwr != mrp) continue;     // Renv: mr' = mr + mwr
+                    double cgWb2 = clebsch_gordan(twm, mwm, tk2, q2, twr, mwr);
+                    if (cgWb2 == 0.0) continue;
+                    double cgWp2 = clebsch_gordan(tp, mu2, tk2, q2, tp, mu2p);
+                    if (cgWp2 == 0.0) continue;
+                    double cgR = clebsch_gordan(tjr, mr, twr, mwr, tjrp, mrp);
+                    if (cgR == 0.0) continue;
+                    full += cgI1 * cgI2 * cgL * cgR * cgWb1 * cgWp1 * cgWb2 * cgWp2;
+                }
+            }
+            num += Pout * full;
+            den += Pout * Pout;
+        }
+    }
+    return den > 0 ? num / den : 0.0;
+}
+
+// Two-site effective Hamiltonian matvec: Theta' = H_eff Theta.
+// L: left env at site1's left bond (ket jl, MPO wl, bra jl'). R: right env at
+// site2's right bond (ket jr, MPO wr, bra jr').
+inline Theta apply_heff_2site(const Theta& th, const Env& L, const Env& R,
+                              const std::vector<SU2Heisenberg::Trans>& trans) {
+    Theta out;
+    for (auto& [kin, Th] : th) {
+        int tjl = std::get<0>(kin), tjc = std::get<1>(kin), tjr = std::get<2>(kin);
+        for (auto& [kL, Lb] : L.blk) {
+            if (std::get<0>(kL) != tjl) continue;
+            int wl = std::get<1>(kL), tjlp = std::get<2>(kL);
+            int twl = SU2Heisenberg::bond_tS(wl);
+            for (auto& [kR, Rb] : R.blk) {
+                if (std::get<0>(kR) != tjr) continue;
+                int wr = std::get<1>(kR), tjrp = std::get<2>(kR);
+                int twr = SU2Heisenberg::bond_tS(wr);
+                for (auto& t1 : trans) {
+                    if (t1.a != wl) continue;
+                    int wm = t1.b, twm = SU2Heisenberg::bond_tS(wm);
+                    for (auto& t2 : trans) {
+                        if (t2.a != wm || t2.b != wr) continue;
+                        int lo = std::max(std::abs(tjlp - 1), std::abs(tjrp - 1));
+                        int hi = std::min(tjlp + 1, tjrp + 1);
+                        for (int tjcp = lo; tjcp <= hi; tjcp += 2) {
+                            double Rc = recoup_2site(tjl, tjc, tjr, tjlp, tjcp, tjrp,
+                                                     twl, twm, twr, t1.tk, t2.tk);
+                            if (Rc == 0.0) continue;
+                            Mat contrib = (Rc * t1.r * t2.r) * (Lb.transpose() * Th * Rb);
+                            Key3 ko{tjlp, tjcp, tjrp};
+                            auto it = out.find(ko);
+                            if (it == out.end()) out[ko] = contrib;
+                            else it->second += contrib;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
 } // namespace qx_su2
