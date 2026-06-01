@@ -767,6 +767,68 @@ static std::map<int,Mat> apply_heff_1site(
     return out;
 }
 
+// -- Single-site canonicalisation (center move) -------------------------------
+//
+// L->R: split the one-site centre tensor M (block_A[i] layout over bs_L x bs_mid)
+// into a left-canonical A[i] and centre matrices C[q_R] (to be absorbed into the
+// next site).  Grouping by the right-bond QN q_R, the rows that map to q_R are the
+// up-block of M[q_R-1] and the dn-block of M[q_R+1]; an SVD of that stacked matrix
+// gives U (-> A) and S V^dag (-> C).  No truncation (keep = min(rows, dim)).
+struct SiteMove {
+    std::map<int,Mat> A;       // q_L -> left-canonical site tensor
+    std::map<int,Mat> C;       // q_R -> centre matrix (keep x old dim)
+    BondSpace          new_mid;
+};
+
+static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
+                                    const BondSpace& bs_L, const BondSpace& bs_mid) {
+    SiteMove mv;
+    std::map<int,Mat> Umap;     // q_R -> U (rows x keep)
+    std::map<int,int> keepmap;  // q_R -> keep
+    std::vector<std::pair<int,int>> new_sectors;
+
+    std::set<int> qRs;
+    for (auto& [q_L, _] : M) { qRs.insert(q_L + 1); qRs.insert(q_L - 1); }
+
+    for (int q_R : qRs) {
+        int dRmid = bs_mid.dim(q_R);
+        if (dRmid == 0) continue;
+        int dL_up = bs_L.dim(q_R - 1);   // s=up rows come from M[q_R-1]
+        int dL_dn = bs_L.dim(q_R + 1);   // s=dn rows come from M[q_R+1]
+        int rows = dL_up + dL_dn;
+        if (rows == 0) continue;
+        Mat X = Mat::Zero(rows, dRmid);
+        if (dL_up > 0 && M.count(q_R - 1))
+            X.topRows(dL_up) = M.at(q_R - 1).leftCols(dRmid);            // up-block
+        if (dL_dn > 0 && M.count(q_R + 1)) {
+            int dRup_p = bs_mid.dim(q_R + 2);                            // up-width of M[q_R+1]
+            X.bottomRows(dL_dn) = M.at(q_R + 1).block(0, dRup_p, dL_dn, dRmid);  // dn-block
+        }
+        Eigen::BDCSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        int keep = (int)svd.singularValues().size();
+        Umap[q_R] = svd.matrixU().leftCols(keep);
+        Mat Vt = svd.matrixV().adjoint().topRows(keep);                 // keep x dRmid
+        for (int k = 0; k < keep; ++k) Vt.row(k) *= svd.singularValues()[k];
+        mv.C[q_R] = Vt;                                                 // S V^dag
+        keepmap[q_R] = keep;
+        new_sectors.emplace_back(q_R, keep);
+    }
+    std::sort(new_sectors.begin(), new_sectors.end());
+    mv.new_mid = BondSpace::from_pairs(new_sectors);
+
+    // Reassemble A[q_L]: up-cols from split(q_L+1) top rows, dn-cols from split(q_L-1) bottom rows.
+    for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
+        int q_L = bs_L.qns[qi], dL = bs_L.dims[qi];
+        int keep_up = keepmap.count(q_L + 1) ? keepmap[q_L + 1] : 0;
+        int keep_dn = keepmap.count(q_L - 1) ? keepmap[q_L - 1] : 0;
+        Mat A = Mat::Zero(dL, keep_up + keep_dn);
+        if (keep_up > 0) A.leftCols(keep_up)  = Umap[q_L + 1].topRows(dL);
+        if (keep_dn > 0) A.rightCols(keep_dn) = Umap[q_L - 1].bottomRows(dL);
+        mv.A[q_L] = A;
+    }
+    return mv;
+}
+
 // -- Block Lanczos (flat packing) ---------------------------------------------
 
 static int theta_total_dim(const std::map<int,Mat>& theta) {
@@ -1323,6 +1385,39 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         double e1 = (den > 1e-30) ? num / den : 0;
         printf("[QX_1SITE_CHECK n=%d] E(2site)=%.8f  E(1site H_eff)=%.8f  diff=%.2e\n",
                n, result.energy, e1, std::abs(result.energy - e1));
+
+        // Isolation test of the L->R single-site split on a middle site tensor.
+        if (n >= 4) {
+            int si = n / 2;
+            SiteMove mvsp = singlesite_split_LR(block_A[si], bond[si], bond[si+1]);
+            // (1) reconstruction A.C == M
+            double recon = 0;
+            for (auto& [q_L, Mblk] : block_A[si]) {
+                int dL = bond[si].dim(q_L);
+                int dR_up = bond[si+1].dim(q_L+1), dR_dn = bond[si+1].dim(q_L-1);
+                Mat R = Mat::Zero(dL, dR_up + dR_dn);
+                int ku = mvsp.new_mid.dim(q_L+1), kd = mvsp.new_mid.dim(q_L-1);
+                if (dR_up > 0 && ku > 0 && mvsp.C.count(q_L+1))
+                    R.leftCols(dR_up) = mvsp.A[q_L].leftCols(ku) * mvsp.C[q_L+1];
+                if (dR_dn > 0 && kd > 0 && mvsp.C.count(q_L-1))
+                    R.rightCols(dR_dn) = mvsp.A[q_L].rightCols(kd) * mvsp.C[q_L-1];
+                recon = std::max(recon, (R - Mblk).cwiseAbs().maxCoeff());
+            }
+            // (2) A left-canonical: sum_{q_L,s} A_s^dag A_s == I per q_R
+            double canon = 0;
+            std::map<int,Mat> G;
+            for (auto& [q_L, Ablk] : mvsp.A) {
+                int ku = mvsp.new_mid.dim(q_L+1), kd = mvsp.new_mid.dim(q_L-1);
+                if (ku > 0) { Mat a = Ablk.leftCols(ku);
+                    G[q_L+1] = (G.count(q_L+1)?G[q_L+1]:Mat::Zero(ku,ku)) + a.adjoint()*a; }
+                if (kd > 0) { Mat a = Ablk.rightCols(kd);
+                    G[q_L-1] = (G.count(q_L-1)?G[q_L-1]:Mat::Zero(kd,kd)) + a.adjoint()*a; }
+            }
+            for (auto& [q,g] : G)
+                canon = std::max(canon, (g - Mat::Identity(g.rows(),g.cols())).cwiseAbs().maxCoeff());
+            printf("[QX_1SITE_CHECK n=%d] split(site %d): ||A*C - M||=%.2e  ||A^dag A - I||=%.2e\n",
+                   n, si, recon, canon);
+        }
         fflush(stdout);
     }
 
