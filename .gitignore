@@ -23,3 +23,11 @@ out/visualizations/
 out/visualizations_test/
 _worktrees/
 docs/_build/
+
+# Agent / IDE session data
+.claude/
+# Python build artifacts
+*.egg-info/
+# Benchmark outputs (regenerable)
+benchmarks/results/
+benchmarks/results_*.json

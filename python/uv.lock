@@ -2411,7 +2411,7 @@ wheels = [
 
 [[package]]
 name = "quantx-engine"
-version = "0.2.0"
+version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2425,28 +2425,16 @@ dependencies = [
 [package.optional-dependencies]
 all = [
     { name = "cupy-cuda12x" },
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pennylane", version = "0.42.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pennylane", version = "0.44.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "ray", extra = ["default"] },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 ci = [
-    { name = "networkx", version = "3.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "networkx", version = "3.6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pennylane", version = "0.42.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "pennylane", version = "0.44.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pytest" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 dev = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pytest" },
 ]
 distributed = [
@@ -2458,11 +2446,7 @@ gpu = [
 notebooks = [
     { name = "nbformat" },
     { name = "nbmake" },
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pytest" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
 pennylane = [
     { name = "pennylane", version = "0.42.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -2480,13 +2464,8 @@ requires-dist = [
     { name = "cupy-cuda12x", marker = "extra == 'gpu'", specifier = ">=13.0" },
     { name = "nbformat", marker = "extra == 'notebooks'", specifier = ">=5.9" },
     { name = "nbmake", marker = "extra == 'notebooks'", specifier = ">=1.4" },
-    { name = "networkx", specifier = ">=3.4.2" },
-    { name = "networkx", marker = "extra == 'all'", specifier = ">=3.0" },
-    { name = "networkx", marker = "extra == 'ci'", specifier = ">=3.0" },
+    { name = "networkx", specifier = ">=3.0" },
     { name = "numpy", specifier = ">=1.24" },
-    { name = "numpy", marker = "extra == 'ci'", specifier = ">=1.24" },
-    { name = "numpy", marker = "extra == 'dev'", specifier = ">=1.24" },
-    { name = "numpy", marker = "extra == 'notebooks'", specifier = ">=1.24" },
     { name = "pennylane", marker = "extra == 'all'", specifier = ">=0.30.0" },
     { name = "pennylane", marker = "extra == 'ci'", specifier = ">=0.30.0" },
     { name = "pennylane", marker = "extra == 'pennylane'", specifier = ">=0.30.0" },
@@ -2495,10 +2474,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'notebooks'", specifier = ">=7.0" },
     { name = "ray", extras = ["default"], marker = "extra == 'all'", specifier = ">=2.0" },
     { name = "ray", extras = ["default"], marker = "extra == 'distributed'", specifier = ">=2.0" },
-    { name = "scipy", specifier = ">=1.15.3" },
-    { name = "scipy", marker = "extra == 'all'", specifier = ">=1.10" },
-    { name = "scipy", marker = "extra == 'ci'", specifier = ">=1.10" },
-    { name = "scipy", marker = "extra == 'notebooks'", specifier = ">=1.10" },
+    { name = "scipy", specifier = ">=1.10" },
 ]
 provides-extras = ["dev", "pennylane", "gpu", "distributed", "ci", "notebooks", "all"]
 
