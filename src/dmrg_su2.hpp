@@ -49,11 +49,20 @@ struct SU2Heisenberg {
     // A transition contributes operator T^k (k from the bond spins) with reduced r.
     struct Trans { int a, b, tk; double r; };
     static std::vector<Trans> transitions(double J) {
+        // The operator bond (spin S_op = 1) closes a scalar product:
+        //   A^(k).B^(k) = (-1)^k sqrt(2k+1) (A (x) B)^(0).
+        // A bare bond contraction yields the coupled (A(x)B)^0; folding this
+        // closure factor into the ABSORBING (op->done) operator makes the raw
+        // MPO contraction reproduce J*sigma.sigma directly -- so the SU(2)
+        // environment/H_eff contractions (which replay the raw MPO) get the
+        // physical energy with no extra bookkeeping.
+        const int S_op = 1;
+        const double closure = ((S_op & 1) ? -1.0 : 1.0) * std::sqrt(2.0 * S_op + 1.0);
         return {
-            {BEGIN, BEGIN, 0, R_I},                 // I
-            {BEGIN, OP,    2, J * R_SIGMA()},        // emit J*sigma
-            {OP,    DONE,  2, R_SIGMA()},            // absorb sigma
-            {DONE,  DONE,  0, R_I},                  // I
+            {BEGIN, BEGIN, 0, R_I},                       // I
+            {BEGIN, OP,    2, J * R_SIGMA()},              // emit J*sigma
+            {OP,    DONE,  2, R_SIGMA() * closure},        // absorb sigma (+ closure)
+            {DONE,  DONE,  0, R_I},                        // I
         };
     }
 

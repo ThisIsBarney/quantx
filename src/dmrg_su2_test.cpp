@@ -28,16 +28,10 @@ int main() {
         if (t.a == SU2Heisenberg::OP && t.b == SU2Heisenberg::DONE) absorb = &t;
     }
 
-    // Scalar-product closure factor for the transported operator multiplet of
-    // spin k = S_op:  A^(k).B^(k) = (-1)^k sqrt(2k+1) (A (x) B)^(0). The bare
-    // bond sum below produces the coupled (A(x)B)^0; this factor turns it into
-    // the physical scalar product. In the full SU(2) DMRG this emerges from the
-    // 6j/9j recoupling of the environment / H_eff contractions.
-    const int S_op = SU2Heisenberg::bond_tS(SU2Heisenberg::OP) / 2;  // = 1
-    const double closure = std::pow(-1.0, S_op) * std::sqrt(2.0 * S_op + 1.0);  // -sqrt(3)
-
     // Two-site Hamiltonian H[(m0',m1')][(m0,m1)], 4x4. Left bond fixed to begin,
-    // right bond fixed to done; the shared bond runs over the op multiplet (tM in {-2,0,2}).
+    // right bond fixed to done; the shared bond runs over the op multiplet (tM in
+    // {-2,0,2}). The scalar-product closure factor is now baked into the absorbing
+    // (op->done) MPO operator, so the raw bond sum yields J*sigma.sigma directly.
     std::array<std::array<double, 4>, 4> H{};
     for (int m0p = 0; m0p < 2; ++m0p)
     for (int m1p = 0; m1p < 2; ++m1p)
@@ -49,7 +43,7 @@ int main() {
             double w1 = SU2Heisenberg::elem(*absorb, /*tMA*/tM, /*tMB*/0, tm_of(m1p), tm_of(m1));
             v += w0 * w1;
         }
-        H[m0p * 2 + m1p][m0 * 2 + m1] = closure * v;
+        H[m0p * 2 + m1p][m0 * 2 + m1] = v;
     }
 
     // Reference J * sigma.sigma in basis {uu, ud, du, dd}.
