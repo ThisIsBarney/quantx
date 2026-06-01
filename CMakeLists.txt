@@ -278,6 +278,22 @@ target_link_libraries(qx_su2_bench PRIVATE qx_eigen)
 target_include_directories(qx_su2_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_su2_bench)
 
+add_executable(qx_su2_vs_u1
+  src/dmrg_su2_vs_u1.cpp
+  src/dmrg_mpo.cpp
+  src/dmrg_dense.cpp
+  src/dmrg_blocks.cpp
+)
+target_link_libraries(qx_su2_vs_u1 PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_su2_vs_u1 PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_su2_vs_u1 PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+qx_set_config_output_dirs(qx_su2_vs_u1)
+
 enable_testing()
 add_test(NAME qx_smoke COMMAND qx_smoke)
 add_test(NAME qx_su2_test COMMAND qx_su2_test)
