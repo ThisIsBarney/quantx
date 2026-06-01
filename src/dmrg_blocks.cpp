@@ -689,6 +689,84 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
     return res;
 }
 
+// -- Single-site effective Hamiltonian ----------------------------------------
+//
+// Applies the one-site H_eff to the site tensor M (same block layout as block_A[i]:
+//   M[q_L] = Mat(dL, dR_up + dR_dn),  up cols -> q_R = q_L+1, dn cols -> q_R = q_L-1).
+// L is the environment at the LEFT bond of the site, R at the RIGHT bond, W the MPO
+// at the site. QN relations (bra vs ket):
+//   q_L_bra = q_L_ket + HB_DELTA[b_in]
+//   q_R_ket = q_L_ket + s_ket_z,  q_R_bra = q_L_bra + s_bra_z = q_R_ket + HB_DELTA[b_out]
+static std::map<int,Mat> apply_heff_1site(
+    const BlockEnv& L, const MPOSite& W, const BlockEnv& R,
+    const std::map<int,Mat>& M,
+    const BondSpace& bs_L, const BondSpace& bs_R)
+{
+    ++g_block_matvecs;
+    std::map<int,Mat> out;
+
+    for (auto& [q_L_ket, Mblk] : M) {
+        int dL_ket   = bs_L.dim(q_L_ket);
+        int dR_up_ket = bs_R.dim(q_L_ket + 1);
+        int dR_dn_ket = bs_R.dim(q_L_ket - 1);
+
+        for (int s_ket = 0; s_ket < 2; ++s_ket) {
+            int skz   = (s_ket == 0) ? +1 : -1;
+            int dR_s_ket = (s_ket == 0) ? dR_up_ket : dR_dn_ket;
+            if (dR_s_ket == 0) continue;
+            int col_k = (s_ket == 0) ? 0 : dR_up_ket;
+            int q_R_ket = q_L_ket + skz;
+            Eigen::Ref<const Mat> M_sub = Mblk.block(0, col_k, dL_ket, dR_s_ket);
+
+            for (int b_in = 0; b_in < W.chi_l; ++b_in) {
+                int q_L_bra = q_L_ket + HB_DELTA[b_in];
+                int dL_bra  = bs_L.dim(q_L_bra);
+                if (dL_bra == 0) continue;
+                auto it_L = L.blocks[b_in].find(q_L_ket);
+                if (it_L == L.blocks[b_in].end()) continue;
+                const Mat& Lblk = it_L->second;   // (dL_bra, dL_ket)
+                if (Lblk.rows() != dL_bra || Lblk.cols() != dL_ket) continue;
+
+                Mat LM = Lblk * M_sub;            // (dL_bra, dR_s_ket)
+
+                for (int b_out = 0; b_out < W.chi_r; ++b_out) {
+                    auto it_R = R.blocks[b_out].find(q_R_ket);
+                    if (it_R == R.blocks[b_out].end()) continue;
+                    const Mat& Rblk = it_R->second;   // (dR_bra, dR_s_ket)
+                    if (Rblk.cols() != dR_s_ket) continue;
+                    int dR_bra = (int)Rblk.rows();
+                    int q_R_bra = q_R_ket + HB_DELTA[b_out];
+
+                    // s_bra fixed by q_R_bra = q_L_bra + s_bra_z
+                    int s_bra = (q_R_bra == q_L_bra + 1) ? 0
+                              : (q_R_bra == q_L_bra - 1) ? 1 : -1;
+                    if (s_bra < 0) continue;
+                    S w = mscal(W.W(b_in, b_out)(s_bra, s_ket));
+                    if (std::abs(w) < 1e-15) continue;
+                    int dR_up_bra = bs_R.dim(q_L_bra + 1);
+                    int dR_dn_bra = bs_R.dim(q_L_bra - 1);
+                    int dR_s_bra  = (s_bra == 0) ? dR_up_bra : dR_dn_bra;
+                    if (dR_s_bra != dR_bra) continue;
+                    int col_b = (s_bra == 0) ? 0 : dR_up_bra;
+
+                    Mat T = LM * Rblk.transpose();   // (dL_bra, dR_bra)
+
+                    auto it_out = out.find(q_L_bra);
+                    if (it_out == out.end()) {
+                        out[q_L_bra] = Mat::Zero(dL_bra, dR_up_bra + dR_dn_bra);
+                        it_out = out.find(q_L_bra);
+                    }
+                    it_out->second.block(0, col_b, dL_bra, dR_bra).noalias() += w * T;
+                }
+            }
+        }
+    }
+    // Ensure all input sectors are present (Galerkin: H_eff maps the space to itself).
+    for (auto& [q, blk] : M)
+        if (!out.count(q)) out[q] = Mat::Zero(blk.rows(), blk.cols());
+    return out;
+}
+
 // -- Block Lanczos (flat packing) ---------------------------------------------
 
 static int theta_total_dim(const std::map<int,Mat>& theta) {
@@ -1218,6 +1296,34 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         prev_energy = E0;
         result.energy = E0;
         result.n_sweeps_done = sweep + 1;
+    }
+
+    // Validation of the single-site H_eff: after the final R->L half-sweep the
+    // orthogonality centre is at bond 1 (block_sv[0]); putting that centre on site 0
+    // gives M0 whose single-site Rayleigh quotient must equal the ground energy.
+    if (std::getenv("QX_DMRG_1SITE_CHECK")) {
+        std::map<int,Mat> M0 = block_A[0];
+        for (auto& [q_L, blk] : M0) {
+            int dR_up = bond[1].dim(q_L + 1), dR_dn = bond[1].dim(q_L - 1);
+            if (dR_up > 0 && block_sv[0].count(q_L + 1)) {
+                const RVec& s = block_sv[0].at(q_L + 1);
+                for (int c = 0; c < dR_up && c < s.size(); ++c) blk.col(c) *= s[c];
+            }
+            if (dR_dn > 0 && block_sv[0].count(q_L - 1)) {
+                const RVec& s = block_sv[0].at(q_L - 1);
+                for (int c = 0; c < dR_dn && c < s.size(); ++c) blk.col(dR_up + c) *= s[c];
+            }
+        }
+        auto HM = apply_heff_1site(L[0], mpo[0], R[1], M0, bond[0], bond[1]);
+        double num = 0, den = 0;
+        for (auto& [q, blk] : M0) {
+            den += blk.squaredNorm();
+            if (HM.count(q)) num += rp((blk.array().conjugate() * HM[q].array()).sum());
+        }
+        double e1 = (den > 1e-30) ? num / den : 0;
+        printf("[QX_1SITE_CHECK n=%d] E(2site)=%.8f  E(1site H_eff)=%.8f  diff=%.2e\n",
+               n, result.energy, e1, std::abs(result.energy - e1));
+        fflush(stdout);
     }
 
     auto t_end = std::chrono::steady_clock::now();
