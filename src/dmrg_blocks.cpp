@@ -411,6 +411,8 @@ struct HeffPlan {
     std::vector<std::pair<int,int>>  out_shape;   // out index -> (rows, cols)
     std::vector<int>                 ket_sectors; // ket index -> theta sector key
     double flops = 0;                             // ~GEMM work per matvec (par gate)
+    int    max_t1 = 1;                            // max elements of any T1 = theta*R^T
+    int    max_lt1 = 1;                           // max elements of any LT1 = L*T1
 
     struct Write  { Cx w; int out_idx, row_b, col_b, dL_b, dR_b; };
     struct LGroup { const Mat* Lblk; std::vector<Write> writes; };
@@ -483,6 +485,7 @@ static HeffPlan build_heff_plan(
                     g.row_k = row_k; g.col_k = col_k; g.dL_k = dL_k; g.dR_k = dR_k;
                     g.Rblk = &Rblk;
                     plan.flops += 2.0 * dL_k * dR_k * dR_bra;  // T1 = theta_sub * R^T
+                    plan.max_t1 = std::max(plan.max_t1, dL_k * dR_bra);
 
                     for (int bL = 0; bL < Wi.chi_l; ++bL) {
                         int q_L_bra = q_L_ket + HB_DELTA[bL];
@@ -496,6 +499,7 @@ static HeffPlan build_heff_plan(
                         HeffPlan::LGroup lg;
                         lg.Lblk = &Lblk;
                         plan.flops += 2.0 * dL_bra * dL_k * dR_bra;  // LT1 = L * T1
+                        plan.max_lt1 = std::max(plan.max_lt1, dL_bra * dR_bra);
 
                         for (int s1b = 0; s1b < 2; ++s1b) {
                             int s1bz = (s1b == 0) ? +1 : -1;
@@ -561,14 +565,24 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
     std::vector<Mat> out(n_out);
 
     if (!par) {
-        // Serial: accumulate straight into `out`.
+        // Serial: accumulate straight into `out`, using reusable scratch for the two
+        // GEMM temporaries (no per-group heap allocation).
+        std::vector<Cx> t1buf(plan.max_t1), lt1buf(plan.max_lt1);
         for (int gi = 0; gi < n_grp; ++gi) {
             const HeffPlan::T1Group& g = plan.groups[gi];
             const Mat* theta_q = theta_blocks[g.ket_idx];
             if (!theta_q) continue;
-            Mat T1 = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
+            int dRb = (int)g.Rblk->rows();
+            Eigen::Map<Mat> T1(t1buf.data(), g.dL_k, dRb);
+            if (g.dL_k <= 24 && dRb <= 24)
+                T1.noalias() = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k).lazyProduct(g.Rblk->transpose());
+            else
+                T1.noalias() = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
             for (const auto& lg : g.lgroups) {
-                Mat LT1 = (*lg.Lblk) * T1;
+                int dLb = (int)lg.Lblk->rows();
+                Eigen::Map<Mat> LT1(lt1buf.data(), dLb, dRb);
+                if (dLb <= 24 && dRb <= 24) LT1.noalias() = lg.Lblk->lazyProduct(T1);
+                else                        LT1.noalias() = (*lg.Lblk) * T1;
                 for (const auto& wr : lg.writes) {
                     Mat& o = out[wr.out_idx];
                     if (o.size() == 0)
@@ -589,14 +603,23 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
             int tid = omp_get_thread_num();
             std::vector<Mat>& dst = tls[tid];
             dst.assign(n_out, Mat());
+            std::vector<Cx> t1buf(plan.max_t1), lt1buf(plan.max_lt1);  // per-thread scratch
             #pragma omp for schedule(dynamic) nowait
             for (int gi = 0; gi < n_grp; ++gi) {
                 const HeffPlan::T1Group& g = plan.groups[gi];
                 const Mat* theta_q = theta_blocks[g.ket_idx];
                 if (!theta_q) continue;
-                Mat T1 = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
+                int dRb = (int)g.Rblk->rows();
+                Eigen::Map<Mat> T1(t1buf.data(), g.dL_k, dRb);
+                if (g.dL_k <= 24 && dRb <= 24)
+                    T1.noalias() = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k).lazyProduct(g.Rblk->transpose());
+                else
+                    T1.noalias() = theta_q->block(g.row_k, g.col_k, g.dL_k, g.dR_k) * g.Rblk->transpose();
                 for (const auto& lg : g.lgroups) {
-                    Mat LT1 = (*lg.Lblk) * T1;
+                    int dLb = (int)lg.Lblk->rows();
+                    Eigen::Map<Mat> LT1(lt1buf.data(), dLb, dRb);
+                    if (dLb <= 24 && dRb <= 24) LT1.noalias() = lg.Lblk->lazyProduct(T1);
+                    else                        LT1.noalias() = (*lg.Lblk) * T1;
                     for (const auto& wr : lg.writes) {
                         Mat& o = dst[wr.out_idx];
                         if (o.size() == 0)
