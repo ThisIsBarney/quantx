@@ -105,21 +105,23 @@ static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
     int sites_L = bond_i + 1;   // sites on the left of this bond
     int sites_R = n - sites_L;  // sites on the right
 
-    // Enumerate reachable QN sectors
-    auto binom = [](int nn, int kk) -> long long {
-        if (kk < 0 || kk > nn) return 0;
-        long long r = 1;
+    // Enumerate reachable QN sectors. Path counts are only used as relative weights
+    // for the proportional allocation, so use double to avoid integer overflow
+    // (binom(100,50)^2 ~ 1e29 overflows long long and corrupts the bond dims).
+    auto binom = [](int nn, int kk) -> double {
+        if (kk < 0 || kk > nn) return 0.0;
+        double r = 1.0;
         for (int j = 0; j < kk; ++j) r = r * (nn - j) / (j + 1);
         return r;
     };
 
-    std::vector<std::pair<int,long long>> sectors;
+    std::vector<std::pair<int,double>> sectors;
     int qn_max = std::min(sites_L, sites_R);
     for (int q = -qn_max; q <= qn_max; q += 2) {
         int ups_L = (sites_L + q) / 2;
         int ups_R = (sites_R - q) / 2;
         if ((sites_L + q) % 2 != 0) continue;
-        long long w = binom(sites_L, ups_L) * binom(sites_R, ups_R);
+        double w = binom(sites_L, ups_L) * binom(sites_R, ups_R);
         if (w > 0) sectors.emplace_back(q, w);
     }
     if (sectors.empty()) {
@@ -129,7 +131,7 @@ static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
         return bs;
     }
 
-    long long total_w = 0;
+    double total_w = 0;
     for (auto& [q,w] : sectors) total_w += w;
 
     // Proportional allocation, at least 1 per sector
