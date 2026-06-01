@@ -44,6 +44,21 @@ inline std::vector<SpinBond> exact_bonds(int N) {
     return bonds;
 }
 
+// cap a bond's total multiplicity to ~max_mult (for the initial MPS; sweeps
+// then grow/adjust bonds via the SVD up to the truncation cap). max_mult<=0
+// keeps the bond exact.
+inline SpinBond cap_bond(const SpinBond& ex, int max_mult) {
+    if (max_mult <= 0) return ex;
+    int n = ex.n();
+    int per = std::max(1, max_mult / std::max(1, n));
+    SpinBond b;
+    for (int i = 0; i < n; ++i) {
+        int d = std::min(ex.deg[i], per);
+        if (d > 0) { b.tS.push_back(ex.tS[i]); b.deg.push_back(d); }
+    }
+    return b;
+}
+
 // random initial MPS with the given bond structure
 inline std::vector<Site> init_mps(const std::vector<SpinBond>& bonds, std::mt19937& rng) {
     int N = (int)bonds.size() - 1;
@@ -369,6 +384,7 @@ inline double run_su2_dmrg(int N, double J, int max_mult, int n_sweeps,
                            unsigned seed = 1) {
     auto trans = SU2Heisenberg::transitions(J);
     auto bonds = exact_bonds(N);
+    for (auto& b : bonds) b = cap_bond(b, max_mult);   // bound the initial MPS size
     std::mt19937 rng(seed);
     auto A = init_mps(bonds, rng);
 

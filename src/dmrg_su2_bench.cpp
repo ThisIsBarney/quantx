@@ -14,13 +14,15 @@ static void bench(int N, int max_mult, int sweeps) {
     double ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
     printf("  N=%-4d cap=%-4d sweeps=%-2d   E=%+.8f  E/N=%+.6f   %8.1f ms\n",
            N, max_mult, sweeps, e, e / N, ms);
+    fflush(stdout);
 }
 
 int main() {
+    setbuf(stdout, nullptr);
     printf("SU(2) two-site DMRG timing (H = J sum sigma.sigma, OBC):\n");
-    bench(16,  0, 6);
-    bench(24, 40, 6);
-    bench(32, 60, 6);
+    bench(16, 40, 6);
+    bench(24, 60, 6);
+    bench(32, 80, 6);
     bench(48, 80, 6);
     bench(64, 100, 6);
     return 0;
