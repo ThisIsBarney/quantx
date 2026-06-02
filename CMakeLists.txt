@@ -284,6 +284,11 @@ endif()
 target_include_directories(qx_su2_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_su2_bench)
 
+add_executable(qx_tdvp_test src/tdvp_test.cpp)
+target_link_libraries(qx_tdvp_test PRIVATE qx_eigen)
+target_include_directories(qx_tdvp_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+qx_set_config_output_dirs(qx_tdvp_test)
+
 add_executable(qx_su2_vs_u1
   src/dmrg_su2_vs_u1.cpp
   src/dmrg_mpo.cpp
@@ -307,6 +312,7 @@ add_test(NAME qx_su2_mpo_test COMMAND qx_su2_mpo_test)
 add_test(NAME qx_su2_env_test COMMAND qx_su2_env_test)
 add_test(NAME qx_su2_heff_test COMMAND qx_su2_heff_test)
 add_test(NAME qx_su2_run_test COMMAND qx_su2_run_test)
+add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
 
