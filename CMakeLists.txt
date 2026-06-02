@@ -284,9 +284,11 @@ endif()
 target_include_directories(qx_su2_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_su2_bench)
 
-add_executable(qx_tdvp_test src/tdvp_test.cpp)
-target_link_libraries(qx_tdvp_test PRIVATE qx_eigen)
-target_include_directories(qx_tdvp_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+add_executable(qx_tdvp_test src/tdvp_test.cpp src/dmrg_mpo.cpp)
+target_link_libraries(qx_tdvp_test PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+target_include_directories(qx_tdvp_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_tdvp_test)
 
 add_executable(qx_su2_vs_u1
