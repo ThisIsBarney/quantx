@@ -291,6 +291,17 @@ target_include_directories(qx_tdvp_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_tdvp_test)
 
+add_executable(qx_tdvp_blocks_test src/tdvp_blocks_test.cpp
+  src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+target_link_libraries(qx_tdvp_blocks_test PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_tdvp_blocks_test PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_tdvp_blocks_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+qx_set_config_output_dirs(qx_tdvp_blocks_test)
+
 add_executable(qx_su2_vs_u1
   src/dmrg_su2_vs_u1.cpp
   src/dmrg_mpo.cpp
@@ -315,6 +326,7 @@ add_test(NAME qx_su2_env_test COMMAND qx_su2_env_test)
 add_test(NAME qx_su2_heff_test COMMAND qx_su2_heff_test)
 add_test(NAME qx_su2_run_test COMMAND qx_su2_run_test)
 add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
+add_test(NAME qx_tdvp_blocks_test COMMAND qx_tdvp_blocks_test)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
 

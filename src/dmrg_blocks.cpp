@@ -1,4 +1,5 @@
 ﻿#include "dmrg_internal.hpp"
+#include "tdvp.hpp"            // qx_tdvp::expmv (Krylov matrix exponential)
 
 #include <algorithm>
 #include <cassert>
@@ -1156,6 +1157,234 @@ static std::map<int,Mat> form_theta(
     return theta;
 }
 
+// ===== Block-sparse TDVP2 (two-site, bond-adaptive) time evolution ==========
+// Reuses the block kernels (form_theta merge, build/apply_heff_plan two-site,
+// apply_heff_1site one-site, block_svd_truncate, env updates) with qx_tdvp::expmv
+// as the local time-step. Only the S=Cx instantiation is used (time evolution).
+struct TDVP2Out {
+    double energy = 0;
+    std::vector<double> times, stag;   // staggered magnetization (1/N) sum (-1)^i <sigma^z_i>
+    int max_bond = 0;
+    double wall_s = 0;
+};
+
+// <sigma^z_i> for a center tensor M (block_A layout): up cols (+1) vs dn cols (-1).
+static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR) {
+    double up = 0, dn = 0;
+    for (auto& [q_L, blk] : M) {
+        int dR_up = bsR.dim(q_L + 1);
+        int dR_dn = bsR.dim(q_L - 1);
+        if (dR_up > 0) up += blk.leftCols(dR_up).squaredNorm();
+        if (dR_dn > 0) dn += blk.rightCols(dR_dn).squaredNorm();
+    }
+    double z = up + dn;
+    return z > 0 ? (up - dn) / z : 0.0;
+}
+
+// staggered magnetization on a COPY (center sweep L->R, non-destructive).
+static double measure_stag(std::vector<std::map<int,Mat>> A,
+                           std::vector<BondSpace> bond, int n) {
+    double m = 0;
+    for (int i = 0; i < n; ++i) {
+        m += ((i % 2 == 0) ? 1.0 : -1.0) * center_sz(A[i], bond[i+1]);
+        if (i < n - 1) {
+            SiteMove mv = singlesite_split_LR(A[i], bond[i], bond[i+1]);
+            A[i] = mv.A; bond[i+1] = mv.new_mid;
+            // absorb centre matrices C[q_R] into A[i+1] (left bond)
+            std::map<int,Mat> next;
+            for (auto& [q_R, Cblk] : mv.C) {
+                auto it = A[i+1].find(q_R);
+                if (it != A[i+1].end()) next[q_R] = Cblk * it->second;
+            }
+            A[i+1] = next;
+        }
+    }
+    return m / n;
+}
+
+static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
+                          double dt, int n_steps, int chi_max, double cutoff,
+                          bool imag) {
+    static_assert(std::is_same_v<S, Cx>, "TDVP2 requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    const Cx fwd = imag ? Cx(-dt/2, 0) : Cx(0, -dt/2);
+    const Cx bwd = imag ? Cx(+dt/2, 0) : Cx(0, +dt/2);
+
+    // --- Neel product-state MPS with minimal (dim-1) bonds ---
+    std::vector<int> qb(n + 1); qb[0] = 0;
+    for (int i = 0; i < n; ++i) qb[i+1] = qb[i] + ((i % 2 == 0) ? +1 : -1);
+    std::vector<BondSpace> bond(n + 1);
+    for (int i = 0; i <= n; ++i) bond[i] = BondSpace::from_pairs({{qb[i], 1}});
+    std::vector<std::map<int,Mat>> block_A(n);
+    for (int i = 0; i < n; ++i) {
+        int q_L = qb[i], sz = (i % 2 == 0) ? +1 : -1;
+        int dR_up = bond[i+1].dim(q_L + 1), dR_dn = bond[i+1].dim(q_L - 1);
+        Mat blk = Mat::Zero(1, dR_up + dR_dn);
+        blk(0, (sz == +1) ? 0 : dR_up) = S(1);
+        block_A[i][q_L] = blk;
+    }
+    // --- environments ---
+    std::vector<BlockEnv> L(n + 1), R(n + 1);
+    { BlockEnv L0; L0.bs = bond[0]; L0.blocks[0][qb[0]] = Mat::Constant(1,1,S(1)); L[0] = L0; }
+    { BlockEnv Rn; Rn.bs = bond[n]; Rn.blocks[0][qb[n]] = Mat::Constant(1,1,S(1)); R[n] = Rn; }
+    for (int i = n - 1; i >= 0; --i)
+        R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+
+    const std::map<int,RVec> no_sv;   // empty -> form_theta does a clean merge
+
+    // Pre-allocate all symmetry-allowed theta sectors (zero amplitude) so the
+    // H_eff matvec can populate them (e.g. XY cross-coupling into +-2 sectors).
+    auto expand_theta = [](std::map<int,Mat>& theta, const BondSpace& bsL, const BondSpace& bsR2) {
+        for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+            int q_L = bsL.qns[qi];
+            for (int s = 0; s < 2; ++s) {
+                int q_mid = q_L + ((s==0)?+1:-1);
+                if (theta.count(q_mid)) continue;
+                int nr = bsL.dim(q_mid-1) + bsL.dim(q_mid+1);
+                int nc = bsR2.dim(q_mid+1) + bsR2.dim(q_mid-1);
+                if (nr > 0 && nc > 0) theta[q_mid] = Mat::Zero(nr, nc);
+            }
+        }
+    };
+
+    auto evolve_theta = [&](std::map<int,Mat>& theta, const HeffPlan& plan, Cx tau) {
+        auto mv = [&](const Vec& vin) -> Vec {
+            std::map<int,Mat> tb; vec_to_theta(vin, theta, tb);
+            auto raw = apply_heff_plan(plan, tb);
+            std::map<int,Mat> outn;
+            for (auto& [q, ref] : theta) {
+                auto it = raw.find(q);
+                outn[q] = (it != raw.end() && it->second.rows()==ref.rows() && it->second.cols()==ref.cols())
+                          ? it->second : Mat::Zero(ref.rows(), ref.cols());
+            }
+            return theta_to_vec(outn);
+        };
+        Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(theta));
+        std::map<int,Mat> out; vec_to_theta(ev, theta, out); theta = out;
+    };
+    auto evolve_site = [&](std::map<int,Mat>& M, const BlockEnv& Le, const MPOSite& W,
+                           const BlockEnv& Re, const BondSpace& bsL, const BondSpace& bsR, Cx tau) {
+        auto mv = [&](const Vec& vin) -> Vec {
+            std::map<int,Mat> tb; vec_to_theta(vin, M, tb);
+            auto raw = apply_heff_1site(Le, W, Re, tb, bsL, bsR);
+            std::map<int,Mat> outn;
+            for (auto& [q, ref] : M) {
+                auto it = raw.find(q);
+                outn[q] = (it != raw.end() && it->second.rows()==ref.rows() && it->second.cols()==ref.cols())
+                          ? it->second : Mat::Zero(ref.rows(), ref.cols());
+            }
+            return theta_to_vec(outn);
+        };
+        Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(M));
+        std::map<int,Mat> out; vec_to_theta(ev, M, out); M = out;
+    };
+    auto A_from_U = [&](const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
+        std::map<int,Mat> A;
+        for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+            int q_L = bsL.qns[qi], dL = bsL.dims[qi];
+            int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
+            Mat blk = Mat::Zero(dL, n_up + n_dn);
+            if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = svd.U_up.at(q_L+1);
+            if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = svd.U_dn.at(q_L-1);
+            A[q_L] = blk;
+        }
+        return A;
+    };
+    auto center_LR = [&](const BlockSVDResult& svd) {        // M (at i+1) = sv * Vt
+        std::map<int,Mat> M;
+        for (auto& [q, Vt] : svd.Vt) {
+            Mat m = Vt;
+            auto it = svd.sv.find(q);
+            if (it != svd.sv.end()) { const RVec& s = it->second;
+                int L2 = std::min((int)s.size(),(int)m.rows()); for (int k=0;k<L2;++k) m.row(k)*=s[k]; }
+            M[q] = m;
+        }
+        return M;
+    };
+    auto center_RL = [&](const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
+        std::map<int,Mat> M;                                 // M (at i) = U * sv, block_A layout
+        for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+            int q_L = bsL.qns[qi], dL = bsL.dims[qi];
+            int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
+            Mat blk = Mat::Zero(dL, n_up + n_dn);
+            auto scaled = [&](Mat u, int q) {
+                auto it = svd.sv.find(q);
+                if (it != svd.sv.end()) { const RVec& s=it->second;
+                    int L2=std::min((int)s.size(),(int)u.cols()); for(int k=0;k<L2;++k) u.col(k)*=s[k]; }
+                return u;
+            };
+            if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = scaled(svd.U_up.at(q_L+1), q_L+1);
+            if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = scaled(svd.U_dn.at(q_L-1), q_L-1);
+            M[q_L] = blk;
+        }
+        return M;
+    };
+
+    TDVP2Out out;
+    out.times.push_back(0.0);
+    out.stag.push_back(measure_stag(block_A, bond, n));
+    auto t0 = clk::now();
+    for (int step = 0; step < n_steps; ++step) {
+        // left -> right
+        for (int i = 0; i < n - 1; ++i) {
+            auto theta = form_theta(block_A[i], block_A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+            expand_theta(theta, bond[i], bond[i+2]);
+            WComb wc = build_wcomb(mpo[i], mpo[i+1]);
+            std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
+            HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
+            evolve_theta(theta, plan, fwd);
+            auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+            bond[i+1] = svd.new_mid_bs;
+            block_A[i] = A_from_U(svd, bond[i], bond[i+1]);
+            L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
+            auto M = center_LR(svd);
+            if (i < n - 2) evolve_site(M, L[i+1], mpo[i+1], R[i+2], bond[i+1], bond[i+2], bwd);
+            block_A[i+1] = M;
+        }
+        // right -> left
+        for (int i = n - 2; i >= 0; --i) {
+            auto theta = form_theta(block_A[i], block_A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+            expand_theta(theta, bond[i], bond[i+2]);
+            WComb wc = build_wcomb(mpo[i], mpo[i+1]);
+            std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
+            HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
+            evolve_theta(theta, plan, fwd);
+            auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+            bond[i+1] = svd.new_mid_bs;
+            block_A[i+1] = svd.Vt;
+            R[i+1] = block_update_right(R[i+2], block_A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
+            auto M = center_RL(svd, bond[i], bond[i+1]);
+            if (i > 0) evolve_site(M, L[i], mpo[i], R[i+1], bond[i], bond[i+1], bwd);
+            block_A[i] = M;
+        }
+        if (imag) {   // renormalize (center at site 0)
+            double nz = 0; for (auto& [q,b] : block_A[0]) nz += b.squaredNorm();
+            nz = std::sqrt(nz); if (nz > 0) for (auto& [q,b] : block_A[0]) b /= nz;
+        }
+        out.times.push_back((step+1)*dt);
+        out.stag.push_back(measure_stag(block_A, bond, n));
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+
+    // energy via the two-site H_eff at the centre (site 0)
+    {
+        auto theta = form_theta(block_A[0], block_A[1], no_sv, bond[0], bond[1], bond[2], true);
+        WComb wc = build_wcomb(mpo[0], mpo[1]);
+        std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
+        HeffPlan plan = build_heff_plan(L[0], mpo[0], mpo[1], R[2], wc, kk, bond[0], bond[2]);
+        auto Hth = apply_heff_plan(plan, theta);
+        Vec tv = theta_to_vec(theta);
+        std::map<int,Mat> Hn;
+        for (auto& [q,ref] : theta) { auto it=Hth.find(q);
+            Hn[q] = (it!=Hth.end()&&it->second.rows()==ref.rows()&&it->second.cols()==ref.cols())? it->second : Mat::Zero(ref.rows(),ref.cols()); }
+        Vec hv = theta_to_vec(Hn);
+        out.energy = rp(tv.dot(hv)) / rp(tv.dot(tv));
+    }
+    out.max_bond = 0;
+    for (auto& b : bond) { int t=0; for (int d : b.dims) t+=d; out.max_bond = std::max(out.max_bond, t); }
+    return out;
+}
+
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
@@ -1587,6 +1816,17 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
     if (mpo_is_real(mpo))
         return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
     return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
+}
+
+// Entry point: block-sparse TDVP2 time evolution (always complex).
+TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
+                                 double dt, int n_steps, int chi_max,
+                                 double cutoff, bool imag) {
+    auto o = BlockDMRG<Cx>::run_tdvp2(mpo, n, dt, n_steps, chi_max, cutoff, imag);
+    TDVPBlockResult r;
+    r.energy = o.energy; r.times = o.times; r.stag = o.stag;
+    r.max_bond = o.max_bond; r.wall_time_s = o.wall_s;
+    return r;
 }
 
 } // namespace qx_dmrg

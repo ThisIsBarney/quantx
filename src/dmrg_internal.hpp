@@ -61,4 +61,15 @@ DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff, int n_sweeps, double tol);
 
+// Block-sparse (Sz-symmetric) TDVP2 time evolution from the Neel state.
+struct TDVPBlockResult {
+    double energy = 0;
+    std::vector<double> times, stag;   // staggered magnetization time series
+    int max_bond = 0;
+    double wall_time_s = 0;
+};
+TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
+                                 double dt, int n_steps, int chi_max,
+                                 double cutoff, bool imag);
+
 } // namespace qx_dmrg
