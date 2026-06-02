@@ -273,3 +273,52 @@ class TestTruncation:
                               max_bond=2, n_sweeps=4)
         if result.backend == "cpp":
             assert result.truncation_error >= 0.0  # can't assert > 0, might still fit
+
+
+# ── SU(2)-symmetric method ────────────────────────────────────────────────────
+
+class TestSU2Method:
+    """The SU(2) spin-symmetric DMRG path (method='su2', Heisenberg only).
+
+    Requires the native C++ library (no Python fallback). Skips otherwise.
+    """
+
+    def _require_native(self, solver, result):
+        if result.backend != "cpp":
+            pytest.skip("SU(2) method requires the native C++ library")
+
+    @pytest.mark.parametrize("n", [4, 6, 8])
+    def test_su2_matches_exact(self, solver, n):
+        """SU(2) ground energy matches exact diagonalisation (sigma.sigma)."""
+        try:
+            result = solver.solve(n_qubits=n, hamiltonian_type="heisenberg",
+                                  J=1.0, max_bond=64, n_sweeps=6, method="su2")
+        except Exception as e:
+            if "native" in str(e).lower():
+                pytest.skip(f"Native library not available: {e}")
+            raise
+        assert result.method == "su2"
+        ref = exact_heisenberg_energy(n, 1.0)
+        assert abs(result.energy - ref) < 1e-6, (
+            f"SU(2) n={n}: got {result.energy:.8f}, exact {ref:.8f}"
+        )
+
+    @pytest.mark.parametrize("n", [8, 12])
+    def test_su2_matches_u1(self, solver, n):
+        """SU(2) and U(1) block-sparse paths agree on the ground energy."""
+        u1 = solver.solve(n_qubits=n, hamiltonian_type="heisenberg", J=1.0,
+                         max_bond=64, n_sweeps=6, method="u1")
+        if u1.backend != "cpp":
+            pytest.skip("SU(2) method requires the native C++ library")
+        su2 = solver.solve(n_qubits=n, hamiltonian_type="heisenberg", J=1.0,
+                          max_bond=40, n_sweeps=6, method="su2")
+        assert abs(u1.energy - su2.energy) < 1e-6, (
+            f"n={n}: U(1)={u1.energy:.8f} vs SU(2)={su2.energy:.8f}"
+        )
+
+    def test_su2_rejects_pauli_sum(self, solver):
+        """method='su2' is Heisenberg-only and rejects pauli_sum."""
+        from quantx_engine.dmrg import DMRGError
+        with pytest.raises(DMRGError):
+            solver.solve(n_qubits=4, hamiltonian_type="pauli_sum",
+                        hamiltonian_terms=[(1.0, "Z0Z1")], method="su2")
