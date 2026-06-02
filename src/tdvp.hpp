@@ -225,4 +225,110 @@ inline void absorb_right(Mat& A, const Mat& L) {
     A = An;
 }
 
+// ===== Stage 3-4: TDVP1 integrator + real/imaginary-time drivers ============
+
+inline double mps_norm2(const std::vector<Mat>& A) {
+    Mat O(1,1); O << Cx(1,0);
+    for (auto& Ai : A) {
+        int chiL = Ai.rows()/2, chiR = Ai.cols();
+        Mat On = Mat::Zero(chiR, chiR);
+        for (int s=0;s<2;++s) {
+            Mat As = Ai.block(s*chiL,0,chiL,chiR);
+            On += As.adjoint() * O * As;
+        }
+        O = On;
+    }
+    return std::real(O(0,0));
+}
+
+inline double mps_energy(const std::vector<Mat>& A, const std::vector<MPOSite>& W) {
+    Env L = left_boundary();
+    for (int i=0;i<(int)A.size();++i) L = update_left(L, A[i], W[i]);
+    return std::real(L.at(0,0,0)) / mps_norm2(A);
+}
+
+inline void right_canonicalize(std::vector<Mat>& A) {
+    for (int i=(int)A.size()-1;i>=1;--i) { Mat L = lq_right(A[i]); absorb_right(A[i-1], L); }
+}
+
+// Neel product state |up dn up dn ...> as a bond-dimension-1 MPS.
+inline std::vector<Mat> neel_state(int n) {
+    std::vector<Mat> A(n);
+    for (int i=0;i<n;++i) {
+        A[i] = Mat::Zero(2,1);
+        A[i]((i%2==0)?0:1, 0) = 1;   // even site up, odd site down
+    }
+    return A;
+}
+
+// one symmetric second-order TDVP1 step of size dt. The MPS must enter in
+// right-canonical form (centre at site 0) and leaves so. imag=true does
+// imaginary-time (e^{-H dt}, renormalized) for ground-state / cooling.
+inline void tdvp_step(std::vector<Mat>& A, const std::vector<MPOSite>& W,
+                      double dt, bool imag) {
+    int N = (int)A.size();
+    Cx fwd = imag ? Cx(-dt/2,0) : Cx(0,-dt/2);   // site forward (half step)
+    Cx bwd = imag ? Cx(+dt/2,0) : Cx(0,+dt/2);   // bond backward (half step)
+
+    std::vector<Env> Renv(N+1), Lenv(N+1);
+    Renv[N] = right_boundary();
+    for (int i=N-1;i>=1;--i) Renv[i] = update_right(Renv[i+1], A[i], W[i]);
+    Lenv[0] = left_boundary();
+
+    auto evolve_site = [&](int i, const Env& L, const Env& R) {
+        int r = (int)A[i].rows(), c = (int)A[i].cols();
+        auto h1 = [&](const Vec& v) -> Vec {
+            Mat X = Eigen::Map<const Mat>(v.data(), r, c);
+            Mat Y = apply_h1(L, W[i], R, X);
+            return Eigen::Map<Vec>(Y.data(), Y.size());
+        };
+        Vec av = Eigen::Map<Vec>(A[i].data(), A[i].size());
+        Vec ev = expmv(fwd, h1, av);
+        A[i] = Eigen::Map<Mat>(ev.data(), r, c);
+    };
+    auto evolve_bond = [&](Mat& C, const Env& L, const Env& R) {
+        int r = (int)C.rows(), c = (int)C.cols();
+        auto h0 = [&](const Vec& v) -> Vec {
+            Mat Cm = Eigen::Map<const Mat>(v.data(), r, c);
+            Mat Y = apply_h0(L, R, Cm);
+            return Eigen::Map<Vec>(Y.data(), Y.size());
+        };
+        Vec cv = Eigen::Map<Vec>(C.data(), C.size());
+        Vec ce = expmv(bwd, h0, cv);
+        C = Eigen::Map<Mat>(ce.data(), r, c);
+    };
+
+    // left -> right
+    for (int i=0;i<N;++i) {
+        evolve_site(i, Lenv[i], Renv[i+1]);
+        if (i < N-1) {
+            Mat C = qr_left(A[i]);
+            Lenv[i+1] = update_left(Lenv[i], A[i], W[i]);
+            evolve_bond(C, Lenv[i+1], Renv[i+1]);
+            absorb_left(C, A[i+1]);
+        }
+    }
+    // right -> left
+    for (int i=N-1;i>=0;--i) {
+        evolve_site(i, Lenv[i], Renv[i+1]);
+        if (i > 0) {
+            Mat C = lq_right(A[i]);
+            Renv[i] = update_right(Renv[i+1], A[i], W[i]);
+            evolve_bond(C, Lenv[i], Renv[i]);
+            absorb_right(A[i-1], C);
+        }
+    }
+    if (imag) { double nz = std::sqrt(mps_norm2(A)); if (nz>0) A[0] /= nz; }
+}
+
+// evolve for n_steps of size dt; returns the final energy. The MPS is
+// right-canonicalized on entry.
+inline double run_tdvp(std::vector<Mat>& A, const std::vector<MPOSite>& W,
+                       double dt, int n_steps, bool imag) {
+    right_canonicalize(A);
+    if (imag) { double nz = std::sqrt(mps_norm2(A)); if (nz>0) A[0] /= nz; }
+    for (int step=0; step<n_steps; ++step) tdvp_step(A, W, dt, imag);
+    return mps_energy(A, W);
+}
+
 } // namespace qx_tdvp

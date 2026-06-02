@@ -108,6 +108,47 @@ static void stage2(std::mt19937& rng) {
     check("zero-site H_eff energy vs dense", std::abs(E0 - Eref), 1e-9);
 }
 
+// ---- Stage 3-4: TDVP1 real- and imaginary-time vs exact --------------------
+static std::vector<Mat> random_mps(int n, const std::vector<int>& chi, std::mt19937& rng) {
+    std::uniform_real_distribution<double> d(-1,1);
+    std::vector<Mat> A(n);
+    for (int i=0;i<n;++i) {
+        A[i] = Mat(chi[i]*2, chi[i+1]);
+        for (int r=0;r<A[i].rows();++r) for (int c=0;c<A[i].cols();++c) A[i](r,c)=Cx(d(rng),d(rng));
+    }
+    return A;
+}
+static void stage34(std::mt19937& rng) {
+    const int n = 4;
+    auto W = qx_dmrg::build_heisenberg_mpo(n, 1.0);
+    std::vector<int> chi = {1,2,4,2,1};        // full bond dims -> TDVP1 is exact
+    Mat H = dense_heisenberg(n, 1.0);
+    Eigen::SelfAdjointEigenSolver<Mat> es(H);
+
+    // real-time: compare to exact exp(-iHt)
+    {
+        std::vector<Mat> A = random_mps(n, chi, rng);
+        Vec psi0 = mps_to_sv(A); psi0 /= psi0.norm();
+        double Einit = std::real(psi0.dot(H*psi0));
+        double dt = 0.1; int steps = 5; double t = dt*steps;
+        Vec cc = es.eigenvectors().adjoint() * psi0;
+        for (int k=0;k<cc.size();++k) cc(k) *= std::exp(Cx(0,-t)*es.eigenvalues()(k));
+        Vec psit = es.eigenvectors() * cc;
+
+        double Efin = run_tdvp(A, W, dt, steps, false);
+        Vec psf = mps_to_sv(A); psf /= psf.norm();
+        double fid = std::norm(psit.dot(psf));
+        check("real-time TDVP1 fidelity vs exact (full bond)", std::abs(fid-1.0), 1e-8);
+        check("real-time energy conserved", std::abs(Efin - Einit), 1e-8);
+    }
+    // imaginary-time: converge to the ground state
+    {
+        std::vector<Mat> B = random_mps(n, chi, rng);
+        double Eg = run_tdvp(B, W, 0.1, 400, true);
+        check("imag-time TDVP1 -> ground (full bond)", std::abs(Eg - es.eigenvalues()(0)), 1e-5);
+    }
+}
+
 int main() {
     std::mt19937 rng(7);
     std::uniform_real_distribution<double> d(-1, 1);
@@ -151,6 +192,7 @@ int main() {
     check("real-time norm preserved", std::abs(n1 - n0) / n0, 1e-9);
 
     stage2(rng);
+    stage34(rng);
 
     printf("\n%s\n", failures == 0 ? "ALL PASSED" : "SOME FAILED");
     return failures == 0 ? 0 : 1;
