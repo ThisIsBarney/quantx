@@ -17,6 +17,9 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 namespace qx_su2 {
 
@@ -156,46 +159,68 @@ inline Theta form_theta(const Site& Ai, const Site& Aj) {
 
 // ----- precomputed two-site H_eff contraction plan -------------------------
 // Recoupling computed once at build (cached), reused across every Lanczos
-// matvec. Ops are grouped BY OUTPUT BLOCK: each group writes a distinct output
-// region, so the matvec parallelizes over groups with no write races.
+// matvec. The matvec is a flat list of tiny block products replayed via a
+// PARALLEL REDUCTION over terms: each thread accumulates a chunk of terms into
+// its own private output buffer (load-balanced regardless of how the work
+// clusters into output blocks), then the buffers are summed. Per-thread
+// reusable scratch + noalias keep the hot loop allocation-free (heap allocs
+// inside make many threads serialize on the malloc lock -> catastrophic). Eigen
+// GEMM is pinned to 1 thread; the parallelism is ours.
+//
+// MEASURED FINDING (spin-1/2 Heisenberg): this matvec does NOT scale with
+// threads. Multiplicity is spread thin across many multiplets, so the work is
+// thousands of tiny ~10x10 GEMMs -- bandwidth/latency-bound, low arithmetic
+// intensity -- and warm-started Lanczos needs only ~7 matvecs/solve, too few to
+// amortize any heavier precompute (a dense per-block-pair "batched GEMM"
+// operator costs more to build than it saves here). Kept because it is neutral
+// (serial path when 1 thread) and helps regimes with larger blocks (e.g. higher
+// spin / fermionic models). The SVD (below) is what actually parallelizes.
 struct Heff2Plan {
-    struct Term { const Mat* L; const Mat* R; double coeff; int in_off, in_dl, in_dr; };
-    struct Group { int out_off, out_dl, out_dr; std::vector<Term> terms; };
-    std::vector<Group> groups;
+    struct Op { const Mat* L; const Mat* R; double coeff;
+                int in_off, in_dl, in_dr, out_off, out_dl, out_dr; };
+    std::vector<Op> ops;
     int dim = 0;
+    mutable std::vector<Eigen::VectorXd> tls;   // per-thread accumulators
     using RMap  = Eigen::Map<Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>>;
     using cRMap = Eigen::Map<const Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor>>;
+    static void apply_op(const Op& o, const double* xd, double* yd, Mat& scratch) {
+        cRMap Th(xd + o.in_off, o.in_dl, o.in_dr);
+        RMap  Y (yd + o.out_off, o.out_dl, o.out_dr);
+        scratch.noalias() = Th * (*o.R);                        // (in_dl x out_dr)
+        Y.noalias() += o.coeff * (o.L->transpose() * scratch);
+    }
     void matvec(const Eigen::VectorXd& x, Eigen::VectorXd& y) const {
-        y.setZero(dim);
         const double* xd = x.data();
-        double* yd = y.data();
-        const int ng = (int)groups.size();
-        // Per-thread reusable scratch keeps the hot loop allocation-free -- with
-        // heap allocs inside, many threads serialize on the malloc lock and the
-        // parallel matvec runs *slower* than serial (catastrophically so at
-        // large chi). Eigen GEMM is pinned to 1 thread; we parallelize over
-        // output groups (each writes a disjoint region, so no write races).
-        #pragma omp parallel if(ng > 16)
-        {
-            Mat scratch;
-            #pragma omp for schedule(dynamic)
-            for (int gi = 0; gi < ng; ++gi) {
-                const Group& g = groups[gi];
-                RMap Y(yd + g.out_off, g.out_dl, g.out_dr);
-                for (auto& t : g.terms) {
-                    cRMap Th(xd + t.in_off, t.in_dl, t.in_dr);
-                    scratch.noalias() = Th * (*t.R);                 // (in_dl x out_dr)
-                    Y.noalias() += t.coeff * (t.L->transpose() * scratch);
-                }
+        const int no = (int)ops.size();
+#ifdef _OPENMP
+        if (no > 256 && omp_get_max_threads() > 1) {
+            int nt = omp_get_max_threads();
+            if ((int)tls.size() != nt) tls.assign(nt, Eigen::VectorXd());
+            #pragma omp parallel
+            {
+                int tid = omp_get_thread_num();
+                Eigen::VectorXd& yl = tls[tid];
+                if (yl.size() != dim) yl = Eigen::VectorXd::Zero(dim); else yl.setZero();
+                Mat scratch;
+                double* yld = yl.data();
+                #pragma omp for schedule(dynamic, 64) nowait
+                for (int i = 0; i < no; ++i) apply_op(ops[i], xd, yld, scratch);
             }
+            y = tls[0];
+            for (int t = 1; t < nt; ++t) y += tls[t];
+            return;
         }
+#endif
+        y.setZero(dim);
+        double* yd = y.data();
+        Mat scratch;
+        for (const Op& o : ops) apply_op(o, xd, yd, scratch);
     }
 };
 
 inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
                             const std::vector<SU2Heisenberg::Trans>& trans) {
     Heff2Plan p; p.dim = sp.dim;
-    std::map<int,int> grp;       // out_off -> group index
     for (auto& inb : sp.blks) {
         int tjl = inb.tjl, tjc = inb.tjc, tjr = inb.tjr;
         for (auto& [kL, Lb] : L.blk) {
@@ -219,15 +244,9 @@ inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
                             double Rc = recoup_2site(tjl, tjc, tjr, tjlp, tjcp, tjrp,
                                                      twl, twm, twr, t1.tk, t2.tk);
                             if (Rc == 0.0) continue;
-                            auto it = grp.find(outb->off);
-                            int gi;
-                            if (it == grp.end()) {
-                                gi = (int)p.groups.size();
-                                grp[outb->off] = gi;
-                                p.groups.push_back({outb->off, outb->dl, outb->dr, {}});
-                            } else gi = it->second;
-                            p.groups[gi].terms.push_back(
-                                {&Lb, &Rb, Rc * t1.r * t2.r, inb.off, inb.dl, inb.dr});
+                            p.ops.push_back({&Lb, &Rb, Rc * t1.r * t2.r,
+                                             inb.off, inb.dl, inb.dr,
+                                             outb->off, outb->dl, outb->dr});
                         }
                     }
                 }
