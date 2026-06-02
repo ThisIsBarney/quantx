@@ -138,8 +138,24 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         bool   imag     = opts.value("imag", false);
         bool   two_site = opts.value("two_site", true);
         std::string init = opts.value("initial", "neel");
+        // Block-sparse (Sz-symmetric) TDVP2 is the default fast path (Neel init).
+        bool   block    = opts.value("block", true) && two_site && init == "neel";
 
         auto W = qx_dmrg::build_heisenberg_mpo(n, J);
+
+        if (block) {
+            auto r = qx_dmrg::run_tdvp2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag);
+            nlj out;
+            out["ok"]            = true;
+            out["energy"]        = r.energy;
+            out["times"]         = r.times;
+            out["staggered_mag"] = r.stag;
+            out["max_bond"]      = r.max_bond;
+            out["wall_time_s"]   = r.wall_time_s;
+            out["method"]        = "tdvp2-block";
+            tl_dmrg_buf = out.dump();
+            return tl_dmrg_buf.c_str();
+        }
         std::vector<qx_tdvp::Mat> A = qx_tdvp::neel_state(n);
         if (init == "up") for (int i=0;i<n;++i) { A[i]=qx_tdvp::Mat::Zero(2,1); A[i](0,0)=1; }
         qx_tdvp::right_canonicalize(A);

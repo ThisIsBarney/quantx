@@ -89,6 +89,7 @@ class TDVPSolver:
         imag: bool = False,
         two_site: bool = True,
         initial: str = "neel",
+        block: bool = True,
     ) -> TDVPResult:
         """Evolve a Heisenberg chain by TDVP.
 
@@ -125,7 +126,8 @@ class TDVPSolver:
             raise TDVPError("n_steps must be >= 1")
         prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J}
         opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
-                "imag": bool(imag), "two_site": bool(two_site), "initial": initial}
+                "imag": bool(imag), "two_site": bool(two_site), "initial": initial,
+                "block": bool(block)}
         raw = self._lib.qx_tdvp_evolve(json.dumps(prob).encode(), json.dumps(opts).encode())
         out = json.loads(raw)
         if not out.get("ok", False):
