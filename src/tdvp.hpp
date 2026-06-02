@@ -171,6 +171,79 @@ inline Mat apply_h1(const Env& L, const MPOSite& W, const Env& R, const Mat& X) 
     return Y;
 }
 
+// two-site effective Hamiltonian. Theta stored as Mat (chiL*2, 2*chiR),
+// Theta(s1*chiL+a, s2*chiR+b).
+//   (H2 T)[s1',s2',a',b'] = sum L[a',wl,a] Wi(wl,wm)(s1',s1) Wj(wm,wr)(s2',s2)
+//                                T[s1,s2,a,b] R[b,wr,b']
+inline Mat apply_h2(const Env& L, const MPOSite& Wi, const MPOSite& Wj,
+                    const Env& R, const Mat& T) {
+    const int chiL = L.chi1, chiR = R.chi2;
+    Mat Y = Mat::Zero(2*chiL, 2*chiR);
+    for (int wl=0; wl<Wi.chi_l; ++wl) {
+        Mat Lwl(L.chi1, L.chi2);
+        for (int ap=0;ap<L.chi1;++ap) for (int a=0;a<L.chi2;++a) Lwl(ap,a) = L.at(ap,wl,a);
+        for (int wr=0; wr<Wj.chi_r; ++wr) {
+            Mat Rwr(R.chi1, R.chi2);
+            for (int b=0;b<R.chi1;++b) for (int bp=0;bp<R.chi2;++bp) Rwr(b,bp) = R.at(b,wr,bp);
+            for (int wm=0; wm<Wi.chi_r; ++wm) {
+                const Mat2& Wim = Wi.W(wl,wm); if (Wim.isZero(1e-15)) continue;
+                const Mat2& Wjm = Wj.W(wm,wr); if (Wjm.isZero(1e-15)) continue;
+                for (int s1=0;s1<2;++s1) for (int s2=0;s2<2;++s2) {
+                    Mat tmp = Lwl * T.block(s1*chiL, s2*chiR, chiL, chiR) * Rwr;  // (a',b')
+                    for (int s1p=0;s1p<2;++s1p) for (int s2p=0;s2p<2;++s2p) {
+                        Cx co = Wim(s1p,s1) * Wjm(s2p,s2);
+                        if (std::abs(co)<1e-15) continue;
+                        Y.block(s1p*chiL, s2p*chiR, chiL, chiR) += co * tmp;
+                    }
+                }
+            }
+        }
+    }
+    return Y;
+}
+
+// merge two site tensors into a two-site Theta (chiL*2, 2*chiR).
+inline Mat merge_two(const Mat& Ai, const Mat& Aj) {
+    int chiL = Ai.rows()/2, chiM = Ai.cols(), chiR = Aj.cols();
+    Mat T = Mat::Zero(2*chiL, 2*chiR);
+    for (int s1=0;s1<2;++s1) for (int s2=0;s2<2;++s2)
+        T.block(s1*chiL, s2*chiR, chiL, chiR) =
+            Ai.block(s1*chiL,0,chiL,chiM) * Aj.block(s2*chiM,0,chiM,chiR);
+    return T;
+}
+
+// SVD-split Theta into A_left (chiL*2, k) and A_right (k*2, chiR), truncating to
+// at most chi_max singular values above cutoff. Returns the kept singular values
+// (for entropy); dir=+1 puts S into A_right (A_left canonical), dir=-1 vice versa.
+inline Eigen::VectorXd split_two(const Mat& T, int chiL, int chiR, int dir,
+                                 int chi_max, double cutoff, Mat& Aleft, Mat& Aright) {
+    // reshape T(s1*chiL+a, s2*chiR+b) -> M((s1,a),(s2,b)) is already that layout
+    Eigen::BDCSVD<Mat> svd(T, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    Eigen::VectorXd sv = svd.singularValues();
+    int k = 0; double tot = sv.squaredNorm();
+    while (k < sv.size() && k < chi_max && sv(k) > cutoff * std::sqrt(std::max(tot,1e-300))) ++k;
+    if (k == 0) k = 1;
+    Eigen::VectorXd s = sv.head(k);
+    Mat U = svd.matrixU().leftCols(k);          // (2chiL, k)
+    Mat V = svd.matrixV().leftCols(k);          // (2chiR, k)
+    // A_left = U (rows already s1*chiL+a); A_right reshaped from V^dagger.
+    if (dir > 0) {
+        Aleft = U;                              // left-canonical (chiL*2, k)
+        Mat SV = s.asDiagonal() * V.adjoint();  // (k, 2chiR)
+        Aright = Mat(2*k, chiR);
+        for (int s2=0;s2<2;++s2) for (int a=0;a<k;++a) for (int b=0;b<chiR;++b)
+            Aright(s2*k+a, b) = SV(a, s2*chiR+b);
+    } else {
+        Mat US = U * s.asDiagonal();            // (2chiL, k)
+        Aleft = US;
+        Mat Vd = V.adjoint();                   // (k, 2chiR) right-canonical
+        Aright = Mat(2*k, chiR);
+        for (int s2=0;s2<2;++s2) for (int a=0;a<k;++a) for (int b=0;b<chiR;++b)
+            Aright(s2*k+a, b) = Vd(a, s2*chiR+b);
+    }
+    return s;
+}
+
 // zero-site (bond) effective Hamiltonian:  (H0 C)[a',b'] = sum_w L[a',w,a] C[a,b] R[b,w,b']
 inline Mat apply_h0(const Env& L, const Env& R, const Mat& C) {
     Mat Y = Mat::Zero(L.chi1, R.chi2);
@@ -329,6 +402,83 @@ inline double run_tdvp(std::vector<Mat>& A, const std::vector<MPOSite>& W,
     if (imag) { double nz = std::sqrt(mps_norm2(A)); if (nz>0) A[0] /= nz; }
     for (int step=0; step<n_steps; ++step) tdvp_step(A, W, dt, imag);
     return mps_energy(A, W);
+}
+
+// ----- TDVP2 (two-site, bond-adaptive) --------------------------------------
+inline void tdvp2_step(std::vector<Mat>& A, const std::vector<MPOSite>& W,
+                       double dt, bool imag, int chi_max, double cutoff) {
+    int N = (int)A.size();
+    Cx fwd = imag ? Cx(-dt/2,0) : Cx(0,-dt/2);
+    Cx bwd = imag ? Cx(+dt/2,0) : Cx(0,+dt/2);
+    std::vector<Env> Renv(N+1), Lenv(N+1);
+    Renv[N] = right_boundary();
+    for (int i=N-1;i>=1;--i) Renv[i] = update_right(Renv[i+1], A[i], W[i]);
+    Lenv[0] = left_boundary();
+
+    auto site_evolve = [&](int i, const Env& L, const Env& R, Cx tau) {
+        int r=(int)A[i].rows(), c=(int)A[i].cols();
+        auto h1=[&](const Vec& v)->Vec{ Mat X=Eigen::Map<const Mat>(v.data(),r,c);
+            Mat Y=apply_h1(L,W[i],R,X); return Eigen::Map<Vec>(Y.data(),Y.size()); };
+        Vec ev=expmv(tau,h1,Eigen::Map<Vec>(A[i].data(),A[i].size()));
+        A[i]=Eigen::Map<Mat>(ev.data(),r,c);
+    };
+    auto pair_evolve = [&](int i, const Env& L, const Env& R, Cx tau, int dir) {
+        int chiL=(int)A[i].rows()/2, chiR=(int)A[i+1].cols();
+        Mat T = merge_two(A[i], A[i+1]);
+        int rr=(int)T.rows(), cc=(int)T.cols();
+        auto h2=[&](const Vec& v)->Vec{ Mat Tm=Eigen::Map<const Mat>(v.data(),rr,cc);
+            Mat Y=apply_h2(L,W[i],W[i+1],R,Tm); return Eigen::Map<Vec>(Y.data(),Y.size()); };
+        Vec ev=expmv(tau,h2,Eigen::Map<Vec>(T.data(),T.size()));
+        T=Eigen::Map<Mat>(ev.data(),rr,cc);
+        Mat Al, Ar;
+        split_two(T, chiL, chiR, dir, chi_max, cutoff, Al, Ar);
+        A[i]=Al; A[i+1]=Ar;
+    };
+    // left -> right
+    for (int i=0;i<N-1;++i) {
+        pair_evolve(i, Lenv[i], Renv[i+2], fwd, +1);
+        Lenv[i+1] = update_left(Lenv[i], A[i], W[i]);
+        if (i < N-2) site_evolve(i+1, Lenv[i+1], Renv[i+2], bwd);
+    }
+    // right -> left
+    for (int i=N-2;i>=0;--i) {
+        pair_evolve(i, Lenv[i], Renv[i+2], fwd, -1);
+        Renv[i+1] = update_right(Renv[i+2], A[i+1], W[i+1]);
+        if (i > 0) site_evolve(i, Lenv[i], Renv[i+1], bwd);
+    }
+    if (imag) { double nz=std::sqrt(mps_norm2(A)); if (nz>0) A[0] /= nz; }
+}
+
+inline double run_tdvp2(std::vector<Mat>& A, const std::vector<MPOSite>& W,
+                        double dt, int n_steps, bool imag,
+                        int chi_max = 64, double cutoff = 1e-12) {
+    right_canonicalize(A);
+    if (imag) { double nz=std::sqrt(mps_norm2(A)); if (nz>0) A[0] /= nz; }
+    for (int step=0; step<n_steps; ++step) tdvp2_step(A, W, dt, imag, chi_max, cutoff);
+    return mps_energy(A, W);
+}
+
+// <Sz_i> expectation values for a (normalized) MPS, Sz = diag(+1,-1)/... here Pauli Z.
+inline std::vector<double> mps_sz(const std::vector<Mat>& A) {
+    int N = (int)A.size();
+    std::vector<double> out(N);
+    double nrm2 = mps_norm2(A);
+    for (int site=0; site<N; ++site) {
+        Mat O(1,1); O << Cx(1,0);
+        for (int i=0;i<N;++i) {
+            int chiL=A[i].rows()/2, chiR=A[i].cols();
+            Mat On = Mat::Zero(chiR, chiR);
+            for (int s=0;s<2;++s) {
+                double z = (s==0) ? 1.0 : -1.0;     // Pauli Z eigenvalue
+                Cx coef = (i==site) ? Cx(z,0) : Cx(1,0);
+                Mat As = A[i].block(s*chiL,0,chiL,chiR);
+                On += coef * (As.adjoint() * O * As);
+            }
+            O = On;
+        }
+        out[site] = std::real(O(0,0)) / nrm2;
+    }
+    return out;
 }
 
 } // namespace qx_tdvp

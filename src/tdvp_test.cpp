@@ -149,6 +149,37 @@ static void stage34(std::mt19937& rng) {
     }
 }
 
+// ---- Stage 5: TDVP2 quench from a product state vs exact -------------------
+static void stage5() {
+    const int n = 6;
+    auto W = qx_dmrg::build_heisenberg_mpo(n, 1.0);
+    Mat H = dense_heisenberg(n, 1.0);
+    Eigen::SelfAdjointEigenSolver<Mat> es(H);
+
+    std::vector<Mat> A = neel_state(n);
+    Vec psi0 = mps_to_sv(A);                 // |up dn up dn ...>, norm 1
+    double E0 = std::real(psi0.dot(H*psi0));
+
+    double dt = 0.02; int steps = 50; double t = dt*steps;   // t = 1.0
+    double Ef = run_tdvp2(A, W, dt, steps, /*imag*/false, /*chi_max*/16, 1e-12);
+
+    // energy conservation (no truncation: chi_max >= 8 = full bond for n=6)
+    check("TDVP2 quench energy conserved", std::abs(Ef - E0), 1e-6);
+
+    // fidelity vs exact exp(-iHt)|Neel>
+    Vec cc = es.eigenvectors().adjoint() * psi0;
+    for (int k=0;k<cc.size();++k) cc(k) *= std::exp(Cx(0,-t)*es.eigenvalues()(k));
+    Vec psit = es.eigenvectors() * cc;
+    Vec psf = mps_to_sv(A); psf /= psf.norm();
+    double fid = std::norm(psit.dot(psf)) / std::real(psit.dot(psit));
+    check("TDVP2 quench fidelity vs exact", std::abs(fid-1.0), 1e-3);
+
+    // entanglement actually grew (middle bond > 1)
+    int mid_bond = (int)A[n/2-1].cols();
+    if (mid_bond <= 1) { ++failures; printf("  TDVP2 bond growth                            FAIL (bond=%d)\n", mid_bond); }
+    else printf("  TDVP2 bond growth                            mid bond=%d  OK\n", mid_bond);
+}
+
 int main() {
     std::mt19937 rng(7);
     std::uniform_real_distribution<double> d(-1, 1);
@@ -193,6 +224,7 @@ int main() {
 
     stage2(rng);
     stage34(rng);
+    stage5();
 
     printf("\n%s\n", failures == 0 ? "ALL PASSED" : "SOME FAILED");
     return failures == 0 ? 0 : 1;
