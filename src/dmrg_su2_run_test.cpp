@@ -6,9 +6,42 @@
 #include <Eigen/Dense>
 #include <cstdio>
 #include <cmath>
+#include <complex>
 #include <vector>
 
 using namespace qx_su2;
+
+// dense ground energy of the spin-1 Heisenberg chain  H = J sum S_i.S_j  (OBC).
+static double dense_ground_spin1(int N, double J) {
+    using Cm = Eigen::MatrixXcd;
+    using Cx = std::complex<double>;
+    double s2 = std::sqrt(2.0);
+    Cm Sz(3,3); Sz.setZero(); Sz(0,0) = 1; Sz(2,2) = -1;
+    Cm Sp(3,3); Sp.setZero(); Sp(0,1) = s2; Sp(1,2) = s2;     // raising
+    Cm Sm = Sp.adjoint();
+    Cm Sx = 0.5 * (Sp + Sm);
+    Cm Sy = Cx(0, -0.5) * (Sp - Sm);                          // (Sp-Sm)/(2i)
+    Cm I3 = Cm::Identity(3, 3);
+    auto kron = [](const Cm& A, const Cm& B) {
+        Cm C(A.rows()*B.rows(), A.cols()*B.cols());
+        for (int i = 0; i < A.rows(); ++i)
+            for (int j = 0; j < A.cols(); ++j)
+                C.block(i*B.rows(), j*B.cols(), B.rows(), B.cols()) = A(i,j) * B;
+        return C;
+    };
+    auto embed = [&](const Cm& op, int site) {
+        Cm r(1,1); r(0,0) = 1;
+        for (int k = 0; k < N; ++k) r = kron(r, (k == site) ? op : I3);
+        return r;
+    };
+    int d = 1; for (int i = 0; i < N; ++i) d *= 3;
+    Cm H = Cm::Zero(d, d);
+    for (int i = 0; i + 1 < N; ++i)
+        for (const Cm* P : {&Sx, &Sy, &Sz})
+            H += J * (embed(*P, i) * embed(*P, i + 1));
+    Eigen::SelfAdjointEigenSolver<Cm> es(H);
+    return es.eigenvalues()(0);
+}
 
 static int failures = 0;
 
@@ -72,6 +105,18 @@ static void show_reduction(int N) {
            N, n_mult, n_u1, (double)n_u1 / n_mult);
 }
 
+// spin-1 chain: SU(2) (tS_phys=2) vs dense ED of H = J sum S.S
+static void run_spin1(int N, int max_mult) {
+    double J = 1.0;
+    double ref = dense_ground_spin1(N, J);
+    double e = run_su2_dmrg(N, J, max_mult, /*sweeps*/8, /*seed*/7, /*tS_phys*/2);
+    double err = std::abs(e - ref);
+    bool ok = err < 1e-6;
+    if (!ok) ++failures;
+    printf("  N=%-2d (S=1, cap %d)  SU(2)=%+.8f  dense=%+.8f  err=%.2e  %s\n",
+           N, max_mult, e, ref, err, ok ? "OK" : "FAIL");
+}
+
 int main() {
     printf("SU(2) two-site DMRG vs dense ED (H = J sum sigma.sigma, OBC):\n");
     run(4);
@@ -80,6 +125,10 @@ int main() {
     printf("Truncated (multiplet cap):\n");
     run_trunc(10, 20);
     run_trunc(12, 30);
+    printf("Spin-1 Heisenberg chain (H = J sum S.S, Haldane) vs dense ED:\n");
+    run_spin1(2, 0);
+    run_spin1(4, 0);
+    run_spin1(6, 40);
     printf("SU(2) multiplet reduction (exact middle bond):\n");
     show_reduction(8);
     show_reduction(16);

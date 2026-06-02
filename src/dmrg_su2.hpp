@@ -46,23 +46,38 @@ struct SU2Heisenberg {
     static constexpr int BEGIN = 0, OP = 1, DONE = 2;
     static int bond_tS(int b) { return (b == OP) ? 2 : 0; }
 
+    // Reduced matrix element of the on-site spin operator S for a site of spin
+    // S_phys (tS_phys = 2 S_phys), consistent with su2.hpp's CG convention:
+    //   <S m'| S^1_q |S m> = <S m; 1 q | S m'> <S||S||S>,  so at the Sz=m=S
+    //   component  S = <S S; 1 0 | S S> <S||S||S>.
+    static double R_spin(int tS_phys) {
+        return (tS_phys / 2.0) /
+               clebsch_gordan(tS_phys, tS_phys, 2, 0, tS_phys, tS_phys);
+    }
+
     // A transition contributes operator T^k (k from the bond spins) with reduced r.
     struct Trans { int a, b, tk; double r; };
-    static std::vector<Trans> transitions(double J) {
+
+    // Heisenberg MPO for a spin-(tS_phys/2) site. tS_phys=1 (spin-1/2) keeps the
+    // Pauli sigma convention (H = J sum sigma.sigma), matching the U(1) path;
+    // higher spin uses the spin operator S (H = J sum S.S), the standard
+    // convention (e.g. the spin-1 Haldane chain).
+    static std::vector<Trans> transitions(double J, int tS_phys = 1) {
         // The operator bond (spin S_op = 1) closes a scalar product:
         //   A^(k).B^(k) = (-1)^k sqrt(2k+1) (A (x) B)^(0).
         // A bare bond contraction yields the coupled (A(x)B)^0; folding this
         // closure factor into the ABSORBING (op->done) operator makes the raw
-        // MPO contraction reproduce J*sigma.sigma directly -- so the SU(2)
-        // environment/H_eff contractions (which replay the raw MPO) get the
-        // physical energy with no extra bookkeeping.
+        // MPO contraction reproduce J*S.S directly -- so the SU(2) environment/
+        // H_eff contractions (which replay the raw MPO) get the physical energy
+        // with no extra bookkeeping.
         const int S_op = 1;
         const double closure = ((S_op & 1) ? -1.0 : 1.0) * std::sqrt(2.0 * S_op + 1.0);
+        const double R_op = (tS_phys == 1) ? R_SIGMA() : R_spin(tS_phys);
         return {
-            {BEGIN, BEGIN, 0, R_I},                       // I
-            {BEGIN, OP,    2, J * R_SIGMA()},              // emit J*sigma
-            {OP,    DONE,  2, R_SIGMA() * closure},        // absorb sigma (+ closure)
-            {DONE,  DONE,  0, R_I},                        // I
+            {BEGIN, BEGIN, 0, R_I},                     // I
+            {BEGIN, OP,    2, J * R_op},                 // emit J * operator
+            {OP,    DONE,  2, R_op * closure},           // absorb operator (+ closure)
+            {DONE,  DONE,  0, R_I},                      // I
         };
     }
 

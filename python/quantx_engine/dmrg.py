@@ -212,6 +212,7 @@ class DMRGSolver:
         tol: float = 1e-10,
         method: str = "u1",
         seed: int = 7,
+        phys_spin: float = 0.5,
     ) -> DMRGResult:
         """Run DMRG to find the ground-state energy.
 
@@ -245,6 +246,10 @@ class DMRGSolver:
             multiplets, reaching a given accuracy with fewer kept states.
         seed : int
             Random seed for the initial MPS (used by ``method="su2"``).
+        phys_spin : float
+            Physical site spin for ``method="su2"``: ``0.5`` (spin-1/2 Heisenberg,
+            ``sigma.sigma`` convention) or ``1.0`` (spin-1 Haldane chain,
+            ``S.S`` convention), etc. Only the SU(2) path supports spin > 1/2.
 
         Returns
         -------
@@ -276,11 +281,13 @@ class DMRGSolver:
             raise DMRGError(f"Unknown method '{method}'. Use 'u1' or 'su2'.")
         if method == "su2" and hamiltonian_type != "heisenberg":
             raise DMRGError("method='su2' supports only hamiltonian_type='heisenberg'")
+        if phys_spin != 0.5 and method != "su2":
+            raise DMRGError("phys_spin > 1/2 requires method='su2'")
 
         if self._lib is not None:
             return self._solve_cpp(
                 n_qubits, hamiltonian_type, J, hamiltonian_terms or [],
-                max_bond, cutoff, n_sweeps, tol, method, seed
+                max_bond, cutoff, n_sweeps, tol, method, seed, phys_spin
             )
         if method == "su2":
             raise DMRGError(
@@ -344,11 +351,13 @@ class DMRGSolver:
         tol: float,
         method: str = "u1",
         seed: int = 7,
+        phys_spin: float = 0.5,
     ) -> DMRGResult:
         prob: dict = {"n_qubits": n_qubits}
         if hamiltonian_type == "heisenberg":
             prob["type"] = "heisenberg"
             prob["J"]    = J
+            prob["spin"] = phys_spin
         else:
             prob["type"]  = "pauli_sum"
             prob["terms"] = [

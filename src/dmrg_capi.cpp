@@ -79,8 +79,11 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
                 return dmrg_error("method 'su2' supports only type 'heisenberg'");
             double J  = prob.value("J", 1.0);
             int seed  = opts.value("seed", 7);
+            double S  = prob.value("spin", 0.5);     // physical site spin (0.5, 1, ...)
+            int tS    = (int)std::lround(2.0 * S);
+            if (tS < 1) return dmrg_error("spin must be >= 1/2");
             auto t0   = std::chrono::steady_clock::now();
-            double E  = qx_su2::run_su2_dmrg(n, J, max_bond, n_sweeps, (unsigned)seed);
+            double E  = qx_su2::run_su2_dmrg(n, J, max_bond, n_sweeps, (unsigned)seed, tS);
             double wt = std::chrono::duration<double>(
                             std::chrono::steady_clock::now() - t0).count();
             nlj out;
@@ -91,6 +94,7 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
             out["wall_time_s"]      = wt;
             out["sweep_energies"]   = nlj::array();
             out["method"]           = "su2";
+            out["spin"]             = S;
             tl_dmrg_buf = out.dump();
             return tl_dmrg_buf.c_str();
         }

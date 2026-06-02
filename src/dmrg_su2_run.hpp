@@ -31,21 +31,20 @@ inline double su2_ms() {
         std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-// number of fusion paths from spin 0 to each multiplet after k spin-1/2's
-inline std::vector<std::map<int,long long>> left_paths(int N) {
+// number of fusion paths from spin 0 to each multiplet after k spin-(tphys/2) sites
+inline std::vector<std::map<int,long long>> left_paths(int N, int tphys = 1) {
     std::vector<std::map<int,long long>> P(N + 1);
     P[0][0] = 1;
     for (int k = 1; k <= N; ++k)
-        for (auto& [j, c] : P[k-1]) {
-            if (j - 1 >= 0) P[k][j-1] += c;
-            P[k][j+1] += c;
-        }
+        for (auto& [j, c] : P[k-1])
+            for (int jn = std::abs(j - tphys); jn <= j + tphys; jn += 2)
+                P[k][jn] += c;
     return P;
 }
 
 // exact bond multiplet structure for a length-N chain, total spin 0
-inline std::vector<SpinBond> exact_bonds(int N) {
-    auto P = left_paths(N);
+inline std::vector<SpinBond> exact_bonds(int N, int tphys = 1) {
+    auto P = left_paths(N, tphys);
     std::vector<SpinBond> bonds(N + 1);
     for (int k = 0; k <= N; ++k) {
         SpinBond b;
@@ -74,7 +73,8 @@ inline SpinBond cap_bond(const SpinBond& ex, int max_mult) {
 }
 
 // random initial MPS with the given bond structure
-inline std::vector<Site> init_mps(const std::vector<SpinBond>& bonds, std::mt19937& rng) {
+inline std::vector<Site> init_mps(const std::vector<SpinBond>& bonds,
+                                  std::mt19937& rng, int tphys = 1) {
     int N = (int)bonds.size() - 1;
     std::uniform_real_distribution<double> d(-1, 1);
     std::vector<Site> A(N);
@@ -84,7 +84,7 @@ inline std::vector<Site> init_mps(const std::vector<SpinBond>& bonds, std::mt199
         for (int li = 0; li < bonds[i].n(); ++li)
         for (int ri = 0; ri < bonds[i+1].n(); ++ri) {
             int tjl = bonds[i].tS[li], tjr = bonds[i+1].tS[ri];
-            if (!tri_ok(tjl, 1, tjr)) continue;        // jl (x) 1/2 -> jr
+            if (!tri_ok(tjl, tphys, tjr)) continue;    // jl (x) S_phys -> jr
             Mat m(bonds[i].deg[li], bonds[i+1].deg[ri]);
             for (int a = 0; a < m.rows(); ++a) for (int b = 0; b < m.cols(); ++b) m(a,b) = d(rng);
             A[i].blk[{tjl, tjr}] = m;
@@ -103,14 +103,14 @@ struct ThetaSpace {
     std::map<Key3,int> idx;     // (jl,jc,jr) -> index into blks
     int dim = 0;
     // enumerate (jl,jc,jr) with deg from bondL (jl) and bondR (jr)
-    void build(const SpinBond& bondL, const SpinBond& bondR) {
+    void build(const SpinBond& bondL, const SpinBond& bondR, int tphys = 1) {
         for (int li = 0; li < bondL.n(); ++li)
         for (int ri = 0; ri < bondR.n(); ++ri) {
             int tjl = bondL.tS[li], tjr = bondR.tS[ri];
-            int lo = std::max(std::abs(tjl - 1), std::abs(tjr - 1));
-            int hi = std::min(tjl + 1, tjr + 1);
+            int lo = std::max(std::abs(tjl - tphys), std::abs(tjr - tphys));
+            int hi = std::min(tjl + tphys, tjr + tphys);
             for (int tjc = lo; tjc <= hi; tjc += 2) {
-                if (!tri_ok(tjl, 1, tjc) || !tri_ok(tjc, 1, tjr)) continue;
+                if (!tri_ok(tjl, tphys, tjc) || !tri_ok(tjc, tphys, tjr)) continue;
                 idx[{tjl, tjc, tjr}] = (int)blks.size();
                 blks.push_back(Blk{tjl, tjc, tjr, bondL.deg[li], bondR.deg[ri], dim});
                 dim += bondL.deg[li] * bondR.deg[ri];
@@ -219,7 +219,8 @@ struct Heff2Plan {
 };
 
 inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
-                            const std::vector<SU2Heisenberg::Trans>& trans) {
+                            const std::vector<SU2Heisenberg::Trans>& trans,
+                            int tphys = 1) {
     Heff2Plan p; p.dim = sp.dim;
     for (auto& inb : sp.blks) {
         int tjl = inb.tjl, tjc = inb.tjc, tjr = inb.tjr;
@@ -236,13 +237,13 @@ inline Heff2Plan build_plan(const ThetaSpace& sp, const Env& L, const Env& R,
                     int wm = t1.b, twm = SU2Heisenberg::bond_tS(wm);
                     for (auto& t2 : trans) {
                         if (t2.a != wm || t2.b != wr) continue;
-                        int lo = std::max(std::abs(tjlp - 1), std::abs(tjrp - 1));
-                        int hi = std::min(tjlp + 1, tjrp + 1);
+                        int lo = std::max(std::abs(tjlp - tphys), std::abs(tjrp - tphys));
+                        int hi = std::min(tjlp + tphys, tjrp + tphys);
                         for (int tjcp = lo; tjcp <= hi; tjcp += 2) {
                             const ThetaSpace::Blk* outb = sp.find(tjlp, tjcp, tjrp);
                             if (!outb) continue;
                             double Rc = recoup_2site(tjl, tjc, tjr, tjlp, tjcp, tjrp,
-                                                     twl, twm, twr, t1.tk, t2.tk);
+                                                     twl, twm, twr, t1.tk, t2.tk, tphys);
                             if (Rc == 0.0) continue;
                             p.ops.push_back({&Lb, &Rb, Rc * t1.r * t2.r,
                                              inb.off, inb.dl, inb.dr,
@@ -308,11 +309,11 @@ inline double lanczos_lowest(const std::function<Eigen::VectorXd(const Eigen::Ve
 // H_eff is plain-symmetric.
 inline double solve_2site(const ThetaSpace& sp, const Env& L, const Env& R,
                           const std::vector<SU2Heisenberg::Trans>& trans,
-                          Theta& theta_out, const Theta* warm = nullptr) {
+                          Theta& theta_out, const Theta* warm = nullptr, int tphys = 1) {
     int n = sp.dim;
     if (n == 0) { theta_out = Theta{}; return 0.0; }
     double t0 = su2_ms();
-    Heff2Plan plan = build_plan(sp, L, R, trans);
+    Heff2Plan plan = build_plan(sp, L, R, trans, tphys);
     su2_prof().build += su2_ms() - t0;
     Eigen::VectorXd sw(n);                 // sqrt weight per coordinate, w = 2jr+1
     for (auto& b : sp.blks) {
@@ -450,47 +451,50 @@ inline void svd_split(const Theta& th, SpinBond bondL, SpinBond bondR,
 }
 
 // ----- full sweep driver ---------------------------------------------------
+// tS_phys is the doubled physical spin (1 = spin-1/2 [Pauli sigma.sigma, matches
+// the U(1) path], 2 = spin-1 [S.S, Haldane chain], ...). Targets total spin 0.
 inline double run_su2_dmrg(int N, double J, int max_mult, int n_sweeps,
-                           unsigned seed = 1) {
+                           unsigned seed = 1, int tS_phys = 1) {
     Eigen::setNbThreads(1);   // we parallelize at the group/sector level; avoid nested GEMM threads
-    auto trans = SU2Heisenberg::transitions(J);
-    auto bonds = exact_bonds(N);
+    const int tp = tS_phys;
+    auto trans = SU2Heisenberg::transitions(J, tp);
+    auto bonds = exact_bonds(N, tp);
     for (auto& b : bonds) b = cap_bond(b, max_mult);   // bound the initial MPS size
     std::mt19937 rng(seed);
-    auto A = init_mps(bonds, rng);
+    auto A = init_mps(bonds, rng, tp);
 
     // build right environments
     std::vector<Env> Lenv(N + 1), Renv(N + 1);
     Lenv[0] = boundary_left();
     Renv[N] = boundary_right();
-    for (int i = N - 1; i >= 1; --i) Renv[i] = grow_right(Renv[i+1], A[i], trans);
+    for (int i = N - 1; i >= 1; --i) Renv[i] = grow_right(Renv[i+1], A[i], trans, tp);
 
     double E = 0;
     double tt;
     for (int sweep = 0; sweep < n_sweeps; ++sweep) {
         // left -> right
         for (int i = 0; i < N - 1; ++i) {
-            ThetaSpace sp; sp.build(A[i].left, A[i+1].right);
+            ThetaSpace sp; sp.build(A[i].left, A[i+1].right, tp);
             tt = su2_ms(); Theta warm = form_theta(A[i], A[i+1]), th; su2_prof().warm += su2_ms()-tt;
-            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm);
+            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm, tp);
             SpinBond mid;
             tt = su2_ms();
             svd_split(th, A[i].left, A[i+1].right, +1,
                       (i==0||i==N-2)?0:max_mult, 1e-12, A[i], A[i+1], mid);
             su2_prof().svd += su2_ms()-tt;
-            tt = su2_ms(); Lenv[i+1] = grow_left(Lenv[i], A[i], trans); su2_prof().grow += su2_ms()-tt;
+            tt = su2_ms(); Lenv[i+1] = grow_left(Lenv[i], A[i], trans, tp); su2_prof().grow += su2_ms()-tt;
         }
         // right -> left
         for (int i = N - 2; i >= 0; --i) {
-            ThetaSpace sp; sp.build(A[i].left, A[i+1].right);
+            ThetaSpace sp; sp.build(A[i].left, A[i+1].right, tp);
             tt = su2_ms(); Theta warm = form_theta(A[i], A[i+1]), th; su2_prof().warm += su2_ms()-tt;
-            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm);
+            E = solve_2site(sp, Lenv[i], Renv[i+2], trans, th, &warm, tp);
             SpinBond mid;
             tt = su2_ms();
             svd_split(th, A[i].left, A[i+1].right, -1,
                       (i==0||i==N-2)?0:max_mult, 1e-12, A[i], A[i+1], mid);
             su2_prof().svd += su2_ms()-tt;
-            tt = su2_ms(); Renv[i+1] = grow_right(Renv[i+2], A[i+1], trans); su2_prof().grow += su2_ms()-tt;
+            tt = su2_ms(); Renv[i+1] = grow_right(Renv[i+2], A[i+1], trans, tp); su2_prof().grow += su2_ms()-tt;
         }
     }
     if (std::getenv("QX_SU2_PROFILE")) {

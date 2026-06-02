@@ -322,3 +322,25 @@ class TestSU2Method:
         with pytest.raises(DMRGError):
             solver.solve(n_qubits=4, hamiltonian_type="pauli_sum",
                         hamiltonian_terms=[(1.0, "Z0Z1")], method="su2")
+
+    # spin-1 Heisenberg (Haldane chain), H = J sum S.S, exact references
+    @pytest.mark.parametrize("n,ref", [(2, -2.0), (4, -4.64575131)])
+    def test_su2_spin1_matches_exact(self, solver, n, ref):
+        """SU(2) spin-1 chain matches exact diagonalization of H = J sum S.S."""
+        try:
+            r = solver.solve(n_qubits=n, hamiltonian_type="heisenberg", J=1.0,
+                            max_bond=64, n_sweeps=8, method="su2", phys_spin=1.0)
+        except Exception as e:
+            if "native" in str(e).lower():
+                pytest.skip(f"Native library not available: {e}")
+            raise
+        assert abs(r.energy - ref) < 1e-6, (
+            f"spin-1 N={n}: got {r.energy:.8f}, exact {ref:.8f}"
+        )
+
+    def test_phys_spin_requires_su2(self, solver):
+        """phys_spin > 1/2 is only valid with method='su2'."""
+        from quantx_engine.dmrg import DMRGError
+        with pytest.raises(DMRGError):
+            solver.solve(n_qubits=4, hamiltonian_type="heisenberg", J=1.0,
+                        method="u1", phys_spin=1.0)

@@ -76,8 +76,7 @@ struct Env {
 //   Lnew_red[jkr,wr,jbr] += R * r_mpo * (Aket^T Lold_red Abra).
 inline double recoup_left_impl(int tjkl, int twl, int tjbl,
                           int tk,                       // operator rank (MPO)
-                          int tjkr, int twr, int tjbr) {
-    const int tphys = 1;
+                          int tjkr, int twr, int tjbr, int tphys) {
     double num = 0.0, den = 0.0;
     for (int mkr = -tjkr; mkr <= tjkr; mkr += 2)
     for (int mwr = -twr;  mwr <= twr;  mwr += 2) {
@@ -116,12 +115,12 @@ inline double recoup_left_impl(int tjkl, int twl, int tjbl,
 }
 // memoized wrapper (labels-only; recoupling is reused across sweeps)
 inline double recoup_left(int tjkl, int twl, int tjbl, int tk,
-                          int tjkr, int twr, int tjbr) {
-    static std::map<std::array<int,7>, double> cache;
-    std::array<int,7> key{tjkl, twl, tjbl, tk, tjkr, twr, tjbr};
+                          int tjkr, int twr, int tjbr, int tphys = 1) {
+    static std::map<std::array<int,8>, double> cache;
+    std::array<int,8> key{tjkl, twl, tjbl, tk, tjkr, twr, tjbr, tphys};
     auto it = cache.find(key);
     if (it != cache.end()) return it->second;
-    double r = recoup_left_impl(tjkl, twl, tjbl, tk, tjkr, twr, tjbr);
+    double r = recoup_left_impl(tjkl, twl, tjbl, tk, tjkr, twr, tjbr, tphys);
     cache.emplace(key, r);
     return r;
 }
@@ -130,8 +129,7 @@ inline double recoup_left(int tjkl, int twl, int tjbl, int tk,
 // new legs (kl,wl,bl) [projected]. Same coupling jk (x) w -> jb throughout.
 inline double recoup_right_impl(int tjkr, int twr, int tjbr,
                            int tk,
-                           int tjkl, int twl, int tjbl) {
-    const int tphys = 1;
+                           int tjkl, int twl, int tjbl, int tphys) {
     double num = 0.0, den = 0.0;
     for (int mkl = -tjkl; mkl <= tjkl; mkl += 2)
     for (int mwl = -twl;  mwl <= twl;  mwl += 2) {
@@ -169,12 +167,12 @@ inline double recoup_right_impl(int tjkr, int twr, int tjbr,
     return den > 0 ? num / den : 0.0;
 }
 inline double recoup_right(int tjkr, int twr, int tjbr, int tk,
-                           int tjkl, int twl, int tjbl) {
-    static std::map<std::array<int,7>, double> cache;
-    std::array<int,7> key{tjkr, twr, tjbr, tk, tjkl, twl, tjbl};
+                           int tjkl, int twl, int tjbl, int tphys = 1) {
+    static std::map<std::array<int,8>, double> cache;
+    std::array<int,8> key{tjkr, twr, tjbr, tk, tjkl, twl, tjbl, tphys};
     auto it = cache.find(key);
     if (it != cache.end()) return it->second;
-    double r = recoup_right_impl(tjkr, twr, tjbr, tk, tjkl, twl, tjbl);
+    double r = recoup_right_impl(tjkr, twr, tjbr, tk, tjkl, twl, tjbl, tphys);
     cache.emplace(key, r);
     return r;
 }
@@ -182,7 +180,7 @@ inline double recoup_right(int tjkr, int twr, int tjbr, int tk,
 // ----- grow left environment by absorbing one site -------------------------
 // trans: MPO transitions; A: the (ket=bra) site tensor at this position.
 inline Env grow_left(const Env& L, const Site& A,
-                     const std::vector<SU2Heisenberg::Trans>& trans) {
+                     const std::vector<SU2Heisenberg::Trans>& trans, int tphys = 1) {
     Env Lnew;
     for (auto& [key, Lblk] : L.blk) {
         int tjkl = std::get<0>(key), wl = std::get<1>(key), tjbl = std::get<2>(key);
@@ -197,7 +195,7 @@ inline Env grow_left(const Env& L, const Site& A,
                 for (auto& [kb, Abra] : A.blk) {
                     if (kb.first != tjbl) continue;
                     int tjbr = kb.second;
-                    double R = recoup_left(tjkl, twl, tjbl, t.tk, tjkr, twr, tjbr);
+                    double R = recoup_left(tjkl, twl, tjbl, t.tk, tjkr, twr, tjbr, tphys);
                     if (R == 0.0) continue;
                     Mat contrib = (R * t.r) * (Aket.transpose() * Lblk * Abra);
                     auto knew = std::make_tuple(tjkr, wr, tjbr);
@@ -213,7 +211,7 @@ inline Env grow_left(const Env& L, const Site& A,
 
 // ----- grow right environment by absorbing one site ------------------------
 inline Env grow_right(const Env& R, const Site& A,
-                      const std::vector<SU2Heisenberg::Trans>& trans) {
+                      const std::vector<SU2Heisenberg::Trans>& trans, int tphys = 1) {
     Env Rnew;
     for (auto& [key, Rblk] : R.blk) {
         int tjkr = std::get<0>(key), wr = std::get<1>(key), tjbr = std::get<2>(key);
@@ -227,7 +225,7 @@ inline Env grow_right(const Env& R, const Site& A,
                 for (auto& [kb, Abra] : A.blk) {
                     if (kb.second != tjbr) continue;
                     int tjbl = kb.first;
-                    double Rc = recoup_right(tjkr, twr, tjbr, t.tk, tjkl, twl, tjbl);
+                    double Rc = recoup_right(tjkr, twr, tjbr, t.tk, tjkl, twl, tjbl, tphys);
                     if (Rc == 0.0) continue;
                     Mat contrib = (Rc * t.r) * (Aket * Rblk * Abra.transpose());
                     auto knew = std::make_tuple(tjkl, wl, tjbl);
@@ -254,8 +252,7 @@ using Theta = std::map<Key3, Mat>;
 inline double recoup_2site_impl(int tjl, int tjc, int tjr,
                            int tjlp, int tjcp, int tjrp,
                            int twl, int twm, int twr,
-                           int tk1, int tk2) {
-    const int tp = 1;
+                           int tk1, int tk2, int tp) {
     double num = 0.0, den = 0.0;
     for (int mlp = -tjlp; mlp <= tjlp; mlp += 2)
     for (int mu1p = -tp; mu1p <= tp; mu1p += 2) {
@@ -313,12 +310,12 @@ inline double recoup_2site_impl(int tjl, int tjc, int tjr,
 }
 inline double recoup_2site(int tjl, int tjc, int tjr,
                            int tjlp, int tjcp, int tjrp,
-                           int twl, int twm, int twr, int tk1, int tk2) {
-    static std::map<std::array<int,11>, double> cache;
-    std::array<int,11> key{tjl, tjc, tjr, tjlp, tjcp, tjrp, twl, twm, twr, tk1, tk2};
+                           int twl, int twm, int twr, int tk1, int tk2, int tp = 1) {
+    static std::map<std::array<int,12>, double> cache;
+    std::array<int,12> key{tjl, tjc, tjr, tjlp, tjcp, tjrp, twl, twm, twr, tk1, tk2, tp};
     auto it = cache.find(key);
     if (it != cache.end()) return it->second;
-    double r = recoup_2site_impl(tjl, tjc, tjr, tjlp, tjcp, tjrp, twl, twm, twr, tk1, tk2);
+    double r = recoup_2site_impl(tjl, tjc, tjr, tjlp, tjcp, tjrp, twl, twm, twr, tk1, tk2, tp);
     cache.emplace(key, r);
     return r;
 }
@@ -327,7 +324,8 @@ inline double recoup_2site(int tjl, int tjc, int tjr,
 // L: left env at site1's left bond (ket jl, MPO wl, bra jl'). R: right env at
 // site2's right bond (ket jr, MPO wr, bra jr').
 inline Theta apply_heff_2site(const Theta& th, const Env& L, const Env& R,
-                              const std::vector<SU2Heisenberg::Trans>& trans) {
+                              const std::vector<SU2Heisenberg::Trans>& trans,
+                              int tphys = 1) {
     Theta out;
     for (auto& [kin, Th] : th) {
         int tjl = std::get<0>(kin), tjc = std::get<1>(kin), tjr = std::get<2>(kin);
@@ -344,11 +342,11 @@ inline Theta apply_heff_2site(const Theta& th, const Env& L, const Env& R,
                     int wm = t1.b, twm = SU2Heisenberg::bond_tS(wm);
                     for (auto& t2 : trans) {
                         if (t2.a != wm || t2.b != wr) continue;
-                        int lo = std::max(std::abs(tjlp - 1), std::abs(tjrp - 1));
-                        int hi = std::min(tjlp + 1, tjrp + 1);
+                        int lo = std::max(std::abs(tjlp - tphys), std::abs(tjrp - tphys));
+                        int hi = std::min(tjlp + tphys, tjrp + tphys);
                         for (int tjcp = lo; tjcp <= hi; tjcp += 2) {
                             double Rc = recoup_2site(tjl, tjc, tjr, tjlp, tjcp, tjrp,
-                                                     twl, twm, twr, t1.tk, t2.tk);
+                                                     twl, twm, twr, t1.tk, t2.tk, tphys);
                             if (Rc == 0.0) continue;
                             Mat contrib = (Rc * t1.r * t2.r) * (Lb.transpose() * Th * Rb);
                             Key3 ko{tjlp, tjcp, tjrp};
