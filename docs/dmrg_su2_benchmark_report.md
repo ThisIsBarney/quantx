@@ -254,15 +254,26 @@ accuracy where O(χ³) compute dominates. We expect the *asymptotic* (very large
 gap to be governed mainly by the symmetry reduction and BLAS efficiency rather
 than overhead; mapping that regime is future work. TeNPy is also a far broader,
 more general library (arbitrary models, infinite DMRG, charges, etc.); QuantX's
-SU(2) path is currently specialized to the spin-½ Heisenberg chain.
+SU(2) path currently targets the Heisenberg model at arbitrary site spin
+(spin-½ and spin-1 validated to machine precision; see §6).
 
 ---
 
 ## 6. Limitations & future work
 
-- **Model coverage**: the SU(2) MPO is currently the spin-½ Heisenberg vector
-  operator. General SU(2) MPOs (spin-1, t–J, Hubbard with SU(2)⊗U(1)) are the
-  natural extension.
+**Done — arbitrary site spin (Tier 1).** The engine is parameterized by the
+physical spin: spin-½ (Pauli `σ·σ`, U(1)-compatible) and **spin-1** (`S·S`, the
+Haldane chain) are both validated against dense ED to machine precision
+(spin-1: N=2 −2.0, N=4 −4.64575131, N=6 −7.37027497). Exposed as
+`solve(..., method="su2", phys_spin=1.0)`.
+
+Future milestones for a *general* SU(2) DMRG:
+
+- **Tier 2 — general spin MPOs**: longer-range and biquadratic couplings
+  (e.g. AKLT `(S·S)²`), via an SU(2) auto-MPO builder.
+- **Tier 3 — fermionic SU(2)⊗U(1)**: Hubbard and t–J models — the high-value
+  prize, requiring fermionic (graded/Z₂) tensors combined with non-abelian spin
+  and U(1) charge. A project in its own right.
 - **Multi-core**: the SU(2) matvec is bandwidth/granularity-bound and does not
   thread-scale; a batched small-GEMM kernel would be required, and only pays off
   in regimes with many matvecs per solve or larger per-multiplet blocks.
