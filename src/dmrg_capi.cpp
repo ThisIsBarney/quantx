@@ -1,6 +1,7 @@
 #include "qx/c_api.h"
 #include "dmrg_internal.hpp"
 #include "dmrg_su2_run.hpp"      // SU(2)-symmetric Heisenberg DMRG (header-only)
+#include "tdvp.hpp"              // TDVP MPS time evolution (header-only)
 
 #include <chrono>
 #include <stdexcept>
@@ -113,6 +114,64 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         out["sweep_energies"]   = res.sweep_energies;
         out["method"]           = "u1";
 
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_tdvp_evolve(const char* problem_json,
+                                  const char* options_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        nlj opts = nlj::parse(options_json ? options_json : "{}");
+        int    n        = prob.value("n_qubits", 8);
+        double J        = prob.value("J", 1.0);
+        std::string type = prob.value("type", "heisenberg");
+        if (type != "heisenberg") return dmrg_error("tdvp supports only type 'heisenberg'");
+        if (n < 2)  return dmrg_error("n_qubits must be >= 2");
+
+        double dt       = opts.value("dt", 0.05);
+        int    n_steps  = opts.value("n_steps", 20);
+        int    chi_max  = opts.value("chi_max", 64);
+        bool   imag     = opts.value("imag", false);
+        bool   two_site = opts.value("two_site", true);
+        std::string init = opts.value("initial", "neel");
+
+        auto W = qx_dmrg::build_heisenberg_mpo(n, J);
+        std::vector<qx_tdvp::Mat> A = qx_tdvp::neel_state(n);
+        if (init == "up") for (int i=0;i<n;++i) { A[i]=qx_tdvp::Mat::Zero(2,1); A[i](0,0)=1; }
+        qx_tdvp::right_canonicalize(A);
+        if (imag) { double nz=std::sqrt(qx_tdvp::mps_norm2(A)); if (nz>0) A[0]/=nz; }
+
+        auto stagmag = [&]() {
+            auto sz = qx_tdvp::mps_sz(A);
+            double m = 0; for (int i=0;i<n;++i) m += ((i%2==0)?1.0:-1.0) * sz[i];
+            return m / n;
+        };
+        std::vector<double> times, stag;
+        times.push_back(0.0); stag.push_back(stagmag());
+
+        auto t0 = std::chrono::steady_clock::now();
+        for (int step=0; step<n_steps; ++step) {
+            if (two_site) qx_tdvp::tdvp2_step(A, W, dt, imag, chi_max, 1e-12);
+            else          qx_tdvp::tdvp_step (A, W, dt, imag);
+            times.push_back((step+1)*dt);
+            stag.push_back(stagmag());
+        }
+        double wt = std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count();
+
+        int max_bond = 0; for (auto& a : A) max_bond = std::max(max_bond, (int)a.cols());
+        nlj out;
+        out["ok"]              = true;
+        out["energy"]          = qx_tdvp::mps_energy(A, W);
+        out["sz"]              = qx_tdvp::mps_sz(A);
+        out["times"]           = times;
+        out["staggered_mag"]   = stag;
+        out["max_bond"]        = max_bond;
+        out["wall_time_s"]     = wt;
+        out["method"]          = two_site ? "tdvp2" : "tdvp1";
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
     } catch (const std::exception& e) {
