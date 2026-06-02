@@ -178,24 +178,39 @@ inline Mat apply_h1(const Env& L, const MPOSite& W, const Env& R, const Mat& X) 
 inline Mat apply_h2(const Env& L, const MPOSite& Wi, const MPOSite& Wj,
                     const Env& R, const Mat& T) {
     const int chiL = L.chi1, chiR = R.chi2;
+    const int Dwl = Wi.chi_l, Dwm = Wi.chi_r, Dwr = Wj.chi_r;
+    // Precombine the two-site MPO: W_comb[wl][wr] is 4x4 over ((s1',s2'),(s1,s2)),
+    // collapsing the internal bond wm so the matvec is ~Dwl*Dwr (not *Dwm) GEMMs.
+    using M4 = Eigen::Matrix<Cx,4,4>;
+    std::vector<std::vector<M4>> Wc(Dwl, std::vector<M4>(Dwr, M4::Zero()));
+    for (int wl=0; wl<Dwl; ++wl)
+        for (int wm=0; wm<Dwm; ++wm) {
+            const Mat2& Wim = Wi.W(wl,wm); if (Wim.isZero(1e-15)) continue;
+            for (int wr=0; wr<Dwr; ++wr) {
+                const Mat2& Wjm = Wj.W(wm,wr); if (Wjm.isZero(1e-15)) continue;
+                for (int s1p=0;s1p<2;++s1p) for (int s2p=0;s2p<2;++s2p)
+                    for (int s1=0;s1<2;++s1) for (int s2=0;s2<2;++s2)
+                        Wc[wl][wr](s1p*2+s2p, s1*2+s2) += Wim(s1p,s1)*Wjm(s2p,s2);
+            }
+        }
     Mat Y = Mat::Zero(2*chiL, 2*chiR);
-    for (int wl=0; wl<Wi.chi_l; ++wl) {
+    for (int wl=0; wl<Dwl; ++wl) {
         Mat Lwl(L.chi1, L.chi2);
         for (int ap=0;ap<L.chi1;++ap) for (int a=0;a<L.chi2;++a) Lwl(ap,a) = L.at(ap,wl,a);
-        for (int wr=0; wr<Wj.chi_r; ++wr) {
+        for (int wr=0; wr<Dwr; ++wr) {
+            if (Wc[wl][wr].isZero(1e-15)) continue;
             Mat Rwr(R.chi1, R.chi2);
             for (int b=0;b<R.chi1;++b) for (int bp=0;bp<R.chi2;++bp) Rwr(b,bp) = R.at(b,wr,bp);
-            for (int wm=0; wm<Wi.chi_r; ++wm) {
-                const Mat2& Wim = Wi.W(wl,wm); if (Wim.isZero(1e-15)) continue;
-                const Mat2& Wjm = Wj.W(wm,wr); if (Wjm.isZero(1e-15)) continue;
-                for (int s1=0;s1<2;++s1) for (int s2=0;s2<2;++s2) {
-                    Mat tmp = Lwl * T.block(s1*chiL, s2*chiR, chiL, chiR) * Rwr;  // (a',b')
-                    for (int s1p=0;s1p<2;++s1p) for (int s2p=0;s2p<2;++s2p) {
-                        Cx co = Wim(s1p,s1) * Wjm(s2p,s2);
-                        if (std::abs(co)<1e-15) continue;
-                        Y.block(s1p*chiL, s2p*chiR, chiL, chiR) += co * tmp;
-                    }
+            Mat LTR[4];                                   // LTR[s1*2+s2] = L T_block R
+            for (int s1=0;s1<2;++s1) for (int s2=0;s2<2;++s2)
+                LTR[s1*2+s2] = Lwl * T.block(s1*chiL, s2*chiR, chiL, chiR) * Rwr;
+            for (int p=0;p<4;++p) {                        // p = s1'*2+s2'
+                Mat acc = Mat::Zero(chiL, chiR);
+                for (int q=0;q<4;++q) {                    // q = s1*2+s2
+                    Cx co = Wc[wl][wr](p,q);
+                    if (std::abs(co)>1e-15) acc += co * LTR[q];
                 }
+                Y.block((p/2)*chiL, (p%2)*chiR, chiL, chiR) += acc;
             }
         }
     }
