@@ -89,6 +89,7 @@ class DMRGResult:
     sweep_energies: list[float]
     wall_time_s: float
     backend: str = "cpp"
+    method: str = "u1"
 
 
 # ── ctypes helpers ────────────────────────────────────────────────────────────
@@ -209,6 +210,8 @@ class DMRGSolver:
         cutoff: float = 1e-10,
         n_sweeps: int = 10,
         tol: float = 1e-10,
+        method: str = "u1",
+        seed: int = 7,
     ) -> DMRGResult:
         """Run DMRG to find the ground-state energy.
 
@@ -225,7 +228,10 @@ class DMRGSolver:
             List of ``(coefficient, pauli_label)`` pairs.  Pauli labels may
             be in indexed format (``"X0X1"``) or plain format (``"XXI..."``).
         max_bond : int
-            Maximum MPS bond dimension χ.  Memory scales as O(χ² · n).
+            For ``method="u1"`` (default): maximum MPS bond dimension χ (number
+            of Sz states kept). For ``method="su2"``: the maximum number of
+            *spin multiplets* kept — each multiplet of spin S stands for 2S+1
+            states, so a given accuracy is reached with far fewer multiplets.
         cutoff : float
             SVD singular-value weight cutoff; states with discarded weight
             below ``cutoff²`` are dropped even if ``max_bond`` is not reached.
@@ -233,6 +239,12 @@ class DMRGSolver:
             Maximum number of full left→right→left DMRG sweeps.
         tol : float
             Energy convergence tolerance.  Stops early when |ΔE| < tol.
+        method : str
+            ``"u1"`` (default): Sz-conserving block-sparse two-site DMRG.
+            ``"su2"``: SU(2) spin-symmetric DMRG (Heisenberg only); tracks spin
+            multiplets, reaching a given accuracy with fewer kept states.
+        seed : int
+            Random seed for the initial MPS (used by ``method="su2"``).
 
         Returns
         -------
@@ -260,11 +272,19 @@ class DMRGSolver:
             raise DMRGError(
                 "hamiltonian_terms must be provided when hamiltonian_type='pauli_sum'"
             )
+        if method not in ("u1", "su2"):
+            raise DMRGError(f"Unknown method '{method}'. Use 'u1' or 'su2'.")
+        if method == "su2" and hamiltonian_type != "heisenberg":
+            raise DMRGError("method='su2' supports only hamiltonian_type='heisenberg'")
 
         if self._lib is not None:
             return self._solve_cpp(
                 n_qubits, hamiltonian_type, J, hamiltonian_terms or [],
-                max_bond, cutoff, n_sweeps, tol
+                max_bond, cutoff, n_sweeps, tol, method, seed
+            )
+        if method == "su2":
+            raise DMRGError(
+                "method='su2' requires the native C++ library (no Python fallback)."
             )
         # Fallback
         return _run_python_dmrg(
@@ -322,6 +342,8 @@ class DMRGSolver:
         cutoff: float,
         n_sweeps: int,
         tol: float,
+        method: str = "u1",
+        seed: int = 7,
     ) -> DMRGResult:
         prob: dict = {"n_qubits": n_qubits}
         if hamiltonian_type == "heisenberg":
@@ -339,6 +361,8 @@ class DMRGSolver:
             "cutoff":   cutoff,
             "n_sweeps": n_sweeps,
             "tol":      tol,
+            "method":   method,
+            "seed":     seed,
         }
 
         raw = self._lib.qx_dmrg_sweep(
@@ -357,4 +381,5 @@ class DMRGSolver:
             sweep_energies=[float(e) for e in out.get("sweep_energies", [])],
             wall_time_s=float(out.get("wall_time_s", 0.0)),
             backend="cpp",
+            method=str(out.get("method", method)),
         )
