@@ -33,7 +33,10 @@ def _dense_heisenberg(n):
 def test_imag_time_ground(solver):
     n=6
     H=_dense_heisenberg(n); e0=np.linalg.eigvalsh(H)[0]
-    g=solver.evolve(n, dt=0.1, n_steps=200, imag=True, two_site=True, chi_max=16)
+    # engine="tdvp2": Krylov-exact local step (no Trotter error), unlike the
+    # default TEBD engine, so energy converges to machine precision.
+    g=solver.evolve(n, dt=0.1, n_steps=200, imag=True, two_site=True, chi_max=16,
+                    engine="tdvp2")
     assert abs(g.energy-e0) < 1e-6
 
 
@@ -59,7 +62,17 @@ def test_real_time_quench_vs_exact(solver):
 
 def test_real_time_energy_conserved(solver):
     n=8
-    r=solver.evolve(n, dt=0.05, n_steps=40, chi_max=32, two_site=True)
+    # engine="tdvp2": exact local step conserves energy to machine precision;
+    # the default TEBD has O(dt^2) Trotter drift (tested separately below).
+    r=solver.evolve(n, dt=0.05, n_steps=40, chi_max=32, two_site=True, engine="tdvp2")
     # Neel energy under Heisenberg sigma.sigma: each bond <sigma.sigma> on
     # alternating spins contributes the ZZ part = -1; (n-1) bonds.
     assert abs(r.energy - (-(n-1))) < 1e-6
+
+
+def test_tebd_default_energy_conserved_trotter(solver):
+    # The default engine is TEBD: energy is conserved only to O(dt^2) Trotter.
+    n=8
+    r=solver.evolve(n, dt=0.05, n_steps=40, chi_max=32)
+    assert r.method == "tebd2-block"
+    assert abs(r.energy - (-(n-1))) < 1e-3

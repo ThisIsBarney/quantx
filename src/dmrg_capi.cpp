@@ -144,7 +144,13 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         auto W = qx_dmrg::build_heisenberg_mpo(n, J);
 
         if (block) {
-            auto r = qx_dmrg::run_tdvp2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag);
+            // Block evolution engine: "tebd" (Trotter gates, fast NN -- default) or
+            // "tdvp2" (Krylov, needed for general/long-range MPOs).
+            std::string engine = opts.value("engine", "tebd");
+            int stride = opts.value("measure_stride", 1);
+            auto r = (engine == "tdvp2")
+                ? qx_dmrg::run_tdvp2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag)
+                : qx_dmrg::run_tebd2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag, stride);
             nlj out;
             out["ok"]            = true;
             out["energy"]        = r.energy;
@@ -152,7 +158,7 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
             out["staggered_mag"] = r.stag;
             out["max_bond"]      = r.max_bond;
             out["wall_time_s"]   = r.wall_time_s;
-            out["method"]        = "tdvp2-block";
+            out["method"]        = (engine == "tdvp2") ? "tdvp2-block" : "tebd2-block";
             tl_dmrg_buf = out.dump();
             return tl_dmrg_buf.c_str();
         }
@@ -188,6 +194,41 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         out["max_bond"]        = max_bond;
         out["wall_time_s"]     = wt;
         out["method"]          = two_site ? "tdvp2" : "tdvp1";
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_spectral(const char* problem_json, const char* options_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        nlj opts = nlj::parse(options_json ? options_json : "{}");
+        int    n  = prob.value("n_qubits", 8);
+        double J  = prob.value("J", 1.0);
+        std::string type = prob.value("type", "heisenberg");
+        if (type != "heisenberg") return dmrg_error("spectral supports only type 'heisenberg'");
+        if (n < 2) return dmrg_error("n_qubits must be >= 2");
+
+        double dt      = opts.value("dt", 0.05);
+        int    n_steps = opts.value("n_steps", 200);
+        int    chi_max = opts.value("chi_max", 128);
+        double cutoff  = opts.value("cutoff", 1e-10);
+        int    n_sweeps = opts.value("n_sweeps", 40);
+
+        auto W = qx_dmrg::build_heisenberg_mpo(n, J);
+        auto r = qx_dmrg::run_spectral_blocks(W, n, dt, n_steps, chi_max, cutoff, n_sweeps);
+        nlj out;
+        out["ok"]          = true;
+        out["times"]       = r.times;
+        out["l0"]          = r.l0;
+        out["n"]           = r.n;
+        out["E0"]          = r.E0;
+        out["max_bond"]    = r.max_bond;
+        out["wall_time_s"] = r.wall_time_s;
+        out["C_re"]        = r.C_re;     // C_re[t][j]
+        out["C_im"]        = r.C_im;
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
     } catch (const std::exception& e) {

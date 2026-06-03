@@ -72,4 +72,24 @@ TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag);
 
+// Block-sparse TEBD2 (Trotter-gate) time evolution from the Neel state -- the
+// fast nearest-neighbour route (no environments / Krylov). measure_stride: record
+// staggered magnetization every this many steps (<=0 = endpoints only).
+TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
+                                 double dt, int n_steps, int chi_max,
+                                 double cutoff, bool imag, int measure_stride = 1);
+
+// Dynamical spin structure factor data: time-dependent correlations
+// C_{j,l0}(t) = <psi0| sigma^z_j e^{-i(H-E0)t} sigma^z_{l0} |psi0> from a central
+// source site l0, ready for a space+time Fourier transform into S(k,omega).
+struct SpectralResult {
+    std::vector<double> times;                  // length n_steps+1
+    int l0 = 0, n = 0, max_bond = 0;
+    double E0 = 0, wall_time_s = 0;
+    std::vector<std::vector<double>> C_re, C_im; // C_re[t][j], C_im[t][j]
+};
+SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
+                                   double dt, int n_steps, int chi_max,
+                                   double cutoff, int n_sweeps);
+
 } // namespace qx_dmrg

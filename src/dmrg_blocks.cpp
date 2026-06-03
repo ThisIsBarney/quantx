@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <random>
 #include <set>
 #include <stdexcept>
 #include <type_traits>
@@ -36,6 +37,10 @@ template<typename S> using VecX = Eigen::Matrix<S, Eigen::Dynamic, 1>;
 
 // Matvec profiling counter (shared across instantiations).
 static long long g_block_matvecs = 0;
+
+// TEBD phase profiling (set env QX_TEBD_PROFILE=1). Seconds per phase.
+static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb = 0;
+static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0;
 
 // =============================================================================
 // Sz-conserving block-sparse DMRG  (M179)
@@ -1004,31 +1009,79 @@ struct BlockSVDResult {
     double             trunc_err;
 };
 
+// Thin SVD M = U diag(sv) V^dag via the Gram matrix + Hermitian eigensolver --
+// faster than a general SVD (solves the simpler m x m or n x n eigenproblem) and
+// the standard route in fast TEBD codes. Squares the condition number, so the
+// tiny tail singular values (which TEBD truncates anyway) lose precision; the
+// kept Schmidt values are accurate. U:(m x k), V:(n x k), sv:(k) descending.
+static void thin_svd_gram(const Mat& M, Mat& U, Mat& V, RVec& sv) {
+    const int m = (int)M.rows(), nc = (int)M.cols();
+    if (m <= nc) {
+        Eigen::SelfAdjointEigenSolver<Mat> es(M * M.adjoint());   // m x m
+        const RVec& ev = es.eigenvalues();                        // ascending
+        const Mat&  Q  = es.eigenvectors();
+        U.resize(m, m); sv.resize(m);
+        for (int j = 0; j < m; ++j) {
+            double lam = ev(m-1-j); sv(j) = std::sqrt(lam > 0 ? lam : 0.0);
+            U.col(j) = Q.col(m-1-j);
+        }
+        Mat MhU = M.adjoint() * U;                                // n x m
+        V.resize(nc, m);
+        double smax = (sv.size() && sv(0) > 0) ? sv(0) : 1.0;
+        for (int j = 0; j < m; ++j) {
+            if (sv(j) > 1e-14 * smax) V.col(j) = MhU.col(j) / sv(j);
+            else V.col(j).setZero();
+        }
+    } else {
+        Eigen::SelfAdjointEigenSolver<Mat> es(M.adjoint() * M);   // n x n
+        const RVec& ev = es.eigenvalues();
+        const Mat&  Q  = es.eigenvectors();
+        V.resize(nc, nc); sv.resize(nc);
+        for (int j = 0; j < nc; ++j) {
+            double lam = ev(nc-1-j); sv(j) = std::sqrt(lam > 0 ? lam : 0.0);
+            V.col(j) = Q.col(nc-1-j);
+        }
+        Mat MV = M * V;                                           // m x n
+        U.resize(m, nc);
+        double smax = (sv.size() && sv(0) > 0) ? sv(0) : 1.0;
+        for (int j = 0; j < nc; ++j) {
+            if (sv(j) > 1e-14 * smax) U.col(j) = MV.col(j) / sv(j);
+            else U.col(j).setZero();
+        }
+    }
+}
+
 static BlockSVDResult block_svd_truncate(
     const std::map<int,Mat>& theta,
     const BondSpace& bs_L,
     const BondSpace& bs_R2,
     int max_bond, double cutoff)
 {
-    // SVD per q_mid sector (independent across sectors -> parallelise).
+    // SVD per q_mid sector (independent across sectors -> parallelise). Use
+    // JacobiSVD for small blocks (much lower fixed overhead than BDCSVD, which
+    // dominates the TEBD step when each bond carries many small Sz sectors), and
+    // BDCSVD only for the few large blocks. Results stored directly (no map of
+    // heavy SVD objects).
+    struct SVDBlk { Mat U, V; RVec s; };
     std::vector<int> svq;
     std::vector<const Mat*> svblk;
     for (auto& [q_mid, blk] : theta)
         if (blk.size() != 0) { svq.push_back(q_mid); svblk.push_back(&blk); }
-    std::vector<Eigen::BDCSVD<Mat>> svvec(svq.size());
+    g_tebd_nsvd += (long long)svq.size();
+    for (auto* p : svblk) g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)std::min(p->rows(), p->cols()));
+    std::vector<SVDBlk> sb(svq.size());
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
     for (int i = 0; i < (int)svq.size(); ++i)
-        svvec[i].compute(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
-    std::map<int, Eigen::BDCSVD<Mat>> svds;
-    for (int i = 0; i < (int)svq.size(); ++i)
-        svds[svq[i]] = std::move(svvec[i]);
+        thin_svd_gram(*svblk[i], sb[i].U, sb[i].V, sb[i].s);
+    std::map<int, SVDBlk*> svds;
+    for (int i = 0; i < (int)svq.size(); ++i) svds[svq[i]] = &sb[i];
 
     // Collect all singular values for global truncation
     struct SVE { double sv; int q; int k; };
     std::vector<SVE> all_sv;
     for (auto& [q, s] : svds)
-        for (int k = 0; k < s.singularValues().size(); ++k)
-            all_sv.push_back({s.singularValues()[k], q, k});
+        for (int k = 0; k < s->s.size(); ++k)
+            all_sv.push_back({s->s[k], q, k});
     std::sort(all_sv.begin(), all_sv.end(), [](auto& a, auto& b){ return a.sv > b.sv; });
 
     // Apply cutoff
@@ -1067,11 +1120,11 @@ static BlockSVDResult block_svd_truncate(
         if (keep == 0) continue;
         int dL_up = bs_L.dim(q_mid - 1);
         int dL_dn = bs_L.dim(q_mid + 1);
-        const Mat& U = svd.matrixU();
+        const Mat& U = svd->U;
         res.U_up[q_mid] = U.topRows(dL_up).leftCols(keep);
         res.U_dn[q_mid] = U.bottomRows(dL_dn).leftCols(keep);
-        res.Vt[q_mid]   = svd.matrixV().adjoint().topRows(keep);
-        res.sv[q_mid]   = svd.singularValues().head(keep);
+        res.Vt[q_mid]   = svd->V.adjoint().topRows(keep);
+        res.sv[q_mid]   = svd->s.head(keep);
         new_sectors.emplace_back(q_mid, keep);
     }
     std::sort(new_sectors.begin(), new_sectors.end());
@@ -1202,186 +1255,499 @@ static double measure_stag(std::vector<std::map<int,Mat>> A,
     return m / n;
 }
 
+// ----- reusable block-TDVP2 helpers (shared by run_tdvp2 and METTS) ----------
+// Full block-MPS state: site tensors, bond spaces, and L/R environments.
+struct BMPS {
+    std::vector<std::map<int,Mat>> A;
+    std::vector<BondSpace> bond;
+    std::vector<BlockEnv> L, R;
+    int n = 0;
+};
+
+static void bt_expand_theta(std::map<int,Mat>& theta, const BondSpace& bsL, const BondSpace& bsR2) {
+    for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+        int q_L = bsL.qns[qi];
+        for (int s = 0; s < 2; ++s) {
+            int q_mid = q_L + ((s==0)?+1:-1);
+            if (theta.count(q_mid)) continue;
+            int nr = bsL.dim(q_mid-1) + bsL.dim(q_mid+1);
+            int nc = bsR2.dim(q_mid+1) + bsR2.dim(q_mid-1);
+            if (nr > 0 && nc > 0) theta[q_mid] = Mat::Zero(nr, nc);
+        }
+    }
+}
+static void bt_evolve_theta(std::map<int,Mat>& theta, const HeffPlan& plan, Cx tau) {
+    auto mv = [&](const Vec& vin) -> Vec {
+        std::map<int,Mat> tb; vec_to_theta(vin, theta, tb);
+        auto raw = apply_heff_plan(plan, tb);
+        std::map<int,Mat> outn;
+        for (auto& [q, ref] : theta) { auto it = raw.find(q);
+            outn[q] = (it!=raw.end()&&it->second.rows()==ref.rows()&&it->second.cols()==ref.cols())
+                      ? it->second : Mat::Zero(ref.rows(), ref.cols()); }
+        return theta_to_vec(outn);
+    };
+    Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(theta));
+    std::map<int,Mat> out; vec_to_theta(ev, theta, out); theta = out;
+}
+static void bt_evolve_site(std::map<int,Mat>& M, const BlockEnv& Le, const MPOSite& W,
+                           const BlockEnv& Re, const BondSpace& bsL, const BondSpace& bsR, Cx tau) {
+    auto mv = [&](const Vec& vin) -> Vec {
+        std::map<int,Mat> tb; vec_to_theta(vin, M, tb);
+        auto raw = apply_heff_1site(Le, W, Re, tb, bsL, bsR);
+        std::map<int,Mat> outn;
+        for (auto& [q, ref] : M) { auto it = raw.find(q);
+            outn[q] = (it!=raw.end()&&it->second.rows()==ref.rows()&&it->second.cols()==ref.cols())
+                      ? it->second : Mat::Zero(ref.rows(), ref.cols()); }
+        return theta_to_vec(outn);
+    };
+    Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(M));
+    std::map<int,Mat> out; vec_to_theta(ev, M, out); M = out;
+}
+static std::map<int,Mat> bt_A_from_U(const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
+    std::map<int,Mat> A;
+    for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+        int q_L = bsL.qns[qi], dL = bsL.dims[qi];
+        int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
+        Mat blk = Mat::Zero(dL, n_up + n_dn);
+        if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = svd.U_up.at(q_L+1);
+        if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = svd.U_dn.at(q_L-1);
+        A[q_L] = blk;
+    }
+    return A;
+}
+static std::map<int,Mat> bt_center_LR(const BlockSVDResult& svd) {     // M (at i+1) = sv * Vt
+    std::map<int,Mat> M;
+    for (auto& [q, Vt] : svd.Vt) {
+        Mat m = Vt;
+        auto it = svd.sv.find(q);
+        if (it != svd.sv.end()) { const RVec& s = it->second;
+            int L2 = std::min((int)s.size(),(int)m.rows()); for (int k=0;k<L2;++k) m.row(k)*=s[k]; }
+        M[q] = m;
+    }
+    return M;
+}
+static std::map<int,Mat> bt_center_RL(const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
+    std::map<int,Mat> M;
+    for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
+        int q_L = bsL.qns[qi], dL = bsL.dims[qi];
+        int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
+        Mat blk = Mat::Zero(dL, n_up + n_dn);
+        auto scaled = [&](Mat u, int q) {
+            auto it = svd.sv.find(q);
+            if (it != svd.sv.end()) { const RVec& s=it->second;
+                int L2=std::min((int)s.size(),(int)u.cols()); for(int k=0;k<L2;++k) u.col(k)*=s[k]; }
+            return u;
+        };
+        if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = scaled(svd.U_up.at(q_L+1), q_L+1);
+        if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = scaled(svd.U_dn.at(q_L-1), q_L-1);
+        M[q_L] = blk;
+    }
+    return M;
+}
+
+// Build a block-MPS for an arbitrary Sz product state (sz[i] = +1 up, -1 dn).
+static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<int>& sz) {
+    BMPS s; s.n = n;
+    std::vector<int> qb(n + 1); qb[0] = 0;
+    for (int i = 0; i < n; ++i) qb[i+1] = qb[i] + sz[i];
+    s.bond.resize(n + 1);
+    for (int i = 0; i <= n; ++i) s.bond[i] = BondSpace::from_pairs({{qb[i], 1}});
+    s.A.resize(n);
+    for (int i = 0; i < n; ++i) {
+        int q_L = qb[i];
+        int dR_up = s.bond[i+1].dim(q_L + 1), dR_dn = s.bond[i+1].dim(q_L - 1);
+        Mat blk = Mat::Zero(1, dR_up + dR_dn);
+        blk(0, (sz[i] == +1) ? 0 : dR_up) = S(1);
+        s.A[i][q_L] = blk;
+    }
+    s.L.assign(n + 1, BlockEnv()); s.R.assign(n + 1, BlockEnv());
+    { BlockEnv L0; L0.bs = s.bond[0]; L0.blocks[0][qb[0]] = Mat::Constant(1,1,S(1)); s.L[0] = L0; }
+    { BlockEnv Rn; Rn.bs = s.bond[n]; Rn.blocks[0][qb[n]] = Mat::Constant(1,1,S(1)); s.R[n] = Rn; }
+    for (int i = n - 1; i >= 0; --i)
+        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i]);
+    return s;
+}
+
+// One symmetric second-order block TDVP2 step (mutates s; centre returns to 0).
+static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
+                              double dt, bool imag, int chi_max, double cutoff) {
+    const int n = s.n;
+    const Cx fwd = imag ? Cx(-dt/2,0) : Cx(0,-dt/2);
+    const Cx bwd = imag ? Cx(+dt/2,0) : Cx(0,+dt/2);
+    const std::map<int,RVec> no_sv;
+    auto& A = s.A; auto& bond = s.bond; auto& L = s.L; auto& R = s.R;
+    for (int i = 0; i < n - 1; ++i) {                      // left -> right
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+        bt_expand_theta(theta, bond[i], bond[i+2]);
+        WComb wc = build_wcomb(mpo[i], mpo[i+1]);
+        std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
+        HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
+        bt_evolve_theta(theta, plan, fwd);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        bond[i+1] = svd.new_mid_bs;
+        A[i] = bt_A_from_U(svd, bond[i], bond[i+1]);
+        L[i+1] = block_update_left(L[i], A[i], bond[i], bond[i+1], mpo[i]);
+        auto M = bt_center_LR(svd);
+        if (i < n - 2) bt_evolve_site(M, L[i+1], mpo[i+1], R[i+2], bond[i+1], bond[i+2], bwd);
+        A[i+1] = M;
+    }
+    for (int i = n - 2; i >= 0; --i) {                    // right -> left
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+        bt_expand_theta(theta, bond[i], bond[i+2]);
+        WComb wc = build_wcomb(mpo[i], mpo[i+1]);
+        std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
+        HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
+        bt_evolve_theta(theta, plan, fwd);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        bond[i+1] = svd.new_mid_bs;
+        A[i+1] = svd.Vt;
+        R[i+1] = block_update_right(R[i+2], A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
+        auto M = bt_center_RL(svd, bond[i], bond[i+1]);
+        if (i > 0) bt_evolve_site(M, L[i], mpo[i], R[i+1], bond[i], bond[i+1], bwd);
+        A[i] = M;
+    }
+    if (imag) {   // renormalize (centre at site 0)
+        double nz = 0; for (auto& [q,b] : A[0]) nz += b.squaredNorm();
+        nz = std::sqrt(nz); if (nz > 0) for (auto& [q,b] : A[0]) b /= nz;
+    }
+}
+
+// ===== Block-sparse TEBD (Trotter gates -- the fast nearest-neighbour route) ==
+// A two-site Sz-conserving gate G = exp(tau * h_bond) for the Heisenberg bond
+// h = sigma.sigma: |uu>,|dd> -> eigenvalue +1; the Sz=0 block {|ud>,|du>} is
+// [[-1,2],[2,-1]] with eigenvalues +1,-3. tau = -i dt (real time) or -dt (imag).
+struct Gate { S pdiag; S g00, g01, g10, g11; };
+static Gate build_heisenberg_gate(Cx tau) {
+    S ep = std::exp(S(tau) * S(1.0));     // e^{+1 tau}  (triplet)
+    S em = std::exp(S(tau) * S(-3.0));    // e^{-3 tau}  (singlet)
+    S a = S(0.5) * (ep + em), b = S(0.5) * (ep - em);
+    return Gate{ ep, a, b, b, a };
+}
+
+// Apply a homogeneous nearest-neighbour gate to the two-site block tensor theta
+// (expanded). For each left charge a: the |ud> block (in theta[a+1]) and the |du>
+// block (in theta[a-1]) -- both (dim a)x(dim a), charge (q_L=a,q_R=a) -- are mixed
+// by the Sz=0 2x2 gate; the |uu> and |dd> diagonal blocks get the phase pdiag.
+static void apply_gate_theta(std::map<int,Mat>& theta, const BondSpace& bsL,
+                             const BondSpace& bsR, const Gate& g) {
+    for (int ai = 0; ai < bsL.n_sectors(); ++ai) {
+        int a = bsL.qns[ai];
+        int dLa = bsL.dim(a);
+        if (dLa == 0) continue;
+        auto itP = theta.find(a + 1);   // holds |uu> and |ud> rows for q_L=a
+        auto itM = theta.find(a - 1);   // holds |du> and |dd> rows for q_L=a
+        int dRa = bsR.dim(a);           // q_R=a dimension (shared by |ud>,|du>)
+        if (itP != theta.end()) {       // |uu> phase: rows [0,dLa), cols [0, dim(a+2))
+            int dRup = bsR.dim(a + 2);
+            if (dRup > 0) itP->second.block(0, 0, dLa, dRup) *= g.pdiag;
+        }
+        if (itM != theta.end()) {       // |dd> phase
+            int dLupM = bsL.dim(a - 2);
+            int dRdnM = bsR.dim(a - 2);
+            if (dRdnM > 0) itM->second.block(dLupM, dRa, dLa, dRdnM) *= g.pdiag;
+        }
+        if (dRa > 0 && itP != theta.end() && itM != theta.end()) {   // Sz=0 mix
+            int dRup = bsR.dim(a + 2);  // |ud> cols start after the s2=up block
+            int dLupM = bsL.dim(a - 2); // |du> rows start after the s1=up block
+            Mat Tud = itP->second.block(0, dRup, dLa, dRa);
+            Mat Tdu = itM->second.block(dLupM, 0, dLa, dRa);
+            itP->second.block(0, dRup, dLa, dRa)  = g.g00 * Tud + g.g01 * Tdu;
+            itM->second.block(dLupM, 0, dLa, dRa) = g.g10 * Tud + g.g11 * Tdu;
+        }
+    }
+}
+
+// One symmetric second-order block TEBD step (L->R then R->L with half gates, so
+// every bond is acted on with the full dt and the sweep is time-symmetric).
+// No environments and no Krylov -- just a gate + SVD per bond, the reason TEBD is
+// cheaper than TDVP for nearest-neighbour models.
+static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
+                              double cutoff) {
+    const int n = s.n;
+    const Cx tau = imag ? Cx(-dt/2, 0) : Cx(0, -dt/2);
+    const Gate g = build_heisenberg_gate(tau);
+    const std::map<int,RVec> no_sv;
+    auto& A = s.A; auto& bond = s.bond;
+    const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
+    using pclk = std::chrono::steady_clock;
+    auto ptick = [&](double& acc, pclk::time_point t0){ if (prof) acc += std::chrono::duration<double>(pclk::now()-t0).count(); };
+    for (int i = 0; i < n - 1; ++i) {                      // left -> right
+        auto tt = pclk::now();
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+        bt_expand_theta(theta, bond[i], bond[i+2]);
+        ptick(g_tebd_theta, tt); tt = pclk::now();
+        apply_gate_theta(theta, bond[i], bond[i+2], g);
+        ptick(g_tebd_gate, tt); tt = pclk::now();
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        ptick(g_tebd_svd, tt); tt = pclk::now();
+        bond[i+1] = svd.new_mid_bs;
+        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1]);
+        A[i+1] = bt_center_LR(svd);
+        ptick(g_tebd_recomb, tt);
+    }
+    for (int i = n - 2; i >= 0; --i) {                    // right -> left
+        auto tt = pclk::now();
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+        bt_expand_theta(theta, bond[i], bond[i+2]);
+        ptick(g_tebd_theta, tt); tt = pclk::now();
+        apply_gate_theta(theta, bond[i], bond[i+2], g);
+        ptick(g_tebd_gate, tt); tt = pclk::now();
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        ptick(g_tebd_svd, tt); tt = pclk::now();
+        bond[i+1] = svd.new_mid_bs;
+        A[i+1] = svd.Vt;
+        A[i]   = bt_center_RL(svd, bond[i], bond[i+1]);
+        ptick(g_tebd_recomb, tt);
+    }
+    if (imag) {   // renormalize (centre at site 0)
+        double nz = 0; for (auto& [q,b] : A[0]) nz += b.squaredNorm();
+        nz = std::sqrt(nz); if (nz > 0) for (auto& [q,b] : A[0]) b /= nz;
+    }
+}
+
+// Energy <H> via the two-site H_eff at the centre (assumes centre at site 0).
+static double bt_energy(const BMPS& s, const std::vector<MPOSite>& mpo) {
+    const std::map<int,RVec> no_sv;
+    auto theta = form_theta(s.A[0], s.A[1], no_sv, s.bond[0], s.bond[1], s.bond[2], true);
+    WComb wc = build_wcomb(mpo[0], mpo[1]);
+    std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
+    HeffPlan plan = build_heff_plan(s.L[0], mpo[0], mpo[1], s.R[2], wc, kk, s.bond[0], s.bond[2]);
+    auto Hth = apply_heff_plan(plan, theta);
+    Vec tv = theta_to_vec(theta);
+    std::map<int,Mat> Hn;
+    for (auto& [q,ref] : theta) { auto it=Hth.find(q);
+        Hn[q] = (it!=Hth.end()&&it->second.rows()==ref.rows()&&it->second.cols()==ref.cols())? it->second : Mat::Zero(ref.rows(),ref.cols()); }
+    return rp(tv.dot(theta_to_vec(Hn))) / rp(tv.dot(tv));
+}
+
 static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
                           double dt, int n_steps, int chi_max, double cutoff,
                           bool imag) {
     static_assert(std::is_same_v<S, Cx>, "TDVP2 requires complex scalar");
     using clk = std::chrono::steady_clock;
-    const Cx fwd = imag ? Cx(-dt/2, 0) : Cx(0, -dt/2);
-    const Cx bwd = imag ? Cx(+dt/2, 0) : Cx(0, +dt/2);
-
-    // --- Neel product-state MPS with minimal (dim-1) bonds ---
-    std::vector<int> qb(n + 1); qb[0] = 0;
-    for (int i = 0; i < n; ++i) qb[i+1] = qb[i] + ((i % 2 == 0) ? +1 : -1);
-    std::vector<BondSpace> bond(n + 1);
-    for (int i = 0; i <= n; ++i) bond[i] = BondSpace::from_pairs({{qb[i], 1}});
-    std::vector<std::map<int,Mat>> block_A(n);
-    for (int i = 0; i < n; ++i) {
-        int q_L = qb[i], sz = (i % 2 == 0) ? +1 : -1;
-        int dR_up = bond[i+1].dim(q_L + 1), dR_dn = bond[i+1].dim(q_L - 1);
-        Mat blk = Mat::Zero(1, dR_up + dR_dn);
-        blk(0, (sz == +1) ? 0 : dR_up) = S(1);
-        block_A[i][q_L] = blk;
-    }
-    // --- environments ---
-    std::vector<BlockEnv> L(n + 1), R(n + 1);
-    { BlockEnv L0; L0.bs = bond[0]; L0.blocks[0][qb[0]] = Mat::Constant(1,1,S(1)); L[0] = L0; }
-    { BlockEnv Rn; Rn.bs = bond[n]; Rn.blocks[0][qb[n]] = Mat::Constant(1,1,S(1)); R[n] = Rn; }
-    for (int i = n - 1; i >= 0; --i)
-        R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
-
-    const std::map<int,RVec> no_sv;   // empty -> form_theta does a clean merge
-
-    // Pre-allocate all symmetry-allowed theta sectors (zero amplitude) so the
-    // H_eff matvec can populate them (e.g. XY cross-coupling into +-2 sectors).
-    auto expand_theta = [](std::map<int,Mat>& theta, const BondSpace& bsL, const BondSpace& bsR2) {
-        for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
-            int q_L = bsL.qns[qi];
-            for (int s = 0; s < 2; ++s) {
-                int q_mid = q_L + ((s==0)?+1:-1);
-                if (theta.count(q_mid)) continue;
-                int nr = bsL.dim(q_mid-1) + bsL.dim(q_mid+1);
-                int nc = bsR2.dim(q_mid+1) + bsR2.dim(q_mid-1);
-                if (nr > 0 && nc > 0) theta[q_mid] = Mat::Zero(nr, nc);
-            }
-        }
-    };
-
-    auto evolve_theta = [&](std::map<int,Mat>& theta, const HeffPlan& plan, Cx tau) {
-        auto mv = [&](const Vec& vin) -> Vec {
-            std::map<int,Mat> tb; vec_to_theta(vin, theta, tb);
-            auto raw = apply_heff_plan(plan, tb);
-            std::map<int,Mat> outn;
-            for (auto& [q, ref] : theta) {
-                auto it = raw.find(q);
-                outn[q] = (it != raw.end() && it->second.rows()==ref.rows() && it->second.cols()==ref.cols())
-                          ? it->second : Mat::Zero(ref.rows(), ref.cols());
-            }
-            return theta_to_vec(outn);
-        };
-        Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(theta));
-        std::map<int,Mat> out; vec_to_theta(ev, theta, out); theta = out;
-    };
-    auto evolve_site = [&](std::map<int,Mat>& M, const BlockEnv& Le, const MPOSite& W,
-                           const BlockEnv& Re, const BondSpace& bsL, const BondSpace& bsR, Cx tau) {
-        auto mv = [&](const Vec& vin) -> Vec {
-            std::map<int,Mat> tb; vec_to_theta(vin, M, tb);
-            auto raw = apply_heff_1site(Le, W, Re, tb, bsL, bsR);
-            std::map<int,Mat> outn;
-            for (auto& [q, ref] : M) {
-                auto it = raw.find(q);
-                outn[q] = (it != raw.end() && it->second.rows()==ref.rows() && it->second.cols()==ref.cols())
-                          ? it->second : Mat::Zero(ref.rows(), ref.cols());
-            }
-            return theta_to_vec(outn);
-        };
-        Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(M));
-        std::map<int,Mat> out; vec_to_theta(ev, M, out); M = out;
-    };
-    auto A_from_U = [&](const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
-        std::map<int,Mat> A;
-        for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
-            int q_L = bsL.qns[qi], dL = bsL.dims[qi];
-            int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
-            Mat blk = Mat::Zero(dL, n_up + n_dn);
-            if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = svd.U_up.at(q_L+1);
-            if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = svd.U_dn.at(q_L-1);
-            A[q_L] = blk;
-        }
-        return A;
-    };
-    auto center_LR = [&](const BlockSVDResult& svd) {        // M (at i+1) = sv * Vt
-        std::map<int,Mat> M;
-        for (auto& [q, Vt] : svd.Vt) {
-            Mat m = Vt;
-            auto it = svd.sv.find(q);
-            if (it != svd.sv.end()) { const RVec& s = it->second;
-                int L2 = std::min((int)s.size(),(int)m.rows()); for (int k=0;k<L2;++k) m.row(k)*=s[k]; }
-            M[q] = m;
-        }
-        return M;
-    };
-    auto center_RL = [&](const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
-        std::map<int,Mat> M;                                 // M (at i) = U * sv, block_A layout
-        for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
-            int q_L = bsL.qns[qi], dL = bsL.dims[qi];
-            int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
-            Mat blk = Mat::Zero(dL, n_up + n_dn);
-            auto scaled = [&](Mat u, int q) {
-                auto it = svd.sv.find(q);
-                if (it != svd.sv.end()) { const RVec& s=it->second;
-                    int L2=std::min((int)s.size(),(int)u.cols()); for(int k=0;k<L2;++k) u.col(k)*=s[k]; }
-                return u;
-            };
-            if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = scaled(svd.U_up.at(q_L+1), q_L+1);
-            if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = scaled(svd.U_dn.at(q_L-1), q_L-1);
-            M[q_L] = blk;
-        }
-        return M;
-    };
+    std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
+    BMPS s = cps_init(mpo, n, neel);
 
     TDVP2Out out;
     out.times.push_back(0.0);
-    out.stag.push_back(measure_stag(block_A, bond, n));
+    out.stag.push_back(measure_stag(s.A, s.bond, n));
     auto t0 = clk::now();
     for (int step = 0; step < n_steps; ++step) {
-        // left -> right
-        for (int i = 0; i < n - 1; ++i) {
-            auto theta = form_theta(block_A[i], block_A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-            expand_theta(theta, bond[i], bond[i+2]);
-            WComb wc = build_wcomb(mpo[i], mpo[i+1]);
-            std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
-            HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
-            evolve_theta(theta, plan, fwd);
-            auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
-            bond[i+1] = svd.new_mid_bs;
-            block_A[i] = A_from_U(svd, bond[i], bond[i+1]);
-            L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
-            auto M = center_LR(svd);
-            if (i < n - 2) evolve_site(M, L[i+1], mpo[i+1], R[i+2], bond[i+1], bond[i+2], bwd);
-            block_A[i+1] = M;
-        }
-        // right -> left
-        for (int i = n - 2; i >= 0; --i) {
-            auto theta = form_theta(block_A[i], block_A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-            expand_theta(theta, bond[i], bond[i+2]);
-            WComb wc = build_wcomb(mpo[i], mpo[i+1]);
-            std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
-            HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
-            evolve_theta(theta, plan, fwd);
-            auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
-            bond[i+1] = svd.new_mid_bs;
-            block_A[i+1] = svd.Vt;
-            R[i+1] = block_update_right(R[i+2], block_A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
-            auto M = center_RL(svd, bond[i], bond[i+1]);
-            if (i > 0) evolve_site(M, L[i], mpo[i], R[i+1], bond[i], bond[i+1], bwd);
-            block_A[i] = M;
-        }
-        if (imag) {   // renormalize (center at site 0)
-            double nz = 0; for (auto& [q,b] : block_A[0]) nz += b.squaredNorm();
-            nz = std::sqrt(nz); if (nz > 0) for (auto& [q,b] : block_A[0]) b /= nz;
-        }
+        tdvp2_step_blocks(s, mpo, dt, imag, chi_max, cutoff);
         out.times.push_back((step+1)*dt);
-        out.stag.push_back(measure_stag(block_A, bond, n));
+        out.stag.push_back(measure_stag(s.A, s.bond, n));
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
-
-    // energy via the two-site H_eff at the centre (site 0)
-    {
-        auto theta = form_theta(block_A[0], block_A[1], no_sv, bond[0], bond[1], bond[2], true);
-        WComb wc = build_wcomb(mpo[0], mpo[1]);
-        std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
-        HeffPlan plan = build_heff_plan(L[0], mpo[0], mpo[1], R[2], wc, kk, bond[0], bond[2]);
-        auto Hth = apply_heff_plan(plan, theta);
-        Vec tv = theta_to_vec(theta);
-        std::map<int,Mat> Hn;
-        for (auto& [q,ref] : theta) { auto it=Hth.find(q);
-            Hn[q] = (it!=Hth.end()&&it->second.rows()==ref.rows()&&it->second.cols()==ref.cols())? it->second : Mat::Zero(ref.rows(),ref.cols()); }
-        Vec hv = theta_to_vec(Hn);
-        out.energy = rp(tv.dot(hv)) / rp(tv.dot(tv));
-    }
+    out.energy = bt_energy(s, mpo);
     out.max_bond = 0;
-    for (auto& b : bond) { int t=0; for (int d : b.dims) t+=d; out.max_bond = std::max(out.max_bond, t); }
+    for (auto& b : s.bond) { int t=0; for (int d : b.dims) t+=d; out.max_bond = std::max(out.max_bond, t); }
+    return out;
+}
+
+// Block-sparse TEBD2 Neel quench (same interface as run_tdvp2; mpo only used for
+// the initial state and the final energy -- the evolution is gate-based).
+// measure_stride: record the staggered magnetization every `measure_stride` steps
+// (1 = every step; <=0 = endpoints only -- isolates the bare evolution cost).
+static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
+                          double dt, int n_steps, int chi_max, double cutoff,
+                          bool imag, int measure_stride = 1) {
+    static_assert(std::is_same_v<S, Cx>, "TEBD2 requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
+    BMPS s = cps_init(mpo, n, neel);
+    const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
+    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=0; }
+
+    TDVP2Out out;
+    auto t0 = clk::now();
+    for (int step = 0; step < n_steps; ++step) {
+        tebd2_step_blocks(s, dt, imag, chi_max, cutoff);
+        if (measure_stride > 0 && (step % measure_stride == 0 || step == n_steps - 1)) {
+            out.times.push_back((step+1)*dt);
+            out.stag.push_back(measure_stag(s.A, s.bond, n));
+        }
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    if (prof) {
+        double tot = g_tebd_theta+g_tebd_gate+g_tebd_svd+g_tebd_recomb;
+        std::fprintf(stderr, "[QX_TEBD_PROFILE n=%d chi=%d] evo=%.3fs theta=%.3f(%.0f%%) gate=%.3f(%.0f%%) svd=%.3f(%.0f%%) recomb=%.3f(%.0f%%) maxblk=%d nsvd=%lld\n",
+            n, chi_max, out.wall_s, g_tebd_theta, 100*g_tebd_theta/tot, g_tebd_gate, 100*g_tebd_gate/tot,
+            g_tebd_svd, 100*g_tebd_svd/tot, g_tebd_recomb, 100*g_tebd_recomb/tot,
+            (int)g_tebd_maxblk, g_tebd_nsvd);
+    }
+    rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
+    out.energy = bt_energy(s, mpo);
+    out.max_bond = 0;
+    for (auto& b : s.bond) { int t=0; for (int d : b.dims) t+=d; out.max_bond = std::max(out.max_bond, t); }
+    return out;
+}
+
+// ===== Dynamical structure factor S(k,omega) ================================
+// Apply sigma^z on one site of a block-MPS in place (diagonal: up -> +1, dn -> -1).
+// sigma^z is its own inverse and unitary, so the right-canonical property and the
+// norm are preserved; only the MPO environments of the modified state go stale.
+static void apply_sz_site(BMPS& s, int site) {
+    for (auto& [q_L, blk] : s.A[site]) {
+        int dR_dn = s.bond[site+1].dim(q_L - 1);
+        int dR_up = s.bond[site+1].dim(q_L + 1);
+        if (dR_dn > 0) blk.rightCols(dR_dn) *= S(-1);   // dn columns -> -1
+        (void)dR_up;
+    }
+}
+
+// Rebuild the MPO environments of a block-MPS (centre on site 0) after an in-place
+// edit, so it can be time-evolved by tdvp2_step_blocks.
+static void rebuild_mpo_envs(BMPS& s, const std::vector<MPOSite>& mpo) {
+    int n = s.n;
+    s.L.assign(n + 1, BlockEnv()); s.R.assign(n + 1, BlockEnv());
+    { BlockEnv L0; L0.bs = s.bond[0]; L0.blocks[0][0] = Mat::Constant(1,1,S(1)); s.L[0] = L0; }
+    { BlockEnv Rn; Rn.bs = s.bond[n];
+      for (int qi = 0; qi < s.bond[n].n_sectors(); ++qi)
+          Rn.blocks[0][s.bond[n].qns[qi]] = Mat::Constant(1,1,S(1));
+      s.R[n] = Rn; }
+    for (int i = n - 1; i >= 0; --i)
+        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i]);
+}
+
+// Two-MPS overlap left environments OL[i][q] = <bra[0..i-1] | ket[0..i-1]> as a
+// (d_bra_i(q) x d_ket_i(q)) block per shared Sz sector q. bra and ket share the
+// total Sz, so the overlap is block-diagonal in Sz.
+static std::vector<std::map<int,Mat>> overlap_left_envs(const BMPS& bra, const BMPS& ket) {
+    int n = bra.n;
+    std::vector<std::map<int,Mat>> OL(n + 1);
+    OL[0][0] = Mat::Constant(1, 1, S(1));
+    for (int i = 0; i < n; ++i) {
+        for (auto& [q_L, Olk] : OL[i]) {
+            auto ib = bra.A[i].find(q_L); auto ik = ket.A[i].find(q_L);
+            if (ib == bra.A[i].end() || ik == ket.A[i].end()) continue;
+            const Mat& Ab = ib->second; const Mat& Ak = ik->second;
+            for (int s = 0; s < 2; ++s) {
+                int sz = (s == 0) ? +1 : -1, q_R = q_L + sz;
+                int ub = bra.bond[i+1].dim(q_L+1), db = bra.bond[i+1].dim(q_L-1);
+                int uk = ket.bond[i+1].dim(q_L+1), dk = ket.bond[i+1].dim(q_L-1);
+                int wb = (sz==+1)?ub:db, wk = (sz==+1)?uk:dk;
+                if (wb == 0 || wk == 0) continue;
+                Eigen::Ref<const Mat> Abs = (sz==+1)? Ab.leftCols(ub) : Ab.rightCols(db);
+                Eigen::Ref<const Mat> Aks = (sz==+1)? Ak.leftCols(uk) : Ak.rightCols(dk);
+                Mat contrib = Abs.adjoint() * (Olk * Aks);   // (wb x wk)
+                auto& dst = OL[i+1][q_R];
+                if (dst.size()==0) dst = contrib; else dst += contrib;
+            }
+        }
+    }
+    return OL;
+}
+
+// Two-MPS overlap right environments OR[i][q] = <bra[i..n-1] | ket[i..n-1]>.
+static std::vector<std::map<int,Mat>> overlap_right_envs(const BMPS& bra, const BMPS& ket) {
+    int n = bra.n;
+    std::vector<std::map<int,Mat>> OR(n + 1);
+    for (int qi = 0; qi < bra.bond[n].n_sectors(); ++qi)
+        OR[n][bra.bond[n].qns[qi]] = Mat::Constant(1, 1, S(1));
+    for (int i = n - 1; i >= 0; --i) {
+        for (auto& [q_L, Ab] : bra.A[i]) {
+            auto ik = ket.A[i].find(q_L);
+            if (ik == ket.A[i].end()) continue;
+            const Mat& Ak = ik->second;
+            for (int s = 0; s < 2; ++s) {
+                int sz = (s == 0) ? +1 : -1, q_R = q_L + sz;
+                auto it = OR[i+1].find(q_R);
+                if (it == OR[i+1].end()) continue;
+                int ub = bra.bond[i+1].dim(q_L+1), db = bra.bond[i+1].dim(q_L-1);
+                int uk = ket.bond[i+1].dim(q_L+1), dk = ket.bond[i+1].dim(q_L-1);
+                int wb = (sz==+1)?ub:db, wk = (sz==+1)?uk:dk;
+                if (wb == 0 || wk == 0) continue;
+                Eigen::Ref<const Mat> Abs = (sz==+1)? Ab.leftCols(ub) : Ab.rightCols(db);
+                Eigen::Ref<const Mat> Aks = (sz==+1)? Ak.leftCols(uk) : Ak.rightCols(dk);
+                // conj on the bra (consistent with OL): OR = sum_s conj(Abs) OR' Aks^T
+                Mat contrib = Abs.conjugate() * (it->second * Aks.transpose());  // (d_bra_L x d_ket_L)
+                auto& dst = OR[i][q_L];
+                if (dst.size()==0) dst = contrib; else dst += contrib;
+            }
+        }
+    }
+    return OR;
+}
+
+// <bra| sigma^z_j |ket> for every site j, given precomputed overlap envs.
+static std::vector<S> measure_sz_all(const BMPS& bra, const BMPS& ket,
+                                     const std::vector<std::map<int,Mat>>& OL,
+                                     const std::vector<std::map<int,Mat>>& OR) {
+    int n = bra.n;
+    std::vector<S> out(n, S(0));
+    for (int j = 0; j < n; ++j) {
+        S val = 0;
+        for (auto& [q_L, Olk] : OL[j]) {
+            auto ib = bra.A[j].find(q_L); auto ik = ket.A[j].find(q_L);
+            if (ib == bra.A[j].end() || ik == ket.A[j].end()) continue;
+            const Mat& Ab = ib->second; const Mat& Ak = ik->second;
+            for (int s = 0; s < 2; ++s) {
+                int sz = (s == 0) ? +1 : -1, q_R = q_L + sz;
+                auto it = OR[j+1].find(q_R);
+                if (it == OR[j+1].end()) continue;
+                int ub = bra.bond[j+1].dim(q_L+1), db = bra.bond[j+1].dim(q_L-1);
+                int uk = ket.bond[j+1].dim(q_L+1), dk = ket.bond[j+1].dim(q_L-1);
+                int wb = (sz==+1)?ub:db, wk = (sz==+1)?uk:dk;
+                if (wb == 0 || wk == 0) continue;
+                Eigen::Ref<const Mat> Abs = (sz==+1)? Ab.leftCols(ub) : Ab.rightCols(db);
+                Eigen::Ref<const Mat> Aks = (sz==+1)? Ak.leftCols(uk) : Ak.rightCols(dk);
+                Mat left = Abs.adjoint() * (Olk * Aks);          // (wb x wk)
+                val += S(sz) * (left.array() * it->second.array()).sum();
+            }
+        }
+        out[j] = val;
+    }
+    return out;
+}
+
+struct SpectralOut {
+    std::vector<double> times;             // length n_steps+1
+    int l0 = 0, n = 0, max_bond = 0;
+    double E0 = 0, wall_s = 0;
+    // C[t][j] = <psi0| sigma^z_j e^{-i(H-E0)t} sigma^z_{l0} |psi0>  (real, imag parts)
+    std::vector<std::vector<double>> C_re, C_im;
+};
+
+// Dynamical spin structure factor data: C_{j,l0}(t) for a central source l0.
+static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
+                                double dt, int n_steps, int chi_max, double cutoff,
+                                int n_sweeps) {
+    static_assert(std::is_same_v<S, Cx>, "spectral requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    SpectralOut out; out.n = n; out.l0 = n / 2;
+
+    // 1. ground state (complex BMPS, centre on site 0)
+    BMPS psi0;
+    DMRGResult gs = run(mpo, n, chi_max, cutoff, n_sweeps, 1e-12, &psi0);
+    out.E0 = gs.energy;
+
+    // Normalisation Z = <psi0|psi0> in the overlap convention (the same machinery
+    // measures the correlations, so C is normalised exactly by this ratio).
+    double Z;
+    { auto OLn = overlap_left_envs(psi0, psi0);
+      Z = OLn[n].count(0) ? std::real(OLn[n].at(0)(0,0)) : 1.0; }
+    if (std::abs(Z) < 1e-300) Z = 1.0;
+
+    // 2. phi = sigma^z_{l0} |psi0>  (still right-canonical; TEBD needs no MPO envs)
+    BMPS phi = psi0;
+    apply_sz_site(phi, out.l0);
+
+    // 3. real-time evolve, measuring C_{j,l0}(t) at each step
+    auto t0 = clk::now();
+    for (int step = 0; step <= n_steps; ++step) {
+        double t = step * dt;
+        auto OL = overlap_left_envs(psi0, phi);
+        auto OR = overlap_right_envs(psi0, phi);
+        auto ov = measure_sz_all(psi0, phi, OL, OR);   // <psi0| sz_j |phi(t)>
+        S phase = std::exp(Cx(0.0, out.E0 * t));
+        std::vector<double> re(n), im(n);
+        for (int j = 0; j < n; ++j) { S c = phase * ov[j] / S(Z); re[j] = c.real(); im[j] = c.imag(); }
+        out.C_re.push_back(re); out.C_im.push_back(im); out.times.push_back(t);
+        for (auto& b : phi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
+        if (step < n_steps)
+            tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff);  // fast NN route
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
 }
 
@@ -1389,7 +1755,8 @@ static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                       int max_bond, double cutoff,
-                      int n_sweeps, double tol) {
+                      int n_sweeps, double tol,
+                      BMPS* out_state = nullptr) {
     auto t_start = std::chrono::steady_clock::now();
 
     // Build bond spaces
@@ -1783,6 +2150,23 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         fflush(stdout);
     }
 
+    // Export the converged ground state as a right-canonical BMPS (centre on
+    // site 0), with L[0]/R[i] environments rebuilt -- ready for TDVP2 / overlaps.
+    if (out_state) {
+        out_state->n = n;
+        out_state->A = block_A;
+        out_state->bond = bond;
+        out_state->L.assign(n + 1, BlockEnv());
+        out_state->R.assign(n + 1, BlockEnv());
+        { BlockEnv L0; L0.bs = bond[0]; L0.blocks[0][0] = Mat::Constant(1,1,S(1)); out_state->L[0] = L0; }
+        { BlockEnv Rn; Rn.bs = bond[n];
+          for (int qi = 0; qi < bond[n].n_sectors(); ++qi)
+              Rn.blocks[0][bond[n].qns[qi]] = Mat::Constant(1,1,S(1));
+          out_state->R[n] = Rn; }
+        for (int i = n - 1; i >= 0; --i)
+            out_state->R[i] = block_update_right(out_state->R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+    }
+
     auto t_end = std::chrono::steady_clock::now();
     result.wall_time_s = std::chrono::duration<double>(t_end - t_start).count();
     if (prof) {
@@ -1826,6 +2210,28 @@ TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;
     r.max_bond = o.max_bond; r.wall_time_s = o.wall_s;
+    return r;
+}
+
+// Entry point: block-sparse TEBD2 time evolution (always complex).
+TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
+                                 double dt, int n_steps, int chi_max,
+                                 double cutoff, bool imag, int measure_stride) {
+    auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride);
+    TDVPBlockResult r;
+    r.energy = o.energy; r.times = o.times; r.stag = o.stag;
+    r.max_bond = o.max_bond; r.wall_time_s = o.wall_s;
+    return r;
+}
+
+// Entry point: dynamical structure factor S(k,omega) data (always complex).
+SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
+                                   double dt, int n_steps, int chi_max,
+                                   double cutoff, int n_sweeps) {
+    auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps);
+    SpectralResult r;
+    r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
+    r.E0 = o.E0; r.wall_time_s = o.wall_s; r.C_re = o.C_re; r.C_im = o.C_im;
     return r;
 }
 

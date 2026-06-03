@@ -59,6 +59,47 @@ int main() {
     auto g = run_tdvp2_blocks(mpo, n, 0.1, 200, 16, 1e-12, /*imag*/true);
     check("imag-time -> ground vs exact", std::abs(g.energy - es.eigenvalues()(0)), 1e-5);
 
+    // Block-sparse TEBD2 (Trotter gates): same Neel quench vs exact, and imag->ground
+    {
+        // TEBD has O(dt^2) Trotter error (unlike Krylov-exact TDVP2), so tolerances
+        // reflect the second-order Suzuki-Trotter accuracy, not machine precision.
+        auto rt = run_tebd2_blocks(mpo, n, dt, steps, /*chi_max*/16, 1e-12, /*imag*/false);
+        double me = 0;
+        for (size_t k=0;k<rt.times.size();++k) me=std::max(me, std::abs(rt.stag[k]-stag_exact(rt.times[k])));
+        check("TEBD2 staggered magnetization vs exact", me, 1e-3);
+        check("TEBD2 energy conserved (Trotter ~dt^2)", std::abs(rt.energy - (-(n-1.0))), 1e-3);
+        auto gt = run_tebd2_blocks(mpo, n, 0.05, 400, 16, 1e-12, /*imag*/true);
+        check("TEBD2 imag-time -> ground vs exact", std::abs(gt.energy - es.eigenvalues()(0)), 1e-4);
+    }
+
+    // Dynamical structure factor: C_{j,l0}(t) = <psi0| sz_j e^{-i(H-E0)t} sz_l0 |psi0>
+    // from the block engine vs exact diagonalization.
+    printf("Dynamical S(k,w) correlations C_{j,l0}(t) vs exact:\n");
+    {
+        int l0 = n / 2;
+        Cv psi0 = es.eigenvectors().col(0);
+        double E0 = es.eigenvalues()(0);
+        Cv phi0 = Zs[l0] * psi0;                         // sz_l0 |psi0>
+        auto C_exact = [&](int j, double t) -> Cx {
+            Cv c = es.eigenvectors().adjoint() * phi0;
+            for (int k = 0; k < d; ++k) c(k) *= std::exp(Cx(0,-(es.eigenvalues()(k)-E0))*t);
+            Cv phit = es.eigenvectors() * c;             // e^{-i(H-E0)t} sz_l0 |psi0>
+            return psi0.dot(Zs[j] * phit);
+        };
+        auto sp = run_spectral_blocks(mpo, n, /*dt*/0.05, /*n_steps*/20, /*chi*/32, 1e-12, 40);
+        double maxerr = 0;
+        for (size_t ti = 0; ti < sp.times.size(); ++ti)
+            for (int j = 0; j < n; ++j) {
+                Cx ce = C_exact(j, sp.times[ti]);
+                Cx cb(sp.C_re[ti][j], sp.C_im[ti][j]);
+                maxerr = std::max(maxerr, std::abs(ce - cb));
+            }
+        // evolution is TEBD (O(dt^2) Trotter); dt=0.05 over 20 steps -> ~1e-2 accuracy
+        check("C_{j,l0}(t) vs exact (all j,t, TEBD Trotter)", maxerr, 1.5e-2);
+        printf("  E0=%.6f exact=%.6f  l0=%d  max_bond=%d  %.3fs\n",
+               sp.E0, E0, sp.l0, sp.max_bond, sp.wall_time_s);
+    }
+
     printf("\n%s\n", failures==0 ? "ALL PASSED" : "SOME FAILED");
     return failures==0 ? 0 : 1;
 }
