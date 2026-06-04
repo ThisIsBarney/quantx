@@ -54,6 +54,8 @@ std::vector<MPOSite> build_xxz_mpo(int n, double J = 1.0, double delta = 1.0);
 inline std::vector<MPOSite> build_heisenberg_mpo(int n, double J = 1.0) {
     return build_xxz_mpo(n, J, 1.0);
 }
+// Total spin-current operator J_tot = sum_l i*J(sigma+_l sigma-_{l+1} - h.c.).
+std::vector<MPOSite> build_current_mpo(int n, double J = 1.0);
 std::vector<MPOSite> build_pauli_sum_mpo(int n,
     const std::vector<std::pair<double, std::string>>& terms);
 
@@ -114,5 +116,17 @@ LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
                                      double dt, int n_steps, int chi_max,
                                      double cutoff, int n_sweeps,
                                      double Jf, double deltaf);
+
+// Spin conductivity: current-current correlator C(t) = <psi0|J e^{-i(H-E0)t}J|psi0>
+// (normalised by <psi0|psi0>), J the total spin current. sigma(omega) is its FFT.
+struct ConductivityResult {
+    std::vector<double> times, C_re, C_im;
+    int n = 0, max_bond = 0;
+    double E0 = 0, wall_time_s = 0;
+};
+ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, int n,
+                                           double dt, int n_steps, int chi_max,
+                                           double cutoff, int n_sweeps,
+                                           double J = 1.0, double delta = 1.0);
 
 } // namespace qx_dmrg

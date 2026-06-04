@@ -152,6 +152,38 @@ int main() {
         printf("  L(0)=%.4f (should be 1)  max_bond=%d  %.3fs\n", lo.L[0], lo.max_bond, lo.wall_time_s);
     }
 
+    // Spin conductivity: current-current correlator C(t) = <psi0|J e^{-i(H-E0)t}J|psi0>
+    // vs ED. Validates the new block MPO x MPS apply (phi = J|psi0>).
+    printf("Spin conductivity C(t)=<J(t)J(0)> vs exact:\n");
+    {
+        double dl = 1.0, Jc = 1.0;
+        Cm sp(2,2); sp<<0,1,0,0;  Cm sm(2,2); sm<<0,0,1,0;
+        Cm Hc = Cm::Zero(d,d);
+        for (int i=0;i+1<n;++i)
+            Hc += emb(X,i)*emb(X,i+1) + emb(Y,i)*emb(Y,i+1) + dl*(emb(Z,i)*emb(Z,i+1));
+        Eigen::SelfAdjointEigenSolver<Cm> esc(Hc);
+        Cv psi0 = esc.eigenvectors().col(0); double E0c = esc.eigenvalues()(0);
+        Cm Jop = Cm::Zero(d,d);          // total spin current
+        for (int i=0;i+1<n;++i)
+            Jop += Cx(0,Jc)*(emb(sp,i)*emb(sm,i+1) - emb(sm,i)*emb(sp,i+1));
+        Cv phi = Jop * psi0;
+        auto C_exact = [&](double t){
+            Cv c = esc.eigenvectors().adjoint() * phi;
+            Cx s=0; for (int k=0;k<d;++k) s += std::norm(c(k)) * std::exp(Cx(0,-(esc.eigenvalues()(k)-E0c))*t);
+            return s;
+        };
+        auto mpo = build_xxz_mpo(n, Jc, dl);
+        // current state J|psi0> has broad energy support -> faster dynamics, so a
+        // small dt is needed to keep the O(dt^2) Trotter error down (it scales dt^2).
+        auto cd = run_conductivity_blocks(mpo, n, 0.0125, 120, 32, 1e-12, 40, Jc, dl);
+        double maxerr = 0;
+        for (size_t k=0;k<cd.times.size();++k)
+            maxerr = std::max(maxerr, std::abs(C_exact(cd.times[k]) - Cx(cd.C_re[k], cd.C_im[k])));
+        check("conductivity C(t) vs exact (all t, TEBD Trotter)", maxerr, 5e-3);
+        printf("  C(0)=%.4f (=<J^2>, exact=%.4f)  max_bond=%d  %.3fs\n",
+               cd.C_re[0], C_exact(0.0).real(), cd.max_bond, cd.wall_time_s);
+    }
+
     printf("\n%s\n", failures==0 ? "ALL PASSED" : "SOME FAILED");
     return failures==0 ? 0 : 1;
 }

@@ -278,6 +278,43 @@ QX_API const char* qx_loschmidt(const char* problem_json, const char* options_js
     }
 }
 
+QX_API const char* qx_conductivity(const char* problem_json, const char* options_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        nlj opts = nlj::parse(options_json ? options_json : "{}");
+        int    n  = prob.value("n_qubits", 8);
+        double J  = prob.value("J", 1.0);
+        double delta = prob.value("delta", 1.0);
+        std::string type = prob.value("type", "heisenberg");
+        if (type != "heisenberg") return dmrg_error("conductivity supports only type 'heisenberg'/'xxz'");
+        if (n < 2) return dmrg_error("n_qubits must be >= 2");
+
+        double dt      = opts.value("dt", 0.0125);
+        int    n_steps = opts.value("n_steps", 400);
+        int    chi_max = opts.value("chi_max", 128);
+        double cutoff  = opts.value("cutoff", 1e-10);
+        int    n_sweeps = opts.value("n_sweeps", 40);
+
+        auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
+        auto r = qx_dmrg::run_conductivity_blocks(W, n, dt, n_steps, chi_max, cutoff,
+                                                  n_sweeps, J, delta);
+        nlj out;
+        out["ok"]          = true;
+        out["times"]       = r.times;
+        out["C_re"]        = r.C_re;
+        out["C_im"]        = r.C_im;
+        out["E0"]          = r.E0;
+        out["n"]           = r.n;
+        out["max_bond"]    = r.max_bond;
+        out["wall_time_s"] = r.wall_time_s;
+        out["delta"]       = delta;
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
 QX_API const char* qx_mps_energy(const char* problem_json) {
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");

@@ -1801,6 +1801,138 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
     return out;
 }
 
+// ===== Apply a block MPO to a block MPS (for operator-applied observables) ====
+// Compress a block MPS to chi_max by symmetric SVD sweeps (centre ends at 0).
+static void compress_bmps(BMPS& p, int chi_max, double cutoff) {
+    const int n = p.n; const std::map<int,RVec> no_sv;
+    for (int i = 0; i < n - 1; ++i) {
+        auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true);
+        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff);
+        p.bond[i+1] = svd.new_mid_bs;
+        p.A[i]   = bt_A_from_U(svd, p.bond[i], p.bond[i+1]);
+        p.A[i+1] = bt_center_LR(svd);
+    }
+    for (int i = n - 2; i >= 0; --i) {
+        auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true);
+        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff);
+        p.bond[i+1] = svd.new_mid_bs;
+        p.A[i+1] = svd.Vt;
+        p.A[i]   = bt_center_RL(svd, p.bond[i], p.bond[i+1]);
+    }
+}
+
+// phi = W|psi> for a block MPO W with the Heisenberg Sz bond structure. The
+// combined bond carries q_c = q_mps + HB_DELTA[mpo_bond]; the product is built
+// exactly (combined bonds up to 5x larger), then SVD-compressed to chi_max.
+static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
+                              int chi_max, double cutoff) {
+    const int n = s.n;
+    BMPS p; p.n = n; p.A.resize(n); p.bond.resize(n + 1);
+    p.L.assign(n + 1, BlockEnv()); p.R.assign(n + 1, BlockEnv());
+    auto mpodim = [&](int ib) { return (ib == 0) ? W[0].chi_l : W[ib-1].chi_r; };
+    auto hbd    = [&](int ib, int b) { return (mpodim(ib) == 1) ? 0 : HB_DELTA[b]; };
+
+    // Combined bond spaces + layout: each q_c is composed of (q_mps, b) sub-blocks.
+    struct Comp { int q_mps, b, off, dim; };
+    std::vector<std::map<int, std::vector<Comp>>> lay(n + 1);
+    for (int i = 0; i <= n; ++i) {
+        int md = mpodim(i);
+        std::map<int,int> acc;
+        for (int qi = 0; qi < s.bond[i].n_sectors(); ++qi) {
+            int q_mps = s.bond[i].qns[qi], dq = s.bond[i].dims[qi];
+            for (int b = 0; b < md; ++b) {
+                int q_c = q_mps + hbd(i, b);
+                lay[i][q_c].push_back({q_mps, b, acc[q_c], dq});
+                acc[q_c] += dq;
+            }
+        }
+        std::vector<std::pair<int,int>> secs(acc.begin(), acc.end());
+        std::sort(secs.begin(), secs.end());
+        p.bond[i] = BondSpace::from_pairs(secs);
+    }
+    auto find_off = [&](int ib, int q_c, int q_mps, int b) -> std::pair<int,int> {
+        auto it = lay[ib].find(q_c);
+        if (it != lay[ib].end())
+            for (auto& c : it->second) if (c.q_mps == q_mps && c.b == b) return {c.off, c.dim};
+        return {-1, 0};
+    };
+
+    for (int i = 0; i < n; ++i) {
+        int mdR = mpodim(i + 1);
+        for (auto& [q_cL, compsL] : lay[i]) {
+            int dLc = p.bond[i].dim(q_cL);
+            int dR_up = p.bond[i+1].dim(q_cL + 1), dR_dn = p.bond[i+1].dim(q_cL - 1);
+            Mat blk = Mat::Zero(dLc, dR_up + dR_dn);
+            for (auto& cL : compsL) {
+                auto itA = s.A[i].find(cL.q_mps);
+                if (itA == s.A[i].end()) continue;
+                const Mat& A = itA->second;
+                int mps_up = s.bond[i+1].dim(cL.q_mps + 1), mps_dn = s.bond[i+1].dim(cL.q_mps - 1);
+                for (int sp = 0; sp < 2; ++sp) {            // mps physical (in)
+                    int spz = (sp == 0) ? +1 : -1, q_mps_R = cL.q_mps + spz;
+                    int dRs = (spz == +1) ? mps_up : mps_dn;
+                    if (dRs == 0) continue;
+                    Eigen::Ref<const Mat> Asp = (spz == +1) ? A.leftCols(mps_up) : A.rightCols(mps_dn);
+                    for (int so = 0; so < 2; ++so) {        // output physical
+                        int sz = (so == 0) ? +1 : -1, q_cR = q_cL + sz;
+                        int col_base = (sz == +1) ? 0 : dR_up;
+                        for (int b_R = 0; b_R < mdR; ++b_R) {
+                            if (q_cR != q_mps_R + hbd(i + 1, b_R)) continue;
+                            S w = mscal(W[i].W(cL.b, b_R)(so, sp));
+                            if (std::abs(w) < 1e-15) continue;
+                            auto [offR, dimR] = find_off(i + 1, q_cR, q_mps_R, b_R);
+                            if (offR < 0) continue;
+                            blk.block(cL.off, col_base + offR, cL.dim, dimR).noalias() += w * Asp;
+                        }
+                    }
+                }
+            }
+            p.A[i][q_cL] = blk;
+        }
+    }
+    compress_bmps(p, chi_max, cutoff);
+    return p;
+}
+
+// ===== Spin conductivity: current-current correlator C(t) = <J(t)J(0)> ========
+struct ConductivityOut {
+    std::vector<double> times, C_re, C_im;   // C(t) = <psi0|J e^{-i(H-E0)t} J|psi0>
+    int n = 0, max_bond = 0;
+    double E0 = 0, wall_s = 0;
+};
+static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n,
+                                        double dt, int n_steps, int chi_max,
+                                        double cutoff, int n_sweeps,
+                                        double J, double delta) {
+    static_assert(std::is_same_v<S, Cx>, "conductivity requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    ConductivityOut out; out.n = n;
+    BMPS psi0;
+    DMRGResult gs = run(mpo_H, n, chi_max, cutoff, n_sweeps, 1e-12, &psi0);
+    out.E0 = gs.energy;
+    double Zpsi;   // <psi0|psi0> in the overlap convention -> normalises C
+    { auto OL = overlap_left_envs(psi0, psi0);
+      Zpsi = OL[n].count(0) ? std::real(OL[n].at(0)(0,0)) : 1.0; }
+    if (std::abs(Zpsi) < 1e-300) Zpsi = 1.0;
+
+    auto Wj  = qx_dmrg::build_current_mpo(n, J);
+    BMPS phi0 = apply_mpo_to_bmps(psi0, Wj, chi_max, cutoff);   // phi = J|psi0>
+    BMPS phi  = phi0;
+
+    auto t0 = clk::now();
+    for (int step = 0; step <= n_steps; ++step) {
+        auto OL = overlap_left_envs(phi0, phi);
+        S ov = OL[n].count(0) ? OL[n].at(0)(0,0) : S(0);
+        S c = std::exp(Cx(0.0, out.E0 * step * dt)) * ov / S(Zpsi);
+        out.times.push_back(step * dt);
+        out.C_re.push_back(c.real()); out.C_im.push_back(c.imag());
+        for (auto& b : phi.bond) { int s=0; for (int dm : b.dims) s+=dm; out.max_bond = std::max(out.max_bond, s); }
+        if (step < n_steps) tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta);
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    return out;
+}
+
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
@@ -2295,6 +2427,19 @@ LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
                                           n_sweeps, Jf, deltaf);
     LoschmidtResult r;
     r.times = o.times; r.L = o.L; r.rate = o.rate;
+    r.n = o.n; r.max_bond = o.max_bond; r.E0 = o.E0; r.wall_time_s = o.wall_s;
+    return r;
+}
+
+// Entry point: spin conductivity current-current correlator (always complex).
+ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, int n,
+                                           double dt, int n_steps, int chi_max,
+                                           double cutoff, int n_sweeps,
+                                           double J, double delta) {
+    auto o = BlockDMRG<Cx>::run_conductivity(mpo_H, n, dt, n_steps, chi_max, cutoff,
+                                             n_sweeps, J, delta);
+    ConductivityResult r;
+    r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
     r.n = o.n; r.max_bond = o.max_bond; r.E0 = o.E0; r.wall_time_s = o.wall_s;
     return r;
 }

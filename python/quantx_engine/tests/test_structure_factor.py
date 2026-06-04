@@ -64,6 +64,37 @@ def test_dynamic_correlation_vs_ed(solver):
         assert np.max(np.abs(r.C[ti] - Cex)) < 2e-2
 
 
+def test_conductivity_correlator_vs_ed():
+    # Current-current correlator C(t) = <J(t)J(0)> vs ED (validates the new block
+    # MPO x MPS apply phi = J|psi0>).
+    try:
+        from quantx_engine import Engine
+        from quantx_engine.structure_factor import ConductivitySolver
+        s = ConductivitySolver(Engine())
+    except Exception as e:
+        pytest.skip(f"conductivity/native unavailable: {e}")
+    if s._lib is None:
+        pytest.skip("native library not built")
+    n, delta = 8, 1.0
+    ev, V, Zs = _ed(n)
+    sp = np.array([[0,1],[0,0]], complex); sm = np.array([[0,0],[1,0]], complex)
+    Iq = np.eye(2, dtype=complex)
+    def emb(P, i):
+        m = np.array([[1]], complex)
+        for k in range(n): m = np.kron(m, P if k == i else Iq)
+        return m
+    psi0 = V[:, 0]; E0 = ev[0]
+    Jop = np.zeros((2**n,)*2, complex)
+    for i in range(n-1):
+        Jop += 1j*(emb(sp,i)@emb(sm,i+1) - emb(sm,i)@emb(sp,i+1))
+    c = V.conj().T @ (Jop @ psi0)
+    def Cex(t):
+        return complex(np.sum(np.abs(c)**2 * np.exp(-1j*(ev-E0)*t)))
+    r = s.correlator(n, delta=delta, dt=0.0125, n_steps=120, chi_max=64)
+    assert r.C[0].real == pytest.approx(Cex(0).real, abs=1e-3)        # C(0) = <J^2>
+    assert max(abs(r.C[k] - Cex(t)) for k, t in enumerate(r.times)) < 5e-3
+
+
 def test_structure_factor_shape_and_peak(solver):
     n = 16
     r = solver.correlations(n, dt=0.05, n_steps=200, chi_max=64)

@@ -33,7 +33,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["StructureFactorSolver", "DSFResult", "StructureFactorError"]
+__all__ = ["StructureFactorSolver", "DSFResult", "StructureFactorError",
+           "ConductivitySolver", "ConductivityResult"]
 
 
 class StructureFactorError(RuntimeError):
@@ -203,3 +204,80 @@ class StructureFactorSolver:
         Skw -= np.real((win[0] * Ck[0])[None, :]) * dt  # remove double-counted t=0
         S = Skw.T                                      # (n_k, n_w)
         return ks, omegas, S
+
+
+# -- Spin conductivity ---------------------------------------------------------
+
+@dataclass
+class ConductivityResult:
+    """Current-current correlator C(t) = <psi0|J e^{-i(H-E0)t} J|psi0>."""
+    times: object
+    C: object       # complex np.ndarray
+    E0: float
+    n: int
+    delta: float
+    max_bond: int
+    wall_time_s: float
+
+
+class ConductivitySolver:
+    """Spin conductivity of the XXZ chain (native C++ backend).
+
+    Computes the zero-temperature current-current correlator C(t) = <J(t)J(0)>
+    (J = total spin current) via DMRG ground state + block MPO x MPS apply
+    (phi = J|psi0>) + block TEBD evolution + two-MPS overlap. sigma(omega) is the
+    Fourier transform of C(t).
+    """
+
+    def __init__(self, engine) -> None:
+        self._engine = engine
+        self._lib = None
+        lib = getattr(engine, "_lib", None)
+        if lib is not None:
+            try:
+                fn = lib.qx_conductivity
+                fn.argtypes = [c_char_p, c_char_p]
+                fn.restype = c_char_p
+                self._lib = lib
+            except AttributeError:
+                self._lib = None
+
+    def correlator(self, n_qubits, *, J=1.0, delta=1.0, dt=0.0125, n_steps=400,
+                   chi_max=128, cutoff=1e-10, n_sweeps=40):
+        """Current-current correlator C(t) for the XXZ chain."""
+        if self._lib is None:
+            raise StructureFactorError("Conductivity requires the native C++ library.")
+        if n_qubits < 2:
+            raise StructureFactorError("n_qubits must be >= 2")
+        prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
+        opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
+                "cutoff": cutoff, "n_sweeps": n_sweeps}
+        raw = self._lib.qx_conductivity(json.dumps(prob).encode(), json.dumps(opts).encode())
+        out = json.loads(raw)
+        if not out.get("ok", False):
+            raise StructureFactorError(out.get("error", "Unknown error from qx_conductivity"))
+        C = np.array(out["C_re"], dtype=float) + 1j * np.array(out["C_im"], dtype=float)
+        return ConductivityResult(
+            times=np.array(out["times"], dtype=float), C=C,
+            E0=float(out["E0"]), n=int(out["n"]), delta=float(out.get("delta", delta)),
+            max_bond=int(out.get("max_bond", 0)),
+            wall_time_s=float(out.get("wall_time_s", 0.0)))
+
+    @staticmethod
+    def sigma(res, *, n_omega=512, omega_max=None, eta=0.1):
+        """Conductivity spectrum: sigma(omega) ~ (1/N) Re FT[C(t)].
+
+        Gaussian time window exp(-(eta t)^2/2) and the C(-t)=conj(C(t)) extension
+        (J Hermitian). Returns (omegas, sigma).
+        """
+        t = res.times
+        dt = float(t[1] - t[0]) if len(t) > 1 else 1.0
+        win = np.exp(-0.5 * (eta * t) ** 2)
+        if omega_max is None:
+            omega_max = 2.0 * np.pi
+        omegas = np.linspace(0.0, omega_max, n_omega)
+        ewt = np.exp(1j * np.outer(omegas, t))           # (n_w, n_t)
+        wC = win * res.C
+        s = 2.0 * np.real(ewt @ wC) * dt
+        s -= np.real(win[0] * res.C[0]) * dt             # de-double-count t=0
+        return omegas, s / res.n
