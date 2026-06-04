@@ -6,6 +6,27 @@ and an honest performance comparison with TeNPy.**
 
 ---
 
+> ## ⚠️ Correction (2026-06): the headline benchmark below was mismeasured
+>
+> The "8–50× faster than TeNPy" result in this report was measured against
+> TeNPy's `TwoSiteTDVPEngine` (its *Python TDVP*, which is slow). Against TeNPy's
+> actual fast method for nearest-neighbour real-time evolution — **TEBD** — our
+> block-sparse TDVP2 **loses 15–22×**, because TDVP does a Krylov matrix
+> exponential per bond versus TEBD's single Trotter gate (an algorithmic gap C++
+> cannot close). The claim that TDVP is "the modern successor to TEBD … no
+> Trotter error" is true in principle but misleading on speed for nearest-neighbour
+> models, where TEBD is the right tool.
+>
+> **The fix:** QuantX now has a **block-sparse TEBD** engine (with a Gram-matrix
+> SVD) that beats TeNPy TEBD at all sizes (1.07–2.37×), and a **dynamical
+> structure factor S(k,ω)** built on it that beats TeNPy 1.84–16.8×. TDVP2 is
+> retained for its Krylov-exact local step (energy conservation ~1e-13) and for
+> general / long-range MPOs where TEBD's Trotter split does not apply. See
+> [`time_evolution_status.md`](time_evolution_status.md) for the corrected
+> benchmarks and the full story.
+
+---
+
 ## Abstract
 
 QuantX adds TDVP time evolution on top of its MPS/DMRG engine: a one-site
@@ -14,11 +35,12 @@ for both real-time dynamics and imaginary-time cooling, with a **Sz-symmetric
 (block-sparse) TDVP2** as the default fast path. The implementation is validated
 to machine precision against exact diagonalization (TDVP1 is exact at full bond
 dimension; the TDVP2 Néel quench matches `exp(-iHt)` to ~10⁻⁶–10⁻¹⁰) and is
-exposed through the C-API and Python. On a real-time Heisenberg quench
-(single-thread, identical accuracy), **block-sparse QuantX TDVP2 is 8–50× faster
-than TeNPy across all tested sizes** (N=10–20, χ up to 64). The block-sparsity is
-the decisive lever — the same one that powers the DMRG path — turning a dense
-implementation that *lost* at large bond dimension into one that wins everywhere.
+exposed through the C-API and Python. On a real-time Heisenberg quench, block-sparse
+QuantX TDVP2 is 8–50× faster than TeNPy's *TDVP* engine — but see the correction
+banner above: that is the wrong baseline. TeNPy's **TEBD** beats our TDVP2 by
+15–22×, so the genuine time-evolution wins come from QuantX's own block-sparse
+**TEBD** engine and the **S(k,ω)** built on it (see `time_evolution_status.md`).
+The block-sparsity remains the decisive lever for the engine that *does* win.
 
 ---
 
