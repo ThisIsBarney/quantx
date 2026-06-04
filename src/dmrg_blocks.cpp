@@ -1413,15 +1413,18 @@ static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
 }
 
 // ===== Block-sparse TEBD (Trotter gates -- the fast nearest-neighbour route) ==
-// A two-site Sz-conserving gate G = exp(tau * h_bond) for the Heisenberg bond
-// h = sigma.sigma: |uu>,|dd> -> eigenvalue +1; the Sz=0 block {|ud>,|du>} is
-// [[-1,2],[2,-1]] with eigenvalues +1,-3. tau = -i dt (real time) or -dt (imag).
+// A two-site Sz-conserving gate G = exp(tau * h_bond) for the XXZ bond
+//   h = J (sigma^x sigma^x + sigma^y sigma^y) + J*delta sigma^z sigma^z
+// (delta=1 is the isotropic Heisenberg point). |uu>,|dd> -> eigenvalue J*delta;
+// the Sz=0 block {|ud>,|du>} is [[-J*delta, 2J],[2J, -J*delta]] with eigenvalues
+// -J*delta +- 2J. tau = -i dt (real time) or -dt (imag).
 struct Gate { S pdiag; S g00, g01, g10, g11; };
-static Gate build_heisenberg_gate(Cx tau) {
-    S ep = std::exp(S(tau) * S(1.0));     // e^{+1 tau}  (triplet)
-    S em = std::exp(S(tau) * S(-3.0));    // e^{-3 tau}  (singlet)
-    S a = S(0.5) * (ep + em), b = S(0.5) * (ep - em);
-    return Gate{ ep, a, b, b, a };
+static Gate build_xxz_gate(double J, double delta, Cx tau) {
+    const S Jd = S(J * delta), J2 = S(2.0 * J), t = S(tau);
+    S pdiag = std::exp(t * Jd);                 // |uu>,|dd> phase
+    S pre   = std::exp(t * (-Jd));              // -J*delta diagonal of the Sz=0 block
+    S c = std::cosh(t * J2), s = std::sinh(t * J2);
+    return Gate{ pdiag, pre * c, pre * s, pre * s, pre * c };
 }
 
 // Apply a homogeneous nearest-neighbour gate to the two-site block tensor theta
@@ -1462,10 +1465,10 @@ static void apply_gate_theta(std::map<int,Mat>& theta, const BondSpace& bsL,
 // No environments and no Krylov -- just a gate + SVD per bond, the reason TEBD is
 // cheaper than TDVP for nearest-neighbour models.
 static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
-                              double cutoff) {
+                              double cutoff, double J = 1.0, double delta = 1.0) {
     const int n = s.n;
     const Cx tau = imag ? Cx(-dt/2, 0) : Cx(0, -dt/2);
-    const Gate g = build_heisenberg_gate(tau);
+    const Gate g = build_xxz_gate(J, delta, tau);
     const std::map<int,RVec> no_sv;
     auto& A = s.A; auto& bond = s.bond;
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
@@ -1550,7 +1553,8 @@ static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
 // (1 = every step; <=0 = endpoints only -- isolates the bare evolution cost).
 static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
                           double dt, int n_steps, int chi_max, double cutoff,
-                          bool imag, int measure_stride = 1) {
+                          bool imag, int measure_stride = 1,
+                          double J = 1.0, double delta = 1.0) {
     static_assert(std::is_same_v<S, Cx>, "TEBD2 requires complex scalar");
     using clk = std::chrono::steady_clock;
     std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
@@ -1561,7 +1565,7 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     TDVP2Out out;
     auto t0 = clk::now();
     for (int step = 0; step < n_steps; ++step) {
-        tebd2_step_blocks(s, dt, imag, chi_max, cutoff);
+        tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta);
         if (measure_stride > 0 && (step % measure_stride == 0 || step == n_steps - 1)) {
             out.times.push_back((step+1)*dt);
             out.stag.push_back(measure_stag(s.A, s.bond, n));
@@ -1711,7 +1715,7 @@ struct SpectralOut {
 // Dynamical spin structure factor data: C_{j,l0}(t) for a central source l0.
 static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
                                 double dt, int n_steps, int chi_max, double cutoff,
-                                int n_sweeps) {
+                                int n_sweeps, double J = 1.0, double delta = 1.0) {
     static_assert(std::is_same_v<S, Cx>, "spectral requires complex scalar");
     using clk = std::chrono::steady_clock;
     SpectralOut out; out.n = n; out.l0 = n / 2;
@@ -1745,7 +1749,7 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
         out.C_re.push_back(re); out.C_im.push_back(im); out.times.push_back(t);
         for (auto& b : phi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
         if (step < n_steps)
-            tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff);  // fast NN route
+            tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta);  // fast NN route
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
@@ -2216,8 +2220,9 @@ TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
 // Entry point: block-sparse TEBD2 time evolution (always complex).
 TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
-                                 double cutoff, bool imag, int measure_stride) {
-    auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride);
+                                 double cutoff, bool imag, int measure_stride,
+                                 double J, double delta) {
+    auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride, J, delta);
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;
     r.max_bond = o.max_bond; r.wall_time_s = o.wall_s;
@@ -2227,8 +2232,8 @@ TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
 // Entry point: dynamical structure factor S(k,omega) data (always complex).
 SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double dt, int n_steps, int chi_max,
-                                   double cutoff, int n_sweeps) {
-    auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps);
+                                   double cutoff, int n_sweeps, double J, double delta) {
+    auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta);
     SpectralResult r;
     r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
     r.E0 = o.E0; r.wall_time_s = o.wall_s; r.C_re = o.C_re; r.C_im = o.C_im;

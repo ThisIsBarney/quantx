@@ -17,7 +17,7 @@ def solver():
     return s
 
 
-def _dense_heisenberg(n):
+def _dense_xxz(n, delta=1.0):
     sx=np.array([[0,1],[1,0]],complex); sy=np.array([[0,-1j],[1j,0]])
     sz=np.array([[1,0],[0,-1]],complex); I=np.eye(2,dtype=complex)
     def emb(P,i):
@@ -26,8 +26,29 @@ def _dense_heisenberg(n):
         return m
     H=np.zeros((2**n,)*2,complex)
     for i in range(n-1):
-        for P in (sx,sy,sz): H+=emb(P,i)@emb(P,i+1)
+        H += emb(sx,i)@emb(sx,i+1) + emb(sy,i)@emb(sy,i+1) + delta*(emb(sz,i)@emb(sz,i+1))
     return H
+
+
+def _dense_heisenberg(n):
+    return _dense_xxz(n, 1.0)
+
+
+@pytest.mark.parametrize("delta", [0.5, 1.5])
+def test_xxz_imag_time_ground_vs_ed(solver, delta):
+    # XXZ (delta != 1) cooled by imaginary-time TEBD -> ground energy vs ED.
+    n=6
+    e0=np.linalg.eigvalsh(_dense_xxz(n, delta))[0]
+    g=solver.evolve(n, delta=delta, dt=0.05, n_steps=400, imag=True, chi_max=32)
+    assert abs(g.energy - e0) < 2e-3
+
+
+@pytest.mark.parametrize("delta", [0.5, 1.5])
+def test_xxz_real_time_energy_conserved(solver, delta):
+    # Neel energy under XXZ is -delta*(n-1); TEBD conserves it (O(dt^2) Trotter).
+    n=8
+    r=solver.evolve(n, delta=delta, dt=0.02, n_steps=25, chi_max=16)
+    assert abs(r.energy - (-delta*(n-1))) < 1e-2
 
 
 def test_imag_time_ground(solver):

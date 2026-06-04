@@ -92,6 +92,7 @@ class StructureFactorSolver:
         n_qubits: int,
         *,
         J: float = 1.0,
+        delta: float = 1.0,
         dt: float = 0.05,
         n_steps: int = 200,
         chi_max: int = 128,
@@ -125,7 +126,7 @@ class StructureFactorSolver:
             raise StructureFactorError("Structure factor requires the native C++ library.")
         if n_qubits < 2:
             raise StructureFactorError("n_qubits must be >= 2")
-        prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J}
+        prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
         opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
                 "cutoff": cutoff, "n_sweeps": n_sweeps}
         raw = self._lib.qx_spectral(json.dumps(prob).encode(), json.dumps(opts).encode())

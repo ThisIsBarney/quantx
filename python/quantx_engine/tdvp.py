@@ -83,6 +83,7 @@ class TDVPSolver:
         n_qubits: int,
         *,
         J: float = 1.0,
+        delta: float = 1.0,
         dt: float = 0.05,
         n_steps: int = 20,
         chi_max: int = 64,
@@ -126,7 +127,7 @@ class TDVPSolver:
             raise TDVPError("n_qubits must be >= 2")
         if n_steps < 1:
             raise TDVPError("n_steps must be >= 1")
-        prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J}
+        prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
         opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
                 "imag": bool(imag), "two_site": bool(two_site), "initial": initial,
                 "block": bool(block), "engine": engine,

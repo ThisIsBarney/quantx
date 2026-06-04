@@ -29,8 +29,9 @@ static const char* dmrg_error(const std::string& msg) {
 static std::vector<MPOSite> parse_ham(const nlj& prob, int n) {
     std::string type = prob.value("type", "pauli_sum");
     if (type == "heisenberg") {
-        double J = prob.value("J", 1.0);
-        return build_heisenberg_mpo(n, J);
+        double J     = prob.value("J", 1.0);
+        double delta = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
+        return build_xxz_mpo(n, J, delta);
     }
     // pauli_sum
     std::vector<std::pair<double, std::string>> terms;
@@ -128,8 +129,9 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         nlj opts = nlj::parse(options_json ? options_json : "{}");
         int    n        = prob.value("n_qubits", 8);
         double J        = prob.value("J", 1.0);
+        double delta    = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
-        if (type != "heisenberg") return dmrg_error("tdvp supports only type 'heisenberg'");
+        if (type != "heisenberg") return dmrg_error("tdvp supports only type 'heisenberg'/'xxz'");
         if (n < 2)  return dmrg_error("n_qubits must be >= 2");
 
         double dt       = opts.value("dt", 0.05);
@@ -141,7 +143,7 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         // Block-sparse (Sz-symmetric) TDVP2 is the default fast path (Neel init).
         bool   block    = opts.value("block", true) && two_site && init == "neel";
 
-        auto W = qx_dmrg::build_heisenberg_mpo(n, J);
+        auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
 
         if (block) {
             // Block evolution engine: "tebd" (Trotter gates, fast NN -- default) or
@@ -150,7 +152,7 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
             int stride = opts.value("measure_stride", 1);
             auto r = (engine == "tdvp2")
                 ? qx_dmrg::run_tdvp2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag)
-                : qx_dmrg::run_tebd2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag, stride);
+                : qx_dmrg::run_tebd2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag, stride, J, delta);
             nlj out;
             out["ok"]            = true;
             out["energy"]        = r.energy;
@@ -207,8 +209,9 @@ QX_API const char* qx_spectral(const char* problem_json, const char* options_jso
         nlj opts = nlj::parse(options_json ? options_json : "{}");
         int    n  = prob.value("n_qubits", 8);
         double J  = prob.value("J", 1.0);
+        double delta = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
-        if (type != "heisenberg") return dmrg_error("spectral supports only type 'heisenberg'");
+        if (type != "heisenberg") return dmrg_error("spectral supports only type 'heisenberg'/'xxz'");
         if (n < 2) return dmrg_error("n_qubits must be >= 2");
 
         double dt      = opts.value("dt", 0.05);
@@ -217,8 +220,8 @@ QX_API const char* qx_spectral(const char* problem_json, const char* options_jso
         double cutoff  = opts.value("cutoff", 1e-10);
         int    n_sweeps = opts.value("n_sweeps", 40);
 
-        auto W = qx_dmrg::build_heisenberg_mpo(n, J);
-        auto r = qx_dmrg::run_spectral_blocks(W, n, dt, n_steps, chi_max, cutoff, n_sweeps);
+        auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
+        auto r = qx_dmrg::run_spectral_blocks(W, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta);
         nlj out;
         out["ok"]          = true;
         out["times"]       = r.times;

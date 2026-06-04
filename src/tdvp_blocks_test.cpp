@@ -100,6 +100,30 @@ int main() {
                sp.E0, E0, sp.l0, sp.max_bond, sp.wall_time_s);
     }
 
+    // XXZ generalization: H = sum (XX + YY + delta ZZ). Validate the parameterized
+    // TEBD gate + MPO at delta != 1 (gapless XY-like and gapped Ising-like) vs ED.
+    printf("XXZ (delta != 1) TEBD + ground vs exact:\n");
+    for (double delta : {0.5, 1.5}) {
+        Cm Hd = Cm::Zero(d, d);
+        for (int i=0;i+1<n;++i) {
+            Hd += emb(X,i)*emb(X,i+1);
+            Hd += emb(Y,i)*emb(Y,i+1);
+            Hd += delta * (emb(Z,i)*emb(Z,i+1));
+        }
+        Eigen::SelfAdjointEigenSolver<Cm> esd(Hd);
+        auto mpo = build_xxz_mpo(n, 1.0, delta);
+        // imaginary-time TEBD cooling -> ground energy
+        auto g = run_tebd2_blocks(mpo, n, 0.05, 400, 32, 1e-12, /*imag*/true, 0, 1.0, delta);
+        char nm[64];
+        std::snprintf(nm, sizeof nm, "XXZ delta=%.1f imag->ground", delta);
+        check(nm, std::abs(g.energy - esd.eigenvalues()(0)), 2e-3);
+        // real-time Neel quench: energy is conserved (Neel energy = -delta*(n-1))
+        auto q = run_tebd2_blocks(mpo, n, 0.02, 25, 16, 1e-12, /*imag*/false, 1, 1.0, delta);
+        std::snprintf(nm, sizeof nm, "XXZ delta=%.1f real-time energy cons", delta);
+        check(nm, std::abs(q.energy - (-delta*(n-1.0))), 1e-3);
+        printf("  delta=%.1f  E_gs=%.6f exact=%.6f\n", delta, g.energy, esd.eigenvalues()(0));
+    }
+
     printf("\n%s\n", failures==0 ? "ALL PASSED" : "SOME FAILED");
     return failures==0 ? 0 : 1;
 }

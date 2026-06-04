@@ -47,7 +47,13 @@ struct DMRGResult {
 
 // dmrg_mpo.cpp
 Mat2 pauli(char c);
-std::vector<MPOSite> build_heisenberg_mpo(int n, double J = 1.0);
+// XXZ chain: H = J sum_i [ (X_i X_{i+1} + Y_i Y_{i+1}) + delta Z_i Z_{i+1} ]
+// (delta=1 is the isotropic Heisenberg point). Same Sz bond structure as the
+// plain Heisenberg MPO, so the block-sparse engine handles it unchanged.
+std::vector<MPOSite> build_xxz_mpo(int n, double J = 1.0, double delta = 1.0);
+inline std::vector<MPOSite> build_heisenberg_mpo(int n, double J = 1.0) {
+    return build_xxz_mpo(n, J, 1.0);
+}
 std::vector<MPOSite> build_pauli_sum_mpo(int n,
     const std::vector<std::pair<double, std::string>>& terms);
 
@@ -75,9 +81,12 @@ TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
 // Block-sparse TEBD2 (Trotter-gate) time evolution from the Neel state -- the
 // fast nearest-neighbour route (no environments / Krylov). measure_stride: record
 // staggered magnetization every this many steps (<=0 = endpoints only).
+// J and delta parameterise the XXZ bond gate exp(tau*h), h = J(XX+YY)+J*delta*ZZ;
+// they must match the mpo passed in (whose energy is measured at the end).
 TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
-                                 double cutoff, bool imag, int measure_stride = 1);
+                                 double cutoff, bool imag, int measure_stride = 1,
+                                 double J = 1.0, double delta = 1.0);
 
 // Dynamical spin structure factor data: time-dependent correlations
 // C_{j,l0}(t) = <psi0| sigma^z_j e^{-i(H-E0)t} sigma^z_{l0} |psi0> from a central
@@ -90,6 +99,7 @@ struct SpectralResult {
 };
 SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double dt, int n_steps, int chi_max,
-                                   double cutoff, int n_sweeps);
+                                   double cutoff, int n_sweeps,
+                                   double J = 1.0, double delta = 1.0);
 
 } // namespace qx_dmrg

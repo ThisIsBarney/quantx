@@ -41,7 +41,7 @@ Mat2 pauli(char c) {
 //
 // Left  boundary: row 4 (last row)
 // Right boundary: col 0 (first col)
-std::vector<MPOSite> build_heisenberg_mpo(int n, double J) {
+std::vector<MPOSite> build_xxz_mpo(int n, double J, double delta) {
     const int chi = 5;
     Mat2 sp; sp << 0, 1, 0, 0;   // σ+ = |↑⟩⟨↓|  (ket ↓ → bra ↑, ΔSz = +2)
     Mat2 sm; sm << 0, 0, 1, 0;   // σ- = |↓⟩⟨↑|  (ΔSz = -2)
@@ -61,9 +61,9 @@ std::vector<MPOSite> build_heisenberg_mpo(int n, double J) {
         W5[1][0] = sm;
         W5[2][0] = sp;
         W5[3][0] = pauli('Z');
-        W5[4][1] = (2.0 * J) * sp;
+        W5[4][1] = (2.0 * J) * sp;            // Jxy = J  (XX + YY)
         W5[4][2] = (2.0 * J) * sm;
-        W5[4][3] = J * pauli('Z');
+        W5[4][3] = (J * delta) * pauli('Z');  // Jz  = J*delta  (delta ZZ)
         W5[4][4] = pauli('I');
 
         // Map cl x cr indices into the 5x5 matrix

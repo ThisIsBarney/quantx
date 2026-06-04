@@ -205,6 +205,7 @@ class DMRGSolver:
         *,
         hamiltonian_type: str = "pauli_sum",
         J: float = 1.0,
+        delta: float = 1.0,
         hamiltonian_terms: Optional[list] = None,
         max_bond: int = 64,
         cutoff: float = 1e-10,
@@ -281,13 +282,16 @@ class DMRGSolver:
             raise DMRGError(f"Unknown method '{method}'. Use 'u1' or 'su2'.")
         if method == "su2" and hamiltonian_type != "heisenberg":
             raise DMRGError("method='su2' supports only hamiltonian_type='heisenberg'")
+        if method == "su2" and delta != 1.0:
+            raise DMRGError("method='su2' requires the isotropic point delta=1 "
+                            "(XXZ anisotropy breaks SU(2) to U(1); use method='u1')")
         if phys_spin != 0.5 and method != "su2":
             raise DMRGError("phys_spin > 1/2 requires method='su2'")
 
         if self._lib is not None:
             return self._solve_cpp(
                 n_qubits, hamiltonian_type, J, hamiltonian_terms or [],
-                max_bond, cutoff, n_sweeps, tol, method, seed, phys_spin
+                max_bond, cutoff, n_sweeps, tol, method, seed, phys_spin, delta
             )
         if method == "su2":
             raise DMRGError(
@@ -352,12 +356,14 @@ class DMRGSolver:
         method: str = "u1",
         seed: int = 7,
         phys_spin: float = 0.5,
+        delta: float = 1.0,
     ) -> DMRGResult:
         prob: dict = {"n_qubits": n_qubits}
         if hamiltonian_type == "heisenberg":
-            prob["type"] = "heisenberg"
-            prob["J"]    = J
-            prob["spin"] = phys_spin
+            prob["type"]  = "heisenberg"
+            prob["J"]     = J
+            prob["delta"] = delta     # XXZ anisotropy (1 = Heisenberg); U(1) path
+            prob["spin"]  = phys_spin
         else:
             prob["type"]  = "pauli_sum"
             prob["terms"] = [
