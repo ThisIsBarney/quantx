@@ -124,6 +124,34 @@ int main() {
         printf("  delta=%.1f  E_gs=%.6f exact=%.6f\n", delta, g.energy, esd.eigenvalues()(0));
     }
 
+    // Loschmidt echo: quench from the XXZ(delta_i) ground state, evolve under
+    // XXZ(delta_f); L(t) = |<psi0|psi(t)>|^2 vs exact diagonalization.
+    printf("Loschmidt echo (quench delta 0.5 -> 1.5) vs exact:\n");
+    {
+        double di = 0.5, df = 1.5;
+        Cm Hi = Cm::Zero(d,d), Hf = Cm::Zero(d,d);
+        for (int i=0;i+1<n;++i) {
+            Cm xy = emb(X,i)*emb(X,i+1) + emb(Y,i)*emb(Y,i+1);
+            Cm zz = emb(Z,i)*emb(Z,i+1);
+            Hi += xy + di*zz;  Hf += xy + df*zz;
+        }
+        Eigen::SelfAdjointEigenSolver<Cm> esi(Hi), esf(Hf);
+        Cv psi0 = esi.eigenvectors().col(0);
+        auto L_exact = [&](double t){
+            Cv c = esf.eigenvectors().adjoint() * psi0;
+            for (int k=0;k<d;++k) c(k) *= std::exp(Cx(0,-t)*esf.eigenvalues()(k));
+            Cv psit = esf.eigenvectors() * c;
+            return std::norm(psi0.dot(psit));
+        };
+        auto mpo_i = build_xxz_mpo(n, 1.0, di);
+        auto lo = run_loschmidt_blocks(mpo_i, n, 0.05, 30, 32, 1e-12, 40, 1.0, df);
+        double maxerr = 0;
+        for (size_t k=0;k<lo.times.size();++k)
+            maxerr = std::max(maxerr, std::abs(lo.L[k] - L_exact(lo.times[k])));
+        check("Loschmidt L(t) vs exact (all t, TEBD Trotter)", maxerr, 5e-3);
+        printf("  L(0)=%.4f (should be 1)  max_bond=%d  %.3fs\n", lo.L[0], lo.max_bond, lo.wall_time_s);
+    }
+
     printf("\n%s\n", failures==0 ? "ALL PASSED" : "SOME FAILED");
     return failures==0 ? 0 : 1;
 }

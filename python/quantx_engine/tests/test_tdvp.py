@@ -51,6 +51,28 @@ def test_xxz_real_time_energy_conserved(solver, delta):
     assert abs(r.energy - (-delta*(n-1))) < 1e-2
 
 
+def test_loschmidt_echo_vs_ed():
+    # Quench XXZ(0.5) -> XXZ(2.0): return probability L(t) vs exact diagonalization.
+    try:
+        from quantx_engine import Engine
+        from quantx_engine.tdvp import LoschmidtSolver
+        s = LoschmidtSolver(Engine())
+    except Exception as e:
+        pytest.skip(f"Loschmidt/native unavailable: {e}")
+    if s._lib is None:
+        pytest.skip("native library not built")
+    n, di, df = 8, 0.5, 2.0
+    H = lambda delta: _dense_xxz(n, delta)
+    evi, Vi = np.linalg.eigh(H(di)); psi0 = Vi[:, 0]
+    evf, Vf = np.linalg.eigh(H(df))
+    def Lex(t):
+        c = (Vf.conj().T @ psi0) * np.exp(-1j * evf * t)
+        return abs(psi0.conj() @ (Vf @ c)) ** 2
+    r = s.echo(n, df, delta=di, dt=0.05, n_steps=40, chi_max=64)
+    assert r.L[0] == pytest.approx(1.0, abs=1e-3)
+    assert max(abs(r.L[k] - Lex(t)) for k, t in enumerate(r.times)) < 5e-3
+
+
 def test_imag_time_ground(solver):
     n=6
     H=_dense_heisenberg(n); e0=np.linalg.eigvalsh(H)[0]

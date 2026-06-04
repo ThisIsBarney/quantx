@@ -1755,6 +1755,52 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
     return out;
 }
 
+// ===== Loschmidt echo / dynamical quantum phase transitions =================
+struct LoschmidtOut {
+    std::vector<double> times, L, rate;   // L(t)=|<psi0|psi(t)>|^2; rate=-ln L / n
+    int n = 0, max_bond = 0;
+    double E0 = 0, wall_s = 0;
+};
+
+// Quench: ground state of H_i (mpo_i), evolved under the XXZ(Jf, deltaf) gate by
+// block TEBD; the return probability L(t) and rate function lambda(t) = -ln L / n
+// (whose non-analyticities are dynamical quantum phase transitions). The overlaps
+// are normalised by <psi0|psi0> and <psi(t)|psi(t)> so truncation norm-drift and
+// the overlap-convention constant both cancel.
+static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
+                                  double dt, int n_steps, int chi_max, double cutoff,
+                                  int n_sweeps, double Jf, double deltaf) {
+    static_assert(std::is_same_v<S, Cx>, "loschmidt requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    LoschmidtOut out; out.n = n;
+
+    BMPS psi0;
+    DMRGResult gs = run(mpo_i, n, chi_max, cutoff, n_sweeps, 1e-12, &psi0);
+    out.E0 = gs.energy;
+    double Z0;
+    { auto OL = overlap_left_envs(psi0, psi0);
+      Z0 = OL[n].count(0) ? std::real(OL[n].at(0)(0,0)) : 1.0; }
+    if (std::abs(Z0) < 1e-300) Z0 = 1.0;
+
+    BMPS psi = psi0;
+    auto t0 = clk::now();
+    for (int step = 0; step <= n_steps; ++step) {
+        auto OLc = overlap_left_envs(psi0, psi);
+        auto OLn = overlap_left_envs(psi,  psi);
+        S ov = OLc[n].count(0) ? OLc[n].at(0)(0,0) : S(0);
+        double Zt = OLn[n].count(0) ? std::real(OLn[n].at(0)(0,0)) : 1.0;
+        double L = (Zt > 1e-300) ? std::norm(ov) / (Z0 * Zt) : 0.0;
+        out.times.push_back(step * dt);
+        out.L.push_back(L);
+        out.rate.push_back(L > 1e-300 ? -std::log(L) / n : 1e30);
+        for (auto& b : psi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
+        if (step < n_steps)
+            tebd2_step_blocks(psi, dt, /*imag*/false, chi_max, cutoff, Jf, deltaf);
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    return out;
+}
+
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
@@ -2237,6 +2283,19 @@ SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
     SpectralResult r;
     r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
     r.E0 = o.E0; r.wall_time_s = o.wall_s; r.C_re = o.C_re; r.C_im = o.C_im;
+    return r;
+}
+
+// Entry point: Loschmidt echo / DQPT (always complex).
+LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
+                                     double dt, int n_steps, int chi_max,
+                                     double cutoff, int n_sweeps,
+                                     double Jf, double deltaf) {
+    auto o = BlockDMRG<Cx>::run_loschmidt(mpo_i, n, dt, n_steps, chi_max, cutoff,
+                                          n_sweeps, Jf, deltaf);
+    LoschmidtResult r;
+    r.times = o.times; r.L = o.L; r.rate = o.rate;
+    r.n = o.n; r.max_bond = o.max_bond; r.E0 = o.E0; r.wall_time_s = o.wall_s;
     return r;
 }
 

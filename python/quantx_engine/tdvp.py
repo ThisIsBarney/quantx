@@ -25,7 +25,8 @@ from ctypes import c_char_p
 from dataclasses import dataclass
 from typing import Any
 
-__all__ = ["TDVPSolver", "TDVPResult", "TDVPError"]
+__all__ = ["TDVPSolver", "TDVPResult", "TDVPError",
+           "LoschmidtSolver", "LoschmidtResult"]
 
 
 class TDVPError(RuntimeError):
@@ -144,4 +145,83 @@ class TDVPSolver:
             max_bond=int(out.get("max_bond", 0)),
             wall_time_s=float(out.get("wall_time_s", 0.0)),
             method=str(out.get("method", "")),
+        )
+
+
+# -- Loschmidt echo / dynamical quantum phase transitions ----------------------
+
+@dataclass
+class LoschmidtResult:
+    """Loschmidt echo of a quench (native engine output).
+
+    Attributes
+    ----------
+    times : list[float]
+        Time grid.
+    L : list[float]
+        Return probability L(t) = |<psi0|psi(t)>|^2 (L(0)=1).
+    rate : list[float]
+        Rate function lambda(t) = -ln L(t) / n; its non-analyticities (cusps)
+        are dynamical quantum phase transitions.
+    delta_i, delta_f : float
+        Initial / quench XXZ anisotropies.
+    E0 : float
+        Initial-state (pre-quench) ground energy.
+    max_bond : int
+    wall_time_s : float
+    """
+    times: list
+    L: list
+    rate: list
+    delta_i: float
+    delta_f: float
+    E0: float
+    max_bond: int
+    wall_time_s: float
+
+
+class LoschmidtSolver:
+    """Loschmidt echo / DQPT of an XXZ quench (native C++ backend).
+
+    Prepares the ground state of XXZ(J, delta), quenches the anisotropy to
+    delta_f, evolves with block-sparse TEBD, and returns the return probability
+    L(t) and rate function. Heisenberg/XXZ chain only.
+    """
+
+    def __init__(self, engine) -> None:
+        self._engine = engine
+        self._lib = None
+        lib = getattr(engine, "_lib", None)
+        if lib is not None:
+            try:
+                fn = lib.qx_loschmidt
+                fn.argtypes = [c_char_p, c_char_p]
+                fn.restype = c_char_p
+                self._lib = lib
+            except AttributeError:
+                self._lib = None
+
+    def echo(self, n_qubits, delta_f, *, J=1.0, delta=1.0, dt=0.05, n_steps=200,
+             chi_max=128, cutoff=1e-10, n_sweeps=40):
+        """Loschmidt echo of the quench XXZ(delta) -> XXZ(delta_f)."""
+        if self._lib is None:
+            raise TDVPError("Loschmidt requires the native C++ library.")
+        if n_qubits < 2:
+            raise TDVPError("n_qubits must be >= 2")
+        prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
+        opts = {"delta_f": delta_f, "dt": dt, "n_steps": n_steps,
+                "chi_max": chi_max, "cutoff": cutoff, "n_sweeps": n_sweeps}
+        raw = self._lib.qx_loschmidt(json.dumps(prob).encode(), json.dumps(opts).encode())
+        out = json.loads(raw)
+        if not out.get("ok", False):
+            raise TDVPError(out.get("error", "Unknown error from qx_loschmidt"))
+        return LoschmidtResult(
+            times=[float(x) for x in out["times"]],
+            L=[float(x) for x in out["L"]],
+            rate=[float(x) for x in out["rate"]],
+            delta_i=float(out.get("delta_i", delta)),
+            delta_f=float(out.get("delta_f", delta_f)),
+            E0=float(out.get("E0", 0.0)),
+            max_bond=int(out.get("max_bond", 0)),
+            wall_time_s=float(out.get("wall_time_s", 0.0)),
         )

@@ -102,4 +102,17 @@ SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double cutoff, int n_sweeps,
                                    double J = 1.0, double delta = 1.0);
 
+// Loschmidt echo of a quench: ground state of mpo_i evolved under XXZ(Jf, deltaf).
+// L(t) = |<psi0|psi(t)>|^2 (return probability); rate(t) = -ln L(t) / n (its
+// non-analyticities are dynamical quantum phase transitions).
+struct LoschmidtResult {
+    std::vector<double> times, L, rate;
+    int n = 0, max_bond = 0;
+    double E0 = 0, wall_time_s = 0;
+};
+LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
+                                     double dt, int n_steps, int chi_max,
+                                     double cutoff, int n_sweeps,
+                                     double Jf, double deltaf);
+
 } // namespace qx_dmrg
