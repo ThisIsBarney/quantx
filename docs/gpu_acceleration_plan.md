@@ -54,6 +54,22 @@ TeNPy's npc orchestration is Python-bound and its dense per-block SVD doesn't
 expose this batch structure as cleanly. The GPU advantage on O(χ³) work **grows
 with χ**, which is exactly the "bigger = more advantage" property we want.
 
+**Two measured findings that shape the GPU plan:**
+- **The GPU priority is the TEBD-based dynamics suite, NOT DMRG.** DMRG was
+  measured to *not* reverse — it stays a strong win at large χ (N=48: χ=64 6.3×,
+  χ=128 5.6×, χ=256 **3.18×**), because its hot loop is many small Lanczos
+  matvecs (overhead-bound, where C++ beats TeNPy's Python) rather than one big SVD.
+  TEBD and everything built on it (S(k,ω), Loschmidt, conductivity) reverse because
+  the hot loop *is* the one big per-bond SVD. So GPU effort should target the SVD
+  path that the dynamics suite shares; DMRG is already fine on CPU.
+- **CPU multi-threading cannot substitute for the GPU.** On a 16-core box: our
+  block-over-sector OpenMP parallelism gives only ~1.8× (Amdahl-capped by the one
+  dominant ~0.6χ block, which runs serial), and multi-threaded OpenBLAS on the
+  *many small* blocks is catastrophic (measured **3.5× slower** — per-block thread
+  overhead ≫ work). This is precisely why GPU is the right tool: a single
+  `…jBatched` call does all the small SVDs at once, which CPU threads cannot do
+  efficiently, and the GPU streams the one big block concurrently.
+
 ---
 
 ## 2. Success criteria
@@ -64,7 +80,9 @@ with χ**, which is exactly the "bigger = more advantage" property we want.
    ~1e-13, S(k,ω)/Loschmidt/conductivity vs ED).
 2. **The margin grows with χ:** benchmark QuantX-GPU vs TeNPy-CPU TEBD on a Néel
    quench (N=32–64) at χ = 128, 256, 512, 1024 and show the speedup **increases**
-   with χ (CPU baseline is flat ~1.1–1.4×; target GPU curve trends upward).
+   with χ. The CPU curve does the opposite — it *reverses*: with Phase 0 OpenBLAS,
+   measured TEBD margin is χ=128 1.84× → χ=256 0.79× (and lower beyond). The GPU
+   target is to turn that downward CPU curve into an upward one.
 3. No regression on small problems (fall back to CPU below a size threshold where
    PCIe transfer dominates).
 
@@ -245,10 +263,11 @@ Write results into `docs/gpu_acceleration_report.md` and update
 
 ## 9. Recommended order of work
 
-0. **Phase 0 (CPU, do first):** link OpenBLAS/MKL (`EIGEN_USE_BLAS`/`LAPACKE`) +
-   size-adaptive SVD (direct `zgesdd` for large blocks). Re-run margin-vs-χ;
-   expect χ=256 to recover from 0.56× to ≥1×. Cheap, and a prerequisite for a fair
-   GPU comparison.
+0. **Phase 0 (CPU) — DONE** (committed `1ff2543`, opt-in `-DQX_ENABLE_BLAS=ON`).
+   `EIGEN_USE_BLAS` + LAPACK `zheevd` for large blocks. Result: ~1.5× uniform
+   (χ=128 1.21→1.84×, χ=256 0.56→0.79×). It did NOT recover χ=256 to ≥1× — the
+   margin still decreases with χ. So the CPU baseline is now OpenBLAS-backed (fair
+   for the GPU comparison), but Phase 0 alone does not solve large-χ.
 1. Phase A `thin_svd_gram_gpu` (large blocks only) + build flag + unit test +
    `qx_tdvp_blocks_test` green.
 2. margin-vs-χ benchmark on GPU → confirm the speedup **grows** with χ. **Key result.**
