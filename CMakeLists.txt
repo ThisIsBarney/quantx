@@ -59,6 +59,22 @@ endif()
 add_library(qx_eigen INTERFACE)
 target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
 
+# Optional: link OpenBLAS/LAPACKE so the large-block SVD uses LAPACK zgesdd
+# instead of Eigen's built-in Gram eigensolve (Phase 0, docs/gpu_acceleration_plan.md).
+# Configure with: -DQX_ENABLE_BLAS=ON -DQX_BLAS_INCLUDE_DIR=<dir with lapacke.h>
+#                 -DQX_BLAS_LIB=<path to openblas import lib>
+option(QX_ENABLE_BLAS "Link OpenBLAS/LAPACKE for the large-block SVD path" OFF)
+add_library(qx_blas INTERFACE)
+if(QX_ENABLE_BLAS)
+  if(NOT QX_BLAS_INCLUDE_DIR OR NOT QX_BLAS_LIB)
+    message(FATAL_ERROR "QX_ENABLE_BLAS=ON requires -DQX_BLAS_INCLUDE_DIR and -DQX_BLAS_LIB")
+  endif()
+  target_include_directories(qx_blas INTERFACE ${QX_BLAS_INCLUDE_DIR})
+  target_link_libraries(qx_blas INTERFACE ${QX_BLAS_LIB})
+  target_compile_definitions(qx_blas INTERFACE QX_HAS_LAPACKE=1 EIGEN_USE_BLAS=1)
+  message(STATUS "QX_ENABLE_BLAS: linking ${QX_BLAS_LIB}")
+endif()
+
 if(QX_ENABLE_OPENMP)
   find_package(OpenMP)
 endif()
@@ -180,6 +196,7 @@ add_library(qx_capi SHARED
   src/dmrg_capi.cpp
 )
 target_link_libraries(qx_capi PRIVATE qx_core)
+target_link_libraries(qx_capi PRIVATE qx_blas)
 target_include_directories(qx_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(qx_capi PRIVATE QX_CAPI_EXPORTS=1)
 set_target_properties(qx_capi PROPERTIES OUTPUT_NAME quantx)
@@ -293,7 +310,7 @@ qx_set_config_output_dirs(qx_tdvp_test)
 
 add_executable(qx_tdvp_blocks_test src/tdvp_blocks_test.cpp
   src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
-target_link_libraries(qx_tdvp_blocks_test PRIVATE qx_eigen nlohmann_json::nlohmann_json)
+target_link_libraries(qx_tdvp_blocks_test PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
 if(OpenMP_CXX_FOUND)
   target_link_libraries(qx_tdvp_blocks_test PRIVATE OpenMP::OpenMP_CXX)
 endif()

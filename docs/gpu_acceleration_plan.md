@@ -72,29 +72,41 @@ with χ**, which is exactly the "bigger = more advantage" property we want.
 
 ## 3. Design — phases
 
-### Phase 0 (CPU, do FIRST — cheapest, biggest immediate win)
+### Phase 0 (CPU) — DONE on this machine. Real ~1.5× win, but does NOT fix large-χ.
 
-**Link an optimized BLAS/LAPACK (OpenBLAS or MKL) and route the large-block linear
-algebra through it.** This is what is actually losing us χ=256, and it is a pure
-build/dispatch change — no GPU needed.
+Implemented and measured (opt-in via `-DQX_ENABLE_BLAS=ON`, linking conda-forge
+OpenBLAS). Two levers, in order of impact:
 
-1. CMake: `find_package(BLAS)` / `find_package(LAPACK)` (or vendor OpenBLAS), and
-   compile with `-DEIGEN_USE_BLAS -DEIGEN_USE_LAPACKE`, linking the libs. This
-   makes Eigen's GEMMs and (with LAPACKE) its dense decompositions use OpenBLAS/
-   MKL — the same kernels TeNPy gets for free.
-2. **Size-adaptive SVD in `block_svd_truncate`:** keep the Gram-eigensolve
-   (`thin_svd_gram`) for *small/moderate* blocks (it wins there via low overhead —
-   that is the χ=128 1.21×), but for *large* blocks call LAPACK `zgesdd` directly
-   (via LAPACKE) instead of Gram+reconstruct. Direct `gesdd` avoids the extra
-   GEMMs and uses the tuned divide-and-conquer kernel. Threshold ~`min(m,n) ≥ 96`.
-3. Re-run the margin-vs-χ benchmark. **Expected:** χ=256 recovers from 0.56× to
-   ≥1× (we should at least match TeNPy, since we'd be using the same OpenBLAS, and
-   keep our small-block + bookkeeping edge). This likely restores a modest win
-   across χ on CPU. **Do this before GPU** — otherwise the GPU comparison is unfair
-   (CPU has free headroom) and you may over-credit the GPU.
+1. **`EIGEN_USE_BLAS` (the big one):** routing Eigen's GEMMs to OpenBLAS. The Gram
+   SVD is GEMM-dominated (`M Mᴴ` + `Mᴴ U` ≈ 4m³ vs the m³ eigensolve), and Eigen's
+   built-in GEMM was the bottleneck. This alone lifted the whole curve ~1.5×.
+2. **LAPACK `zheevd` for the large-block Gram eigensolve** (`thin_svd_lapacke`,
+   threshold `min(m,n) ≥ 96`); small blocks keep the pure-Eigen Gram path. A
+   *direct* `zgesdd` was tried too but was **slower** at χ=256 (0.67× vs 0.79×) —
+   the Gram trick is fewer FLOPs, so keep it and just put its eigensolve on OpenBLAS.
 
-Phase 0 is a few hours of build work; Phases A/B below are the GPU path for the
-regime where even OpenBLAS saturates and the advantage should *grow* with χ.
+**Measured (N=32 quench, single thread), margin = TeNPy/QuantX:**
+
+| χ | pre-BLAS | Phase 0 (OpenBLAS) |
+|---|----------|--------------------|
+| 128 | 1.21× | **1.84×** |
+| 256 | 0.56× | **0.79×** |
+
+So Phase 0 is a genuine ~1.5× uniform speedup — χ=128 becomes a strong win and
+χ=256 goes from a clear loss to nearly even. **But the margin still *decreases*
+with χ (1.84 → 0.79), i.e. Phase 0 does NOT make the advantage grow with scale.**
+At large χ our Gram-on-OpenBLAS still does not beat TeNPy's tuned per-block
+`gesdd` on its own OpenBLAS. The "advantage grows with χ" goal genuinely needs the
+GPU (Phases A/B) — but now the CPU baseline is honest (OpenBLAS-backed), so the GPU
+comparison will be fair.
+
+**Build/runtime notes (Windows):** OpenBLAS from `conda create -n qxblas -c
+conda-forge openblas`; configure with `-DQX_ENABLE_BLAS=ON
+-DQX_BLAS_INCLUDE_DIR=<env>/Library/include/openblas
+-DQX_BLAS_LIB=<env>/Library/lib/openblas.lib`. At runtime the loader must find
+`openblas.dll` — Python 3.8+ ignores PATH for a loaded DLL's dependencies, so use
+`os.add_dll_directory(<env>/Library/bin)` before importing (or copy the dll next
+to `libquantx.dll`). Default build is `QX_ENABLE_BLAS=OFF` and unaffected.
 
 ### Phase A (GPU): GPU only the large-block SVDs
 

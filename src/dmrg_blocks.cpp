@@ -18,6 +18,14 @@
 #include <Eigen/Dense>
 #include <Eigen/SVD>
 
+#ifdef QX_HAS_LAPACKE
+// Use std::complex as the LAPACKE complex type (bit-compatible, MSVC-friendly).
+#define LAPACK_COMPLEX_CUSTOM
+#define lapack_complex_float  std::complex<float>
+#define lapack_complex_double std::complex<double>
+#include <lapacke.h>
+#endif
+
 #ifdef _OPENMP
 #include <omp.h>
 #else
@@ -40,7 +48,7 @@ static long long g_block_matvecs = 0;
 
 // TEBD phase profiling (set env QX_TEBD_PROFILE=1). Seconds per phase.
 static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb = 0;
-static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0;
+static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0;
 
 // =============================================================================
 // Sz-conserving block-sparse DMRG  (M179)
@@ -1051,6 +1059,56 @@ static void thin_svd_gram(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     }
 }
 
+#ifdef QX_HAS_LAPACKE
+// SVD via the Gram trick with the (smaller) Hermitian eigensolve done by LAPACK
+// xheevd/xsyevd (OpenBLAS, divide-and-conquer) instead of Eigen's built-in solver
+// which lags at large m. With EIGEN_USE_BLAS the surrounding GEMMs (M Mᴴ, Mᴴ U)
+// also run on OpenBLAS. Same interface/semantics as thin_svd_gram; used for LARGE
+// blocks (small blocks keep the pure-Eigen Gram path, lower fixed overhead).
+// Measured faster than a direct LAPACK xgesdd here (the Gram trick is fewer FLOPs).
+static bool gram_eigh_lapacke(Mat& G /*destroyed -> eigenvectors*/, int d, Eigen::VectorXd& w) {
+    lapack_int info;
+    if constexpr (std::is_same_v<S, Cx>)
+        info = LAPACKE_zheevd(LAPACK_COL_MAJOR, 'V', 'U', (lapack_int)d,
+                              reinterpret_cast<lapack_complex_double*>(G.data()), (lapack_int)d, w.data());
+    else
+        info = LAPACKE_dsyevd(LAPACK_COL_MAJOR, 'V', 'U', (lapack_int)d,
+                              reinterpret_cast<double*>(G.data()), (lapack_int)d, w.data());
+    return info == 0;                      // G: eigenvectors (cols), w: eigenvalues (ascending)
+}
+static bool thin_svd_lapacke(const Mat& M, Mat& U, Mat& V, RVec& sv) {
+    const int m = (int)M.rows(), nc = (int)M.cols();
+    if (m <= nc) {
+        Mat G = M * M.adjoint();                          // m×m Hermitian
+        Eigen::VectorXd w(m);
+        if (!gram_eigh_lapacke(G, m, w)) return false;
+        U.resize(m, m); sv.resize(m);
+        for (int j = 0; j < m; ++j) {
+            double lam = w(m-1-j); sv(j) = std::sqrt(lam > 0 ? lam : 0.0);
+            U.col(j) = G.col(m-1-j);                      // descending order
+        }
+        Mat MhU = M.adjoint() * U; V.resize(nc, m);
+        double smax = (sv.size() && sv(0) > 0) ? sv(0) : 1.0;
+        for (int j = 0; j < m; ++j)
+            if (sv(j) > 1e-14 * smax) V.col(j) = MhU.col(j) / sv(j); else V.col(j).setZero();
+    } else {
+        Mat G = M.adjoint() * M;                          // n×n Hermitian
+        Eigen::VectorXd w(nc);
+        if (!gram_eigh_lapacke(G, nc, w)) return false;
+        V.resize(nc, nc); sv.resize(nc);
+        for (int j = 0; j < nc; ++j) {
+            double lam = w(nc-1-j); sv(j) = std::sqrt(lam > 0 ? lam : 0.0);
+            V.col(j) = G.col(nc-1-j);
+        }
+        Mat MV = M * V; U.resize(m, nc);
+        double smax = (sv.size() && sv(0) > 0) ? sv(0) : 1.0;
+        for (int j = 0; j < nc; ++j)
+            if (sv(j) > 1e-14 * smax) U.col(j) = MV.col(j) / sv(j); else U.col(j).setZero();
+    }
+    return true;
+}
+#endif
+
 static BlockSVDResult block_svd_truncate(
     const std::map<int,Mat>& theta,
     const BondSpace& bs_L,
@@ -1071,8 +1129,16 @@ static BlockSVDResult block_svd_truncate(
     for (auto* p : svblk) g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)std::min(p->rows(), p->cols()));
     std::vector<SVDBlk> sb(svq.size());
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
-    for (int i = 0; i < (int)svq.size(); ++i)
+    for (int i = 0; i < (int)svq.size(); ++i) {
+#ifdef QX_HAS_LAPACKE
+        // Large blocks: LAPACK xgesdd (OpenBLAS) beats the Eigen Gram eigensolve;
+        // small blocks keep the Gram path (lower overhead). Fall back on error.
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= 96 &&
+            thin_svd_lapacke(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+            { g_tebd_nlapacke++; continue; }
+#endif
         thin_svd_gram(*svblk[i], sb[i].U, sb[i].V, sb[i].s);
+    }
     std::map<int, SVDBlk*> svds;
     for (int i = 0; i < (int)svq.size(); ++i) svds[svq[i]] = &sb[i];
 
@@ -1560,7 +1626,7 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
     BMPS s = cps_init(mpo, n, neel);
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
-    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=0; }
+    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=0; }
 
     TDVP2Out out;
     auto t0 = clk::now();
@@ -1578,6 +1644,8 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
             n, chi_max, out.wall_s, g_tebd_theta, 100*g_tebd_theta/tot, g_tebd_gate, 100*g_tebd_gate/tot,
             g_tebd_svd, 100*g_tebd_svd/tot, g_tebd_recomb, 100*g_tebd_recomb/tot,
             (int)g_tebd_maxblk, g_tebd_nsvd);
+        std::fprintf(stderr, "   nsvd=%lld nlapacke=%lld (>=96 blocks routed to LAPACK zgesdd)\n",
+                     g_tebd_nsvd, g_tebd_nlapacke);
     }
     rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
     out.energy = bt_energy(s, mpo);
