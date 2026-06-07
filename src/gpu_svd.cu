@@ -49,12 +49,25 @@ struct Ctx {
     void*    tA    = nullptr; size_t ctA  = 0;
     void*    tB    = nullptr; size_t ctB  = 0;
     void*    tT    = nullptr; size_t ctT  = 0;
+    // FP32 buffers for thin_svd_gram_gpu_c (Phase C mixed precision).
+    void*    fM    = nullptr; size_t cfM  = 0;
+    void*    fG    = nullptr; size_t cfG  = 0;
+    void*    fP    = nullptr; size_t cfP  = 0;
+    float*   fW    = nullptr; size_t cfW  = 0;
+    void*    fWk   = nullptr; size_t cfWk = 0;
+    // Jacobi eigensolver params for the FP32 path: Cheevd (divide&conquer) fails to
+    // converge (info>0) on the steep/clustered Gram spectra of theta blocks in FP32;
+    // Cheevj (Jacobi) is robust there.
+    syevjInfo_t fjacobi = nullptr;
 };
 
 bool init_ctx(Ctx& c) {
     if (cudaSetDevice(0) != cudaSuccess) return false;
     if (cusolverDnCreate(&c.solver) != CUSOLVER_STATUS_SUCCESS) return false;
     if (cublasCreate(&c.blas) != CUBLAS_STATUS_SUCCESS) return false;
+    if (cusolverDnCreateSyevjInfo(&c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
+    cusolverDnXsyevjSetTolerance(c.fjacobi, 1e-5);   // FP32-appropriate
+    cusolverDnXsyevjSetMaxSweeps(c.fjacobi, 12);     // kept (large) eigenpairs converge early
     if (cudaMalloc(&c.dInfo, sizeof(int)) != cudaSuccess) return false;
     return true;
 }
@@ -179,6 +192,95 @@ bool thin_svd_gram_gpu_z(const std::complex<double>* M, int m, int n,
             for (int r = 0; r < rowsP; ++r) scol[r] = pcol[r] * inv;
         } else {
             for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(0.0, 0.0);
+            sv[j] = 0.0;   // mode dropped: a zeroed factor column must carry sv=0 so the
+                           // global truncation neither keeps it nor mis-counts trunc error
+        }
+    }
+    return true;
+}
+
+bool thin_svd_gram_gpu_c(const std::complex<double>* M, int m, int n,
+                         std::complex<double>* U, std::complex<double>* V,
+                         double* sv) {
+    Ctx& c = ctx();
+    if (!c.ok || m <= 0 || n <= 0) return false;
+    std::lock_guard<std::mutex> lock(c.mtx);
+
+    const int k     = (m <= n) ? m : n;
+    const int rowsP = (m <= n) ? n : m;
+
+    // host: cast M (complex<double>) -> complex<float>
+    std::vector<std::complex<float>> Mf((size_t)m * n);
+    for (size_t i = 0; i < (size_t)m * n; ++i)
+        Mf[i] = std::complex<float>((float)M[i].real(), (float)M[i].imag());
+
+    if (!ensure(&c.fM, &c.cfM, sizeof(cuComplex) * (size_t)m * n)) return false;
+    if (!ensure(&c.fG, &c.cfG, sizeof(cuComplex) * (size_t)k * k)) return false;
+    if (!ensure(&c.fP, &c.cfP, sizeof(cuComplex) * (size_t)rowsP * k)) return false;
+    if (!ensure((void**)&c.fW, &c.cfW, sizeof(float) * (size_t)k)) return false;
+    auto* dM = reinterpret_cast<cuComplex*>(c.fM);
+    auto* dG = reinterpret_cast<cuComplex*>(c.fG);
+    auto* dP = reinterpret_cast<cuComplex*>(c.fP);
+
+    if (cudaMemcpy(dM, Mf.data(), sizeof(cuComplex)*(size_t)m*n, cudaMemcpyHostToDevice) != cudaSuccess) return false;
+
+    const float one_r = 1.0f, zero_r = 0.0f;
+    const cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
+    cublasOperation_t herk_op = (m <= n) ? CUBLAS_OP_N : CUBLAS_OP_C;
+    int herk_contract = (m <= n) ? n : m;
+    if (cublasCherk(c.blas, uplo, herk_op, k, herk_contract,
+                    &one_r, dM, m, &zero_r, dG, k) != CUBLAS_STATUS_SUCCESS) return false;
+
+    // Jacobi eigensolver (robust in FP32; Cheevd D&C fails to converge here).
+    int lwork = 0;
+    if (cusolverDnCheevj_bufferSize(c.solver, CUSOLVER_EIG_MODE_VECTOR, uplo,
+                                    k, dG, k, c.fW, &lwork, c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
+    if (!ensure(&c.fWk, &c.cfWk, sizeof(cuComplex) * (size_t)lwork)) return false;
+    if (cusolverDnCheevj(c.solver, CUSOLVER_EIG_MODE_VECTOR, uplo, k, dG, k, c.fW,
+                         reinterpret_cast<cuComplex*>(c.fWk), lwork, c.dInfo, c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
+    int info = 0;
+    if (cudaMemcpy(&info, c.dInfo, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess) return false;
+    // Accept only a fully-converged Jacobi decomposition (info==0). info>0 means the
+    // sweep cap was hit without reaching tolerance -- cuSOLVER does not guarantee a
+    // valid eigendecomposition there, so reject and let the caller fall back to the
+    // FP64 path (correctness over the modest FP32 speedup).
+    if (info != 0) return false;
+
+    const cuComplex c_one  = make_cuComplex(1.0f, 0.0f);
+    const cuComplex c_zero = make_cuComplex(0.0f, 0.0f);
+    cublasOperation_t gemm_opA = (m <= n) ? CUBLAS_OP_C : CUBLAS_OP_N;
+    if (cublasCgemm(c.blas, gemm_opA, CUBLAS_OP_N, rowsP, k, k,
+                    &c_one, dM, m, dG, k, &c_zero, dP, rowsP) != CUBLAS_STATUS_SUCCESS) return false;
+
+    std::vector<std::complex<float>> hQ((size_t)k * k);
+    std::vector<std::complex<float>> hP((size_t)rowsP * k);
+    std::vector<float>               hW((size_t)k);
+    if (cudaMemcpy(hQ.data(), dG, sizeof(cuComplex)*(size_t)k*k, cudaMemcpyDeviceToHost) != cudaSuccess) return false;
+    if (cudaMemcpy(hP.data(), dP, sizeof(cuComplex)*(size_t)rowsP*k, cudaMemcpyDeviceToHost) != cudaSuccess) return false;
+    if (cudaMemcpy(hW.data(), c.fW, sizeof(float)*(size_t)k, cudaMemcpyDeviceToHost) != cudaSuccess) return false;
+
+    // reorder to descending + scale; assemble outputs in double.
+    std::complex<double>* eigDst = (m <= n) ? U : V;
+    std::complex<double>* sclDst = (m <= n) ? V : U;
+    for (int j = 0; j < k; ++j) {
+        double lam = (double)hW[k - 1 - j];
+        sv[j] = std::sqrt(lam > 0.0 ? lam : 0.0);
+    }
+    double smax = (k > 0 && sv[0] > 0.0) ? sv[0] : 1.0;
+    for (int j = 0; j < k; ++j) {
+        int src = k - 1 - j;
+        const std::complex<float>* qcol = hQ.data() + (size_t)src * k;
+        std::complex<double>*       dcol = eigDst + (size_t)j * k;
+        for (int r = 0; r < k; ++r) dcol[r] = std::complex<double>(qcol[r].real(), qcol[r].imag());
+        const std::complex<float>* pcol = hP.data() + (size_t)src * rowsP;
+        std::complex<double>*       scol = sclDst + (size_t)j * rowsP;
+        if (sv[j] > 1e-6 * smax) {          // FP32 guard: ~single-precision floor
+            double inv = 1.0 / sv[j];
+            for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(pcol[r].real()*inv, pcol[r].imag()*inv);
+        } else {
+            for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(0.0, 0.0);
+            sv[j] = 0.0;   // mode dropped: a zeroed factor column must carry sv=0 so the
+                           // global truncation neither keeps it nor mis-counts trunc error
         }
     }
     return true;

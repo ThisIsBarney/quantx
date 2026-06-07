@@ -85,6 +85,23 @@ static long long gpu_theta_minwork() {
     }();
     return v;
 }
+// Whether the GPU SVD should use the FP32 mixed-precision path (Phase C). It is a
+// measured but modest win (~1.1-1.4x on the SVD phase; the Jacobi eigensolver is
+// iteration-bound, so it captures only part of the FP32 throughput advantage) and
+// it reduces precision, so it is OFF by default. `allow` is passed per-call by the
+// caller and is true only where single precision is tolerable (real-time TEBD and
+// the dynamics built on it); it is never a global, so an energy-exact path can never
+// be cross-contaminated by a concurrent/earlier dynamics call. Env QX_GPU_FP32:
+//   unset/0 -> FP64 always (default);  1 -> honour `allow`;  >=2 -> FP32 always (testing).
+static bool gpu_fp32_mode(bool allow) {
+    static int env = []() {
+        const char* e = std::getenv("QX_GPU_FP32");
+        return e ? std::atoi(e) : 0;
+    }();
+    if (env <= 0) return false;     // default: FP64
+    if (env >= 2) return true;      // force FP32 everywhere (testing)
+    return allow;                   // env==1: FP32 only where the caller permits it
+}
 #endif
 
 // =============================================================================
@@ -1151,17 +1168,22 @@ static bool thin_svd_lapacke(const Mat& M, Mat& U, Mat& V, RVec& sv) {
 // thin_svd_gram. Only the complex path is on the GPU (the TEBD dynamics suite the
 // plan targets); the real (DMRG) scalar falls back to the CPU, which is already a
 // strong win there. Returns false on any device error -> caller uses the CPU path.
-static bool thin_svd_gram_gpu(const Mat& M, Mat& U, Mat& V, RVec& sv) {
+static bool thin_svd_gram_gpu(const Mat& M, Mat& U, Mat& V, RVec& sv, bool allow_fp32) {
     if constexpr (!std::is_same_v<S, Cx>) {
         return false;
     } else {
         const int m = (int)M.rows(), nc = (int)M.cols();
         const int k = std::min(m, nc);
         U.resize(m, k); V.resize(nc, k); sv.resize(k);
-        return qx_gpu::thin_svd_gram_gpu_z(
-            reinterpret_cast<const std::complex<double>*>(M.data()), m, nc,
-            reinterpret_cast<std::complex<double>*>(U.data()),
-            reinterpret_cast<std::complex<double>*>(V.data()), sv.data());
+        auto* Md = reinterpret_cast<const std::complex<double>*>(M.data());
+        auto* Ud = reinterpret_cast<std::complex<double>*>(U.data());
+        auto* Vd = reinterpret_cast<std::complex<double>*>(V.data());
+        // Phase C: try FP32 first when permitted; if its Jacobi didn't converge
+        // (returns false before writing outputs) fall back to FP64 *on the GPU*
+        // (still fast) rather than dropping a large block to the CPU.
+        if (gpu_fp32_mode(allow_fp32) && qx_gpu::thin_svd_gram_gpu_c(Md, m, nc, Ud, Vd, sv.data()))
+            return true;
+        return qx_gpu::thin_svd_gram_gpu_z(Md, m, nc, Ud, Vd, sv.data());  // FP64 GPU
     }
 }
 #endif
@@ -1170,7 +1192,8 @@ static BlockSVDResult block_svd_truncate(
     const std::map<int,Mat>& theta,
     const BondSpace& bs_L,
     const BondSpace& bs_R2,
-    int max_bond, double cutoff)
+    int max_bond, double cutoff,
+    bool allow_fp32 = false)   // Phase C: FP32 GPU SVD permitted (real-time TEBD only)
 {
     // SVD per q_mid sector (independent across sectors -> parallelise). Use
     // JacobiSVD for small blocks (much lower fixed overhead than BDCSVD, which
@@ -1192,7 +1215,7 @@ static BlockSVDResult block_svd_truncate(
         // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
         // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
         if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk() &&
-            thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+            thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s, allow_fp32))
             { g_tebd_ngpu++; continue; }
 #endif
 #ifdef QX_HAS_LAPACKE
@@ -1640,7 +1663,8 @@ static void apply_gate_theta(std::map<int,Mat>& theta, const BondSpace& bsL,
 // No environments and no Krylov -- just a gate + SVD per bond, the reason TEBD is
 // cheaper than TDVP for nearest-neighbour models.
 static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
-                              double cutoff, double J = 1.0, double delta = 1.0) {
+                              double cutoff, double J = 1.0, double delta = 1.0,
+                              bool allow_fp32 = false) {
     const int n = s.n;
     const Cx tau = imag ? Cx(-dt/2, 0) : Cx(0, -dt/2);
     const Gate g = build_xxz_gate(J, delta, tau);
@@ -1656,7 +1680,7 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
         ptick(g_tebd_theta, tt); tt = pclk::now();
         apply_gate_theta(theta, bond[i], bond[i+2], g);
         ptick(g_tebd_gate, tt); tt = pclk::now();
-        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32);
         ptick(g_tebd_svd, tt); tt = pclk::now();
         bond[i+1] = svd.new_mid_bs;
         A[i]   = bt_A_from_U(svd, bond[i], bond[i+1]);
@@ -1670,7 +1694,7 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
         ptick(g_tebd_theta, tt); tt = pclk::now();
         apply_gate_theta(theta, bond[i], bond[i+2], g);
         ptick(g_tebd_gate, tt); tt = pclk::now();
-        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32);
         ptick(g_tebd_svd, tt); tt = pclk::now();
         bond[i+1] = svd.new_mid_bs;
         A[i+1] = svd.Vt;
@@ -1740,7 +1764,7 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     TDVP2Out out;
     auto t0 = clk::now();
     for (int step = 0; step < n_steps; ++step) {
-        tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta);
+        tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta, /*allow_fp32=*/!imag);
         if (measure_stride > 0 && (step % measure_stride == 0 || step == n_steps - 1)) {
             out.times.push_back((step+1)*dt);
             out.stag.push_back(measure_stag(s.A, s.bond, n));
@@ -1926,7 +1950,8 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
         out.C_re.push_back(re); out.C_im.push_back(im); out.times.push_back(t);
         for (auto& b : phi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
         if (step < n_steps)
-            tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta);  // fast NN route
+            tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta,
+                              /*allow_fp32=*/true);  // fast NN route
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
@@ -1972,7 +1997,8 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
         out.rate.push_back(L > 1e-300 ? -std::log(L) / n : 1e30);
         for (auto& b : psi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
         if (step < n_steps)
-            tebd2_step_blocks(psi, dt, /*imag*/false, chi_max, cutoff, Jf, deltaf);
+            tebd2_step_blocks(psi, dt, /*imag*/false, chi_max, cutoff, Jf, deltaf,
+                              /*allow_fp32=*/true);
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
@@ -2093,7 +2119,7 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
     if (std::abs(Zpsi) < 1e-300) Zpsi = 1.0;
 
     auto Wj  = qx_dmrg::build_current_mpo(n, J);
-    BMPS phi0 = apply_mpo_to_bmps(psi0, Wj, chi_max, cutoff);   // phi = J|psi0>
+    BMPS phi0 = apply_mpo_to_bmps(psi0, Wj, chi_max, cutoff);   // phi = J|psi0> (FP64)
     BMPS phi  = phi0;
 
     auto t0 = clk::now();
@@ -2104,7 +2130,8 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
         out.times.push_back(step * dt);
         out.C_re.push_back(c.real()); out.C_im.push_back(c.imag());
         for (auto& b : phi.bond) { int s=0; for (int dm : b.dims) s+=dm; out.max_bond = std::max(out.max_bond, s); }
-        if (step < n_steps) tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta);
+        if (step < n_steps) tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta,
+                                              /*allow_fp32=*/true);
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;

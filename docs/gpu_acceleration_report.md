@@ -1,4 +1,4 @@
-# GPU Acceleration Report — Phase A (cuSOLVER Gram-SVD) + Phase B (theta residency)
+# GPU Acceleration Report — Phase A (cuSOLVER SVD) + Phase B (theta residency) + Phase C (FP32, opt-in)
 
 **Date:** 2026-06-06 **Hardware:** NVIDIA RTX 4090 (Ada, sm_89), 24 GB; CUDA 13.2;
 MSVC 19.50 x64; single-thread CPU baseline. **Plan:** [`gpu_acceleration_plan.md`](gpu_acceleration_plan.md).
@@ -17,6 +17,7 @@ and Phase B pulls further ahead:
 | **bare SVD kernel** (GPU/CPU) | 5.6× | 17.4× | **45×** (86× at d=2048) |
 | **TEBD end-to-end, Phase A** (GPU SVD) | 1.01× | 1.57× | **2.60×** |
 | **TEBD end-to-end, Phase B** (GPU SVD + theta) | 0.98× | 2.27× | **4.42×** |
+| **QuantX-GPU vs TeNPy-CPU** (the real opponent) | 0.8–1.1× | 1.0–2.0× | **3.0–4.0×** (≈3.2–4.5× w/ FP32) |
 
 (N=32 Néel quench, 60 steps, vs single-thread CPU; clean same-process 3-ways, cool
 clocks.) Both curves **grow with χ** — the goal — and Phase B widens the lead
@@ -208,6 +209,45 @@ theta bottleneck removed.
 > work, which controls for that. The earlier Phase-A-only singleton (3.13× at χ=1024)
 > came from a cooler GPU run; the controlled 2.60× here is the honest Phase-A number.
 
+## Phase C — FP32 mixed precision (opt-in; a modest win, eigensolver-bound)
+
+The 4090's FP64 is ~1/64 of its FP32 throughput and the step is ~80% SVD, so FP32
+*looked* like the big lever. In practice it is a **modest** win, because the SVD is
+**eigensolver-bound, not GEMM-bound**, and the only FP32 eigensolver that is robust
+on the steep/clustered Gram spectra of theta blocks is **iterative**:
+
+- `cusolverDnCheevd` (FP32 divide & conquer) is fast but **fails to converge**
+  (`info>0`) on these spectra — almost every large block fell back to CPU, making
+  FP32 *slower* than FP64. FP64 `Zheevd` is robust; FP32 D&C is not.
+- `cusolverDnCheevj` (FP32 Jacobi, tol 1e-5, ≤12 sweeps) is robust — the kept large
+  Schmidt values converge in the first few sweeps — but its iteration cost eats most
+  of the FP32 throughput advantage.
+
+**Correctness:** cuSOLVER only guarantees a valid eigendecomposition at `info==0`. A
+block whose Jacobi hits the 12-sweep cap (`info>0`) is **rejected**, and
+`thin_svd_gram_gpu` falls back **FP32 → FP64-GPU → CPU** — so an unconverged block is
+re-solved in FP64 *on the GPU* (still fast), never used unconverged and never dropped
+to the CPU. In practice most large blocks converge in ≤12 sweeps, so this costs little.
+
+`thin_svd_gram_gpu_c` does the Gram/eigensolve/back-multiply in FP32 (host casts
+double↔float; final reorder + 1/σ scaling stays in double). Measured (same-binary
+A/B, Phase A+B on, toggle `QX_GPU_FP32`; SVD-phase ratio is the thermally-stable
+metric):
+
+| χ | FP64 SVD phase | FP32 SVD phase | SVD speedup |
+|---|---|---|---|
+| 512  | 28.6 s | 20.6 s | **1.39×** |
+| 1024 | 58.4 s | 44.5 s | **1.31×** |
+
+**OFF by default** (`QX_GPU_FP32`: unset/0 = FP64; 1 = FP32 on real-time TEBD only;
+≥2 = FP32 everywhere, testing). Gated to where single precision is tolerable
+(real-time TEBD / S(k,ω) / Loschmidt / conductivity, Trotter-error-dominated);
+DMRG, TDVP2, imag-time cooling, and the ground-state / J|ψ₀⟩ prep inside the
+dynamics paths stay FP64. ED suite passes with `QX_GPU_FP32=1` (real-time TEBD errors
+unchanged; TDVP2 energy 1.8e-13). Forcing FP32 onto TDVP2 (`=2`) breaks its 1e-6
+energy check — confirming the gating is necessary. Large-χ real-time accuracy is not
+ED-validatable (no ED beyond n=6), which is the other reason it ships opt-in.
+
 ## How to build & run
 
 ```
@@ -222,25 +262,52 @@ cmd /c "<VS>\VC\Auxiliary\Build\vcvars64.bat && \
 - `qx_tebd_bench.exe [n] [chi] [steps] [dt]` — end-to-end; runtime knobs:
   `QX_GPU_MIN_BLK` (SVD→GPU threshold, default 128; huge = CPU-only SVD),
   `QX_GPU_THETA_MINWORK` (theta→GPU work threshold, default ~2.1e6; huge = CPU theta),
-  and `QX_TEBD_PROFILE=1` (per-phase timings + `ngpu`). The clean 3-way above toggles
-  exactly these two on one binary.
+  `QX_GPU_FP32` (0/unset = FP64, 1 = FP32 real-time TEBD, ≥2 = FP32 everywhere),
+  and `QX_TEBD_PROFILE=1` (per-phase timings + `ngpu`).
 
 For production / Python (`quantx.dll`), also build the `qx_capi` target; at runtime
 the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the CUDA
 `bin` dir is on PATH on this box).
 
+## The headline — QuantX-GPU vs TeNPy-CPU (the real opponent)
+
+The plan's actual deliverable: does the QuantX advantage **grow with χ against TeNPy**?
+Same Néel-quench physics on both engines (`benchmarks/gpu_vs_tenpy_quench.py`): TeNPy
+`SpinChain` Jx=Jy=Jz=4 (= σ·σ), 2nd-order Trotter, `svd_min=1e-12`, **single-thread**
+(TeNPy's optimal, OpenBLAS); QuantX via the native `qx_tebd_bench.exe`. N=32, 60 steps.
+
+Two full runs (the box has a consumer CPU+GPU with **no clock pinning**, so absolute
+times — and the single-thread-CPU vs GPU *ratio* — swing with thermal state; run 2
+followed ~30 min of sustained benchmarking, so both engines were more throttled):
+
+| χ | run 1 GPU/TeNPy | run 2 GPU/TeNPy | run 1 FP32/TeNPy | run 2 FP32/TeNPy |
+|---|---|---|---|---|
+| 256  | 0.78× | 1.11× | 0.97× | 1.16× |
+| 512  | 1.04× | 2.04× | 1.22× | 2.33× |
+| 1024 | **4.04×** | **2.96×** | **4.54×** | **3.15×** |
+
+Run 1 (cooler) absolute, FP64: TeNPy 20.9/50.3/408.6 s vs QuantX-GPU 26.7/48.6/101.2 s.
+
+Robust conclusion (both runs agree): the CPU-vs-TeNPy curve *reversed* with χ (Phase 0:
+χ=128 1.84× → χ=256 0.79×, i.e. we lost ground at scale); **on GPU the curve turns
+upward — monotonically in both runs — to ≈3–4× at χ=1024** (≈3.2–4.5× with opt-in
+FP32). The margin grows with χ, which is the regime that matters. The *absolute*
+multiple at χ=1024 is thermally sensitive (3.0–4.0×); the *trend* is not. (At χ=1024
+TeNPy-CPU ≈ our own Eigen-CPU 431.8 s — TeNPy's faster per-block BLAS is offset by its
+Python per-bond orchestration — so it's a fair like-for-like win, not a baseline
+artifact. A clock-pinned box, or min-of-N trials, would tighten the number.)
+
 ## Limitations / next
 
-- **No fair TeNPy comparison yet** — base Python here has no numpy/scipy/TeNPy, and
-  no OpenBLAS env. The honest "QuantX-GPU vs TeNPy-CPU" headline needs those
-  installed; with the documented CPU/TeNPy margin (Phase 0: χ=128 1.84×, χ=256
-  0.79×) and the GPU/CPU ratios above, GPU/TeNPy ≈ (GPU/CPU)·(CPU/TeNPy) already
-  trends up with χ, but a direct measurement is the right deliverable.
 - **Real scalar (DMRG) stays on CPU** by design (the wrapper returns false for
   `S=double`); DMRG is already a strong CPU win and not the target.
-- **Phase C (next):** with theta solved, the χ=1024 Phase-B step is 80% SVD + 6%
-  recombine. The remaining wins: (a) batch the small-block SVD tail with
-  `cusolverDnZheevjBatched` instead of leaving it on the CPU; (b) keep the A/U/V
-  block tensors resident on the device across bonds so theta/SVD/recombine stop
-  round-tripping through host memory each bond (the full-residency end state).
-- **Fair TeNPy comparison** still pending (no numpy/OpenBLAS/TeNPy on this box).
+- **χ=256 is roughly break-even vs TeNPy (0.8–1.1×)**: the blocks are below the GPU
+  thresholds, so it runs effectively on CPU-Eigen (vs TeNPy's OpenBLAS). Linking
+  OpenBLAS (`QX_ENABLE_BLAS`) alongside CUDA would lift the small-χ floor.
+- **Thermal noise**: this box has no clock pinning, so single-thread-CPU vs GPU ratios
+  swing run-to-run; report min-of-N or pin clocks for a publication number.
+- **Phase D frontier:** the χ=1024 step is now ~80% SVD; batch the small-block SVD
+  tail (`cusolverDnZheevjBatched`) and keep A/U/V resident across bonds (drop the
+  per-bond host round-trips) for the next step up.
+- **FP32 is opt-in and modest** (eigensolver-bound, see Phase C); a faster robust FP32
+  eigensolver (or a batched Jacobi) is the lever to make it a bigger win.
