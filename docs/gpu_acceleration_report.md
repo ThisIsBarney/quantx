@@ -17,7 +17,7 @@ and Phase B pulls further ahead:
 | **bare SVD kernel** (GPU/CPU) | 5.6× | 17.4× | **45×** (86× at d=2048) |
 | **TEBD end-to-end, Phase A** (GPU SVD) | 1.01× | 1.57× | **2.60×** |
 | **TEBD end-to-end, Phase B** (GPU SVD + theta) | 0.98× | 2.27× | **4.42×** |
-| **QuantX-GPU vs TeNPy-CPU** (the real opponent) | 0.78× | 1.04× | **4.04×** (4.5× w/ FP32) |
+| **QuantX-GPU vs TeNPy-CPU** (the real opponent) | 0.8–1.1× | 1.0–2.0× | **3.0–4.0×** (≈3.2–4.5× w/ FP32) |
 
 (N=32 Néel quench, 60 steps, vs single-thread CPU; clean same-process 3-ways, cool
 clocks.) Both curves **grow with χ** — the goal — and Phase B widens the lead
@@ -276,27 +276,36 @@ Same Néel-quench physics on both engines (`benchmarks/gpu_vs_tenpy_quench.py`):
 `SpinChain` Jx=Jy=Jz=4 (= σ·σ), 2nd-order Trotter, `svd_min=1e-12`, **single-thread**
 (TeNPy's optimal, OpenBLAS); QuantX via the native `qx_tebd_bench.exe`. N=32, 60 steps.
 
-| χ | TeNPy-CPU (s) | QuantX-GPU FP64 (s) | QuantX-GPU FP32 (s) | **GPU/TeNPy** | FP32/TeNPy |
-|---|---|---|---|---|---|
-| 256  | 20.9  | 26.7  | 21.6 | 0.78× | 0.97× |
-| 512  | 50.3  | 48.6  | 41.3 | 1.04× | 1.22× |
-| 1024 | 408.6 | 101.2 | 90.0 | **4.04×** | **4.54×** |
+Two full runs (the box has a consumer CPU+GPU with **no clock pinning**, so absolute
+times — and the single-thread-CPU vs GPU *ratio* — swing with thermal state; run 2
+followed ~30 min of sustained benchmarking, so both engines were more throttled):
 
-This is the goal achieved: the CPU-vs-TeNPy curve *reversed* with χ (Phase 0: χ=128
-1.84× → χ=256 0.79×, i.e. we lost ground at scale); **on GPU the curve turns upward**
-— a slight loss at χ=256 (blocks below the GPU thresholds; TeNPy's tuned BLAS wins the
-small case) → even at χ=512 → **4× at χ=1024** (4.5× with opt-in FP32). The margin
-grows with χ, which is the regime that matters. (At χ=1024 TeNPy-CPU 408.6 s ≈ our
-own Eigen-CPU 431.8 s — TeNPy's faster per-block BLAS is offset by its Python per-bond
-orchestration — so the 4× is a fair, like-for-like win, not a baseline artifact.)
+| χ | run 1 GPU/TeNPy | run 2 GPU/TeNPy | run 1 FP32/TeNPy | run 2 FP32/TeNPy |
+|---|---|---|---|---|
+| 256  | 0.78× | 1.11× | 0.97× | 1.16× |
+| 512  | 1.04× | 2.04× | 1.22× | 2.33× |
+| 1024 | **4.04×** | **2.96×** | **4.54×** | **3.15×** |
+
+Run 1 (cooler) absolute, FP64: TeNPy 20.9/50.3/408.6 s vs QuantX-GPU 26.7/48.6/101.2 s.
+
+Robust conclusion (both runs agree): the CPU-vs-TeNPy curve *reversed* with χ (Phase 0:
+χ=128 1.84× → χ=256 0.79×, i.e. we lost ground at scale); **on GPU the curve turns
+upward — monotonically in both runs — to ≈3–4× at χ=1024** (≈3.2–4.5× with opt-in
+FP32). The margin grows with χ, which is the regime that matters. The *absolute*
+multiple at χ=1024 is thermally sensitive (3.0–4.0×); the *trend* is not. (At χ=1024
+TeNPy-CPU ≈ our own Eigen-CPU 431.8 s — TeNPy's faster per-block BLAS is offset by its
+Python per-bond orchestration — so it's a fair like-for-like win, not a baseline
+artifact. A clock-pinned box, or min-of-N trials, would tighten the number.)
 
 ## Limitations / next
 
 - **Real scalar (DMRG) stays on CPU** by design (the wrapper returns false for
   `S=double`); DMRG is already a strong CPU win and not the target.
-- **χ=256 still loses to TeNPy (0.78×)**: the blocks are below the GPU thresholds, so
-  it runs effectively on CPU-Eigen (slower than TeNPy's OpenBLAS). Linking OpenBLAS
-  (`QX_ENABLE_BLAS`) alongside CUDA would lift the small-χ floor.
+- **χ=256 is roughly break-even vs TeNPy (0.8–1.1×)**: the blocks are below the GPU
+  thresholds, so it runs effectively on CPU-Eigen (vs TeNPy's OpenBLAS). Linking
+  OpenBLAS (`QX_ENABLE_BLAS`) alongside CUDA would lift the small-χ floor.
+- **Thermal noise**: this box has no clock pinning, so single-thread-CPU vs GPU ratios
+  swing run-to-run; report min-of-N or pin clocks for a publication number.
 - **Phase D frontier:** the χ=1024 step is now ~80% SVD; batch the small-block SVD
   tail (`cusolverDnZheevjBatched`) and keep A/U/V resident across bonds (drop the
   per-bond host round-trips) for the next step up.

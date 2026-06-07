@@ -323,9 +323,11 @@ Write results into `docs/gpu_acceleration_report.md` and update
    iteration cost — so FP32 ships OFF by default (`QX_GPU_FP32=1` to opt in for
    real-time TEBD). Not the big win the 4090's FP64 weakness suggested.
 5. **vs-TeNPy headline — DONE.** `benchmarks/gpu_vs_tenpy_quench.py` (qxbench conda
-   env: numpy+OpenBLAS, tenpy 1.0.6). QuantX-GPU vs TeNPy-CPU (1 thread), N=32
-   Néel quench: χ=256 0.78× → χ=512 1.04× → **χ=1024 4.04×** (4.54× w/ FP32). The
-   margin **grows with χ** against the real opponent — the goal.
+   env: numpy+OpenBLAS, tenpy 1.0.6). QuantX-GPU vs TeNPy-CPU (1 thread), N=32 Néel
+   quench: the margin **grows monotonically with χ** in both runs — χ=256 ≈0.8–1.1×
+   → χ=512 ≈1.0–2.0× → **χ=1024 ≈3–4×** (≈3.2–4.5× w/ FP32). Absolute multiple is
+   thermally sensitive (no clock pinning on this box); the upward trend is robust —
+   the goal achieved against the real opponent.
 6. **Phase D frontier:** batched small-block SVD (`cusolverDnZheevjBatched`) + full
    A/U/V residency across bonds; link OpenBLAS with CUDA to lift the small-χ floor.
 
