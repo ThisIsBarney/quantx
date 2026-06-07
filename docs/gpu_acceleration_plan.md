@@ -177,6 +177,17 @@ which is the 87%. This alone should make the margin grow with χ.
 
 ### Phase B (if Phase A pays off): keep the state on GPU, batch everything
 
+**Update (2026-06-06): the contained shortcut was tried and is a measured dead end.**
+Offloading just the `form_theta` GEMMs (the 36%) to cuBLAS *per call* made the step
+~2.5× **slower** (χ=512: 0.99→2.45 s/step) — ~1000 GEMMs/step each paying H2D/D2H +
+sync overhead swamp the O(d³) saved (the §8 "never transfer per-block" pitfall), and
+returning `C=A*B` by value also broke Eigen's fused `noalias() += A*B`. It was
+reverted. **theta-merge therefore requires true residency**: form `theta` on-device
+from resident MPS tensors (one A upload per bond; per-sector `cublasZgemm` with
+`beta=1` accumulating into offset device `theta` sub-blocks; `theta` never returns to
+the host) and feed it straight into the gate + SVD on-device. Details:
+[`gpu_acceleration_report.md`](gpu_acceleration_report.md) "Phase B investigation".
+
 PCIe transfer per bond is the enemy. Phase B amortizes it by keeping the MPS
 tensors (and DMRG environments) **resident on GPU** across the whole sweep, and
 running `form_theta`, `apply_gate_theta`, the SVD, and `bt_A_from_U`/`bt_center_*`

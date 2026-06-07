@@ -118,6 +118,39 @@ as one `cusolverDnZheevjBatched` call (kills the CPU tail), and move `form_theta
 `apply_gate` onto the GPU (kills the 36%). The kernel benchmark (up to 86×) is the
 ceiling Phase B chases.
 
+## Phase B investigation — why the contained offload does NOT work (measured)
+
+The tempting low-risk Phase-B step is to offload just the `form_theta` block GEMMs
+(`Ai_s1 * Ai1`, the 36%) to cuBLAS, leaving the data flow otherwise unchanged. It
+was implemented (`gpu_matmul_z`, threshold `QX_GPU_GEMM_MIN`) and **measured to be a
+net loss**, then reverted:
+
+| χ=512, N=32 (GPU SVD on) | theta time | step time |
+|---|---|---|
+| Phase A (theta on CPU, fused Eigen GEMM) | baseline | 0.99 s/step |
+| + per-call GEMM offload, threshold 96 | **↑ (much worse)** | 2.45 s/step |
+| + per-call GEMM offload, threshold 256–512 | no better | 1.78–1.87 s/step |
+
+Two structural reasons, both confirming the plan's residency thesis:
+1. **Per-call transfer dominates.** `form_theta` issues ~1000 GEMMs/step (≈20 Sz
+   sectors × 2 spin terms × 62 bonds × 2 half-sweeps). Each offloaded GEMM pays
+   H2D(A)+H2D(B)+D2H(C) + kernel-launch + a `cudaMemcpy` sync (~0.5–1 ms of fixed
+   cost), which for d≈100–280 blocks swamps the O(d³) compute saved. ~1000 × ~1 ms
+   ≈ 1 s/step of pure overhead. This is the exact "never transfer per-block"
+   pitfall in the plan §8.
+2. **Returning `C = A*B` by value breaks Eigen's fused `dest.noalias() += A*B`**
+   (one GEMM, no temporary) into alloc + GEMM + a second add pass — so even the CPU
+   fallback regressed.
+
+**Conclusion:** theta-merge can only be accelerated by **GPU residency**, not
+per-call offload — form `theta` on the device from MPS tensors that are *already*
+resident (one A upload per bond, the per-sector GEMMs accumulated into device
+`theta` sub-blocks via `cublasZgemm` with `beta=1` into offset pointers, `theta`
+never round-tripping to the host), then feed it straight into the gate + SVD (also
+on-device). That is the real Phase-B architecture; the contained shortcut is a dead
+end. The host-pointer `gpu_matmul_z` primitive was removed — residency needs
+device-resident-pointer GEMMs, a different (correct) primitive.
+
 ## How to build & run
 
 ```
