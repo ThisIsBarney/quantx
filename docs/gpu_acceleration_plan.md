@@ -313,20 +313,21 @@ Write results into `docs/gpu_acceleration_report.md` and update
 2. **DONE** — margin-vs-χ benchmark on GPU: the speedup **grows** with χ
    (kernel 1.15×→86×; SVD phase 1.2×→4.5×; end-to-end 1.0×→3.13× at χ=1024). The
    key "advantage grows with χ" claim is demonstrated. See the report.
-3. **Next: Phase B** (state-resident-on-GPU, batched small blocks, GPU theta-merge)
-   — this is now clearly motivated: at χ=1024 the GPU step is 36% theta-merge + a
-   long tail of sub-threshold small SVDs still on CPU, so batching + keeping the
-   state resident is where the remaining ~4.5×→bigger win lives.
+3. **Phase B — DONE** (GPU theta residency, `form_theta_block_z`). The contained
+   per-GEMM offload was a measured dead end; building whole large theta blocks
+   on-device works. χ=1024 step 166→98 s; theta phase 87→12 s. End-to-end 4.42×/CPU.
 4. **Mixed precision (Phase C) — DONE, modest/opt-in.** FP32 Gram-SVD
    (`thin_svd_gram_gpu_c`). Finding: the SVD is *eigensolver*-bound, and FP32 D&C
    (`Cheevd`) fails to converge on theta-block spectra; the robust FP32 Jacobi
    (`Cheevj`) captures only ~1.3-1.4× of the SVD phase (chi=512/1024) because of its
    iteration cost — so FP32 ships OFF by default (`QX_GPU_FP32=1` to opt in for
    real-time TEBD). Not the big win the 4090's FP64 weakness suggested.
-   Remaining stretch: an honest QuantX-GPU vs TeNPy comparison (needs a
-   numpy/OpenBLAS + TeNPy install on this box — not yet present; this build's CPU
-   baseline is Eigen-Gram, ~1.5× slower than the Phase-0 OpenBLAS baseline, so the
-   GPU/CPU ratios here are if anything *conservative* against a tuned CPU).
+5. **vs-TeNPy headline — DONE.** `benchmarks/gpu_vs_tenpy_quench.py` (qxbench conda
+   env: numpy+OpenBLAS, tenpy 1.0.6). QuantX-GPU vs TeNPy-CPU (1 thread), N=32
+   Néel quench: χ=256 0.78× → χ=512 1.04× → **χ=1024 4.04×** (4.54× w/ FP32). The
+   margin **grows with χ** against the real opponent — the goal.
+6. **Phase D frontier:** batched small-block SVD (`cusolverDnZheevjBatched`) + full
+   A/U/V residency across bonds; link OpenBLAS with CUDA to lift the small-χ floor.
 
 Note: Phase 0 can (and should) be done on this CPU machine; only Phases A/B need
 the GPU box.

@@ -17,6 +17,7 @@ and Phase B pulls further ahead:
 | **bare SVD kernel** (GPU/CPU) | 5.6× | 17.4× | **45×** (86× at d=2048) |
 | **TEBD end-to-end, Phase A** (GPU SVD) | 1.01× | 1.57× | **2.60×** |
 | **TEBD end-to-end, Phase B** (GPU SVD + theta) | 0.98× | 2.27× | **4.42×** |
+| **QuantX-GPU vs TeNPy-CPU** (the real opponent) | 0.78× | 1.04× | **4.04×** (4.5× w/ FP32) |
 
 (N=32 Néel quench, 60 steps, vs single-thread CPU; clean same-process 3-ways, cool
 clocks.) Both curves **grow with χ** — the goal — and Phase B widens the lead
@@ -261,18 +262,36 @@ For production / Python (`quantx.dll`), also build the `qx_capi` target; at runt
 the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the CUDA
 `bin` dir is on PATH on this box).
 
+## The headline — QuantX-GPU vs TeNPy-CPU (the real opponent)
+
+The plan's actual deliverable: does the QuantX advantage **grow with χ against TeNPy**?
+Same Néel-quench physics on both engines (`benchmarks/gpu_vs_tenpy_quench.py`): TeNPy
+`SpinChain` Jx=Jy=Jz=4 (= σ·σ), 2nd-order Trotter, `svd_min=1e-12`, **single-thread**
+(TeNPy's optimal, OpenBLAS); QuantX via the native `qx_tebd_bench.exe`. N=32, 60 steps.
+
+| χ | TeNPy-CPU (s) | QuantX-GPU FP64 (s) | QuantX-GPU FP32 (s) | **GPU/TeNPy** | FP32/TeNPy |
+|---|---|---|---|---|---|
+| 256  | 20.9  | 26.7  | 21.6 | 0.78× | 0.97× |
+| 512  | 50.3  | 48.6  | 41.3 | 1.04× | 1.22× |
+| 1024 | 408.6 | 101.2 | 90.0 | **4.04×** | **4.54×** |
+
+This is the goal achieved: the CPU-vs-TeNPy curve *reversed* with χ (Phase 0: χ=128
+1.84× → χ=256 0.79×, i.e. we lost ground at scale); **on GPU the curve turns upward**
+— a slight loss at χ=256 (blocks below the GPU thresholds; TeNPy's tuned BLAS wins the
+small case) → even at χ=512 → **4× at χ=1024** (4.5× with opt-in FP32). The margin
+grows with χ, which is the regime that matters. (At χ=1024 TeNPy-CPU 408.6 s ≈ our
+own Eigen-CPU 431.8 s — TeNPy's faster per-block BLAS is offset by its Python per-bond
+orchestration — so the 4× is a fair, like-for-like win, not a baseline artifact.)
+
 ## Limitations / next
 
-- **No fair TeNPy comparison yet** — base Python here has no numpy/scipy/TeNPy, and
-  no OpenBLAS env. The honest "QuantX-GPU vs TeNPy-CPU" headline needs those
-  installed; with the documented CPU/TeNPy margin (Phase 0: χ=128 1.84×, χ=256
-  0.79×) and the GPU/CPU ratios above, GPU/TeNPy ≈ (GPU/CPU)·(CPU/TeNPy) already
-  trends up with χ, but a direct measurement is the right deliverable.
 - **Real scalar (DMRG) stays on CPU** by design (the wrapper returns false for
   `S=double`); DMRG is already a strong CPU win and not the target.
-- **Phase C (next):** with theta solved, the χ=1024 Phase-B step is 80% SVD + 6%
-  recombine. The remaining wins: (a) batch the small-block SVD tail with
-  `cusolverDnZheevjBatched` instead of leaving it on the CPU; (b) keep the A/U/V
-  block tensors resident on the device across bonds so theta/SVD/recombine stop
-  round-tripping through host memory each bond (the full-residency end state).
-- **Fair TeNPy comparison** still pending (no numpy/OpenBLAS/TeNPy on this box).
+- **χ=256 still loses to TeNPy (0.78×)**: the blocks are below the GPU thresholds, so
+  it runs effectively on CPU-Eigen (slower than TeNPy's OpenBLAS). Linking OpenBLAS
+  (`QX_ENABLE_BLAS`) alongside CUDA would lift the small-χ floor.
+- **Phase D frontier:** the χ=1024 step is now ~80% SVD; batch the small-block SVD
+  tail (`cusolverDnZheevjBatched`) and keep A/U/V resident across bonds (drop the
+  per-bond host round-trips) for the next step up.
+- **FP32 is opt-in and modest** (eigensolver-bound, see Phase C); a faster robust FP32
+  eigensolver (or a batched Jacobi) is the lever to make it a bigger win.
