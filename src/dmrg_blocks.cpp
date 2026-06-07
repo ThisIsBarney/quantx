@@ -1178,9 +1178,12 @@ static bool thin_svd_gram_gpu(const Mat& M, Mat& U, Mat& V, RVec& sv, bool allow
         auto* Md = reinterpret_cast<const std::complex<double>*>(M.data());
         auto* Ud = reinterpret_cast<std::complex<double>*>(U.data());
         auto* Vd = reinterpret_cast<std::complex<double>*>(V.data());
-        return gpu_fp32_mode(allow_fp32)
-            ? qx_gpu::thin_svd_gram_gpu_c(Md, m, nc, Ud, Vd, sv.data())   // Phase C FP32
-            : qx_gpu::thin_svd_gram_gpu_z(Md, m, nc, Ud, Vd, sv.data());  // FP64
+        // Phase C: try FP32 first when permitted; if its Jacobi didn't converge
+        // (returns false before writing outputs) fall back to FP64 *on the GPU*
+        // (still fast) rather than dropping a large block to the CPU.
+        if (gpu_fp32_mode(allow_fp32) && qx_gpu::thin_svd_gram_gpu_c(Md, m, nc, Ud, Vd, sv.data()))
+            return true;
+        return qx_gpu::thin_svd_gram_gpu_z(Md, m, nc, Ud, Vd, sv.data());  // FP64 GPU
     }
 }
 #endif

@@ -240,10 +240,11 @@ bool thin_svd_gram_gpu_c(const std::complex<double>* M, int m, int n,
                          reinterpret_cast<cuComplex*>(c.fWk), lwork, c.dInfo, c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
     int info = 0;
     if (cudaMemcpy(&info, c.dInfo, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess) return false;
-    // info<0: illegal arg -> fail. info>0: Jacobi hit the sweep cap without full
-    // convergence, but the large eigenpairs (the kept Schmidt values) converge first,
-    // so the result is still good for TEBD truncation -> accept.
-    if (info < 0) return false;
+    // Accept only a fully-converged Jacobi decomposition (info==0). info>0 means the
+    // sweep cap was hit without reaching tolerance -- cuSOLVER does not guarantee a
+    // valid eigendecomposition there, so reject and let the caller fall back to the
+    // FP64 path (correctness over the modest FP32 speedup).
+    if (info != 0) return false;
 
     const cuComplex c_one  = make_cuComplex(1.0f, 0.0f);
     const cuComplex c_zero = make_cuComplex(0.0f, 0.0f);
