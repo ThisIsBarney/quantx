@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# dmrg_blocks.cpp is a large scalar-templated translation unit; in Release (and
+# more so once the GPU path adds instantiations) it exceeds the COFF section limit.
+if(MSVC)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
+endif()
+
 option(QX_ENABLE_OPENMP "Enable OpenMP parallel backend" ON)
 option(QX_ENABLE_MPI "Enable MPI features" OFF)
 option(QX_ENABLE_PYBIND "Build pybind11 bindings" OFF)
@@ -73,6 +79,25 @@ if(QX_ENABLE_BLAS)
   target_link_libraries(qx_blas INTERFACE ${QX_BLAS_LIB})
   target_compile_definitions(qx_blas INTERFACE QX_HAS_LAPACKE=1 EIGEN_USE_BLAS=1)
   message(STATUS "QX_ENABLE_BLAS: linking ${QX_BLAS_LIB}")
+endif()
+
+# Optional: GPU (cuSOLVER/cuBLAS) Gram-SVD path for the block-sparse TEBD dynamics
+# (Phase A, docs/gpu_acceleration_plan.md). Off by default; the CPU build is
+# unaffected. Builds src/gpu_svd.cu with nvcc into a small static lib (qx_gpu) and
+# defines QX_USE_CUDA on the targets that need it.
+#   Configure with: -DQX_USE_CUDA=ON [-DCMAKE_CUDA_ARCHITECTURES=89]
+option(QX_USE_CUDA "Build the GPU (cuSOLVER) Gram-SVD path for the block TEBD dynamics (Phase A)" OFF)
+if(QX_USE_CUDA)
+  enable_language(CUDA)
+  find_package(CUDAToolkit REQUIRED)
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 89)  # RTX 4090 (Ada); 80=A100, 90=H100
+  endif()
+  add_library(qx_gpu STATIC src/gpu_svd.cu)
+  set_target_properties(qx_gpu PROPERTIES POSITION_INDEPENDENT_CODE ON)
+  target_include_directories(qx_gpu PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  target_link_libraries(qx_gpu PUBLIC CUDA::cusolver CUDA::cublas CUDA::cudart)
+  message(STATUS "QX_USE_CUDA: GPU SVD enabled (CMAKE_CUDA_ARCHITECTURES=${CMAKE_CUDA_ARCHITECTURES})")
 endif()
 
 if(QX_ENABLE_OPENMP)
@@ -199,6 +224,11 @@ target_link_libraries(qx_capi PRIVATE qx_core)
 target_link_libraries(qx_capi PRIVATE qx_blas)
 target_include_directories(qx_capi PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_definitions(qx_capi PRIVATE QX_CAPI_EXPORTS=1)
+if(QX_USE_CUDA)
+  target_link_libraries(qx_capi PRIVATE qx_gpu)
+  target_compile_definitions(qx_capi PRIVATE QX_USE_CUDA=1)
+  target_include_directories(qx_capi PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+endif()
 set_target_properties(qx_capi PROPERTIES OUTPUT_NAME quantx)
 qx_set_config_output_dirs(qx_capi)
 
@@ -317,7 +347,37 @@ endif()
 target_include_directories(qx_tdvp_blocks_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/include
   ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(QX_USE_CUDA)
+  target_link_libraries(qx_tdvp_blocks_test PRIVATE qx_gpu)
+  target_compile_definitions(qx_tdvp_blocks_test PRIVATE QX_USE_CUDA=1)
+endif()
 qx_set_config_output_dirs(qx_tdvp_blocks_test)
+
+# Phase A unit check: GPU Gram-SVD vs reconstruction/orthonormality (CUDA only).
+if(QX_USE_CUDA)
+  add_executable(qx_gpu_svd_test src/gpu_svd_test.cpp)
+  target_link_libraries(qx_gpu_svd_test PRIVATE qx_gpu qx_eigen)
+  target_include_directories(qx_gpu_svd_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  qx_set_config_output_dirs(qx_gpu_svd_test)
+  add_test(NAME qx_gpu_svd_test COMMAND qx_gpu_svd_test)
+
+  # Phase A benchmarks: kernel SVD scaling, and end-to-end TEBD step time.
+  add_executable(qx_gpu_svd_bench src/gpu_svd_bench.cpp)
+  target_link_libraries(qx_gpu_svd_bench PRIVATE qx_gpu qx_eigen)
+  target_include_directories(qx_gpu_svd_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  qx_set_config_output_dirs(qx_gpu_svd_bench)
+
+  add_executable(qx_tebd_bench src/tebd_bench.cpp
+    src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+  target_link_libraries(qx_tebd_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_gpu)
+  target_compile_definitions(qx_tebd_bench PRIVATE QX_USE_CUDA=1)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(qx_tebd_bench PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_include_directories(qx_tebd_bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  qx_set_config_output_dirs(qx_tebd_bench)
+endif()
 
 add_executable(qx_su2_vs_u1
   src/dmrg_su2_vs_u1.cpp

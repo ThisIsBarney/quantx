@@ -1,5 +1,6 @@
 build/
 build-vs/
+build-cuda/
 out/
 dist/
 .vs/
