@@ -45,6 +45,10 @@ struct Ctx {
     double*  dW    = nullptr; size_t cW   = 0;  // eigenvalues (k double)
     void*    dWork = nullptr; size_t cWk  = 0;  // Zheevd workspace
     int*     dInfo = nullptr;
+    // Buffers for form_theta_block_z (Phase B): A sub-block, Ai1, theta.
+    void*    tA    = nullptr; size_t ctA  = 0;
+    void*    tB    = nullptr; size_t ctB  = 0;
+    void*    tT    = nullptr; size_t ctT  = 0;
 };
 
 bool init_ctx(Ctx& c) {
@@ -177,6 +181,46 @@ bool thin_svd_gram_gpu_z(const std::complex<double>* M, int m, int n,
             for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(0.0, 0.0);
         }
     }
+    return true;
+}
+
+bool form_theta_block_z(const std::complex<double>* Aup, int dLup,
+                        const std::complex<double>* Adn, int dLdn,
+                        const std::complex<double>* Ai1, int kmid, int ncol,
+                        std::complex<double>* theta) {
+    Ctx& c = ctx();
+    const int nrow = dLup + dLdn;
+    if (!c.ok || nrow <= 0 || ncol <= 0 || kmid <= 0) return false;
+    std::lock_guard<std::mutex> lock(c.mtx);
+
+    const int maxdL = (dLup > dLdn) ? dLup : dLdn;
+    if (!ensure(&c.tA, &c.ctA, sizeof(cuDoubleComplex) * (size_t)maxdL * kmid)) return false;
+    if (!ensure(&c.tB, &c.ctB, sizeof(cuDoubleComplex) * (size_t)kmid * ncol)) return false;
+    if (!ensure(&c.tT, &c.ctT, sizeof(cuDoubleComplex) * (size_t)nrow * ncol)) return false;
+    auto* dA = reinterpret_cast<cuDoubleComplex*>(c.tA);
+    auto* dB = reinterpret_cast<cuDoubleComplex*>(c.tB);
+    auto* dT = reinterpret_cast<cuDoubleComplex*>(c.tT);
+
+    // Ai1 uploaded once, shared by both spin sectors.
+    if (cudaMemcpy(dB, Ai1, sizeof(cuDoubleComplex)*(size_t)kmid*ncol, cudaMemcpyHostToDevice) != cudaSuccess) return false;
+    // zero theta so a missing spin sector leaves its rows = 0 (matches CPU).
+    if (cudaMemset(dT, 0, sizeof(cuDoubleComplex)*(size_t)nrow*ncol) != cudaSuccess) return false;
+
+    const cuDoubleComplex one  = make_cuDoubleComplex(1.0, 0.0);
+    const cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
+    // s1=up -> theta rows [0, dLup): C = Aup * Ai1, written with ldc = nrow.
+    if (dLup > 0 && Aup) {
+        if (cudaMemcpy(dA, Aup, sizeof(cuDoubleComplex)*(size_t)dLup*kmid, cudaMemcpyHostToDevice) != cudaSuccess) return false;
+        if (cublasZgemm(c.blas, CUBLAS_OP_N, CUBLAS_OP_N, dLup, ncol, kmid,
+                        &one, dA, dLup, dB, kmid, &zero, dT, nrow) != CUBLAS_STATUS_SUCCESS) return false;
+    }
+    // s1=dn -> theta rows [dLup, nrow): write into dT + dLup (ldc = nrow).
+    if (dLdn > 0 && Adn) {
+        if (cudaMemcpy(dA, Adn, sizeof(cuDoubleComplex)*(size_t)dLdn*kmid, cudaMemcpyHostToDevice) != cudaSuccess) return false;
+        if (cublasZgemm(c.blas, CUBLAS_OP_N, CUBLAS_OP_N, dLdn, ncol, kmid,
+                        &one, dA, dLdn, dB, kmid, &zero, dT + dLup, nrow) != CUBLAS_STATUS_SUCCESS) return false;
+    }
+    if (cudaMemcpy(theta, dT, sizeof(cuDoubleComplex)*(size_t)nrow*ncol, cudaMemcpyDeviceToHost) != cudaSuccess) return false;
     return true;
 }
 

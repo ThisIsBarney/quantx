@@ -72,6 +72,19 @@ static int gpu_min_blk() {
     }();
     return v;
 }
+// Minimum GEMM work (n_row * n_keep_mid * n_col) for a theta block to be built on
+// the GPU (Phase B residency). Both spin-sector GEMMs of the block run on-device
+// sharing one Ai1 upload, so transfer is amortised -- but only above this work do
+// the O(.^3) GEMMs beat the H2D/D2H. Override with env QX_GPU_THETA_MINWORK.
+static long long gpu_theta_minwork() {
+    static long long v = []() {
+        const char* e = std::getenv("QX_GPU_THETA_MINWORK");
+        long long d = 1LL << 21;            // ~2.1e6 ≈ 128^3
+        if (e) { long long x = std::atoll(e); if (x > 0) d = x; }
+        return d;
+    }();
+    return v;
+}
 #endif
 
 // =============================================================================
@@ -1280,11 +1293,55 @@ static std::map<int,Mat> form_theta(
         int n_col = dR_up + dR_dn;
         if (n_row == 0 || n_col == 0) continue;
 
-        Mat th = Mat::Zero(n_row, n_col);
-
         // Get A[i+1][q_mid] with optional sv absorption
         auto it1 = block_Ai1.find(q_mid);
         if (it1 == block_Ai1.end()) continue;
+
+#ifdef QX_USE_CUDA
+        // Phase B residency: build large theta blocks on the GPU (no sv-absorption
+        // case = TEBD; pure GEMMs). Both spin sectors run on-device sharing one Ai1
+        // upload. Falls through to the CPU path on miss/error.
+        if constexpr (std::is_same_v<S, Cx>) {
+            const int n_keep_mid = bs_mid.dim(q_mid);
+            const Mat& Ai1r = it1->second;
+            if (sv_mid.empty() && n_keep_mid > 0 &&
+                (int)Ai1r.rows() == n_keep_mid && (int)Ai1r.cols() == n_col &&
+                (long long)n_row * n_keep_mid * n_col >= gpu_theta_minwork()) {
+                const Cx* Aup = nullptr; const Cx* Adn = nullptr;
+                bool gpu_ok = true;
+                if (dL_up > 0) {                              // s1=up: q_L = q_mid-1, col_off 0
+                    auto it0 = block_Ai.find(q_mid - 1);
+                    if (it0 != block_Ai.end() && n_keep_mid <= (int)it0->second.cols()) {
+                        // this side contributes (matches CPU); GPU needs it dense (rows==dL)
+                        if ((int)it0->second.rows() == dL_up)
+                            Aup = reinterpret_cast<const Cx*>(it0->second.data());
+                        else gpu_ok = false;
+                    }
+                }
+                if (gpu_ok && dL_dn > 0) {                    // s1=dn: q_L = q_mid+1, col_off dR_up_mid
+                    auto it0 = block_Ai.find(q_mid + 1);
+                    int dR_up_mid = bs_mid.dim(q_mid + 2);
+                    if (it0 != block_Ai.end() && dR_up_mid + n_keep_mid <= (int)it0->second.cols()) {
+                        if ((int)it0->second.rows() == dL_dn)
+                            Adn = reinterpret_cast<const Cx*>(it0->second.data())
+                                  + (size_t)dR_up_mid * dL_dn;
+                        else gpu_ok = false;
+                    }
+                }
+                if (gpu_ok && (Aup || Adn)) {
+                    Mat th(n_row, n_col);
+                    if (qx_gpu::form_theta_block_z(Aup, dL_up, Adn, dL_dn,
+                            reinterpret_cast<const Cx*>(Ai1r.data()), n_keep_mid, n_col,
+                            reinterpret_cast<Cx*>(th.data()))) {
+                        if (th.norm() > 1e-14) theta[q_mid] = std::move(th);
+                        continue;
+                    }
+                }
+            }
+        }
+#endif
+
+        Mat th = Mat::Zero(n_row, n_col);
         Mat Ai1 = it1->second;  // (n_keep_mid, dR_up+dR_dn)
         if (absorb_sv_into_Ai1) {
             auto it_sv = sv_mid.find(q_mid);

@@ -29,4 +29,19 @@ bool thin_svd_gram_gpu_z(const std::complex<double>* M, int m, int n,
                          std::complex<double>* U, std::complex<double>* V,
                          double* sv);
 
+// Build one block-sparse theta block on the GPU (Phase B residency). Computes the
+// two spin-sector contributions of form_theta entirely on-device, sharing a single
+// upload of Ai1, so the O(n_row·kmid·n_col) GEMMs amortise the O(·²) transfers --
+// the right granularity (whole big block, both GEMMs) vs the failed per-GEMM offload.
+//   theta (n_row x n_col, n_row = dLup+dLdn), column-major:
+//     rows [0, dLup)        = Aup (dLup x kmid) * Ai1 (kmid x n_col)   (s1=up)
+//     rows [dLup, n_row)    = Adn (dLdn x kmid) * Ai1                   (s1=dn)
+//   A missing side: pass its pointer = nullptr and dL = 0 -> those rows are zero.
+//   Aup/Adn are dense column-major (lda = dLup/dLdn); Ai1 is dense (lda = kmid).
+// Returns false on any device error -> caller falls back to the CPU form_theta.
+bool form_theta_block_z(const std::complex<double>* Aup, int dLup,
+                        const std::complex<double>* Adn, int dLdn,
+                        const std::complex<double>* Ai1, int kmid, int ncol,
+                        std::complex<double>* theta);
+
 }  // namespace qx_gpu
