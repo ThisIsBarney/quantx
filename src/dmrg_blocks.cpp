@@ -56,6 +56,13 @@ static long long g_block_matvecs = 0;
 static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb = 0;
 static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0, g_tebd_ngpu = 0;
 
+// FP32 mixed-precision GPU SVD gate (Phase C). Set true by the real-time TEBD entry
+// points where single precision is tolerable (Trotter error dominates), false for
+// the energy-exact paths (DMRG/TDVP). Read via gpu_use_fp32() (env QX_GPU_FP32
+// overrides: 0=never, 1=always). Defined unconditionally so the entry points can set
+// it without an #ifdef; only consulted on the CUDA dispatch path.
+static bool g_gpu_allow_fp32 = false;
+
 #ifdef QX_USE_CUDA
 // Minimum min(rows,cols) for a block to be routed to the GPU SVD (Phase A). Below
 // this, PCIe transfer + kernel-launch overhead dominate the O(k^3) compute, so keep
@@ -84,6 +91,18 @@ static long long gpu_theta_minwork() {
         return d;
     }();
     return v;
+}
+// Whether the GPU SVD should use the FP32 mixed-precision path (Phase C). Defaults
+// to the g_gpu_allow_fp32 gate (set by real-time TEBD entry points); env QX_GPU_FP32
+// forces 0=never / 1=always.
+static bool gpu_use_fp32() {
+    static int env = []() {
+        const char* e = std::getenv("QX_GPU_FP32");
+        return e ? (std::atoi(e) ? 1 : 0) : -1;
+    }();
+    if (env == 0) return false;
+    if (env == 1) return true;
+    return g_gpu_allow_fp32;
 }
 #endif
 
@@ -1158,10 +1177,12 @@ static bool thin_svd_gram_gpu(const Mat& M, Mat& U, Mat& V, RVec& sv) {
         const int m = (int)M.rows(), nc = (int)M.cols();
         const int k = std::min(m, nc);
         U.resize(m, k); V.resize(nc, k); sv.resize(k);
-        return qx_gpu::thin_svd_gram_gpu_z(
-            reinterpret_cast<const std::complex<double>*>(M.data()), m, nc,
-            reinterpret_cast<std::complex<double>*>(U.data()),
-            reinterpret_cast<std::complex<double>*>(V.data()), sv.data());
+        auto* Md = reinterpret_cast<const std::complex<double>*>(M.data());
+        auto* Ud = reinterpret_cast<std::complex<double>*>(U.data());
+        auto* Vd = reinterpret_cast<std::complex<double>*>(V.data());
+        return gpu_use_fp32()
+            ? qx_gpu::thin_svd_gram_gpu_c(Md, m, nc, Ud, Vd, sv.data())   // Phase C FP32
+            : qx_gpu::thin_svd_gram_gpu_z(Md, m, nc, Ud, Vd, sv.data());  // FP64
     }
 }
 #endif
@@ -1703,6 +1724,7 @@ static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
                           bool imag) {
     static_assert(std::is_same_v<S, Cx>, "TDVP2 requires complex scalar");
     using clk = std::chrono::steady_clock;
+    g_gpu_allow_fp32 = false;   // TDVP2 is energy-exact (Krylov) -> always FP64 GPU SVD
     std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
     BMPS s = cps_init(mpo, n, neel);
 
@@ -1738,6 +1760,7 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0; }
 
     TDVP2Out out;
+    g_gpu_allow_fp32 = !imag;   // FP32 GPU SVD for real-time TEBD; FP64 for imag-time cooling
     auto t0 = clk::now();
     for (int step = 0; step < n_steps; ++step) {
         tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta);
@@ -1747,6 +1770,7 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
         }
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    g_gpu_allow_fp32 = false;
     if (prof) {
         double tot = g_tebd_theta+g_tebd_gate+g_tebd_svd+g_tebd_recomb;
         std::fprintf(stderr, "[QX_TEBD_PROFILE n=%d chi=%d] evo=%.3fs theta=%.3f(%.0f%%) gate=%.3f(%.0f%%) svd=%.3f(%.0f%%) recomb=%.3f(%.0f%%) maxblk=%d nsvd=%lld\n",
@@ -1914,6 +1938,7 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
     apply_sz_site(phi, out.l0);
 
     // 3. real-time evolve, measuring C_{j,l0}(t) at each step
+    g_gpu_allow_fp32 = true;   // real-time TEBD evolution (ground state above stayed FP64)
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
         double t = step * dt;
@@ -1929,6 +1954,7 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
             tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta);  // fast NN route
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    g_gpu_allow_fp32 = false;
     return out;
 }
 
@@ -1960,6 +1986,7 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
     if (std::abs(Z0) < 1e-300) Z0 = 1.0;
 
     BMPS psi = psi0;
+    g_gpu_allow_fp32 = true;   // real-time TEBD evolution (ground state above stayed FP64)
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
         auto OLc = overlap_left_envs(psi0, psi);
@@ -1975,6 +2002,7 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
             tebd2_step_blocks(psi, dt, /*imag*/false, chi_max, cutoff, Jf, deltaf);
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    g_gpu_allow_fp32 = false;
     return out;
 }
 
@@ -2093,9 +2121,10 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
     if (std::abs(Zpsi) < 1e-300) Zpsi = 1.0;
 
     auto Wj  = qx_dmrg::build_current_mpo(n, J);
-    BMPS phi0 = apply_mpo_to_bmps(psi0, Wj, chi_max, cutoff);   // phi = J|psi0>
+    BMPS phi0 = apply_mpo_to_bmps(psi0, Wj, chi_max, cutoff);   // phi = J|psi0> (FP64)
     BMPS phi  = phi0;
 
+    g_gpu_allow_fp32 = true;   // real-time TEBD evolution (ground state + J|psi0> above stayed FP64)
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
         auto OL = overlap_left_envs(phi0, phi);
@@ -2107,6 +2136,7 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
         if (step < n_steps) tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta);
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    g_gpu_allow_fp32 = false;
     return out;
 }
 
@@ -2117,6 +2147,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                       int n_sweeps, double tol,
                       BMPS* out_state = nullptr) {
     auto t_start = std::chrono::steady_clock::now();
+    g_gpu_allow_fp32 = false;   // DMRG is energy-exact -> always FP64 GPU SVD
 
     // Build bond spaces
     std::vector<BondSpace> bond(n + 1);

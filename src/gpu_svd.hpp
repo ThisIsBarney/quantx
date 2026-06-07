@@ -29,6 +29,18 @@ bool thin_svd_gram_gpu_z(const std::complex<double>* M, int m, int n,
                          std::complex<double>* U, std::complex<double>* V,
                          double* sv);
 
+// Mixed-precision variant (Phase C): identical interface and layout (host buffers
+// are complex<double>), but the O(k³) GPU linear algebra (Gram, Hermitian
+// eigensolve, back-multiply) runs in FP32 (cuComplex: Cherk/Cheevd/Cgemm). The
+// 4090's FP32 throughput is ~64× its FP64, and the dominant TEBD SVD is FP64-bound,
+// so this is the big win on consumer GPUs. Precision: the Gram trick already
+// squares the condition number; FP32 on top keeps ~3–4 digits in the kept Schmidt
+// values — fine for real-time TEBD truncation (Trotter error dominates), NOT for
+// energy-exact DMRG/TDVP. The final reorder + 1/σ scaling is done in double.
+bool thin_svd_gram_gpu_c(const std::complex<double>* M, int m, int n,
+                         std::complex<double>* U, std::complex<double>* V,
+                         double* sv);
+
 // Build one block-sparse theta block on the GPU (Phase B residency). Computes the
 // two spin-sector contributions of form_theta entirely on-device, sharing a single
 // upload of Ai1, so the O(n_row·kmid·n_col) GEMMs amortise the O(·²) transfers --
