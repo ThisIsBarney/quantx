@@ -223,14 +223,21 @@ on the steep/clustered Gram spectra of theta blocks is **iterative**:
   Schmidt values converge in the first few sweeps — but its iteration cost eats most
   of the FP32 throughput advantage.
 
+**Correctness:** cuSOLVER only guarantees a valid eigendecomposition at `info==0`. A
+block whose Jacobi hits the 12-sweep cap (`info>0`) is **rejected**, and
+`thin_svd_gram_gpu` falls back **FP32 → FP64-GPU → CPU** — so an unconverged block is
+re-solved in FP64 *on the GPU* (still fast), never used unconverged and never dropped
+to the CPU. In practice most large blocks converge in ≤12 sweeps, so this costs little.
+
 `thin_svd_gram_gpu_c` does the Gram/eigensolve/back-multiply in FP32 (host casts
 double↔float; final reorder + 1/σ scaling stays in double). Measured (same-binary
-A/B, Phase A+B on, toggle `QX_GPU_FP32`):
+A/B, Phase A+B on, toggle `QX_GPU_FP32`; SVD-phase ratio is the thermally-stable
+metric):
 
-| χ | FP64 SVD phase | FP32 SVD phase | SVD speedup | end-to-end |
-|---|---|---|---|---|
-| 512  | 27.5 s | 19.9 s | 1.38× | ~1.29× |
-| 1024 | 55.2 s | 43.9 s | 1.26× | ~1.11× |
+| χ | FP64 SVD phase | FP32 SVD phase | SVD speedup |
+|---|---|---|---|
+| 512  | 28.6 s | 20.6 s | **1.39×** |
+| 1024 | 58.4 s | 44.5 s | **1.31×** |
 
 **OFF by default** (`QX_GPU_FP32`: unset/0 = FP64; 1 = FP32 on real-time TEBD only;
 ≥2 = FP32 everywhere, testing). Gated to where single precision is tolerable
