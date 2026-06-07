@@ -26,6 +26,12 @@
 #include <lapacke.h>
 #endif
 
+#ifdef QX_USE_CUDA
+// GPU (cuSOLVER/cuBLAS) Gram-trick SVD for the large blocks (Phase A,
+// docs/gpu_acceleration_plan.md). Plain-type interface; impl in gpu_svd.cu.
+#include "gpu_svd.hpp"
+#endif
+
 #ifdef _OPENMP
 #include <omp.h>
 #else
@@ -48,7 +54,25 @@ static long long g_block_matvecs = 0;
 
 // TEBD phase profiling (set env QX_TEBD_PROFILE=1). Seconds per phase.
 static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb = 0;
-static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0;
+static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0, g_tebd_ngpu = 0;
+
+#ifdef QX_USE_CUDA
+// Minimum min(rows,cols) for a block to be routed to the GPU SVD (Phase A). Below
+// this, PCIe transfer + kernel-launch overhead dominate the O(k^3) compute, so keep
+// it on the CPU. The measured CPU(Eigen-Gram)/GPU(cuSOLVER) crossover is ~d=128
+// (qx_gpu_svd_bench: d=64 0.28x, d=128 1.15x, d=256 5.6x, d=1024 45x); against an
+// OpenBLAS CPU baseline the crossover is a bit higher, so 128 is a safe default.
+// Override with env QX_GPU_MIN_BLK.
+static int gpu_min_blk() {
+    static int v = []() {
+        const char* e = std::getenv("QX_GPU_MIN_BLK");
+        int d = 128;
+        if (e) { int x = std::atoi(e); if (x > 0) d = x; }
+        return d;
+    }();
+    return v;
+}
+#endif
 
 // =============================================================================
 // Sz-conserving block-sparse DMRG  (M179)
@@ -1109,6 +1133,26 @@ static bool thin_svd_lapacke(const Mat& M, Mat& U, Mat& V, RVec& sv) {
 }
 #endif
 
+#ifdef QX_USE_CUDA
+// GPU Gram-trick SVD for large blocks (Phase A). Same interface/semantics as
+// thin_svd_gram. Only the complex path is on the GPU (the TEBD dynamics suite the
+// plan targets); the real (DMRG) scalar falls back to the CPU, which is already a
+// strong win there. Returns false on any device error -> caller uses the CPU path.
+static bool thin_svd_gram_gpu(const Mat& M, Mat& U, Mat& V, RVec& sv) {
+    if constexpr (!std::is_same_v<S, Cx>) {
+        return false;
+    } else {
+        const int m = (int)M.rows(), nc = (int)M.cols();
+        const int k = std::min(m, nc);
+        U.resize(m, k); V.resize(nc, k); sv.resize(k);
+        return qx_gpu::thin_svd_gram_gpu_z(
+            reinterpret_cast<const std::complex<double>*>(M.data()), m, nc,
+            reinterpret_cast<std::complex<double>*>(U.data()),
+            reinterpret_cast<std::complex<double>*>(V.data()), sv.data());
+    }
+}
+#endif
+
 static BlockSVDResult block_svd_truncate(
     const std::map<int,Mat>& theta,
     const BondSpace& bs_L,
@@ -1130,6 +1174,14 @@ static BlockSVDResult block_svd_truncate(
     std::vector<SVDBlk> sb(svq.size());
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
     for (int i = 0; i < (int)svq.size(); ++i) {
+#ifdef QX_USE_CUDA
+        // Large blocks -> GPU (cuSOLVER) Gram-eigensolve; the dominant central-Sz
+        // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
+        // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk() &&
+            thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+            { g_tebd_ngpu++; continue; }
+#endif
 #ifdef QX_HAS_LAPACKE
         // Large blocks: LAPACK xgesdd (OpenBLAS) beats the Eigen Gram eigensolve;
         // small blocks keep the Gram path (lower overhead). Fall back on error.
@@ -1626,7 +1678,7 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
     BMPS s = cps_init(mpo, n, neel);
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
-    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=0; }
+    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0; }
 
     TDVP2Out out;
     auto t0 = clk::now();
@@ -1644,8 +1696,8 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
             n, chi_max, out.wall_s, g_tebd_theta, 100*g_tebd_theta/tot, g_tebd_gate, 100*g_tebd_gate/tot,
             g_tebd_svd, 100*g_tebd_svd/tot, g_tebd_recomb, 100*g_tebd_recomb/tot,
             (int)g_tebd_maxblk, g_tebd_nsvd);
-        std::fprintf(stderr, "   nsvd=%lld nlapacke=%lld (>=96 blocks routed to LAPACK zgesdd)\n",
-                     g_tebd_nsvd, g_tebd_nlapacke);
+        std::fprintf(stderr, "   nsvd=%lld nlapacke=%lld ngpu=%lld (large blocks: LAPACK zheevd / GPU cuSOLVER)\n",
+                     g_tebd_nsvd, g_tebd_nlapacke, g_tebd_ngpu);
     }
     rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
     out.energy = bt_energy(s, mpo);
