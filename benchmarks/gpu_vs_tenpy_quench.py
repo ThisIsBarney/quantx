@@ -99,8 +99,8 @@ def main():
     if not os.path.exists(QX_BENCH):
         sys.exit(f"qx_tebd_bench not found at {QX_BENCH} (set QX_TEBD_BENCH or build build-cuda-blas)")
     import tenpy
-    print(f"dt={DT} steps={STEPS} cutoff={CUTOFF} reps={REPS}(min) cooldown={COOLDOWN}s | "
-          f"tenpy {tenpy.__version__} | CPU threads=1 | GPU clock-locked\n")
+    print(f"dt={DT} steps={STEPS} cutoff={CUTOFF} reps={REPS}(min-of-N) cooldown={COOLDOWN}s | "
+          f"tenpy {tenpy.__version__} | CPU threads=1 | GPU boost (min-of-N picks best trial)\n")
     results = {"dt": DT, "steps": STEPS, "reps": REPS, "runs": []}
     for n in sorted(PLAN):
         hdr = f"N={n}: {'chi':>5} {'TeNPy(s)':>10} {'QX-GPU(s)':>10} {'QX-FP32(s)':>11} {'GPU/TeNPy':>10} {'FP32/TeNPy':>11}"
