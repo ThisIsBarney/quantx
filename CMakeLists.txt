@@ -369,7 +369,7 @@ if(QX_USE_CUDA)
 
   add_executable(qx_tebd_bench src/tebd_bench.cpp
     src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
-  target_link_libraries(qx_tebd_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_gpu)
+  target_link_libraries(qx_tebd_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_gpu qx_blas)
   target_compile_definitions(qx_tebd_bench PRIVATE QX_USE_CUDA=1)
   if(OpenMP_CXX_FOUND)
     target_link_libraries(qx_tebd_bench PRIVATE OpenMP::OpenMP_CXX)

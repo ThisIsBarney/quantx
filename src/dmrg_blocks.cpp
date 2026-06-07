@@ -24,6 +24,12 @@
 #define lapack_complex_float  std::complex<float>
 #define lapack_complex_double std::complex<double>
 #include <lapacke.h>
+// Force OpenBLAS single-threaded, once at load. The engine parallelises over Sz
+// blocks with its own OpenMP; a multi-threaded BLAS *inside* that loop oversubscribes
+// and access-violates (and Phase 0 found it catastrophic for performance too). This
+// makes the OpenBLAS build robust without requiring OPENBLAS_NUM_THREADS=1 in the env.
+extern "C" void openblas_set_num_threads(int);
+namespace { struct QxOpenBlasInit { QxOpenBlasInit() { openblas_set_num_threads(1); } } g_qx_openblas_init; }
 #endif
 
 #ifdef QX_USE_CUDA
