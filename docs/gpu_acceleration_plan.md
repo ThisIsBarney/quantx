@@ -317,7 +317,13 @@ Write results into `docs/gpu_acceleration_report.md` and update
    — this is now clearly motivated: at χ=1024 the GPU step is 36% theta-merge + a
    long tail of sub-threshold small SVDs still on CPU, so batching + keeping the
    state resident is where the remaining ~4.5×→bigger win lives.
-4. Stretch: mixed precision; an honest QuantX-GPU vs TeNPy comparison (needs a
+4. **Mixed precision (Phase C) — DONE, modest/opt-in.** FP32 Gram-SVD
+   (`thin_svd_gram_gpu_c`). Finding: the SVD is *eigensolver*-bound, and FP32 D&C
+   (`Cheevd`) fails to converge on theta-block spectra; the robust FP32 Jacobi
+   (`Cheevj`) captures only ~1.3-1.4× of the SVD phase (chi=512/1024) because of its
+   iteration cost — so FP32 ships OFF by default (`QX_GPU_FP32=1` to opt in for
+   real-time TEBD). Not the big win the 4090's FP64 weakness suggested.
+   Remaining stretch: an honest QuantX-GPU vs TeNPy comparison (needs a
    numpy/OpenBLAS + TeNPy install on this box — not yet present; this build's CPU
    baseline is Eigen-Gram, ~1.5× slower than the Phase-0 OpenBLAS baseline, so the
    GPU/CPU ratios here are if anything *conservative* against a tuned CPU).

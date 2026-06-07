@@ -1,4 +1,4 @@
-# GPU Acceleration Report — Phase A (cuSOLVER Gram-SVD) + Phase B (theta residency)
+# GPU Acceleration Report — Phase A (cuSOLVER SVD) + Phase B (theta residency) + Phase C (FP32, opt-in)
 
 **Date:** 2026-06-06 **Hardware:** NVIDIA RTX 4090 (Ada, sm_89), 24 GB; CUDA 13.2;
 MSVC 19.50 x64; single-thread CPU baseline. **Plan:** [`gpu_acceleration_plan.md`](gpu_acceleration_plan.md).
@@ -208,6 +208,38 @@ theta bottleneck removed.
 > work, which controls for that. The earlier Phase-A-only singleton (3.13× at χ=1024)
 > came from a cooler GPU run; the controlled 2.60× here is the honest Phase-A number.
 
+## Phase C — FP32 mixed precision (opt-in; a modest win, eigensolver-bound)
+
+The 4090's FP64 is ~1/64 of its FP32 throughput and the step is ~80% SVD, so FP32
+*looked* like the big lever. In practice it is a **modest** win, because the SVD is
+**eigensolver-bound, not GEMM-bound**, and the only FP32 eigensolver that is robust
+on the steep/clustered Gram spectra of theta blocks is **iterative**:
+
+- `cusolverDnCheevd` (FP32 divide & conquer) is fast but **fails to converge**
+  (`info>0`) on these spectra — almost every large block fell back to CPU, making
+  FP32 *slower* than FP64. FP64 `Zheevd` is robust; FP32 D&C is not.
+- `cusolverDnCheevj` (FP32 Jacobi, tol 1e-5, ≤12 sweeps) is robust — the kept large
+  Schmidt values converge in the first few sweeps — but its iteration cost eats most
+  of the FP32 throughput advantage.
+
+`thin_svd_gram_gpu_c` does the Gram/eigensolve/back-multiply in FP32 (host casts
+double↔float; final reorder + 1/σ scaling stays in double). Measured (same-binary
+A/B, Phase A+B on, toggle `QX_GPU_FP32`):
+
+| χ | FP64 SVD phase | FP32 SVD phase | SVD speedup | end-to-end |
+|---|---|---|---|---|
+| 512  | 27.5 s | 19.9 s | 1.38× | ~1.29× |
+| 1024 | 55.2 s | 43.9 s | 1.26× | ~1.11× |
+
+**OFF by default** (`QX_GPU_FP32`: unset/0 = FP64; 1 = FP32 on real-time TEBD only;
+≥2 = FP32 everywhere, testing). Gated to where single precision is tolerable
+(real-time TEBD / S(k,ω) / Loschmidt / conductivity, Trotter-error-dominated);
+DMRG, TDVP2, imag-time cooling, and the ground-state / J|ψ₀⟩ prep inside the
+dynamics paths stay FP64. ED suite passes with `QX_GPU_FP32=1` (real-time TEBD errors
+unchanged; TDVP2 energy 1.8e-13). Forcing FP32 onto TDVP2 (`=2`) breaks its 1e-6
+energy check — confirming the gating is necessary. Large-χ real-time accuracy is not
+ED-validatable (no ED beyond n=6), which is the other reason it ships opt-in.
+
 ## How to build & run
 
 ```
@@ -222,8 +254,8 @@ cmd /c "<VS>\VC\Auxiliary\Build\vcvars64.bat && \
 - `qx_tebd_bench.exe [n] [chi] [steps] [dt]` — end-to-end; runtime knobs:
   `QX_GPU_MIN_BLK` (SVD→GPU threshold, default 128; huge = CPU-only SVD),
   `QX_GPU_THETA_MINWORK` (theta→GPU work threshold, default ~2.1e6; huge = CPU theta),
-  and `QX_TEBD_PROFILE=1` (per-phase timings + `ngpu`). The clean 3-way above toggles
-  exactly these two on one binary.
+  `QX_GPU_FP32` (0/unset = FP64, 1 = FP32 real-time TEBD, ≥2 = FP32 everywhere),
+  and `QX_TEBD_PROFILE=1` (per-phase timings + `ngpu`).
 
 For production / Python (`quantx.dll`), also build the `qx_capi` target; at runtime
 the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the CUDA
