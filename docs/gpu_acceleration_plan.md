@@ -1,13 +1,17 @@
 # GPU Acceleration Plan for QuantX Block-Sparse Tensor-Network Engine
 
-**Status:** **Phase A implemented and validated on an RTX 4090 (CUDA 13.2), 2026-06-06.**
-The handoff machine now *has* a GPU, so Phase A (route the large per-Sz-sector SVDs
-to cuSOLVER) is done, tested vs ED, and benchmarked. Result summary: the GPU/CPU
-margin **grows with χ** as intended — end-to-end TEBD 1.0× (χ≤256) → **3.13× (χ=1024)**,
-the SVD phase it targets 1.2× → **4.5×**, and the bare kernel 1.15× (d=128) →
-**86× (d=2048)**. Full numbers, build flags, and the Phase-B gap analysis are in
-[`gpu_acceleration_report.md`](gpu_acceleration_report.md). The CPU baseline below
-(Phase 0 OpenBLAS) and everything in `src/dmrg_blocks.cpp` remain validated on CPU.
+**Status:** **Phases A and B (theta residency) implemented and validated on an RTX
+4090 (CUDA 13.2), 2026-06-06.** The handoff machine now *has* a GPU. Phase A routes
+the large per-Sz-sector SVDs to cuSOLVER; Phase B additionally builds the large
+`theta` blocks on the GPU (`form_theta_block_z`). Both tested vs ED and benchmarked.
+Headline (clean χ=1024 3-way, N=32, 60-step Néel quench, vs single-thread CPU):
+CPU 431.8 s → **Phase A 166.1 s (2.60×)** → **Phase B 97.8 s (4.42×)**; the bare SVD
+kernel grows 1.15× (d=128) → **86× (d=2048)**, i.e. the margin **grows with χ** as
+intended. The contained per-GEMM theta offload was tried and is a measured dead end
+(residency at the per-block granularity is what works). Full numbers, build flags,
+thermal caveats, and the remaining frontier are in
+[`gpu_acceleration_report.md`](gpu_acceleration_report.md). Everything in
+`src/dmrg_blocks.cpp` (incl. the Phase 0 OpenBLAS CPU path) remains validated on CPU.
 
 **Goal:** make QuantX's advantage over TeNPy **grow with system scale** (bond
 dimension χ). On CPU single-thread we are at the LAPACK floor on the dominant SVD
@@ -177,16 +181,19 @@ which is the 87%. This alone should make the margin grow with χ.
 
 ### Phase B (if Phase A pays off): keep the state on GPU, batch everything
 
-**Update (2026-06-06): the contained shortcut was tried and is a measured dead end.**
-Offloading just the `form_theta` GEMMs (the 36%) to cuBLAS *per call* made the step
-~2.5× **slower** (χ=512: 0.99→2.45 s/step) — ~1000 GEMMs/step each paying H2D/D2H +
-sync overhead swamp the O(d³) saved (the §8 "never transfer per-block" pitfall), and
-returning `C=A*B` by value also broke Eigen's fused `noalias() += A*B`. It was
-reverted. **theta-merge therefore requires true residency**: form `theta` on-device
-from resident MPS tensors (one A upload per bond; per-sector `cublasZgemm` with
-`beta=1` accumulating into offset device `theta` sub-blocks; `theta` never returns to
-the host) and feed it straight into the gate + SVD on-device. Details:
-[`gpu_acceleration_report.md`](gpu_acceleration_report.md) "Phase B investigation".
+**Update (2026-06-06): partial Phase B DONE — theta residency.** First, the contained
+shortcut (offloading each `form_theta` GEMM to cuBLAS *per call*) was tried and is a
+measured dead end: ~2.5× **slower** (χ=512: 0.99→2.45 s/step) — ~1000 GEMMs/step each
+paying H2D/D2H + sync swamp the O(d³) saved (the §8 "never transfer per-block"
+pitfall). The **right granularity is per large theta block**: `form_theta_block_z`
+builds a block's two spin-sector GEMMs on-device sharing one `Ai1` upload (disjoint
+row ranges, one download), routed only above a work threshold (`QX_GPU_THETA_MINWORK`).
+That **works**: clean χ=1024 3-way (N=32, 60 steps, same process) — CPU 431.8 s →
+Phase A (GPU SVD) 166.1 s (2.60×) → **Phase B (GPU SVD + theta) 97.8 s (4.42×)**; the
+theta phase collapses 87→11.9 s. Still on the CPU and the remaining frontier: the
+small-block SVD tail (batch via `cusolverDnZheevjBatched`) and full A/U/V residency
+across bonds (no per-bond round-trip). Details + thermal caveats:
+[`gpu_acceleration_report.md`](gpu_acceleration_report.md).
 
 PCIe transfer per bond is the enemy. Phase B amortizes it by keeping the MPS
 tensors (and DMRG environments) **resident on GPU** across the whole sweep, and

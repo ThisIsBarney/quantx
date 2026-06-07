@@ -1,24 +1,30 @@
-# GPU Acceleration Report — Phase A (cuSOLVER Gram-SVD)
+# GPU Acceleration Report — Phase A (cuSOLVER Gram-SVD) + Phase B (theta residency)
 
 **Date:** 2026-06-06 **Hardware:** NVIDIA RTX 4090 (Ada, sm_89), 24 GB; CUDA 13.2;
 MSVC 19.50 x64; single-thread CPU baseline. **Plan:** [`gpu_acceleration_plan.md`](gpu_acceleration_plan.md).
 
 ## TL;DR
 
-Phase A routes the large per-Sz-sector SVDs of the block-sparse TEBD step to the
-GPU (cuSOLVER `Zheevd` on the Gram matrix), leaving everything else on the CPU.
-The central claim of the plan — **the QuantX advantage grows with bond dimension
-χ** — is demonstrated:
+**Phase A** routes the large per-Sz-sector SVDs of the block TEBD step to the GPU
+(cuSOLVER `Zheevd` on the Gram matrix). **Phase B** additionally builds the large
+`theta` blocks on the GPU (`form_theta_block_z`), removing the theta-merge CPU
+bottleneck. Both leave the control flow + small-block tail on the CPU. The central
+claim of the plan — **the QuantX advantage grows with bond dimension χ** — holds,
+and Phase B pulls further ahead:
 
-| level | χ=128 / d=128 | χ=256 | χ=512 | χ=1024 / d=1024 |
-|---|---|---|---|---|
-| **bare SVD kernel** (GPU/CPU) | 1.15× | 5.6× | 17.4× | **45×** (86× at d=2048) |
-| **TEBD SVD phase** (GPU/CPU) | ~1.0× | ~1.0× | 1.23× | **4.51×** |
-| **TEBD end-to-end** (GPU/CPU) | 1.04× | 0.97× | 1.67× | **3.13×** |
+| level | χ=256 | χ=512 | χ=1024 |
+|---|---|---|---|
+| **bare SVD kernel** (GPU/CPU) | 5.6× | 17.4× | **45×** (86× at d=2048) |
+| **TEBD end-to-end, Phase A** (GPU SVD) | 1.01× | 1.57× | **2.60×** |
+| **TEBD end-to-end, Phase B** (GPU SVD + theta) | 0.98× | 2.27× | **4.42×** |
 
-The kernel speedup is dramatic and monotonic in size; it translates only partly to
-the end-to-end step because of Amdahl's law (analysis below). This is the expected
-Phase-A result and directly motivates Phase B.
+(N=32 Néel quench, 60 steps, vs single-thread CPU; clean same-process 3-ways, cool
+clocks.) Both curves **grow with χ** — the goal — and Phase B widens the lead
+(Phase-B/Phase-A = 1.0→1.44→1.70× across the three χ). Small-χ stays ~1× because the
+blocks are below the GPU thresholds (no small-problem regression). The bare-kernel
+speedup is monotonic in size; Phase A captures its SVD part (4.3× on the SVD phase
+at χ=1024) and Phase B adds the theta part (7× on that phase), together turning the
+χ=1024 step from 7.2 s (CPU) into **1.63 s**.
 
 ## What was built
 
@@ -50,10 +56,13 @@ Phase-A result and directly motivates Phase B.
 | V orthonormal ‖VᴴV−I‖ | 3.0e-12 |
 | singular values vs BDCSVD (rel) | 5.7e-15 |
 
-`qx_tdvp_blocks_test` with `QX_GPU_MIN_BLK=1` (every block forced through the GPU)
-— the full TEBD / S(k,ω) / Loschmidt / conductivity / TDVP2 suite passes vs exact
-diagonalization at the **same tolerances** as CPU: staggered-mag 5.3e-6, energy
-conservation 1.9e-14, S(k,ω) 5.8e-3, Loschmidt 7.2e-4, conductivity 1.2e-3.
+`qx_tdvp_blocks_test` with `QX_GPU_MIN_BLK=1` **and** `QX_GPU_THETA_MINWORK=1` (every
+SVD *and* every theta block forced through the GPU) — the full TEBD / S(k,ω) /
+Loschmidt / conductivity / TDVP2 suite passes vs exact diagonalization at the **same
+tolerances** as CPU: staggered-mag 5.3e-6, energy conservation 1.8e-13, S(k,ω) 5.8e-3,
+Loschmidt 7.2e-4, conductivity 1.2e-3. (The GPU theta path is gated to the no-sv-
+absorption / dense-block case and otherwise falls back to the CPU `form_theta`, so
+the TDVP/spectral paths that pass `sv` are byte-for-byte the CPU result.)
 
 ## Benchmark 1 — bare Gram-SVD kernel (the thing Phase A changes)
 
@@ -91,9 +100,13 @@ faster, so the ratios below are conservative against a tuned CPU).
 | 128 | 128 | 4.85 | 4.67 | 1.04× | ~1.0× |
 | 256 | 256 | 21.31 | 21.86 | 0.97× | ~1.0× |
 | 512 | 512 | 99.48 | 59.53 | 1.67× | 1.23× |
-| 1024 | 1024 | 403.1 | 128.9 | **3.13×** | **4.51×** |
+| 1024 | 1024 | 403.1 | 128.9 | 3.13× | **4.51×** |
 
-The end-to-end margin turns upward and is decisively a win by χ=1024.
+The end-to-end margin turns upward and is decisively a win by χ=1024. (These are
+the Phase-A first pass — one run per config, and the χ=1024 GPU run happened to be
+cool; the controlled same-process 3-way in the Phase-B section gives the honest
+Phase-A χ=1024 number, 2.60×. The qualitative "grows with χ" trend is robust either
+way; what's thermally noisy is the *absolute* CPU baseline, not the GPU.)
 
 ## Why end-to-end < kernel — the Amdahl picture (and the Phase-B case)
 
@@ -118,12 +131,12 @@ as one `cusolverDnZheevjBatched` call (kills the CPU tail), and move `form_theta
 `apply_gate` onto the GPU (kills the 36%). The kernel benchmark (up to 86×) is the
 ceiling Phase B chases.
 
-## Phase B investigation — why the contained offload does NOT work (measured)
+## Phase B investigation — why the per-GEMM offload does NOT work (measured)
 
-The tempting low-risk Phase-B step is to offload just the `form_theta` block GEMMs
-(`Ai_s1 * Ai1`, the 36%) to cuBLAS, leaving the data flow otherwise unchanged. It
-was implemented (`gpu_matmul_z`, threshold `QX_GPU_GEMM_MIN`) and **measured to be a
-net loss**, then reverted:
+The tempting low-risk Phase-B step is to offload each `form_theta` block GEMM
+(`Ai_s1 * Ai1`, the 36%) to cuBLAS *individually*, leaving the data flow otherwise
+unchanged. It was implemented (a per-call `gpu_matmul_z`, threshold `QX_GPU_GEMM_MIN`)
+and **measured to be a net loss**, then reverted in favour of the per-block builder:
 
 | χ=512, N=32 (GPU SVD on) | theta time | step time |
 |---|---|---|
@@ -142,14 +155,58 @@ Two structural reasons, both confirming the plan's residency thesis:
    (one GEMM, no temporary) into alloc + GEMM + a second add pass — so even the CPU
    fallback regressed.
 
-**Conclusion:** theta-merge can only be accelerated by **GPU residency**, not
-per-call offload — form `theta` on the device from MPS tensors that are *already*
-resident (one A upload per bond, the per-sector GEMMs accumulated into device
-`theta` sub-blocks via `cublasZgemm` with `beta=1` into offset pointers, `theta`
-never round-tripping to the host), then feed it straight into the gate + SVD (also
-on-device). That is the real Phase-B architecture; the contained shortcut is a dead
-end. The host-pointer `gpu_matmul_z` primitive was removed — residency needs
-device-resident-pointer GEMMs, a different (correct) primitive.
+**Conclusion:** theta-merge can only be accelerated at the right *granularity* —
+not per GEMM, but **per large theta block, built entirely on the device** so a
+block's two spin-sector GEMMs share one upload and the O(n_row·kmid·n_col) work
+amortises the O(·²) transfer. That is Phase B (below).
+
+## Phase B — theta residency (implemented; the real win)
+
+`form_theta_block_z` (in `gpu_svd.cu`) builds one theta block on the GPU: upload
+`Ai1` once, run the up-sector GEMM (`Aup·Ai1` → rows `[0,dLup)`) and the dn-sector
+GEMM (`Adn·Ai1` → rows `[dLup,n_row)`) into a single device `theta` buffer (disjoint
+row ranges, `ldc=n_row`), download once. `form_theta` routes a block here when it is
+large (`n_row·kmid·n_col ≥ QX_GPU_THETA_MINWORK`, default ~2.1e6 ≈ 128³), the scalar
+is complex, and there is no sv-absorption (the TEBD case) — otherwise it uses the CPU
+path, so results are identical (validated against ED, and the GPU path is gated on the
+A blocks being dense, `rows == left-sector dim`). The small-block tail stays on the
+CPU (transfer-bound), exactly mirroring the SVD threshold.
+
+**Clean 3-way, one process, χ=1024, N=32, 60 steps** (identical work `nsvd=26310`,
+CPU run first so the single-thread baseline gets the coolest clocks → the GPU
+speedups are a conservative floor):
+
+| config | wall (s) | s/step | theta | svd | speedup vs CPU |
+|---|---|---|---|---|---|
+| Pure CPU (Eigen) | 431.8 | 7.20 | 87.1 | 337.1 | 1.0× |
+| Phase A (GPU SVD, CPU theta) | 166.1 | 2.77 | 79.3 | 78.6 | **2.60×** |
+| **Phase B (GPU SVD + GPU theta)** | **97.8** | **1.63** | **11.9** | 77.6 | **4.42×** |
+
+Phase B is **4.42× over single-thread CPU** and **1.70× over Phase A**. The theta
+phase collapses from a co-bottleneck (87 s, 20% of the CPU step / 48% of the Phase-A
+step) to **11.9 s (12%)** — a 7.3× phase speedup — and SVD is the clean 4.29× from
+Phase A (337→78.6 s). What's left (svd 80%, recomb 6%, gate 2%) is the next frontier:
+the small-block SVD tail (batched `cusolverDnZheevjBatched`) and keeping the A/U/V
+tensors resident across bonds to drop the remaining per-block transfers.
+
+**The win grows with χ** (clean cool-clock 3-ways, N=32, 60 steps, end-to-end wall):
+
+| χ | CPU (s) | Phase A (s) | Phase B (s) | A vs CPU | B vs CPU | B vs A |
+|---|---|---|---|---|---|---|
+| 256  | 22.3  | 22.1  | 22.8 | 1.01× | 0.98× | 0.97× |
+| 512  | 102.7 | 65.4  | 45.3 | 1.57× | 2.27× | 1.44× |
+| 1024 | 431.8 | 166.1 | 97.8 | 2.60× | **4.42×** | **1.70×** |
+
+At χ=256 the blocks are below both GPU thresholds, so all three are ~equal (correct:
+no transfer the compute can't pay back). From χ=512 up, both phases turn on and the
+margin climbs — the "advantage grows with χ" property, now end-to-end and with the
+theta bottleneck removed.
+
+> **Measurement note:** single-thread CPU times here are thermally noisy (boost vs
+> sustained clocks can swing absolute times ±~20% run to run); the SVD/GPU phase
+> timers are stable. All ratios above are from one back-to-back run on identical
+> work, which controls for that. The earlier Phase-A-only singleton (3.13× at χ=1024)
+> came from a cooler GPU run; the controlled 2.60× here is the honest Phase-A number.
 
 ## How to build & run
 
@@ -162,8 +219,11 @@ cmd /c "<VS>\VC\Auxiliary\Build\vcvars64.bat && \
 
 - `build-cuda/Release/qx_gpu_svd_test.exe` — correctness (exit 0 = pass).
 - `build-cuda/Release/qx_gpu_svd_bench.exe` — kernel scaling table.
-- `qx_tebd_bench.exe [n] [chi] [steps] [dt]` — end-to-end; set `QX_GPU_MIN_BLK`
-  (128 = GPU on large blocks; a huge value = CPU only) and `QX_TEBD_PROFILE=1`.
+- `qx_tebd_bench.exe [n] [chi] [steps] [dt]` — end-to-end; runtime knobs:
+  `QX_GPU_MIN_BLK` (SVD→GPU threshold, default 128; huge = CPU-only SVD),
+  `QX_GPU_THETA_MINWORK` (theta→GPU work threshold, default ~2.1e6; huge = CPU theta),
+  and `QX_TEBD_PROFILE=1` (per-phase timings + `ngpu`). The clean 3-way above toggles
+  exactly these two on one binary.
 
 For production / Python (`quantx.dll`), also build the `qx_capi` target; at runtime
 the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the CUDA
@@ -178,4 +238,9 @@ the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the C
   trends up with χ, but a direct measurement is the right deliverable.
 - **Real scalar (DMRG) stays on CPU** by design (the wrapper returns false for
   `S=double`); DMRG is already a strong CPU win and not the target.
-- **Phase B** is the clear next step (see above).
+- **Phase C (next):** with theta solved, the χ=1024 Phase-B step is 80% SVD + 6%
+  recombine. The remaining wins: (a) batch the small-block SVD tail with
+  `cusolverDnZheevjBatched` instead of leaving it on the CPU; (b) keep the A/U/V
+  block tensors resident on the device across bonds so theta/SVD/recombine stop
+  round-tripping through host memory each bond (the full-residency end state).
+- **Fair TeNPy comparison** still pending (no numpy/OpenBLAS/TeNPy on this box).
