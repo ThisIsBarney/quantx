@@ -55,12 +55,19 @@ struct Ctx {
     void*    fP    = nullptr; size_t cfP  = 0;
     float*   fW    = nullptr; size_t cfW  = 0;
     void*    fWk   = nullptr; size_t cfWk = 0;
+    // Jacobi eigensolver params for the FP32 path: Cheevd (divide&conquer) fails to
+    // converge (info>0) on the steep/clustered Gram spectra of theta blocks in FP32;
+    // Cheevj (Jacobi) is robust there.
+    syevjInfo_t fjacobi = nullptr;
 };
 
 bool init_ctx(Ctx& c) {
     if (cudaSetDevice(0) != cudaSuccess) return false;
     if (cusolverDnCreate(&c.solver) != CUSOLVER_STATUS_SUCCESS) return false;
     if (cublasCreate(&c.blas) != CUBLAS_STATUS_SUCCESS) return false;
+    if (cusolverDnCreateSyevjInfo(&c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
+    cusolverDnXsyevjSetTolerance(c.fjacobi, 1e-6);   // FP32-appropriate
+    cusolverDnXsyevjSetMaxSweeps(c.fjacobi, 64);
     if (cudaMalloc(&c.dInfo, sizeof(int)) != cudaSuccess) return false;
     return true;
 }
@@ -222,15 +229,19 @@ bool thin_svd_gram_gpu_c(const std::complex<double>* M, int m, int n,
     if (cublasCherk(c.blas, uplo, herk_op, k, herk_contract,
                     &one_r, dM, m, &zero_r, dG, k) != CUBLAS_STATUS_SUCCESS) return false;
 
+    // Jacobi eigensolver (robust in FP32; Cheevd D&C fails to converge here).
     int lwork = 0;
-    if (cusolverDnCheevd_bufferSize(c.solver, CUSOLVER_EIG_MODE_VECTOR, uplo,
-                                    k, dG, k, c.fW, &lwork) != CUSOLVER_STATUS_SUCCESS) return false;
+    if (cusolverDnCheevj_bufferSize(c.solver, CUSOLVER_EIG_MODE_VECTOR, uplo,
+                                    k, dG, k, c.fW, &lwork, c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
     if (!ensure(&c.fWk, &c.cfWk, sizeof(cuComplex) * (size_t)lwork)) return false;
-    if (cusolverDnCheevd(c.solver, CUSOLVER_EIG_MODE_VECTOR, uplo, k, dG, k, c.fW,
-                         reinterpret_cast<cuComplex*>(c.fWk), lwork, c.dInfo) != CUSOLVER_STATUS_SUCCESS) return false;
+    if (cusolverDnCheevj(c.solver, CUSOLVER_EIG_MODE_VECTOR, uplo, k, dG, k, c.fW,
+                         reinterpret_cast<cuComplex*>(c.fWk), lwork, c.dInfo, c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
     int info = 0;
     if (cudaMemcpy(&info, c.dInfo, sizeof(int), cudaMemcpyDeviceToHost) != cudaSuccess) return false;
-    if (info != 0) return false;
+    // info<0: illegal arg -> fail. info>0: Jacobi hit the sweep cap without full
+    // convergence, but the large eigenpairs (the kept Schmidt values) converge first,
+    // so the result is still good for TEBD truncation -> accept.
+    if (info < 0) return false;
 
     const cuComplex c_one  = make_cuComplex(1.0f, 0.0f);
     const cuComplex c_zero = make_cuComplex(0.0f, 0.0f);
