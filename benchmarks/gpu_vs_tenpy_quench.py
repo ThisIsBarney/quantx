@@ -16,10 +16,12 @@ Run (qxbench env):
 """
 from __future__ import annotations
 import os
-# pin single-thread BEFORE numpy/tenpy import (fair: TeNPy's optimal config)
+# pin single-thread BEFORE numpy/tenpy import (fair: TeNPy's optimal config).
+# Assign unconditionally -- setdefault would leave a caller's pre-set OMP_NUM_THREADS
+# in force while we still report threads=1, mislabeling the baseline.
 for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
            "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
-    os.environ.setdefault(_v, "1")
+    os.environ[_v] = "1"
 
 import re
 import subprocess

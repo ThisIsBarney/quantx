@@ -192,6 +192,8 @@ bool thin_svd_gram_gpu_z(const std::complex<double>* M, int m, int n,
             for (int r = 0; r < rowsP; ++r) scol[r] = pcol[r] * inv;
         } else {
             for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(0.0, 0.0);
+            sv[j] = 0.0;   // mode dropped: a zeroed factor column must carry sv=0 so the
+                           // global truncation neither keeps it nor mis-counts trunc error
         }
     }
     return true;
@@ -276,6 +278,8 @@ bool thin_svd_gram_gpu_c(const std::complex<double>* M, int m, int n,
             for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(pcol[r].real()*inv, pcol[r].imag()*inv);
         } else {
             for (int r = 0; r < rowsP; ++r) scol[r] = std::complex<double>(0.0, 0.0);
+            sv[j] = 0.0;   // mode dropped: a zeroed factor column must carry sv=0 so the
+                           // global truncation neither keeps it nor mis-counts trunc error
         }
     }
     return true;
