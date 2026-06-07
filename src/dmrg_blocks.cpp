@@ -92,17 +92,20 @@ static long long gpu_theta_minwork() {
     }();
     return v;
 }
-// Whether the GPU SVD should use the FP32 mixed-precision path (Phase C). Defaults
-// to the g_gpu_allow_fp32 gate (set by real-time TEBD entry points); env QX_GPU_FP32
-// forces 0=never / 1=always.
+// Whether the GPU SVD should use the FP32 mixed-precision path (Phase C). It is a
+// measured but modest win (~1.1-1.4x on the SVD phase; the Jacobi eigensolver is
+// iteration-bound, so it captures only part of the FP32 throughput advantage) and
+// it reduces precision, so it is OFF by default. Opt in with env QX_GPU_FP32:
+//   unset/0 -> FP64 always (default);  1 -> FP32 on the real-time TEBD paths only
+//   (where g_gpu_allow_fp32 is set);   >=2 -> FP32 always (testing).
 static bool gpu_use_fp32() {
     static int env = []() {
         const char* e = std::getenv("QX_GPU_FP32");
-        return e ? (std::atoi(e) ? 1 : 0) : -1;
+        return e ? std::atoi(e) : 0;
     }();
-    if (env == 0) return false;
-    if (env == 1) return true;
-    return g_gpu_allow_fp32;
+    if (env <= 0) return false;     // default: FP64
+    if (env >= 2) return true;      // force FP32 everywhere (testing)
+    return g_gpu_allow_fp32;        // env==1: FP32 only where single precision is tolerable
 }
 #endif
 

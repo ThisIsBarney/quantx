@@ -66,8 +66,8 @@ bool init_ctx(Ctx& c) {
     if (cusolverDnCreate(&c.solver) != CUSOLVER_STATUS_SUCCESS) return false;
     if (cublasCreate(&c.blas) != CUBLAS_STATUS_SUCCESS) return false;
     if (cusolverDnCreateSyevjInfo(&c.fjacobi) != CUSOLVER_STATUS_SUCCESS) return false;
-    cusolverDnXsyevjSetTolerance(c.fjacobi, 1e-6);   // FP32-appropriate
-    cusolverDnXsyevjSetMaxSweeps(c.fjacobi, 64);
+    cusolverDnXsyevjSetTolerance(c.fjacobi, 1e-5);   // FP32-appropriate
+    cusolverDnXsyevjSetMaxSweeps(c.fjacobi, 12);     // kept (large) eigenpairs converge early
     if (cudaMalloc(&c.dInfo, sizeof(int)) != cudaSuccess) return false;
     return true;
 }
