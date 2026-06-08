@@ -17,13 +17,14 @@ and Phase B pulls further ahead:
 | **bare SVD kernel** (GPU/CPU) | 5.6× | 17.4× | **45×** (86× at d=2048) |
 | **TEBD end-to-end, Phase A** (GPU SVD) | 1.01× | 1.57× | **2.60×** |
 | **TEBD end-to-end, Phase B** (GPU SVD + theta) | 0.98× | 2.27× | **4.42×** |
-| **QuantX-GPU+OpenBLAS vs TeNPy-MKL** (N=32, min-of-2) | 1.43× | 1.59× | **2.38×** (2.92× w/ FP32) |
+| **QuantX-GPU+OpenBLAS vs TeNPy-MKL** (N=32, min-of-2, post-fix) | 0.91× | 1.12× | **2.17×** (2.74× w/ FP32) |
 
 (First three rows: N=32 Néel quench, 60 steps, GPU-vs-CPU same-process 3-ways. Last
 row: the real opponent — QuantX(CUDA+OpenBLAS) vs single-thread TeNPy(MKL), min-of-2
-controlled; also 4.65× at χ=128 where C++ overhead beats TeNPy's Python, and **N=64
-χ=1024 = 4.56× / 5.86× FP32** — bigger N, bigger win. Absolute ratios are thermally
-noisy (±~2×) on this box; the χ-trend is robust.) The internal GPU-vs-CPU curves
+controlled, **post-LAPACKE-fix**; also ~4.7× at χ=128 where C++ overhead beats TeNPy's
+Python, and **N=64 χ=1024 = 2.22× / 2.66× FP32** — consistent with N=32 at large χ.
+Absolute ratios are thermally noisy (±~2×) on this box; the χ-trend is robust.) The
+internal GPU-vs-CPU curves
 **grow with χ** — the goal — and Phase B widens the lead (Phase-B/Phase-A =
 1.0→1.44→1.70× across the three χ). Small-χ stays ~1× because the
 blocks are below the GPU thresholds (no small-problem regression). The bare-kernel
@@ -288,41 +289,78 @@ Néel-quench physics on both engines (`benchmarks/gpu_vs_tenpy_quench.py`): TeNP
 `SpinChain` Jx=Jy=Jz=4 (= σ·σ), 2nd-order Trotter, `svd_min=1e-12`, **single-thread**
 (TeNPy's optimal, here backed by **Intel MKL** — a top-tier opponent, not OpenBLAS as
 earlier drafts said). QuantX is the CUDA **+ OpenBLAS** build (large blocks → GPU,
-small/sub-threshold blocks → OpenBLAS). Controlled protocol (consumer box, no clock
-pinning): **min-of-2 trials + cooldowns** (best trial = least-throttled = each side's
-true capability), 50 steps. `qx_tebd_bench` native exe vs in-process TeNPy.
+small/sub-threshold blocks → OpenBLAS GEMMs via `EIGEN_USE_BLAS`). Controlled protocol
+(consumer box, no clock pinning): **min-of-2 trials + cooldowns** (best trial =
+least-throttled = each side's true capability), 50 steps. `qx_tebd_bench` vs in-process
+TeNPy. Numbers below are **post-LAPACKE-fix** (Step 4 found and disabled a wrong-results
+LAPACKE path — see that section); they are lower than the buggy-LAPACKE drafts.
 
 **N=32** (TeNPy / QuantX-GPU / QuantX-FP32 seconds, then ratios):
 
 | χ | TeNPy(s) | QX-GPU(s) | QX-FP32(s) | GPU/TeNPy | FP32/TeNPy |
 |---|---|---|---|---|---|
-| 128  | 11.45 | 2.46 | 2.44 | **4.65×** | 4.70× |
-| 256  | 29.46 | 20.59 | 17.62 | 1.43× | 1.67× |
-| 512  | 63.40 | 39.85 | 29.02 | 1.59× | 2.18× |
-| 1024 | 198.47 | 83.44 | 68.02 | **2.38×** | **2.92×** |
+| 128  | 11.45 | 2.46 | 2.44 | **~4.7×** | ~4.7× |
+| 256  | 11.48 | 12.66 | 9.89 | 0.91× | 1.16× |
+| 512  | 34.53 | 30.70 | 21.96 | 1.12× | 1.57× |
+| 1024 | 139.42 | 64.36 | 50.94 | **2.17×** | **2.74×** |
 
-**N=64** (large-χ tail re-measured in a separate, cooler session — see the noise note):
+(χ=128 is from a separate session — no block clears the ≥96 LAPACKE band there, so the
+fix doesn't change it; it's the small-χ C++-overhead regime.)
+
+**N=64** (post-fix, min-of-2; χ=128 from the earlier session, LAPACKE-irrelevant there):
 
 | χ | TeNPy(s) | QX-GPU(s) | QX-FP32(s) | GPU/TeNPy | FP32/TeNPy |
 |---|---|---|---|---|---|
-| 128  | 13.13 | 6.82 | 7.42 | 1.92× | 1.77× |
-| 256  | 84.53 | 65.97 | 52.67 | 1.28× | 1.60× |
-| 512  | 289.70 | 129.41 | 102.28 | 2.24× | 2.83× |
-| 1024 | 1318.39 | 289.20 | 224.87 | **4.56×** | **5.86×** |
+| 128  | 13.13 | 6.82 | 7.42 | ~1.9× | ~1.8× |
+| 256  | 31.68 | 40.09 | 30.80 | 0.79× | 1.03× |
+| 512  | 110.26 | 101.99 | 73.44 | 1.08× | 1.50× |
+| 1024 | 517.59 | 232.99 | 194.33 | **2.22×** | **2.66×** |
 
-The honest, controlled picture (this **supersedes** the earlier single-run "4.04× at
-N=32 χ=1024" — that caught a *throttled* TeNPy; clean best-vs-best is **2.38×**):
+The honest, controlled picture (these **supersede** all earlier drafts: the single-run
+"4.04×" caught a *throttled* TeNPy, and the buggy-LAPACKE numbers were inflated):
 
-- **The advantage grows with χ in the GPU regime** (the plan's point). N=32: 256→1024
-  1.43→1.59→**2.38×** (FP32 2.92×). N=64: 256→1024 1.28→2.24→**4.56×** (FP32 **5.86×**).
-- **Bigger N → bigger large-χ win** (N=64 χ=1024 4.56× vs N=32 2.38×): at fixed χ more
-  sites = more O(χ³) work where the GPU compounds, against more of TeNPy's per-bond
-  Python overhead.
-- **Small χ is a separate C++-overhead win** (N=32 χ=128 **4.65×**): no block clears the
-  GPU threshold, so this is QuantX-CPU-OpenBLAS vs TeNPy's Python orchestration.
-- **A shallow mid-χ dip** (χ=256) sits between the two regimes; **Step 1 (OpenBLAS)
-  lifted it** (N=32 χ=256 ~0.8× CUDA-only → **1.43×**), so it's now a modest win rather
-  than a loss.
+- **The advantage grows with χ in the GPU regime** (the plan's point), consistently for
+  both sizes: N=32 256→1024 0.91→1.12→**2.17×** (FP32 2.74×); N=64 0.79→1.08→**2.22×**
+  (FP32 2.66×). At χ=1024 both land ~**2.2×** (FP32 ~2.7×).
+- **Small χ is a separate C++-overhead win** (N=32 χ=128 ~4.7×): no block clears the GPU
+  threshold, so this is QuantX-CPU vs TeNPy's Python orchestration.
+- **Mid χ (256) is ~break-even-to-slightly-below** (0.79–0.91×): blocks below the GPU
+  threshold, TeNPy's MKL efficient; this is the engine's weakest regime.
+- Earlier drafts showed bigger large-χ multiples (up to 4.56×); those were **thermally
+  inflated** (a throttled single-thread TeNPy ran 2–2.5× slower). Cool-clock min-of-2
+  gives ~2.2× — the honest number.
+- **A mid-χ dip** (χ=256) sits between the two regimes — **~break-even post-fix**
+  (N=32 0.91×). `EIGEN_USE_BLAS` gives a small lift over CUDA-only-Eigen but doesn't
+  clear 1× there. (An earlier draft showed 1.43×, but that came from the buggy LAPACKE
+  eigensolve, now disabled for correctness — see Step 4.)
+
+## Step 4 — observables inherit the speedup (spot-check) + a correctness fix
+
+Spot-check (`qx_obs_bench`): the spin-conductivity C(t)=⟨J(t)J(0)⟩ (block DMRG ground
+state → J|ψ₀⟩ MPO apply → real-time block TEBD), N=32, CPU vs GPU, results compared by
+fingerprint (C(0)=⟨J²⟩, Σ|C|):
+
+| χ | CPU (s) | GPU (s) | GPU/CPU | C(0) match |
+|---|---|---|---|---|
+| 512  | 92.6 | 56.5 | 1.64× | 4.857261 = 4.857261 ✓ |
+| 1024 | 456.8 | 94.6 | **4.83×** | 4.857269 ≈ 4.857272 ✓ (~6 digits) |
+
+So the observables **inherit the engine speedup** (4.83× at χ=1024) and the GPU path
+reproduces the CPU result — there is no ED at this χ, but GPU≡CPU is the consistency
+proof. (At χ=256 the observable is DMRG-ground-state-dominated, which is real-scalar
+CPU work identical both ways, so the GPU evolution barely moves the total — consistent
+with the mid-χ dip.)
+
+**Correctness fix found here (important).** The first χ=512 conductivity gave a *garbage*
+DMRG ground state (E0=−3395 vs the correct −55.99) — and on the CPU(OpenBLAS) path, not
+the GPU. Isolated to `thin_svd_lapacke`: this conda-forge OpenBLAS returns **wrong
+results from `LAPACKE_dsyevd/zheevd` at some block sizes** (χ=512 hit it; χ=256/1024
+happened to be fine). The ED test (n=6, blocks <96) never exercises the ≥96 LAPACKE
+path, so #141 shipped it. **Fix:** the LAPACK eigensolve is now opt-in (`QX_LAPACKE_MIN`,
+default disabled); `EIGEN_USE_BLAS` still routes the Gram trick's dominant GEMMs to
+OpenBLAS (the bulk of the small-χ speedup, and correct), with the eigensolve back on
+Eigen. χ=512 is now correct. **Follow-up: add a large-χ DMRG-energy regression test**
+(the gap that hid this).
 
 ## Limitations / next
 

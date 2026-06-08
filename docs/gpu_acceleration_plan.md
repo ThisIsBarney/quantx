@@ -322,16 +322,26 @@ Write results into `docs/gpu_acceleration_report.md` and update
    (`Cheevj`) captures only ~1.3-1.4× of the SVD phase (chi=512/1024) because of its
    iteration cost — so FP32 ships OFF by default (`QX_GPU_FP32=1` to opt in for
    real-time TEBD). Not the big win the 4090's FP64 weakness suggested.
-5. **vs-TeNPy headline — DONE.** `benchmarks/gpu_vs_tenpy_quench.py` (qxbench env,
-   tenpy 1.0.6 on **Intel MKL**). QuantX(CUDA+OpenBLAS) vs TeNPy-CPU (1 thread),
-   Néel quench, min-of-2 + cooldowns. The margin **grows with χ in the GPU regime**:
-   N=32 χ=256→1024 1.43→1.59→**2.38×** (FP32 2.92×); N=64 1.28→2.24→**4.56×** (FP32
-   **5.86×**) — bigger N, bigger win. Small χ is a separate C++-overhead win (N=32
-   χ=128 4.65×). The clean min-of-2 **corrected the earlier throttled-TeNPy 4.04×**
-   (→ 2.38×). Absolute ratios are thermally noisy on this consumer box (±~2×); the
-   χ-trend and the large-χ multi-× win are the robust results.
-6. **Phase D frontier:** batched small-block SVD (`cusolverDnZheevjBatched`) + full
-   A/U/V residency across bonds; link OpenBLAS with CUDA to lift the small-χ floor.
+5. **vs-TeNPy headline — DONE (honest, post-fix numbers).**
+   `benchmarks/gpu_vs_tenpy_quench.py` (qxbench env, tenpy 1.0.6 on **Intel MKL**).
+   QuantX(CUDA+OpenBLAS) vs TeNPy-CPU (1 thread), Néel quench, min-of-2 + cooldowns.
+   The margin **grows with χ in the GPU regime**, consistently for both sizes: N=32
+   χ=256→1024 0.91→1.12→**2.17×** (FP32 2.74×); N=64 0.79→1.08→**2.22×** (FP32 2.66×)
+   — both ~2.2× at χ=1024. Small χ is a separate C++-overhead win (χ=128 ~4.7×); mid χ
+   (256) is ~break-even. Iterating corrected two over-claims: the single-run "4.04×"
+   was a *throttled* TeNPy, and the buggy-LAPACKE drafts were inflated — cool min-of-2
+   gives ~2.2×. Absolute ratios remain thermally noisy on this consumer box (±~2×); the
+   χ-trend is the robust result.
+6. **Step 4 (observables + correctness) — DONE.** Spot-check `qx_obs_bench`: spin
+   conductivity at χ=1024 is **4.83× GPU/CPU** and GPU≡CPU to ~6 digits — observables
+   inherit the speedup. **Found+fixed a correctness bug:** this OpenBLAS's
+   `LAPACKE_*syevd` returns wrong results at some block sizes (garbage DMRG E0 at
+   χ=512); the ED test (blocks<96) never hit it. LAPACK eigensolve is now opt-in
+   (`QX_LAPACKE_MIN`, default off); `EIGEN_USE_BLAS` retained. TODO: large-χ DMRG-energy
+   regression test.
+7. **Phase D frontier (NOT worth it — measured):** at χ=1024 the GPU step is ~88%
+   compute / ~9% transfer, so full residency's ceiling is ~1.1×. The workload is
+   compute-bound; the real lever is FP32 (done) or a faster eigensolver.
 
 Note: Phase 0 can (and should) be done on this CPU machine; only Phases A/B need
 the GPU box.
