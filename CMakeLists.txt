@@ -377,6 +377,17 @@ if(QX_USE_CUDA)
   target_include_directories(qx_tebd_bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
   qx_set_config_output_dirs(qx_tebd_bench)
+
+  add_executable(qx_obs_bench src/obs_bench.cpp
+    src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+  target_link_libraries(qx_obs_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_gpu qx_blas)
+  target_compile_definitions(qx_obs_bench PRIVATE QX_USE_CUDA=1)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(qx_obs_bench PRIVATE OpenMP::OpenMP_CXX)
+  endif()
+  target_include_directories(qx_obs_bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/src)
+  qx_set_config_output_dirs(qx_obs_bench)
 endif()
 
 add_executable(qx_su2_vs_u1

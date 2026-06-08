@@ -1193,6 +1193,21 @@ static bool thin_svd_lapacke(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     }
     return true;
 }
+// Minimum block min-dim to route the Gram eigensolve to LAPACK xsyevd/xheevd.
+// DEFAULT: off. The conda-forge OpenBLAS on this box returns WRONG results from
+// LAPACKE_dsyevd/zheevd at some block sizes -- reproduced as a corrupted real DMRG
+// ground state (E0 garbage at chi=512, while chi=256/1024 happened to be fine), which
+// the ED test (n=6, tiny blocks <96) never exercises. EIGEN_USE_BLAS still routes the
+// Gram trick's dominant GEMMs (M Mᴴ, Mᴴ U) to OpenBLAS -- the bulk of the speedup and
+// numerically correct. Opt back in with QX_LAPACKE_MIN=<n> only on an OpenBLAS whose
+// LAPACKE eigensolver is verified correct.
+static int lapacke_min() {
+    static int v = []() {
+        const char* e = std::getenv("QX_LAPACKE_MIN");
+        return (e && std::atoi(e) > 0) ? std::atoi(e) : 1000000000;   // default: disabled
+    }();
+    return v;
+}
 #endif
 
 #ifdef QX_USE_CUDA
@@ -1258,7 +1273,7 @@ static BlockSVDResult block_svd_truncate(
 #ifdef QX_HAS_LAPACKE
         // Large blocks: LAPACK xgesdd (OpenBLAS) beats the Eigen Gram eigensolve;
         // small blocks keep the Gram path (lower overhead). Fall back on error.
-        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= 96 &&
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= lapacke_min() &&
             thin_svd_lapacke(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
             { g_tebd_nlapacke++; continue; }
 #endif
