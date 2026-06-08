@@ -333,8 +333,8 @@ Write results into `docs/gpu_acceleration_report.md` and update
    gives ~2.2×. Absolute ratios remain thermally noisy on this consumer box (±~2×); the
    χ-trend is the robust result.
 6. **Step 4 (observables + correctness) — DONE.** Spot-check `qx_obs_bench`: spin
-   conductivity at χ=1024 is **4.83× GPU/CPU** and GPU≡CPU to ~6 digits — observables
-   inherit the speedup. **Found+fixed a correctness bug:** this OpenBLAS's
+   conductivity at χ=1024 is **2.15× GPU vs true CPU** and GPU≡CPU to ~6 digits —
+   observables inherit the speedup (consistent with the vs-TeNPy ~2.2×). **Found+fixed a correctness bug:** this OpenBLAS's
    `LAPACKE_*syevd` returns wrong results at some block sizes (garbage DMRG E0 at
    χ=512); the ED test (blocks<96) never hit it. LAPACK eigensolve is now opt-in
    (`QX_LAPACKE_MIN`, default off); `EIGEN_USE_BLAS` retained. TODO: large-χ DMRG-energy
