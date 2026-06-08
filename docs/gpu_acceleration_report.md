@@ -337,19 +337,20 @@ The honest, controlled picture (these **supersede** all earlier drafts: the sing
 ## Step 4 — observables inherit the speedup (spot-check) + a correctness fix
 
 Spot-check (`qx_obs_bench`): the spin-conductivity C(t)=⟨J(t)J(0)⟩ (block DMRG ground
-state → J|ψ₀⟩ MPO apply → real-time block TEBD), N=32, CPU vs GPU, results compared by
-fingerprint (C(0)=⟨J²⟩, Σ|C|):
+state → J|ψ₀⟩ MPO apply → real-time block TEBD), N=32, **true CPU (both GPU paths off)
+vs full GPU, same session**, results compared by fingerprint (C(0)=⟨J²⟩, Σ|C|):
 
 | χ | CPU (s) | GPU (s) | GPU/CPU | C(0) match |
 |---|---|---|---|---|
-| 512  | 92.6 | 56.5 | 1.64× | 4.857261 = 4.857261 ✓ |
-| 1024 | 456.8 | 94.6 | **4.83×** | 4.857269 ≈ 4.857272 ✓ (~6 digits) |
+| 512  | 74.1 | 54.9 | 1.35× | 4.857261 = 4.857261 ✓ |
+| 1024 | 215.4 | 100.3 | **2.15×** | 4.857268 ≈ 4.857261 ✓ (~6 digits) |
 
-So the observables **inherit the engine speedup** (4.83× at χ=1024) and the GPU path
-reproduces the CPU result — there is no ED at this χ, but GPU≡CPU is the consistency
-proof. (At χ=256 the observable is DMRG-ground-state-dominated, which is real-scalar
-CPU work identical both ways, so the GPU evolution barely moves the total — consistent
-with the mid-χ dip.)
+So the observables **inherit the engine speedup** (2.15× at χ=1024, consistent with the
+vs-TeNPy ~2.2×) and the GPU path **reproduces the CPU result** — there is no ED at this
+χ, but GPU≡CPU to ~6 digits is the consistency proof. (Part of the observable is the
+real-scalar DMRG ground state, which is CPU both ways, so the GPU speedup applies only
+to the complex evolution — that is why the total ratio tracks the evolution's, not the
+larger bare-SVD multiples.)
 
 **Correctness fix found here (important).** The first χ=512 conductivity gave a *garbage*
 DMRG ground state (E0=−3395 vs the correct −55.99) — and on the CPU(OpenBLAS) path, not
