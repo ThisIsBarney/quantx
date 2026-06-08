@@ -24,12 +24,19 @@
 #define lapack_complex_float  std::complex<float>
 #define lapack_complex_double std::complex<double>
 #include <lapacke.h>
-// Force OpenBLAS single-threaded, once at load. The engine parallelises over Sz
-// blocks with its own OpenMP; a multi-threaded BLAS *inside* that loop oversubscribes
-// and access-violates (and Phase 0 found it catastrophic for performance too). This
-// makes the OpenBLAS build robust without requiring OPENBLAS_NUM_THREADS=1 in the env.
-extern "C" void openblas_set_num_threads(int);
-namespace { struct QxOpenBlasInit { QxOpenBlasInit() { openblas_set_num_threads(1); } } g_qx_openblas_init; }
+// The engine parallelises over Sz blocks with its own OpenMP; a multi-threaded BLAS
+// *inside* that loop oversubscribes and access-violates (and Phase 0 found it
+// catastrophic for performance too). Pin OpenBLAS to one thread only for the duration
+// of that loop, then RESTORE the host's setting -- so loading QuantX into a process
+// that also uses OpenBLAS (numpy/scipy/...) does not silently single-thread it (Codex).
+extern "C" { int openblas_get_num_threads(void); void openblas_set_num_threads(int); }
+namespace {
+struct OpenBlasSingleThreadGuard {
+    int prev;
+    OpenBlasSingleThreadGuard() : prev(openblas_get_num_threads()) { openblas_set_num_threads(1); }
+    ~OpenBlasSingleThreadGuard() { openblas_set_num_threads(prev); }
+};
+}
 #endif
 
 #ifdef QX_USE_CUDA
@@ -1214,6 +1221,11 @@ static BlockSVDResult block_svd_truncate(
     g_tebd_nsvd += (long long)svq.size();
     for (auto* p : svblk) g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)std::min(p->rows(), p->cols()));
     std::vector<SVDBlk> sb(svq.size());
+#ifdef QX_HAS_LAPACKE
+    // Pin OpenBLAS to 1 thread across this parallel loop (nested BLAS threads crash),
+    // restoring the host's setting when the guard leaves scope at function return.
+    OpenBlasSingleThreadGuard _blas_guard;
+#endif
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
     for (int i = 0; i < (int)svq.size(); ++i) {
 #ifdef QX_USE_CUDA
