@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <random>
 #include <set>
 #include <stdexcept>
@@ -31,10 +32,18 @@
 // that also uses OpenBLAS (numpy/scipy/...) does not silently single-thread it (Codex).
 extern "C" { int openblas_get_num_threads(void); void openblas_set_num_threads(int); }
 namespace {
+// OpenBLAS's thread count is process-global (no thread-local setter), so concurrent
+// guards would race -- one could restore the host's value while another's loop is
+// still running, re-enabling the nested threading that crashes (Codex). Serialise the
+// guarded regions with a mutex: it's uncontended in QuantX's normal single-driver use
+// and correct if a host ever calls QuantX from multiple threads at once.
+std::mutex g_openblas_mtx;
 struct OpenBlasSingleThreadGuard {
+    std::lock_guard<std::mutex> lk;          // held for the whole block-SVD loop
     int prev;
-    OpenBlasSingleThreadGuard() : prev(openblas_get_num_threads()) { openblas_set_num_threads(1); }
-    ~OpenBlasSingleThreadGuard() { openblas_set_num_threads(prev); }
+    OpenBlasSingleThreadGuard()
+        : lk(g_openblas_mtx), prev(openblas_get_num_threads()) { openblas_set_num_threads(1); }
+    ~OpenBlasSingleThreadGuard() { openblas_set_num_threads(prev); }  // restore under lock, then unlock
 };
 }
 #endif
