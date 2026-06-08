@@ -24,6 +24,6 @@ int main(int argc, char** argv) {
 
     std::printf("n=%-3d chi_max=%-5d steps=%-4d dt=%.4f | max_bond=%-5d wall=%8.3f s | %.4f s/step | QX_GPU_MIN_BLK=%s\n",
                 n, chi, steps, dt, r.max_bond, r.wall_time_s, r.wall_time_s/steps,
-                thr ? thr : "(unset->64)");
+                thr ? thr : "(unset->128)");
     return 0;
 }

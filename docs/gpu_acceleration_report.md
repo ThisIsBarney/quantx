@@ -17,11 +17,15 @@ and Phase B pulls further ahead:
 | **bare SVD kernel** (GPU/CPU) | 5.6× | 17.4× | **45×** (86× at d=2048) |
 | **TEBD end-to-end, Phase A** (GPU SVD) | 1.01× | 1.57× | **2.60×** |
 | **TEBD end-to-end, Phase B** (GPU SVD + theta) | 0.98× | 2.27× | **4.42×** |
-| **QuantX-GPU vs TeNPy-CPU** (the real opponent) | 0.8–1.1× | 1.0–2.0× | **3.0–4.0×** (≈3.2–4.5× w/ FP32) |
+| **QuantX-GPU+OpenBLAS vs TeNPy-MKL** (N=32, min-of-2) | 1.43× | 1.59× | **2.38×** (2.92× w/ FP32) |
 
-(N=32 Néel quench, 60 steps, vs single-thread CPU; clean same-process 3-ways, cool
-clocks.) Both curves **grow with χ** — the goal — and Phase B widens the lead
-(Phase-B/Phase-A = 1.0→1.44→1.70× across the three χ). Small-χ stays ~1× because the
+(First three rows: N=32 Néel quench, 60 steps, GPU-vs-CPU same-process 3-ways. Last
+row: the real opponent — QuantX(CUDA+OpenBLAS) vs single-thread TeNPy(MKL), min-of-2
+controlled; also 4.65× at χ=128 where C++ overhead beats TeNPy's Python, and **N=64
+χ=1024 = 4.56× / 5.86× FP32** — bigger N, bigger win. Absolute ratios are thermally
+noisy (±~2×) on this box; the χ-trend is robust.) The internal GPU-vs-CPU curves
+**grow with χ** — the goal — and Phase B widens the lead (Phase-B/Phase-A =
+1.0→1.44→1.70× across the three χ). Small-χ stays ~1× because the
 blocks are below the GPU thresholds (no small-problem regression). The bare-kernel
 speedup is monotonic in size; Phase A captures its SVD part (4.3× on the SVD phase
 at χ=1024) and Phase B adds the theta part (7× on that phase), together turning the
@@ -269,43 +273,69 @@ For production / Python (`quantx.dll`), also build the `qx_capi` target; at runt
 the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the CUDA
 `bin` dir is on PATH on this box).
 
-## The headline — QuantX-GPU vs TeNPy-CPU (the real opponent)
+**OpenBLAS threading caveat:** QuantX parallelises over Sz blocks with its own OpenMP,
+so it pins OpenBLAS to 1 thread (mutex-serialised, restored after the loop) — a
+multi-threaded BLAS *inside* that loop oversubscribes and crashes. Because OpenBLAS's
+thread count is *process-global*, a concurrent external numpy/scipy BLAS call on
+another host thread can be transiently affected. When embedding the OpenBLAS build in
+a multithreaded-BLAS host, run with `OPENBLAS_NUM_THREADS=1` (standard for OpenMP
+hosts) or build without `QX_ENABLE_BLAS`.
 
-The plan's actual deliverable: does the QuantX advantage **grow with χ against TeNPy**?
-Same Néel-quench physics on both engines (`benchmarks/gpu_vs_tenpy_quench.py`): TeNPy
+## The headline — QuantX-GPU+OpenBLAS vs TeNPy-CPU (the real opponent)
+
+The plan's deliverable: does the QuantX advantage **grow with χ against TeNPy**? Same
+Néel-quench physics on both engines (`benchmarks/gpu_vs_tenpy_quench.py`): TeNPy
 `SpinChain` Jx=Jy=Jz=4 (= σ·σ), 2nd-order Trotter, `svd_min=1e-12`, **single-thread**
-(TeNPy's optimal, OpenBLAS); QuantX via the native `qx_tebd_bench.exe`. N=32, 60 steps.
+(TeNPy's optimal, here backed by **Intel MKL** — a top-tier opponent, not OpenBLAS as
+earlier drafts said). QuantX is the CUDA **+ OpenBLAS** build (large blocks → GPU,
+small/sub-threshold blocks → OpenBLAS). Controlled protocol (consumer box, no clock
+pinning): **min-of-2 trials + cooldowns** (best trial = least-throttled = each side's
+true capability), 50 steps. `qx_tebd_bench` native exe vs in-process TeNPy.
 
-Two full runs (the box has a consumer CPU+GPU with **no clock pinning**, so absolute
-times — and the single-thread-CPU vs GPU *ratio* — swing with thermal state; run 2
-followed ~30 min of sustained benchmarking, so both engines were more throttled):
+**N=32** (TeNPy / QuantX-GPU / QuantX-FP32 seconds, then ratios):
 
-| χ | run 1 GPU/TeNPy | run 2 GPU/TeNPy | run 1 FP32/TeNPy | run 2 FP32/TeNPy |
-|---|---|---|---|---|
-| 256  | 0.78× | 1.11× | 0.97× | 1.16× |
-| 512  | 1.04× | 2.04× | 1.22× | 2.33× |
-| 1024 | **4.04×** | **2.96×** | **4.54×** | **3.15×** |
+| χ | TeNPy(s) | QX-GPU(s) | QX-FP32(s) | GPU/TeNPy | FP32/TeNPy |
+|---|---|---|---|---|---|
+| 128  | 11.45 | 2.46 | 2.44 | **4.65×** | 4.70× |
+| 256  | 29.46 | 20.59 | 17.62 | 1.43× | 1.67× |
+| 512  | 63.40 | 39.85 | 29.02 | 1.59× | 2.18× |
+| 1024 | 198.47 | 83.44 | 68.02 | **2.38×** | **2.92×** |
 
-Run 1 (cooler) absolute, FP64: TeNPy 20.9/50.3/408.6 s vs QuantX-GPU 26.7/48.6/101.2 s.
+**N=64** (large-χ tail re-measured in a separate, cooler session — see the noise note):
 
-Robust conclusion (both runs agree): the CPU-vs-TeNPy curve *reversed* with χ (Phase 0:
-χ=128 1.84× → χ=256 0.79×, i.e. we lost ground at scale); **on GPU the curve turns
-upward — monotonically in both runs — to ≈3–4× at χ=1024** (≈3.2–4.5× with opt-in
-FP32). The margin grows with χ, which is the regime that matters. The *absolute*
-multiple at χ=1024 is thermally sensitive (3.0–4.0×); the *trend* is not. (At χ=1024
-TeNPy-CPU ≈ our own Eigen-CPU 431.8 s — TeNPy's faster per-block BLAS is offset by its
-Python per-bond orchestration — so it's a fair like-for-like win, not a baseline
-artifact. A clock-pinned box, or min-of-N trials, would tighten the number.)
+| χ | TeNPy(s) | QX-GPU(s) | QX-FP32(s) | GPU/TeNPy | FP32/TeNPy |
+|---|---|---|---|---|---|
+| 128  | 13.13 | 6.82 | 7.42 | 1.92× | 1.77× |
+| 256  | 84.53 | 65.97 | 52.67 | 1.28× | 1.60× |
+| 512  | 289.70 | 129.41 | 102.28 | 2.24× | 2.83× |
+| 1024 | 1318.39 | 289.20 | 224.87 | **4.56×** | **5.86×** |
+
+The honest, controlled picture (this **supersedes** the earlier single-run "4.04× at
+N=32 χ=1024" — that caught a *throttled* TeNPy; clean best-vs-best is **2.38×**):
+
+- **The advantage grows with χ in the GPU regime** (the plan's point). N=32: 256→1024
+  1.43→1.59→**2.38×** (FP32 2.92×). N=64: 256→1024 1.28→2.24→**4.56×** (FP32 **5.86×**).
+- **Bigger N → bigger large-χ win** (N=64 χ=1024 4.56× vs N=32 2.38×): at fixed χ more
+  sites = more O(χ³) work where the GPU compounds, against more of TeNPy's per-bond
+  Python overhead.
+- **Small χ is a separate C++-overhead win** (N=32 χ=128 **4.65×**): no block clears the
+  GPU threshold, so this is QuantX-CPU-OpenBLAS vs TeNPy's Python orchestration.
+- **A shallow mid-χ dip** (χ=256) sits between the two regimes; **Step 1 (OpenBLAS)
+  lifted it** (N=32 χ=256 ~0.8× CUDA-only → **1.43×**), so it's now a modest win rather
+  than a loss.
 
 ## Limitations / next
 
+- **Thermal noise dominates the absolute ratios** on this consumer box (no clock
+  pinning, single-thread CPU turbo + GPU boost both drift with session thermal state).
+  Two min-of-2 measurements of N=64 χ=256/512 gave 0.55×/1.03× (hot) vs 1.28×/2.24×
+  (cool) — a ~2× spread. **Trust the χ-scaling trend and the large-χ multi-× win; treat
+  the exact multiple as ±~2×.** A clock-pinned/server box would tighten it.
 - **Real scalar (DMRG) stays on CPU** by design (the wrapper returns false for
   `S=double`); DMRG is already a strong CPU win and not the target.
-- **χ=256 is roughly break-even vs TeNPy (0.8–1.1×)**: the blocks are below the GPU
-  thresholds, so it runs effectively on CPU-Eigen (vs TeNPy's OpenBLAS). Linking
-  OpenBLAS (`QX_ENABLE_BLAS`) alongside CUDA would lift the small-χ floor.
-- **Thermal noise**: this box has no clock pinning, so single-thread-CPU vs GPU ratios
-  swing run-to-run; report min-of-N or pin clocks for a publication number.
+- **Mid-χ (χ≈256)** is the weakest regime (blocks below the GPU threshold, TeNPy's MKL
+  efficient). Levers: lower `QX_GPU_MIN_BLK` (watch the transfer crossover) or batch the
+  small blocks (`cusolverDnZheevjBatched`).
 - **Phase D frontier:** the χ=1024 step is now ~80% SVD; batch the small-block SVD
   tail (`cusolverDnZheevjBatched`) and keep A/U/V resident across bonds (drop the
   per-bond host round-trips) for the next step up.

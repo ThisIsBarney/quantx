@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <random>
 #include <set>
 #include <stdexcept>
@@ -24,6 +25,37 @@
 #define lapack_complex_float  std::complex<float>
 #define lapack_complex_double std::complex<double>
 #include <lapacke.h>
+// The engine parallelises over Sz blocks with its own OpenMP; a multi-threaded BLAS
+// *inside* that loop oversubscribes and access-violates (and Phase 0 found it
+// catastrophic for performance too). Pin OpenBLAS to one thread only for the duration
+// of that loop, then RESTORE the host's setting -- so loading QuantX into a process
+// that also uses OpenBLAS (numpy/scipy/...) does not silently single-thread it (Codex).
+extern "C" { int openblas_get_num_threads(void); void openblas_set_num_threads(int); }
+namespace {
+// OpenBLAS's thread count is process-global (no thread-local setter), so concurrent
+// guards would race -- one could restore the host's value while another's loop is
+// still running, re-enabling the nested threading that crashes (Codex). Serialise the
+// guarded regions with a mutex: it's uncontended in QuantX's normal single-driver use
+// and correct if a host ever calls QuantX from multiple threads at once.
+//
+// INHERENT LIMITATION: because the setting is process-global, while a QuantX block-SVD
+// loop runs the process OpenBLAS is momentarily 1 thread, so a *concurrent* external
+// OpenBLAS call (numpy/scipy on another host thread, sharing this OpenBLAS) can be
+// transiently single-threaded -- the mutex only serialises QuantX's own guards, it
+// cannot fence non-QuantX BLAS users. No global knob can avoid this; restoring the
+// host's value (above) handles the common sequential case (QuantX call, then numpy).
+// When embedding QuantX-with-OpenBLAS in a multithreaded BLAS host, run the process
+// with OPENBLAS_NUM_THREADS=1 (standard for OpenMP-parallel hosts) or build without
+// QX_ENABLE_BLAS.
+std::mutex g_openblas_mtx;
+struct OpenBlasSingleThreadGuard {
+    std::lock_guard<std::mutex> lk;          // held for the whole block-SVD loop
+    int prev;
+    OpenBlasSingleThreadGuard()
+        : lk(g_openblas_mtx), prev(openblas_get_num_threads()) { openblas_set_num_threads(1); }
+    ~OpenBlasSingleThreadGuard() { openblas_set_num_threads(prev); }  // restore under lock, then unlock
+};
+}
 #endif
 
 #ifdef QX_USE_CUDA
@@ -1208,6 +1240,11 @@ static BlockSVDResult block_svd_truncate(
     g_tebd_nsvd += (long long)svq.size();
     for (auto* p : svblk) g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)std::min(p->rows(), p->cols()));
     std::vector<SVDBlk> sb(svq.size());
+#ifdef QX_HAS_LAPACKE
+    // Pin OpenBLAS to 1 thread across this parallel loop (nested BLAS threads crash),
+    // restoring the host's setting when the guard leaves scope at function return.
+    OpenBlasSingleThreadGuard _blas_guard;
+#endif
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
     for (int i = 0; i < (int)svq.size(); ++i) {
 #ifdef QX_USE_CUDA
