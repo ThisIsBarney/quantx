@@ -281,6 +281,28 @@ target_include_directories(qx_dmrg_test PRIVATE
 )
 qx_set_config_output_dirs(qx_dmrg_test)
 
+# Large-block SVD-backend regression test: exercises the >=96-block CPU eigensolve
+# (Eigen vs LAPACK) that the ED suite (tiny blocks) never reaches. Links qx_blas so the
+# LAPACKE path can be validated via QX_LAPACKE_MIN.
+add_executable(qx_large_block_test
+  src/large_block_test.cpp
+  src/dmrg_mpo.cpp
+  src/dmrg_dense.cpp
+  src/dmrg_blocks.cpp
+)
+target_link_libraries(qx_large_block_test PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_large_block_test PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_large_block_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+qx_set_config_output_dirs(qx_large_block_test)
+# n=32 chi=512 reaches ~256-wide central blocks (>=96), exercising the large-block
+# eigensolve the ED suite never reaches; assert the known ground-state energy.
+add_test(NAME qx_large_block_test COMMAND qx_large_block_test 32 512 -55.989262 1e-3)
+
 add_executable(qx_dmrg_bench
   src/dmrg_bench.cpp
   src/dmrg_mpo.cpp
