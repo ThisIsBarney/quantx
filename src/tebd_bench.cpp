@@ -1,8 +1,9 @@
 // Phase A end-to-end benchmark (docs/gpu_acceleration_plan.md, benchmark step
 // "margin vs chi"): real-time Néel quench TEBD2 on the Heisenberg chain, timed at a
-// given bond dimension chi. CPU vs GPU is selected at runtime by QX_GPU_MIN_BLK
-// (huge => CPU only; 64 => GPU for the large blocks), so the exact same code path
-// is timed both ways. Pair with QX_TEBD_PROFILE=1 to see the SVD share / ngpu count.
+// given bond dimension chi. The GPU has TWO thresholds -- SVD (QX_GPU_MIN_BLK) and
+// theta build (QX_GPU_THETA_MINWORK) -- so a TRUE CPU run must set BOTH high; setting
+// only QX_GPU_MIN_BLK leaves the large theta blocks on the GPU (hybrid, not pure CPU).
+// Pair with QX_TEBD_PROFILE=1 to see the SVD share / ngpu count.
 //
 // Usage: qx_tebd_bench [n] [chi] [steps] [dt]   (defaults: 32 chi 60 0.05)
 #include "dmrg_internal.hpp"

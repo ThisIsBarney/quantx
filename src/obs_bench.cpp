@@ -2,7 +2,10 @@
 // observable inherits the GPU TEBD acceleration at large chi, and that the GPU path
 // reproduces the CPU result. Runs the spin-conductivity current-current correlator
 // C(t)=<J(t)J(0)> (the richest path: block DMRG ground state -> J|psi0> MPO apply ->
-// real-time block TEBD evolution). CPU vs GPU selected at runtime by QX_GPU_MIN_BLK.
+// real-time block TEBD evolution). GPU has TWO independent thresholds -- the SVD
+// dispatch (QX_GPU_MIN_BLK) and the theta build (QX_GPU_THETA_MINWORK) -- so a TRUE
+// CPU baseline must set BOTH high; setting only QX_GPU_MIN_BLK still routes large
+// theta blocks to the GPU (a hybrid, not pure CPU).
 //
 // Usage: qx_obs_bench [n] [chi] [steps] [dt]   (defaults: 32 256 60 0.0125)
 #include "dmrg_internal.hpp"
