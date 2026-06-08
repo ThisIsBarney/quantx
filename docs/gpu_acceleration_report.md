@@ -273,6 +273,14 @@ For production / Python (`quantx.dll`), also build the `qx_capi` target; at runt
 the loader must find `cusolver64_*.dll`/`cublas64_*.dll`/`cudart64_*.dll` (the CUDA
 `bin` dir is on PATH on this box).
 
+**OpenBLAS threading caveat:** QuantX parallelises over Sz blocks with its own OpenMP,
+so it pins OpenBLAS to 1 thread (mutex-serialised, restored after the loop) — a
+multi-threaded BLAS *inside* that loop oversubscribes and crashes. Because OpenBLAS's
+thread count is *process-global*, a concurrent external numpy/scipy BLAS call on
+another host thread can be transiently affected. When embedding the OpenBLAS build in
+a multithreaded-BLAS host, run with `OPENBLAS_NUM_THREADS=1` (standard for OpenMP
+hosts) or build without `QX_ENABLE_BLAS`.
+
 ## The headline — QuantX-GPU+OpenBLAS vs TeNPy-CPU (the real opponent)
 
 The plan's deliverable: does the QuantX advantage **grow with χ against TeNPy**? Same
