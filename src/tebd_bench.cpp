@@ -18,13 +18,14 @@ int main(int argc, char** argv) {
     int    steps = argc > 3 ? std::atoi(argv[3]) : 60;
     double dt    = argc > 4 ? std::atof(argv[4]) : 0.05;
 
-    const char* thr = std::getenv("QX_GPU_MIN_BLK");
+    const char* thr  = std::getenv("QX_GPU_MIN_BLK");
+    const char* thrT = std::getenv("QX_GPU_THETA_MINWORK");
     auto mpo = build_heisenberg_mpo(n, 1.0);
     // real-time Néel quench (imag=false); endpoints only (stride=0); J=1, delta=1.
     auto r = run_tebd2_blocks(mpo, n, dt, steps, chi, 1e-12, /*imag*/false, /*stride*/0, 1.0, 1.0);
 
-    std::printf("n=%-3d chi_max=%-5d steps=%-4d dt=%.4f | max_bond=%-5d wall=%8.3f s | %.4f s/step | QX_GPU_MIN_BLK=%s\n",
+    std::printf("n=%-3d chi_max=%-5d steps=%-4d dt=%.4f | max_bond=%-5d wall=%8.3f s | %.4f s/step | QX_GPU_MIN_BLK=%s QX_GPU_THETA_MINWORK=%s\n",
                 n, chi, steps, dt, r.max_bond, r.wall_time_s, r.wall_time_s/steps,
-                thr ? thr : "(unset->128)");
+                thr ? thr : "(unset->128)", thrT ? thrT : "(unset->2097152)");
     return 0;
 }
