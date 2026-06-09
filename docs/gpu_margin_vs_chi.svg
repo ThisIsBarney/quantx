@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="500" viewBox="0 0 780 500" font-family="Segoe UI, Arial, sans-serif">
+<rect width="780" height="500" fill="white"/>
+<line x1="78" y1="416.0" x2="530" y2="416.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="70" y="420.0" text-anchor="end" font-size="11" fill="#444">0.6×</text>
+<line x1="78" y1="357.7" x2="530" y2="357.7" stroke="#e6e6e6" stroke-width="1"/>
+<text x="70" y="361.7" text-anchor="end" font-size="11" fill="#444">1.0×</text>
+<line x1="78" y1="284.8" x2="530" y2="284.8" stroke="#e6e6e6" stroke-width="1"/>
+<text x="70" y="288.8" text-anchor="end" font-size="11" fill="#444">1.5×</text>
+<line x1="78" y1="211.8" x2="530" y2="211.8" stroke="#e6e6e6" stroke-width="1"/>
+<text x="70" y="215.8" text-anchor="end" font-size="11" fill="#444">2.0×</text>
+<line x1="78" y1="138.9" x2="530" y2="138.9" stroke="#e6e6e6" stroke-width="1"/>
+<text x="70" y="142.9" text-anchor="end" font-size="11" fill="#444">2.5×</text>
+<line x1="78" y1="66.0" x2="530" y2="66.0" stroke="#e6e6e6" stroke-width="1"/>
+<text x="70" y="70.0" text-anchor="end" font-size="11" fill="#444">3.0×</text>
+<line x1="78" y1="357.7" x2="530" y2="357.7" stroke="#999" stroke-width="1.4" stroke-dasharray="2,3"/>
+<text x="526" y="352.7" text-anchor="end" font-size="10" fill="#999">break-even vs TeNPy</text>
+<line x1="78.0" y1="416" x2="78.0" y2="421" stroke="#444" stroke-width="1"/>
+<text x="78.0" y="436" text-anchor="middle" font-size="11" fill="#444">256</text>
+<line x1="304.0" y1="416" x2="304.0" y2="421" stroke="#444" stroke-width="1"/>
+<text x="304.0" y="436" text-anchor="middle" font-size="11" fill="#444">512</text>
+<line x1="530.0" y1="416" x2="530.0" y2="421" stroke="#444" stroke-width="1"/>
+<text x="530.0" y="436" text-anchor="middle" font-size="11" fill="#444">1024</text>
+<line x1="78" y1="66" x2="78" y2="416" stroke="#444" stroke-width="1.2"/>
+<line x1="78" y1="416" x2="530" y2="416" stroke="#444" stroke-width="1.2"/>
+<text x="304" y="456" text-anchor="middle" font-size="13" fill="#222">bond dimension  χ</text>
+<text x="22" y="241" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 22 241)">speedup  (QuantX-GPU / TeNPy-CPU)</text>
+<text x="304" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Néel-quench TEBD: QuantX-GPU vs TeNPy-CPU (MKL, 1 thread)</text>
+<text x="304" y="46" text-anchor="middle" font-size="12" fill="#555">the margin grows with χ — Heisenberg chain, 50 steps</text>
+<polyline points="78.0,370.8 304.0,340.2 530.0,187.0" fill="none" stroke="#1f77b4" stroke-width="2.4"/>
+<circle cx="78.0" cy="370.8" r="4" fill="#1f77b4"/>
+<text x="78.0" y="362.8" text-anchor="middle" font-size="9.5" fill="#1f77b4">0.91</text>
+<circle cx="304.0" cy="340.2" r="4" fill="#1f77b4"/>
+<text x="304.0" y="332.2" text-anchor="middle" font-size="9.5" fill="#1f77b4">1.12</text>
+<circle cx="530.0" cy="187.0" r="4" fill="#1f77b4"/>
+<text x="530.0" y="179.0" text-anchor="middle" font-size="9.5" fill="#1f77b4">2.17</text>
+<polyline points="78.0,334.3 304.0,274.5 530.0,103.9" fill="none" stroke="#1f77b4" stroke-width="2.4" stroke-dasharray="6,4"/>
+<circle cx="78.0" cy="334.3" r="4" fill="#1f77b4"/>
+<text x="78.0" y="326.3" text-anchor="middle" font-size="9.5" fill="#1f77b4">1.16</text>
+<circle cx="304.0" cy="274.5" r="4" fill="#1f77b4"/>
+<text x="304.0" y="266.5" text-anchor="middle" font-size="9.5" fill="#1f77b4">1.57</text>
+<circle cx="530.0" cy="103.9" r="4" fill="#1f77b4"/>
+<text x="530.0" y="95.9" text-anchor="middle" font-size="9.5" fill="#1f77b4">2.74</text>
+<polyline points="78.0,388.3 304.0,346.0 530.0,179.7" fill="none" stroke="#d62728" stroke-width="2.4"/>
+<circle cx="78.0" cy="388.3" r="4" fill="#d62728"/>
+<text x="78.0" y="380.3" text-anchor="middle" font-size="9.5" fill="#d62728">0.79</text>
+<circle cx="304.0" cy="346.0" r="4" fill="#d62728"/>
+<text x="304.0" y="338.0" text-anchor="middle" font-size="9.5" fill="#d62728">1.08</text>
+<circle cx="530.0" cy="179.7" r="4" fill="#d62728"/>
+<text x="530.0" y="171.7" text-anchor="middle" font-size="9.5" fill="#d62728">2.22</text>
+<polyline points="78.0,353.3 304.0,284.8 530.0,115.6" fill="none" stroke="#d62728" stroke-width="2.4" stroke-dasharray="6,4"/>
+<circle cx="78.0" cy="353.3" r="4" fill="#d62728"/>
+<text x="78.0" y="345.3" text-anchor="middle" font-size="9.5" fill="#d62728">1.03</text>
+<circle cx="304.0" cy="284.8" r="4" fill="#d62728"/>
+<text x="304.0" y="276.8" text-anchor="middle" font-size="9.5" fill="#d62728">1.50</text>
+<circle cx="530.0" cy="115.6" r="4" fill="#d62728"/>
+<text x="530.0" y="107.6" text-anchor="middle" font-size="9.5" fill="#d62728">2.66</text>
+<rect x="84" y="66" width="186" height="74" fill="white" stroke="#ddd" rx="4"/>
+<line x1="92" y1="78" x2="114" y2="78" stroke="#1f77b4" stroke-width="2.4"/>
+<text x="120" y="82" font-size="10.5" fill="#333">N=32  GPU (FP64)</text>
+<line x1="92" y1="94" x2="114" y2="94" stroke="#1f77b4" stroke-width="2.4" stroke-dasharray="6,4"/>
+<text x="120" y="98" font-size="10.5" fill="#333">N=32  GPU (FP32, opt-in)</text>
+<line x1="92" y1="110" x2="114" y2="110" stroke="#d62728" stroke-width="2.4"/>
+<text x="120" y="114" font-size="10.5" fill="#333">N=64  GPU (FP64)</text>
+<line x1="92" y1="126" x2="114" y2="126" stroke="#d62728" stroke-width="2.4" stroke-dasharray="6,4"/>
+<text x="120" y="130" font-size="10.5" fill="#333">N=64  GPU (FP32, opt-in)</text>
+<text x="524" y="100" text-anchor="end" font-size="10" fill="#666">small χ (128): ~4.7× — C++-overhead regime (off-scale)</text>
+<text x="304" y="486" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">Consumer RTX 4090 + i5-13600KF, no clock pinning → absolute ratios are ±~2× thermally noisy; the upward χ-trend is robust.</text>
+</svg>
