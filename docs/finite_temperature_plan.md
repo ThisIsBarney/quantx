@@ -53,10 +53,11 @@ Represent the thermal density matrix `ρ(β) = e^{-βH}/Z` as a pure state in an
 enlarged Hilbert space (physical ⊗ ancilla):
 
 1. **Infinite-T state** `|ψ(β=0)⟩`: a product of locally maximally-entangled
-   physical–ancilla pairs, `⊗_i (|↑⟩_i|↓⟩_ā + |↓⟩_i|↑⟩_ā)/√2`. Tracing out the
-   ancilla gives `ρ ∝ I` (infinite temperature). **Pairing the ancilla spin with
-   *opposite* Sz keeps the whole purified state in the total-Sz=0 block** — i.e. it
-   stays inside the existing U(1) block-sparse structure with no new symmetry code.
+   physical–ancilla pairs, `⊗_i (|↑⟩_i|↓⟩_ā − |↓⟩_i|↑⟩_ā)/√2` (the singlet; any
+   relative phase works — it cancels in `Tr_anc`). Tracing out the ancilla gives
+   `ρ ∝ I` (infinite temperature). **Pairing the ancilla spin with *opposite* Sz
+   keeps the whole purified state in the total-Sz=0 block** — i.e. it stays
+   inside the existing U(1) block-sparse structure with no new symmetry code.
 2. **Cool:** imaginary-time evolve `|ψ(β)⟩ = e^{-βH_phys/2}|ψ(0)⟩` with H acting on
    the **physical legs only** (identity on ancillae). Reuses the imag-time TEBD path.
    Then `⟨O⟩_β = ⟨ψ(β)|O_phys|ψ(β)⟩` for any physical operator O.
@@ -64,19 +65,39 @@ enlarged Hilbert space (physical ⊗ ancilla):
    `C_{j,l0}(t; T) = ⟨ψ(β)| O_j e^{-i(H-⟨H⟩)t} O_{l0} |ψ(β)⟩`, 2D-FFT → `S(k,ω,T)`.
 
 **Lattice-doubling design decision (the first thing to settle):**
-- **(A) Composite d=4 site (recommended):** each MPS site carries physical⊗ancilla
+- **(A) Composite d=4 site:** each MPS site carries physical⊗ancilla
   (two spin-½ → local dim 4), Sz quantum number = `sz_phys + sz_anc`. The XXZ TEBD
   gate acts as `exp(τ h_phys) ⊗ I_anc` on neighboring composite sites — i.e. the
-  *nearest-neighbor* gate structure is preserved, which is exactly what the block
-  TEBD engine wants. Cost: introduce a d=4 local site type + the doubled MPO/gate.
+  *nearest-neighbor* gate structure is preserved. Cost: introduce a d=4 local site
+  type + the doubled MPO/gate.
 - **(B) Interleaved 2N chain:** physical and ancilla sites alternate on a length-2N
-  chain (odd bonds = the β=0 Bell pairs, even bonds = H). Keeps d=2 but makes the
-  physical coupling *next-nearest-neighbor*, needing swap gates or 3-site handling —
-  more friction with the NN TEBD path.
+  chain. Keeps d=2 but makes the physical coupling *next-nearest-neighbor*,
+  needing swap gates.
 
-Recommend **(A)**: it preserves the engine's NN-gate + U(1)-block invariants and
-localizes all new code to "a doubled local site + its gate," leaving the SVD /
-truncation / GPU hot loop untouched.
+**DECIDED: (B) interleaved — implemented in Phase F0.** The plan originally
+recommended (A), but reading the engine settled it the other way: **d=2 with ±1
+charge shifts is the engine's pervasive structural contract**, not a local
+parameter — `block_A[i][q_L] = Mat(dL, dR_up+dR_dn)` two-sector column layout,
+theta's 2-group rows/cols, `bt_expand_theta` / `bt_A_from_U` / `bt_center_*`,
+the overlap envs, and the GPU `form_theta` kernel all hard-code two spin
+sectors. Option (A) would have rewritten every kernel (and re-validated the GPU
+paths); option (B) turned out to need **zero engine changes**:
+- **SWAP is an Sz-conserving 2-site gate** that fits the existing homogeneous
+  `Gate` format exactly (`pdiag=1`, Sz=0 block `[[0,1],[1,0]]`), so
+  `apply_gate_theta` applies it unmodified.
+- **Swap-and-carry sweep:** L→R puts SWAP on even bonds (carrying each physical
+  site past its ancilla) and the XXZ half-gate on odd bonds; R→L mirrors it,
+  restoring the `p a p a …` layout each step. The sequence is a palindrome
+  (2nd-order Trotter) and bond order is monotonic, so the canonical centre stays
+  adjacent to the active bond — structurally identical to `tebd2_step_blocks`.
+  Cost: one extra SVD per physical bond per half-sweep (the swap), a constant
+  factor ≪ the d=4 rewrite risk.
+- **Ancilla pass-through MPO** (`build_xxz_purified_mpo`): odd sites carry a
+  diagonal identity on all 5 MPO bond states, preserving each state's
+  `HB_DELTA`, so environments / `H_eff` / `bt_energy` run on the purified chain
+  with no special cases.
+- The β=0 singlet Bell pairs `⊗ (|↑↓⟩−|↓↑⟩)/√2` keep every pair at total Sz 0
+  (bond QNs: 0 between pairs, ±1 inside), as required.
 
 **Entanglement-reduction trick (Phase F1, the make-or-break):** the naive purified
 real-time correlator's entanglement grows fast (you evolve a state that already
@@ -90,16 +111,22 @@ finite-T-tNRG/purification optimization and is essential for useful spectra.
 
 ## 3. Design — phases
 
-### Phase F0 — purified state + thermal **static** observables
+### Phase F0 — purified state + thermal **static** observables ✅ DONE
 Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
-- Composite d=4 site type + β=0 maximally-entangled init in the Sz=0 block.
-- Doubled XXZ gate `exp(τ h_phys)⊗I_anc`; reuse imag-time TEBD + block SVD.
-- Outputs: `E(T)`, specific heat `C(T)=dE/dT`, uniform susceptibility `χ(T)`,
-  static structure factor `⟨S^z_j S^z_l⟩_T`.
-- **Validation:** vs ED finite-T (small N, exact `Tr[O e^{-βH}]/Z`); vs the known
-  XXZ thermodynamics (Bethe-ansatz / QTM) for `E(T)`, `χ(T)` at larger N.
-- New API: `run_thermal_blocks(mpo, n, beta, dtau, chi_max, cutoff, ...)`
-  → `ThermalResult { temps/betas, E, C, chi, szsz... }`.
+- ~~Composite d=4 site~~ → **interleaved 2N chain** (see decision above):
+  `purified_init` (β=0 singlet Bell pairs, right-canonical, centre on site 0) +
+  `thermal_step_blocks` (swap-and-carry imag-time TEBD2) + `build_xxz_purified_mpo`.
+- Outputs per checkpoint: `E(β)`, `⟨Z_j⟩`, `⟨Z_c Z_j⟩` (c = central physical
+  site), `χ_zz = β·Var(Σ_j Z_j)/N` (all-pairs via overlap envs; `with_chi` flag —
+  it costs N overlap sweeps per checkpoint). `C(T) = dE/dT` is a finite-difference
+  post-process of `E(β)`.
+- **Validation:** `src/thermal_blocks_test.cpp` (ctest `qx_thermal_blocks_test`)
+  vs dense ED `Tr[O e^{-βH}]/Z`, N=8, Δ=1 (β→2) and Δ=0.5 (β→1): β=0 exact to
+  machine precision; worst finite-β errors errE≈9e-4, errZcZ≈2e-4, errChi≈2e-4
+  (Trotter-dominated at dβ=0.05); passes on Eigen-CPU, forced-GPU
+  (`QX_GPU_MIN_BLK=1`), and forced-LAPACKE (`QX_LAPACKE_MIN=1`) backends.
+- API: `run_thermal_blocks(n_phys, J, delta, dbeta, n_steps, chi_max, cutoff,
+  measure_stride, with_chi)` → `ThermalResult { betas, E, chi_zz, sz, szsz, … }`.
 
 ### Phase F1 — finite-T **dynamical** correlators → `S(k,ω,T)`, `χ''(ω,T)`
 - After cooling to β/2, apply source `σ^z_{l0}`, real-time evolve, measure
@@ -131,11 +158,12 @@ Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
 
 ## 4. Where to change (file/function map)
 
-- `src/dmrg_internal.hpp` — new result structs (`ThermalResult`,
+- `src/dmrg_internal.hpp` — new result structs (`ThermalResult` ✅,
   `SpectralThermalResult`) + declarations.
-- `src/dmrg_mpo.cpp` — composite d=4 site type; doubled XXZ gate
-  `exp(τ h_phys)⊗I_anc`; β=0 maximally-entangled init builder.
-- `src/dmrg_blocks.cpp` — `run_thermal_blocks`, `run_spectral_thermal_blocks`,
+- `src/dmrg_mpo.cpp` — `build_xxz_purified_mpo` ✅ (interleaved chain: physical
+  XXZ W at even sites, identity pass-through at odd/ancilla sites).
+- `src/dmrg_blocks.cpp` — `purified_init` + `thermal_step_blocks` +
+  `run_thermal` ✅; F1/F2: `run_spectral_thermal_blocks`,
   `run_conductivity_thermal_blocks`. These are **purified-state wrappers** around the
   existing imag/real TEBD step + `block_svd_truncate` (GPU-dispatched as today).
 - New benchmark `benchmarks/finite_T_vs_tenpy.py`; new validation
@@ -170,15 +198,19 @@ Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
   infinite-T `⟨O⟩` equals the trace average before any cooling.
 - **Finite-time ω-resolution** → window + optional linear prediction; report the
   effective ω-resolution honestly (don't over-resolve).
-- **d=4 site doubles block sizes** → re-tune `QX_GPU_MIN_BLK` / `QX_GPU_THETA_MINWORK`
-  for the doubled local dimension (more work per block → GPU fires sooner).
+- **The 2N-site chain doubles the sweep length** (and the swap bonds add one SVD
+  per physical bond per half-sweep) → a constant-factor overhead; the thermal χ
+  growth with β is what actually sets the cost. If profiling ever shows the swap
+  SVDs dominating, the swap bond's spectrum is a permutation of the unswapped
+  one (no new truncation), so a cheaper exact-permutation path is possible.
 
 ---
 
 ## 7. Recommended order of work
 
-1. **Phase F0** — composite-site purification + cooling + static thermodynamics,
-   validated vs ED and XXZ-thermo. (Establishes the purified state is correct.)
+1. **Phase F0** ✅ — interleaved-chain purification + swap-and-carry cooling +
+   static thermodynamics, validated vs ED. (Establishes the purified state is
+   correct.)
 2. **Phase F1** — finite-T `S(k,ω,T)` with the disentangler; detailed-balance +
    ED-Lehmann validation. (The scientific payoff.)
 3. **GPU headline benchmark** — margin vs (χ, β) vs TeNPy-CPU; write into

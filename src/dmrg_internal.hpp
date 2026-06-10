@@ -56,6 +56,14 @@ inline std::vector<MPOSite> build_heisenberg_mpo(int n, double J = 1.0) {
 }
 // Total spin-current operator J_tot = sum_l i*J(sigma+_l sigma-_{l+1} - h.c.).
 std::vector<MPOSite> build_current_mpo(int n, double J = 1.0);
+// XXZ Hamiltonian on the *interleaved purified* chain of 2*n_phys sites: physical
+// sites at even positions, ancillas at odd. Even sites carry the standard XXZ
+// W (couplings between physical neighbours pass over the intervening ancilla);
+// odd (ancilla) sites are a diagonal identity on all 5 MPO bond states, so the
+// Sz bond structure (HB_DELTA) -- and therefore every block-sparse environment
+// kernel -- is unchanged. H acts on physical sites only: ancillas are spectators.
+std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J = 1.0,
+                                            double delta = 1.0);
 std::vector<MPOSite> build_pauli_sum_mpo(int n,
     const std::vector<std::pair<double, std::string>>& terms);
 
@@ -128,5 +136,29 @@ ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, in
                                            double dt, int n_steps, int chi_max,
                                            double cutoff, int n_sweeps,
                                            double J = 1.0, double delta = 1.0);
+
+// Finite-temperature statics via ancilla purification (thermofield double):
+// rho(beta) = e^{-beta H}/Z represented as the pure state |psi(beta)> =
+// e^{-beta H/2} |psi0> on an interleaved 2*n_phys chain (physical at even sites,
+// ancilla at odd; |psi0> = product of (|ud>-|du>)/sqrt(2) Bell pairs = beta=0).
+// Cooling is imaginary-time block-TEBD2 with swap gates ferrying physical
+// neighbours together. Each step advances beta by dbeta. Per checkpoint
+// (every measure_stride steps; <=0 = endpoints only) it records, in Pauli
+// (sigma^z) units with H = J sum [XX+YY+delta ZZ]:
+//   E       = <H>_beta = Tr(H e^{-beta H})/Z                (per chain, not per site)
+//   sz[j]   = <Z_j>_beta            (physical sites only, j = 0..n_phys-1)
+//   szsz[j] = <Z_c Z_j>_beta        (c = n_phys/2, central physical site)
+//   chi_zz  = beta*(<M^2> - <M>^2)/n_phys,  M = sum_j Z_j   (only if with_chi;
+//             costs n_phys overlap sweeps per checkpoint)
+struct ThermalResult {
+    std::vector<double> betas, E, chi_zz;
+    std::vector<std::vector<double>> sz, szsz;   // [checkpoint][j_phys]
+    int n_phys = 0, c = 0, max_bond = 0;
+    double wall_time_s = 0;
+};
+ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
+                                 double dbeta, int n_steps, int chi_max,
+                                 double cutoff, int measure_stride = 1,
+                                 bool with_chi = true);
 
 } // namespace qx_dmrg
