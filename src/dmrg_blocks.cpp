@@ -2345,6 +2345,143 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
     return out;
 }
 
+// ===== Finite-temperature dynamics (F1): real-time purified evolution ========
+// One real-time swap-and-carry sweep over the interleaved chain. Bonds in
+// [lo,hi] carry a SWAP or the homogeneous gate `g` (by parity:
+// `(i%2==0)==swap_on_even` selects the SWAP); bonds outside [lo,hi] get an
+// identity (transport-only) step so the canonical centre still traverses the
+// whole chain and returns to site 0. The sweep is a palindrome (L->R then R->L
+// with half-gates), so it is 2nd-order in dt; SWAPs are exact permutations and
+// add no Trotter error. Real time is unitary -- no renormalization.
+//   swap_on_even=true,  lo=0, hi=n-3  -> physical sublattice (even sites)
+//   swap_on_even=false, lo=1, hi=n-2  -> ancilla  sublattice (odd  sites)
+// The physical sweep stops at n-3: the last physical pair is gated at bond n-3,
+// so bond n-2 carries no gate. Leaving it as identity transport (rather than a
+// SWAP that is undone next half-sweep) avoids a needless SWAP+SVD -- and any
+// doubt about a chi-limited SVD there perturbing the state (the terminal bond's
+// Schmidt rank is <=2, so it never actually truncates, but this keeps it clean
+// and matches F0's thermal_step_blocks range).
+static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
+                     int chi_max, double cutoff, double J, double delta) {
+    const int n = s.n;
+    const Gate gxxz = build_xxz_gate(J, delta, tau_half);
+    const Gate gswap{S(1), S(0), S(1), S(1), S(0)};
+    const std::map<int,RVec> no_sv;
+    auto& A = s.A; auto& bond = s.bond;
+    auto pick = [&](int i) -> const Gate* {
+        if (i < lo || i > hi) return nullptr;                // identity transport
+        bool is_swap = ((i % 2 == 0) == swap_on_even);
+        return is_swap ? &gswap : &gxxz;
+    };
+    auto theta_at = [&](int i, const Gate* g) {
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+        bt_expand_theta(theta, bond[i], bond[i+2]);
+        if (g) apply_gate_theta(theta, bond[i], bond[i+2], *g);
+        return block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff,
+                                  /*allow_fp32=*/true);
+    };
+    for (int i = 0; i <= n - 2; ++i) {                       // left -> right
+        auto svd = theta_at(i, pick(i));
+        bond[i+1] = svd.new_mid_bs;
+        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1]);
+        A[i+1] = bt_center_LR(svd);
+    }
+    for (int i = n - 2; i >= 0; --i) {                       // right -> left
+        auto svd = theta_at(i, pick(i));
+        bond[i+1] = svd.new_mid_bs;
+        A[i+1] = svd.Vt;
+        A[i]   = bt_center_RL(svd, bond[i], bond[i+1]);
+    }
+}
+
+// One symmetric real-time step e^{-i dt H_phys} (and, if `disentangle`, the
+// backward-ancilla gauge e^{+i dt H_anc}). H_phys and H_anc act on disjoint
+// sublattices and therefore commute exactly, so the two sweeps compose with no
+// added Trotter error -- the only error is the standard O(dt^3) within each
+// nearest-neighbour sweep. Each gate-bond is hit twice (L->R + R->L) with
+// tau_half, so a physical pair sees e^{-i dt h} and an ancilla pair e^{+i dt h}.
+static void purified_rt_step(BMPS& s, double dt, int chi_max, double cutoff,
+                             double J, double delta, bool disentangle) {
+    const int n = s.n;
+    rt_sweep(s, /*swap_on_even=*/true,  /*lo=*/0, /*hi=*/n-3, Cx(0, -dt/2),
+             chi_max, cutoff, J, delta);                     // physical forward
+    if (disentangle)
+        rt_sweep(s, /*swap_on_even=*/false, /*lo=*/1, /*hi=*/n-2, Cx(0, +dt/2),
+                 chi_max, cutoff, J, delta);                 // ancilla backward
+}
+
+struct SpectralThermalOut {
+    std::vector<double> times;
+    std::vector<std::vector<double>> C_re, C_im;
+    std::vector<int> bond_t, bond_a_t, bond_b_t;
+    int l0 = 0, n_phys = 0, max_bond = 0;
+    double beta = 0, E = 0, wall_s = 0;
+    bool disentangled = false;
+};
+
+// Finite-T dynamical structure factor C_{j,l0}(t;T). See the header comment on
+// run_spectral_thermal_blocks for the physics.
+static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delta,
+                                               double beta, int n_cool,
+                                               double dt, int n_steps, int chi_max,
+                                               double cutoff, bool disentangle) {
+    static_assert(std::is_same_v<S, Cx>, "thermal spectral requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    const int n = 2 * n_phys, l0 = n_phys / 2;
+    SpectralThermalOut out; out.n_phys = n_phys; out.l0 = l0;
+    out.beta = beta; out.disentangled = disentangle;
+    auto mpo = qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta);
+
+    auto bond_of = [](const BMPS& st) {
+        int mb = 0; for (auto& b : st.bond) { int t = 0; for (int d : b.dims) t += d;
+            mb = std::max(mb, t); }
+        return mb;
+    };
+
+    // 1. cool to |psi(beta)> = e^{-beta H/2}|psi0>  (n_cool imag-time steps,
+    //    each e^{-dtau H}; total e^{-(n_cool*dtau) H} = e^{-(beta/2) H}).
+    BMPS psi = purified_init(n_phys);
+    const double dtau = beta / (2.0 * std::max(1, n_cool));   // per-step argument
+    for (int k = 0; k < n_cool; ++k)
+        thermal_step_blocks(psi, dtau, chi_max, cutoff, J, delta);
+    rebuild_mpo_envs(psi, mpo);
+    out.E = bt_energy(psi, mpo);
+
+    // normalisation Z = <psi|psi> (overlap convention; constant in t)
+    double Z;
+    { auto OL = overlap_left_envs(psi, psi);
+      Z = OL[n].count(0) ? rp(OL[n].at(0)(0,0)) : 1.0; }
+    if (std::abs(Z) < 1e-300) Z = 1.0;
+
+    // 2. A = |psi(beta)>, B = sigma^z_{l0}|psi(beta)>  (physical site 2*l0)
+    BMPS A = psi, B = psi;
+    apply_sz_site(B, 2 * l0);
+
+    // 3. real-time evolve both; measure C_{j,l0}(t) = <A(t)|sigma^z_{2j}|B(t)>/Z
+    auto t0 = clk::now();
+    for (int step = 0; step <= n_steps; ++step) {
+        auto OL = overlap_left_envs(A, B);
+        auto OR = overlap_right_envs(A, B);
+        auto ov = measure_sz_all(A, B, OL, OR);
+        std::vector<double> re(n_phys), im(n_phys);
+        for (int p = 0; p < n_phys; ++p) {
+            S c = ov[2*p] / S(Z); re[p] = c.real(); im[p] = c.imag();
+        }
+        out.C_re.push_back(re); out.C_im.push_back(im);
+        out.times.push_back(step * dt);
+        int ba = bond_of(A), bb = bond_of(B);
+        out.bond_a_t.push_back(ba); out.bond_b_t.push_back(bb);
+        out.bond_t.push_back(std::max(ba, bb));
+        out.max_bond = std::max(out.max_bond, std::max(ba, bb));
+        if (step < n_steps) {
+            purified_rt_step(A, dt, chi_max, cutoff, J, delta, disentangle);
+            purified_rt_step(B, dt, chi_max, cutoff, J, delta, disentangle);
+        }
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    return out;
+}
+
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
@@ -2869,6 +3006,22 @@ ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
     r.sz = o.sz; r.szsz = o.szsz;
     r.n_phys = o.n_phys; r.c = o.c; r.max_bond = o.max_bond;
     r.wall_time_s = o.wall_s;
+    return r;
+}
+
+// Entry point: finite-T dynamical structure factor S(k,omega,T) data (F1).
+SpectralThermalResult run_spectral_thermal_blocks(
+        int n_phys, double J, double delta, double beta, int n_cool,
+        double dt, int n_steps, int chi_max, double cutoff, bool disentangle) {
+    auto o = BlockDMRG<Cx>::run_spectral_thermal(n_phys, J, delta, beta, n_cool,
+                                                 dt, n_steps, chi_max, cutoff,
+                                                 disentangle);
+    SpectralThermalResult r;
+    r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
+    r.bond_t = o.bond_t; r.bond_a_t = o.bond_a_t; r.bond_b_t = o.bond_b_t;
+    r.l0 = o.l0; r.n_phys = o.n_phys; r.max_bond = o.max_bond;
+    r.beta = o.beta; r.E = o.E; r.wall_time_s = o.wall_s;
+    r.disentangled = o.disentangled;
     return r;
 }
 

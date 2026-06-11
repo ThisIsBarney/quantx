@@ -161,4 +161,35 @@ ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
                                  double cutoff, int measure_stride = 1,
                                  bool with_chi = true);
 
+// Finite-temperature dynamical structure factor (F1): the purified-state
+// analogue of run_spectral_blocks. The state is cooled to |psi(beta)> =
+// e^{-beta H/2}|psi0> (n_cool imaginary-time steps), the central physical site
+// l0 is hit with sigma^z, and BOTH the unsourced state A = e^{-iHt}|psi(beta)>
+// and the sourced state B = e^{-iHt} sigma^z_{l0}|psi(beta)> are real-time
+// evolved (the finite-T bra is not stationary, unlike T=0). The emitted
+//   C_{j,l0}(t;T) = <A(t)| sigma^z_j |B(t)> / Z = <sigma^z_j(t) sigma^z_{l0}(0)>_beta
+// is ready for a space+time FFT into S(k,omega,T); chi''(k,omega,T) =
+// (1 - e^{-beta omega}) S(k,omega,T).
+//
+// disentangle: apply the Karrasch-Bardarson-Moore backward-ancilla evolution
+// (auxiliary +H on the ancilla sublattice). H_anc commutes with H_phys and with
+// the physical sigma^z operators, so the correlator is exactly invariant in the
+// absence of truncation, but the operator-space entanglement -- hence the bond
+// dimension at fixed accuracy -- is substantially reduced (->longer reachable t
+// / lower T). bond_t[t] records the max bond dimension at each step (for the
+// disentangler benchmark). All indices j are physical-site indices 0..n_phys-1.
+struct SpectralThermalResult {
+    std::vector<double> times;                   // length n_steps+1
+    std::vector<std::vector<double>> C_re, C_im; // C_re[t][j], C_im[t][j]
+    std::vector<int> bond_t;                     // max(bond_a, bond_b) per step
+    std::vector<int> bond_a_t, bond_b_t;         // bond dims of A (unsourced) / B (sourced)
+    int l0 = 0, n_phys = 0, max_bond = 0;
+    double beta = 0, E = 0, wall_time_s = 0;
+    bool disentangled = false;
+};
+SpectralThermalResult run_spectral_thermal_blocks(
+    int n_phys, double J, double delta, double beta, int n_cool,
+    double dt, int n_steps, int chi_max, double cutoff,
+    bool disentangle = true);
+
 } // namespace qx_dmrg
