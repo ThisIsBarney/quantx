@@ -2482,6 +2482,76 @@ static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delt
     return out;
 }
 
+// ===== Finite-temperature transport (F2): current-current correlator =========
+struct ConductivityThermalOut {
+    std::vector<double> times, C_re, C_im;
+    std::vector<int> bond_t;
+    int n_phys = 0, max_bond = 0;
+    double beta = 0, E = 0, wall_s = 0;
+    bool disentangled = false;
+};
+
+// Spin conductivity correlator C(t;T) = <J(t)J(0)>_beta on the purified chain.
+// Structurally the F1 spectral routine with the local sigma^z source replaced by
+// the extensive total current J (a 5-wide MPO): cool to |psi(beta)>, set
+// B = J|psi>, real-time evolve both A = e^{-iHt}|psi> and B = e^{-iHt}J|psi>, and
+// measure C(t) = <A(t)|J|B(t)> = <J A(t)|B(t)> (J Hermitian) via apply_mpo_to_bmps
+// + an overlap, normalised by Z = <psi|psi>.
+static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, double delta,
+                                                       double beta, int n_cool,
+                                                       double dt, int n_steps, int chi_max,
+                                                       double cutoff, bool disentangle) {
+    static_assert(std::is_same_v<S, Cx>, "thermal conductivity requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    const int n = 2 * n_phys;
+    ConductivityThermalOut out; out.n_phys = n_phys;
+    out.beta = beta; out.disentangled = disentangle;
+    auto Hmpo = qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta);
+    auto Jmpo = qx_dmrg::build_current_purified_mpo(n_phys, J);
+
+    auto bond_of = [](const BMPS& st) {
+        int mb = 0; for (auto& b : st.bond) { int t = 0; for (int d : b.dims) t += d;
+            mb = std::max(mb, t); }
+        return mb;
+    };
+
+    // 1. cool to |psi(beta)> = e^{-beta H/2}|psi0>
+    BMPS psi = purified_init(n_phys);
+    const double dtau = beta / (2.0 * std::max(1, n_cool));
+    for (int k = 0; k < n_cool; ++k)
+        thermal_step_blocks(psi, dtau, chi_max, cutoff, J, delta);
+    rebuild_mpo_envs(psi, Hmpo);
+    out.E = bt_energy(psi, Hmpo);
+
+    double Z;
+    { auto OL = overlap_left_envs(psi, psi);
+      Z = OL[n].count(0) ? rp(OL[n].at(0)(0, 0)) : 1.0; }
+    if (std::abs(Z) < 1e-300) Z = 1.0;
+
+    // 2. A = |psi>, B = J|psi>
+    BMPS A = psi;
+    BMPS B = apply_mpo_to_bmps(psi, Jmpo, chi_max, cutoff);
+
+    // 3. evolve both; C(t) = <J A(t)|B(t)>/Z
+    auto t0 = clk::now();
+    for (int step = 0; step <= n_steps; ++step) {
+        BMPS JA = apply_mpo_to_bmps(A, Jmpo, chi_max, cutoff);
+        auto OL = overlap_left_envs(JA, B);
+        S ov = OL[n].count(0) ? OL[n].at(0)(0, 0) : S(0);
+        S c = ov / S(Z);
+        out.times.push_back(step * dt);
+        out.C_re.push_back(c.real()); out.C_im.push_back(c.imag());
+        out.bond_t.push_back(std::max(bond_of(A), bond_of(B)));
+        out.max_bond = std::max(out.max_bond, out.bond_t.back());
+        if (step < n_steps) {
+            purified_rt_step(A, dt, chi_max, cutoff, J, delta, disentangle);
+            purified_rt_step(B, dt, chi_max, cutoff, J, delta, disentangle);
+        }
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    return out;
+}
+
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
@@ -3020,6 +3090,21 @@ SpectralThermalResult run_spectral_thermal_blocks(
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
     r.bond_t = o.bond_t; r.bond_a_t = o.bond_a_t; r.bond_b_t = o.bond_b_t;
     r.l0 = o.l0; r.n_phys = o.n_phys; r.max_bond = o.max_bond;
+    r.beta = o.beta; r.E = o.E; r.wall_time_s = o.wall_s;
+    r.disentangled = o.disentangled;
+    return r;
+}
+
+// Entry point: finite-T spin conductivity current-current correlator (F2).
+ConductivityThermalResult run_conductivity_thermal_blocks(
+        int n_phys, double J, double delta, double beta, int n_cool,
+        double dt, int n_steps, int chi_max, double cutoff, bool disentangle) {
+    auto o = BlockDMRG<Cx>::run_conductivity_thermal(n_phys, J, delta, beta, n_cool,
+                                                     dt, n_steps, chi_max, cutoff,
+                                                     disentangle);
+    ConductivityThermalResult r;
+    r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im; r.bond_t = o.bond_t;
+    r.n_phys = o.n_phys; r.max_bond = o.max_bond;
     r.beta = o.beta; r.E = o.E; r.wall_time_s = o.wall_s;
     r.disentangled = o.disentangled;
     return r;

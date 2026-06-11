@@ -64,6 +64,11 @@ std::vector<MPOSite> build_current_mpo(int n, double J = 1.0);
 // kernel -- is unchanged. H acts on physical sites only: ancillas are spectators.
 std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J = 1.0,
                                             double delta = 1.0);
+// Total spin-current operator on the interleaved purified chain (physical sites
+// even, ancilla identity pass-through), for finite-T transport. Same HB_DELTA
+// bond structure as build_xxz_purified_mpo, so apply_mpo_to_bmps applies it
+// unchanged. J_tot = sum_l i*J(sigma+_{2l} sigma-_{2l+2} - h.c.) over physical l.
+std::vector<MPOSite> build_current_purified_mpo(int n_phys, double J = 1.0);
 std::vector<MPOSite> build_pauli_sum_mpo(int n,
     const std::vector<std::pair<double, std::string>>& terms);
 
@@ -188,6 +193,27 @@ struct SpectralThermalResult {
     bool disentangled = false;
 };
 SpectralThermalResult run_spectral_thermal_blocks(
+    int n_phys, double J, double delta, double beta, int n_cool,
+    double dt, int n_steps, int chi_max, double cutoff,
+    bool disentangle = true);
+
+// Finite-temperature spin conductivity (F2): the current-current correlator
+//   C(t;T) = <J(t) J(0)>_beta = <psi(beta)| e^{iHt} J e^{-iHt} J |psi(beta)> / Z
+// on the purified chain, J the total spin current. Its FFT is the optical
+// conductivity sigma(omega,T); the t->inf plateau / zero-frequency weight is the
+// Drude weight D(T) (the integrable-XXZ ballistic-vs-diffusive question). Like
+// the structure factor, the finite-T bra is not stationary, so both the
+// unsourced A = e^{-iHt}|psi> and the sourced B = e^{-iHt} J|psi> are real-time
+// evolved; C(t) = <A(t)|J|B(t)> = <J A(t)|B(t)>. disentangle: KBM ancilla-backward
+// gauge (cancels A's real-time growth -- a compute win, exactly as in F1).
+struct ConductivityThermalResult {
+    std::vector<double> times, C_re, C_im;
+    std::vector<int> bond_t;
+    int n_phys = 0, max_bond = 0;
+    double beta = 0, E = 0, wall_time_s = 0;
+    bool disentangled = false;
+};
+ConductivityThermalResult run_conductivity_thermal_blocks(
     int n_phys, double J, double delta, double beta, int n_cool,
     double dt, int n_steps, int chi_max, double cutoff,
     bool disentangle = true);
