@@ -109,6 +109,54 @@ std::vector<MPOSite> build_current_mpo(int n, double J) {
     return mpo;
 }
 
+// XXZ MPO on the interleaved purified chain (2*n_phys sites): even sites carry the
+// physical XXZ couplings, odd (ancilla) sites are identity pass-throughs on every
+// MPO bond state, so an "in-progress" term emitted at physical site 2i hops over
+// ancilla 2i+1 and completes at physical site 2i+2. The identity is Sz-diagonal
+// and keeps each bond state's HB_DELTA, so the block-sparse engine (environments,
+// H_eff, energies) runs on the purified chain completely unchanged.
+//
+// Note the last *physical* site (2*n_phys-2) still uses the full bulk W (it can
+// "emit" σ±/Z to its right), but those in-progress states die at the right
+// boundary (col 0 of the final ancilla's identity), so H is exactly
+//   J sum_{i<n_phys-1} [ 2(σ+_{2i}σ-_{2i+2} + h.c.) + delta Z_{2i} Z_{2i+2} ].
+std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J, double delta) {
+    const int chi = 5, n = 2 * n_phys;
+    Mat2 sp; sp << 0, 1, 0, 0;   // σ+ = |↑⟩⟨↓|  (ΔSz = +2)
+    Mat2 sm; sm << 0, 0, 1, 0;   // σ- = |↓⟩⟨↑|  (ΔSz = -2)
+
+    // Physical-site W (same as build_xxz_mpo bulk).
+    std::array<std::array<Mat2, 5>, 5> Wp{};
+    for (auto& row : Wp) for (auto& e : row) e.setZero();
+    Wp[0][0] = pauli('I');
+    Wp[1][0] = sm;
+    Wp[2][0] = sp;
+    Wp[3][0] = pauli('Z');
+    Wp[4][1] = (2.0 * J) * sp;
+    Wp[4][2] = (2.0 * J) * sm;
+    Wp[4][3] = (J * delta) * pauli('Z');
+    Wp[4][4] = pauli('I');
+    // Ancilla-site W: diagonal identity (pass every bond state through).
+    std::array<std::array<Mat2, 5>, 5> Wa{};
+    for (auto& row : Wa) for (auto& e : row) e.setZero();
+    for (int b = 0; b < chi; ++b) Wa[b][b] = pauli('I');
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W5 = (i % 2 == 0) ? Wp : Wa;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.ops.assign(cl * cr, Mat2::Zero());
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 4 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W5[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // -- Pauli label parser -------------------------------------------------------
 
 // Convert indexed label ("X0X1") or plain label ("XXI") to per-site char array.

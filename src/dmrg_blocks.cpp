@@ -2189,6 +2189,162 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
     return out;
 }
 
+// ===== Finite temperature via ancilla purification (thermofield double) ======
+// rho(beta) = e^{-beta H}/Z as the pure state |psi(beta)> = e^{-beta H/2}|psi0>
+// on an interleaved 2*n_phys chain: physical sites at even positions, ancillas
+// at odd. |psi0> = product of (|ud> - |du>)/sqrt(2) Bell pairs, whose physical
+// reduced density matrix is I/2^N -- the beta = 0 Gibbs state. Any maximally
+// entangled pair state works; the singlet is the Sz-conserving choice (every
+// pair carries total Sz 0), so the whole U(1) block machinery applies as-is.
+
+// Build the beta=0 purified state. Right-canonical with the centre on site 0,
+// norm 1 (matching the cps_init convention). Bond QNs: 0 between pairs, +-1
+// inside a pair. MPO environments are left empty -- call rebuild_mpo_envs
+// before any bt_energy (thermal_step_blocks itself needs no environments).
+static BMPS purified_init(int n_phys) {
+    const int n = 2 * n_phys;
+    BMPS s; s.n = n;
+    s.bond.resize(n + 1);
+    for (int i = 0; i <= n; ++i)
+        s.bond[i] = (i % 2 == 0) ? BondSpace::from_pairs({{0, 1}})
+                                 : BondSpace::from_pairs({{-1, 1}, {+1, 1}});
+    s.A.resize(n);
+    const double r2 = 1.0 / std::sqrt(2.0);
+    for (int p = 0; p < n_phys; ++p) {
+        // physical site 2p: q_L = 0, cols = [up: dim(+1)=1 | dn: dim(-1)=1]
+        Mat phys(1, 2);
+        phys(0, 0) = S(+r2);                   // |u>_p  (bond QN -> +1)
+        phys(0, 1) = S(-r2);                   // |d>_p  (bond QN -> -1)
+        s.A[2*p][0] = phys;
+        // ancilla site 2p+1 returns the bond QN to 0:
+        //   q_L=+1: dn only (cols [up: dim(+2)=0 | dn: dim(0)=1])
+        //   q_L=-1: up only (cols [up: dim(0)=1 | dn: dim(-2)=0])
+        s.A[2*p+1][+1] = Mat::Constant(1, 1, S(1));
+        s.A[2*p+1][-1] = Mat::Constant(1, 1, S(1));
+    }
+    s.L.assign(n + 1, BlockEnv());
+    s.R.assign(n + 1, BlockEnv());
+    return s;
+}
+
+// One symmetric swap-and-carry cooling step: applies e^{-dtau*H} to the
+// interleaved purified chain (so beta advances by 2*dtau). The physical
+// neighbours (p_i, p_{i+1}) sit two sites apart; the L->R half-sweep puts a
+// SWAP on each even bond -- carrying p_i rightward past its ancilla -- and the
+// XXZ half-gate exp(-(dtau/2) h) on each odd bond, which by then joins p_i and
+// p_{i+1} adjacently. The R->L half-sweep mirrors the sequence (gate then
+// swap), restoring the p a p a ... layout. The full step is a palindrome, so
+// the Trotter error is O(dtau^3) per step (2nd order), and the bond order is
+// monotonic, so the canonical centre stays adjacent to the active bond and
+// ends back on site 0 (exactly as in tebd2_step_blocks).
+// SWAP is Sz-conserving and fits the homogeneous Gate format:
+//   pdiag = 1 (|uu>,|dd>), Sz=0 block [[0,1],[1,0]] (|ud> <-> |du>).
+static void thermal_step_blocks(BMPS& s, double dtau, int chi_max, double cutoff,
+                                double J = 1.0, double delta = 1.0) {
+    const int n = s.n;
+    const Gate gx = build_xxz_gate(J, delta, Cx(-dtau / 2, 0));
+    const Gate gswap{S(1), S(0), S(1), S(1), S(0)};
+    const std::map<int,RVec> no_sv;
+    auto& A = s.A; auto& bond = s.bond;
+    auto do_bond = [&](int i, const Gate& g) {
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
+        bt_expand_theta(theta, bond[i], bond[i+2]);
+        apply_gate_theta(theta, bond[i], bond[i+2], g);
+        return block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+    };
+    for (int i = 0; i <= n - 3; ++i) {                 // left -> right
+        auto svd = do_bond(i, (i % 2 == 0) ? gswap : gx);
+        bond[i+1] = svd.new_mid_bs;
+        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1]);
+        A[i+1] = bt_center_LR(svd);
+    }
+    for (int i = n - 3; i >= 0; --i) {                 // right -> left (mirror)
+        auto svd = do_bond(i, (i % 2 == 0) ? gswap : gx);
+        bond[i+1] = svd.new_mid_bs;
+        A[i+1] = svd.Vt;
+        A[i]   = bt_center_RL(svd, bond[i], bond[i+1]);
+    }
+    // imaginary time is non-unitary: renormalize (centre at site 0)
+    double nz = 0; for (auto& [q, b] : A[0]) nz += b.squaredNorm();
+    nz = std::sqrt(nz); if (nz > 0) for (auto& [q, b] : A[0]) b /= nz;
+}
+
+struct ThermalOut {
+    std::vector<double> betas, E, chi_zz;
+    std::vector<std::vector<double>> sz, szsz;   // [checkpoint][j_phys]
+    int n_phys = 0, c = 0, max_bond = 0;
+    double wall_s = 0;
+};
+
+// Cooling driver: purified_init, n_steps of thermal_step_blocks (each advancing
+// beta by dbeta, i.e. dtau = dbeta/2), measuring E / <Z_j> / <Z_c Z_j> / chi_zz
+// at checkpoints. All observables act on physical (even) sites only and are
+// normalised by Z = <psi|psi> in the overlap convention, so truncation
+// norm-drift cancels exactly.
+static ThermalOut run_thermal(int n_phys, double J, double delta,
+                              double dbeta, int n_steps, int chi_max,
+                              double cutoff, int measure_stride, bool with_chi) {
+    static_assert(std::is_same_v<S, Cx>, "thermal requires complex scalar");
+    using clk = std::chrono::steady_clock;
+    const int n = 2 * n_phys, c_phys = n_phys / 2;
+    ThermalOut out; out.n_phys = n_phys; out.c = c_phys;
+    auto mpo = qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta);
+    BMPS s = purified_init(n_phys);
+
+    auto measure = [&](double beta) {
+        rebuild_mpo_envs(s, mpo);                      // bt_energy needs MPO envs
+        out.betas.push_back(beta);
+        out.E.push_back(bt_energy(s, mpo));
+        auto OL = overlap_left_envs(s, s);
+        auto OR = overlap_right_envs(s, s);
+        double Z = OL[n].count(0) ? rp(OL[n].at(0)(0, 0)) : 1.0;
+        if (std::abs(Z) < 1e-300) Z = 1.0;
+        auto zall = measure_sz_all(s, s, OL, OR);
+        std::vector<double> zj(n_phys);
+        for (int p = 0; p < n_phys; ++p) zj[p] = rp(zall[2*p]) / Z;
+        // <Z_j Z_src> for all j from one source: phi = Z_src|psi> (sigma^z is
+        // unitary and diagonal, so phi stays right-canonical) + overlap envs.
+        auto zrow = [&](int p_src) {
+            BMPS phi = s;
+            apply_sz_site(phi, 2 * p_src);
+            auto OL2 = overlap_left_envs(s, phi);
+            auto OR2 = overlap_right_envs(s, phi);
+            auto v = measure_sz_all(s, phi, OL2, OR2);
+            std::vector<double> r(n_phys);
+            for (int p = 0; p < n_phys; ++p) r[p] = rp(v[2*p]) / Z;
+            return r;
+        };
+        std::vector<double> zz_c;
+        if (with_chi) {     // all pairs -> chi_zz = beta * Var(sum_j Z_j) / n_phys
+            double m2 = 0;
+            for (int p_src = 0; p_src < n_phys; ++p_src) {
+                auto row = zrow(p_src);
+                if (p_src == c_phys) zz_c = row;
+                for (double v : row) m2 += v;
+            }
+            double m1 = 0; for (double v : zj) m1 += v;
+            out.chi_zz.push_back(beta * (m2 - m1 * m1) / n_phys);
+        } else {
+            zz_c = zrow(c_phys);
+            out.chi_zz.push_back(0.0);
+        }
+        out.sz.push_back(std::move(zj));
+        out.szsz.push_back(std::move(zz_c));
+    };
+
+    auto t0 = clk::now();
+    measure(0.0);
+    for (int step = 1; step <= n_steps; ++step) {
+        thermal_step_blocks(s, dbeta / 2, chi_max, cutoff, J, delta);
+        for (auto& b : s.bond) { int t = 0; for (int d : b.dims) t += d;
+            out.max_bond = std::max(out.max_bond, t); }
+        if ((measure_stride > 0 && step % measure_stride == 0) || step == n_steps)
+            measure(step * dbeta);
+    }
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    return out;
+}
+
 // -- Block-sparse DMRG sweep --------------------------------------------------
 
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
@@ -2697,6 +2853,22 @@ ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, in
     ConductivityResult r;
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
     r.n = o.n; r.max_bond = o.max_bond; r.E0 = o.E0; r.wall_time_s = o.wall_s;
+    return r;
+}
+
+// Entry point: finite-temperature statics via ancilla purification (always
+// complex -- the cooling gates are real, but keeping the complex core means the
+// GPU SVD path and the downstream real-time (F1) evolution apply unchanged).
+ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
+                                 double dbeta, int n_steps, int chi_max,
+                                 double cutoff, int measure_stride, bool with_chi) {
+    auto o = BlockDMRG<Cx>::run_thermal(n_phys, J, delta, dbeta, n_steps,
+                                        chi_max, cutoff, measure_stride, with_chi);
+    ThermalResult r;
+    r.betas = o.betas; r.E = o.E; r.chi_zz = o.chi_zz;
+    r.sz = o.sz; r.szsz = o.szsz;
+    r.n_phys = o.n_phys; r.c = o.c; r.max_bond = o.max_bond;
+    r.wall_time_s = o.wall_s;
     return r;
 }
 
