@@ -2353,8 +2353,14 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
 // whole chain and returns to site 0. The sweep is a palindrome (L->R then R->L
 // with half-gates), so it is 2nd-order in dt; SWAPs are exact permutations and
 // add no Trotter error. Real time is unitary -- no renormalization.
-//   swap_on_even=true,  lo=0,    hi=n-2  -> physical sublattice (even sites)
-//   swap_on_even=false, lo=1,    hi=n-2  -> ancilla  sublattice (odd  sites)
+//   swap_on_even=true,  lo=0, hi=n-3  -> physical sublattice (even sites)
+//   swap_on_even=false, lo=1, hi=n-2  -> ancilla  sublattice (odd  sites)
+// The physical sweep stops at n-3: the last physical pair is gated at bond n-3,
+// so bond n-2 carries no gate. Leaving it as identity transport (rather than a
+// SWAP that is undone next half-sweep) avoids a needless SWAP+SVD -- and any
+// doubt about a chi-limited SVD there perturbing the state (the terminal bond's
+// Schmidt rank is <=2, so it never actually truncates, but this keeps it clean
+// and matches F0's thermal_step_blocks range).
 static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
                      int chi_max, double cutoff, double J, double delta) {
     const int n = s.n;
@@ -2397,7 +2403,7 @@ static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
 static void purified_rt_step(BMPS& s, double dt, int chi_max, double cutoff,
                              double J, double delta, bool disentangle) {
     const int n = s.n;
-    rt_sweep(s, /*swap_on_even=*/true,  /*lo=*/0, /*hi=*/n-2, Cx(0, -dt/2),
+    rt_sweep(s, /*swap_on_even=*/true,  /*lo=*/0, /*hi=*/n-3, Cx(0, -dt/2),
              chi_max, cutoff, J, delta);                     // physical forward
     if (disentangle)
         rt_sweep(s, /*swap_on_even=*/false, /*lo=*/1, /*hi=*/n-2, Cx(0, +dt/2),
