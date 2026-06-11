@@ -15,7 +15,8 @@
 //   * C(0) = <J^2>_beta real (imag part ~0): source/normalisation
 //   * full C(t;T) re+im vs ED Lehmann at beta=0.5 and beta=2
 //   * disentangler invariance: the ancilla gauge is unitary and commutes with the
-//     physical current J, so C is exactly invariant (truncation-limited ~1e-9).
+//     physical current J, so C is exactly invariant (measured ~1e-13 CPU /
+//     ~1e-10 GPU; asserted < 1e-7).
 #include "dmrg_internal.hpp"
 #include <Eigen/Dense>
 #include <cmath>
@@ -126,7 +127,8 @@ int main() {
     // chi=256 >= 2^6 -> the purified evolution and the J-application are lossless,
     // so the ED match is Trotter-limited (worst ~1.2e-2 at dt=0.05, beta=2, where
     // the colder correlator has sharper features; tol 2e-2 with margin) and the
-    // disentangler invariance is exact to ~1e-9 (gauge is unitary, commutes with J).
+    // disentangler invariance is exact to ~1e-13 CPU / ~1e-10 GPU (gauge is
+    // unitary and commutes with J; asserted < 1e-7).
     fails += check_case(/*n_phys*/6, /*J*/1.0, /*delta*/1.0, /*beta*/0.5,
                         /*n_cool*/20, /*dt*/0.05, /*n_steps*/40, /*chi*/256,
                         /*tol*/2e-2);
