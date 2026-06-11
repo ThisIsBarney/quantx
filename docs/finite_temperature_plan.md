@@ -166,12 +166,29 @@ Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
   O(n²) evolve-apply-evolve structure. Also: windowing / linear prediction for
   ω-resolution; detailed-balance `S(k,-ω)=e^{-βω}S(k,ω)` post-FFT check.
 
-### Phase F2 — finite-T **transport** + experimental observables
-- Current-current correlator on the purified state → `σ(ω,T)`, Drude weight `D(T)`
-  (the live XXZ ballistic-vs-diffusive transport question), and NMR `1/T1(T)` from
-  the q-summed low-ω limit. Reuses `run_conductivity_blocks` + `build_current_mpo`.
-- **Validation:** ED finite-T transport (small N); D(T)→ integrable-XXZ known
-  behavior; sum rules.
+### Phase F2 — finite-T **transport** ✅ DONE (correlator); 1/T1 deferred
+- Current-current correlator `C(t;T) = ⟨J(t)J(0)⟩_β` on the purified state, the
+  integrand of `σ(ω,T)` (FFT downstream); its long-time behaviour is the live
+  XXZ ballistic-vs-diffusive / Drude-weight question. Structurally the F1 routine
+  with the local `σ^z` source replaced by the **extensive total current** J (a
+  5-wide MPO, `build_current_purified_mpo`): cool, set `B = J|ψ⟩` via
+  `apply_mpo_to_bmps`, real-time evolve both `A = e^{-iHt}|ψ⟩` and `B`, measure
+  `C(t) = ⟨A(t)|J|B(t)⟩ = ⟨J A(t)|B(t)⟩` (J Hermitian) by applying J to the
+  cheap unsourced A and overlapping. KBM disentangler carries over unchanged.
+- **Validation:** `src/thermal_transport_test.cpp` (ctest
+  `qx_thermal_transport_test`) vs dense-ED **Lehmann**
+  `C(t;T) = (1/Z) Σ_{mn} e^{-βE_m} |⟨m|J|n⟩|² e^{i(E_m-E_n)t}`, N=6, β=0.5 and
+  β=2: worst err 4e-3 / 1.2e-2 (Trotter-limited, dt=0.05); `C(0)=⟨J²⟩_β` real;
+  disentangler invariance ~1e-13 (J is physical, commutes with the ancilla
+  gauge). Passes Eigen-CPU, forced-GPU, forced-LAPACKE.
+- **Benchmark** (`src/thermal_transport_bench.cpp` →
+  `docs/transport_correlator.csv`): emits `C(t;T)` across temperatures + `⟨J²⟩_β`
+  (decreases as T↓ — 6.8/5.1/3.7 at β=0.5/1/2, N=14) + a crude Drude proxy.
+- New API: `run_conductivity_thermal_blocks(n_phys, J, delta, beta, n_cool, dt,
+  n_steps, chi_max, cutoff, disentangle=true)`.
+- **Deferred:** NMR `1/T1(T)` (q-summed low-ω limit of `S(k,ω,T)`); a proper
+  Drude-weight extraction (long-t + finite-size scaling); the σ(ω,T) FFT
+  post-processor + sum-rule check.
 
 ### GPU / benchmark phase — the headline (the deliverable)
 - Confirm the SVD/theta GPU paths fire unchanged on the doubled chain (they will —

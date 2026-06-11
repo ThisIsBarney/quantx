@@ -157,6 +157,43 @@ std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J, double delta) 
     return mpo;
 }
 
+// Total spin-current operator on the interleaved purified chain: even sites carry
+// the current W (sigma+/sigma- emission, no Z term -- the Z bond carries no
+// current), odd (ancilla) sites are identity pass-throughs. Same HB_DELTA bond
+// structure as build_xxz_purified_mpo, so apply_mpo_to_bmps applies it unchanged.
+std::vector<MPOSite> build_current_purified_mpo(int n_phys, double J) {
+    const int chi = 5, n = 2 * n_phys;
+    Mat2 sp; sp << 0, 1, 0, 0;
+    Mat2 sm; sm << 0, 0, 1, 0;
+    Cx iJ(0.0, J);
+    std::array<std::array<Mat2, 5>, 5> Wp{};
+    for (auto& row : Wp) for (auto& e : row) e.setZero();
+    Wp[0][0] = pauli('I');
+    Wp[1][0] = sm;                 // complete  i*J sigma+_l sigma-_{l+1}
+    Wp[2][0] = sp;                 // complete -i*J sigma-_l sigma+_{l+1}
+    Wp[4][1] = iJ * sp;            // emit sigma+ (bond 1, DeltaSz +2)
+    Wp[4][2] = (-iJ) * sm;         // emit sigma- (bond 2, DeltaSz -2)
+    Wp[4][4] = pauli('I');
+    std::array<std::array<Mat2, 5>, 5> Wa{};
+    for (auto& row : Wa) for (auto& e : row) e.setZero();
+    for (int b = 0; b < chi; ++b) Wa[b][b] = pauli('I');
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W5 = (i % 2 == 0) ? Wp : Wa;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.ops.assign(cl * cr, Mat2::Zero());
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 4 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W5[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // -- Pauli label parser -------------------------------------------------------
 
 // Convert indexed label ("X0X1") or plain label ("XXI") to per-site char array.
