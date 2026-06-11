@@ -128,15 +128,43 @@ Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
 - API: `run_thermal_blocks(n_phys, J, delta, dbeta, n_steps, chi_max, cutoff,
   measure_stride, with_chi)` → `ThermalResult { betas, E, chi_zz, sz, szsz, … }`.
 
-### Phase F1 — finite-T **dynamical** correlators → `S(k,ω,T)`, `χ''(ω,T)`
-- After cooling to β/2, apply source `σ^z_{l0}`, real-time evolve, measure
-  `C_{j,l0}(t;T)`; 2D-FFT → `S(k,ω,T)`. `χ''(k,ω,T) = (1-e^{-βω}) S(k,ω,T)`.
-- Implement the **backward-ancilla disentangler** for reach.
-- Optional: linear-prediction / windowing to extend the time series for ω-resolution.
-- **Validation:** vs ED finite-T Lehmann (small N); **detailed balance**
-  `S(k,-ω) = e^{-βω} S(k,ω)` (internal check, any N); f-sum rule; T→0 limit must
-  reproduce the existing `run_spectral_blocks` result.
-- New API: `run_spectral_thermal_blocks(...)` mirroring `run_spectral_blocks` + β.
+### Phase F1 — finite-T **dynamical** correlators → `S(k,ω,T)`, `χ''(ω,T)` ✅ DONE
+- Cool to `|ψ(β)⟩ = e^{-βH/2}|ψ0⟩`, apply `σ^z_{l0}` at the central physical
+  site, and real-time evolve **both** the unsourced `A = e^{-iHt}|ψ⟩` and the
+  sourced `B = e^{-iHt}σ^z_{l0}|ψ⟩` (at finite T the bra is **not** stationary,
+  unlike T=0), measuring `C_{j,l0}(t;T) = ⟨A(t)|σ^z_j|B(t)⟩/Z =
+  ⟨σ^z_j(t)σ^z_{l0}(0)⟩_β`. Ready for a space+time FFT → `S(k,ω,T)`;
+  `χ''(k,ω,T) = (1-e^{-βω}) S(k,ω,T)`.
+- Real-time step `purified_rt_step`: a physical-sublattice swap-and-carry sweep
+  (`rt_sweep`, full bond range, identity-transport boundary bonds) at `τ=-i dt`,
+  plus — when the **Karrasch–Bardarson–Moore backward-ancilla disentangler** is
+  on — an ancilla-sublattice sweep at `τ=+i dt`. `[H_phys,H_anc]=0` (disjoint
+  sublattices) and SWAPs are exact, so the two sweeps compose with **no extra
+  Trotter error**.
+- **Validation:** `src/thermal_spectral_test.cpp` (ctest
+  `qx_thermal_spectral_test`) vs dense-ED **Lehmann** `C_{j,l0}(t;T)` at N=6,
+  β=0.5 and β=4 (the cold case **is** the T→0 ground-state correlator): worst
+  err ≈ 6e-3 / 8e-3, Trotter-limited at dt=0.05 (chi=256 ≥ 2^6 → lossless);
+  `C_{l0,l0}(0)=1` exactly; **disentangler invariance `|C_on − C_off| ≈ 1e-13`**
+  (the ancilla gauge is unitary and commutes with the physical `σ^z`, so the
+  correlator is exactly invariant — a true gauge, not an approximation). Passes
+  on Eigen-CPU, forced-GPU, forced-LAPACKE.
+- **Disentangler benchmark** (`src/thermal_spectral_bench.cpp` +
+  `benchmarks/plot_disentangler.py` → `docs/disentangler_bond_growth.svg`):
+  the gauge **cancels the real-time entanglement growth of the unsourced state
+  A** (Heisenberg N=32, β=1: A peak bond **≈2.8–5× smaller**; the thermal-entropy
+  floor of `|ψ(β)⟩` itself is intrinsic and remains). The **sourced ket B**
+  carries operator-spreading entanglement the gauge cannot remove, so peak
+  *memory* (max bond) stays ket-limited in this same-time scheme — but because A
+  is half the work and runs at ~3× smaller bond, **wall time drops ~1.4×**
+  (N=32: 178s→130s), a gap that widens as A(off) hits the volume law and with χ.
+- New API: `run_spectral_thermal_blocks(n_phys, J, delta, beta, n_cool, dt,
+  n_steps, chi_max, cutoff, disentangle=true)`.
+- **Deferred to F1.5:** the symmetric/midpoint correlator
+  `⟨σ^z_j(t/2)σ^z_l(-t/2)⟩` (operator spreads over t/2, not t) — the documented
+  way to also halve the **ket** entanglement and cut peak memory; needs the
+  O(n²) evolve-apply-evolve structure. Also: windowing / linear prediction for
+  ω-resolution; detailed-balance `S(k,-ω)=e^{-βω}S(k,ω)` post-FFT check.
 
 ### Phase F2 — finite-T **transport** + experimental observables
 - Current-current correlator on the purified state → `σ(ω,T)`, Drude weight `D(T)`
@@ -191,7 +219,11 @@ Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
 
 - **Entanglement growth is worse than at T=0** (the t=0 state is already thermally
   entangled) → backward-ancilla disentangler (F1) + larger χ (where GPU wins).
-  This is *the* risk; F1 stands or falls on the disentangler working.
+  **Resolved in F1, with a caveat:** the disentangler cancels the *unsourced*
+  state's real-time growth (compute win, ED-validated, gauge-exact to 1e-13) but
+  not the *sourced* ket's operator spreading. Peak memory stays ket-limited until
+  the F1.5 symmetric-midpoint correlator. So large-χ headroom (the GPU story) is
+  still what buys reach at low T.
 - **Low T needs large χ for the *state itself*** (imag-time cooling). Good news for
   the GPU story; budget χ accordingly and report the χ(β) needed.
 - **β=0 state normalization / Sz bookkeeping** in the block basis — unit-test the
@@ -211,8 +243,11 @@ Deliver `e^{-βH/2}` cooling on the doubled chain and static thermodynamics.
 1. **Phase F0** ✅ — interleaved-chain purification + swap-and-carry cooling +
    static thermodynamics, validated vs ED. (Establishes the purified state is
    correct.)
-2. **Phase F1** — finite-T `S(k,ω,T)` with the disentangler; detailed-balance +
-   ED-Lehmann validation. (The scientific payoff.)
+2. **Phase F1** ✅ — finite-T `S(k,ω,T)` correlator with the disentangler;
+   ED-Lehmann validation + disentangler-invariance (1e-13) + bond-growth
+   benchmark. **Honest finding:** the disentangler is a *compute* win (cancels
+   the unsourced-state real-time growth, ~1.4× faster, A bond ~3-5× smaller); the
+   *memory* (peak bond) is ket-limited until the F1.5 symmetric-midpoint scheme.
 3. **GPU headline benchmark** — margin vs (χ, β) vs TeNPy-CPU; write into
    `docs/gpu_acceleration_report.md` / a new finite-T report; update `positioning.md`.
 4. **Phase F2** — finite-T transport `σ(ω,T)`, Drude weight, NMR `1/T1`.

@@ -390,6 +390,37 @@ if(QX_USE_CUDA)
 endif()
 qx_set_config_output_dirs(qx_thermal_blocks_test)
 
+add_executable(qx_thermal_spectral_test src/thermal_spectral_test.cpp
+  src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+target_link_libraries(qx_thermal_spectral_test PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_thermal_spectral_test PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_thermal_spectral_test PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(QX_USE_CUDA)
+  target_link_libraries(qx_thermal_spectral_test PRIVATE qx_gpu)
+  target_compile_definitions(qx_thermal_spectral_test PRIVATE QX_USE_CUDA=1)
+endif()
+qx_set_config_output_dirs(qx_thermal_spectral_test)
+
+# F1 headline benchmark: disentangler bond-growth reduction (not a ctest).
+add_executable(qx_thermal_spectral_bench src/thermal_spectral_bench.cpp
+  src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+target_link_libraries(qx_thermal_spectral_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_thermal_spectral_bench PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_thermal_spectral_bench PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(QX_USE_CUDA)
+  target_link_libraries(qx_thermal_spectral_bench PRIVATE qx_gpu)
+  target_compile_definitions(qx_thermal_spectral_bench PRIVATE QX_USE_CUDA=1)
+endif()
+qx_set_config_output_dirs(qx_thermal_spectral_bench)
+
 # Phase A unit check: GPU Gram-SVD vs reconstruction/orthonormality (CUDA only).
 if(QX_USE_CUDA)
   add_executable(qx_gpu_svd_test src/gpu_svd_test.cpp)
@@ -453,6 +484,7 @@ add_test(NAME qx_su2_run_test COMMAND qx_su2_run_test)
 add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
 add_test(NAME qx_tdvp_blocks_test COMMAND qx_tdvp_blocks_test)
 add_test(NAME qx_thermal_blocks_test COMMAND qx_thermal_blocks_test)
+add_test(NAME qx_thermal_spectral_test COMMAND qx_thermal_spectral_test)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
 
