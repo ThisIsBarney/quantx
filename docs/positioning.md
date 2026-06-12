@@ -46,8 +46,10 @@ The same engine computes the finite-T response by ancilla purification — `S(k,
 the optical/spin conductivity `σ(ω, T)`, and static thermodynamics `E(T)`, `χ(T)` — on an
 interleaved purified chain with **zero engine changes**, each ED-validated at every
 temperature (and with a Karrasch–Bardarson–Moore disentangler that is a *true unitary
-gauge*, exact to ~1e-13). Finite-T is exactly where the GPU/large-χ story compounds:
-cooling to low T drives the bond dimension up, into the regime where the advantage grows.
+gauge*, exact to ~1e-13). Finite-T is exactly where the GPU/large-χ story compounds: the
+real-time response saturates the bond dimension, so the GPU advantage **grows with χ**
+here too — **2.86× at χ=1024** on the purified evolution (vs ~2.2× for the T=0
+Néel-quench: the finite-T correlator evolves two states, doubling the SVD load).
 See [finite_temperature.md](finite_temperature.md).
 
 ## What "complete" means
