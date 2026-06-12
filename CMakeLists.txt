@@ -452,6 +452,22 @@ if(QX_USE_CUDA)
 endif()
 qx_set_config_output_dirs(qx_thermal_skw_emit)
 
+# Finite-T cooling GPU vs CPU SVD-throughput benchmark (not a ctest).
+add_executable(qx_thermal_gpu_bench src/thermal_gpu_bench.cpp
+  src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+target_link_libraries(qx_thermal_gpu_bench PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_thermal_gpu_bench PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_thermal_gpu_bench PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(QX_USE_CUDA)
+  target_link_libraries(qx_thermal_gpu_bench PRIVATE qx_gpu)
+  target_compile_definitions(qx_thermal_gpu_bench PRIVATE QX_USE_CUDA=1)
+endif()
+qx_set_config_output_dirs(qx_thermal_gpu_bench)
+
 # F2 transport benchmark: current correlator + disentangler effect (not a ctest).
 add_executable(qx_thermal_transport_bench src/thermal_transport_bench.cpp
   src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)

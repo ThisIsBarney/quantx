@@ -78,3 +78,27 @@ S(k,ω,T) needs larger N (so finite-size revivals fall outside the time window)
 and larger χ (so the long-time dynamics is truncation-free). That is exactly the
 regime where the GPU large-χ engine pays off; the correlators themselves are
 ED-validated (above).
+
+## GPU acceleration — the advantage grows with χ, now at finite T
+
+The block-sparse SVD hot loop fires unchanged on the purified chain, and the
+real-time response **saturates the bond dimension to χ_max** within a few steps —
+so finite-T dynamics lands directly in the large-χ regime where cuSOLVER beats the
+CPU. Timing the purified real-time evolution (Heisenberg N=20, 40 purified sites,
+RTX 4090 vs a single i5-13600KF thread, `QX_GPU_MIN_BLK` toggle, identical
+`E(β) = −32.618` on both paths):
+
+| χ | GPU | CPU | speedup |
+|---|-----|-----|---------|
+| 512 | 46.5 s | 67.6 s | **1.46×** |
+| 1024 | 90.6 s | 258.7 s | **2.86×** |
+
+![finite-T GPU margin](gpu_finiteT_margin.svg)
+
+The margin **grows with χ** (1.46× → 2.86×), the same property as the T=0 dynamics
+([gpu_margin_vs_chi.svg](gpu_margin_vs_chi.svg)) — and here the win at χ=1024 is
+*larger* than the T=0 Néel-quench (~2.2×), because the finite-T correlator evolves
+two states (a non-stationary bra and the sourced ket), doubling the SVD load. This
+is the "bigger problem → bigger advantage" property exactly where finite-T needs
+it: low T and long times both push χ up. Benchmark: `qx_thermal_gpu_bench`
+(`QX_GPU_MIN_BLK=128` GPU vs `=9999999` CPU) → `benchmarks/plot_gpu_finiteT.py`.
