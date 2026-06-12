@@ -41,13 +41,22 @@ The DMRG ground state is a **4.8–6× win over TeNPy** on CPU (the hot loop is 
 Lanczos matvecs, where compiled C++ beats Python orchestration) — independent of the
 GPU work, it anchors the package.
 
+**4. The pipeline now runs at *finite temperature*.**
+The same engine computes the finite-T response by ancilla purification — `S(k, ω, T)`,
+the optical/spin conductivity `σ(ω, T)`, and static thermodynamics `E(T)`, `χ(T)` — on an
+interleaved purified chain with **zero engine changes**, each ED-validated at every
+temperature (and with a Karrasch–Bardarson–Moore disentangler that is a *true unitary
+gauge*, exact to ~1e-13). Finite-T is exactly where the GPU/large-χ story compounds:
+cooling to low T drives the bond dimension up, into the regime where the advantage grows.
+See [finite_temperature.md](finite_temperature.md).
+
 ## What "complete" means
 
 The killer feature is the *system*, not a component: a single engine where the
 ground state, the operator algebra, the time evolution, and the spectral post-processing
 are all block-sparse, GPU-aware, and consistent — so a user goes from a Hamiltonian to
-S(k, ω) / σ(ω) / DQPT in one fast, validated path, and can push χ on a single consumer
-GPU (RTX 4090) without the CPU-era large-χ reversal.
+S(k, ω) / σ(ω) / DQPT — at **T = 0 or finite T** — in one fast, validated path, and can
+push χ on a single consumer GPU (RTX 4090) without the CPU-era large-χ reversal.
 
 ## Honest boundaries (deliberately not in the headline)
 

@@ -36,11 +36,15 @@ int main(int argc, char** argv) {
                 "dt=%.3f, %d steps (t->%.1f), chi<=%d, cutoff=%.0e, cool=%d\n",
                 N, 2*N, dt, nsteps, dt*nsteps, chi, cutoff, ncool);
 
+    // disentangle OFF: the correlator is disentangler-invariant (~1e-13), so the
+    // cheaper single-sweep path emits identical C(t;T) at ~2x the speed -- the
+    // disentangler's value (a compute win on the unsourced bra) is its own
+    // benchmark (F1, qx_thermal_spectral_bench), not re-litigated here.
     std::vector<ConductivityThermalResult> res;
     for (double beta : betas)
         res.push_back(run_conductivity_thermal_blocks(N, 1.0, 1.0, beta, ncool, dt,
                                                       nsteps, chi, cutoff,
-                                                      /*disentangle*/true));
+                                                      /*disentangle*/false));
 
     // per-temperature summary: <J^2>, Drude proxy, peak bond, wall time
     std::printf("\n  %-6s %-12s %-12s %-9s %-9s\n",
