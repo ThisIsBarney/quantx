@@ -43,7 +43,7 @@ for c in CHI:
 s.append(f'<line x1="{PX0}" y1="{PY0}" x2="{PX0}" y2="{PY1}" stroke="#444" stroke-width="1.2"/>')
 s.append(f'<line x1="{PX0}" y1="{PY1}" x2="{PX1}" y2="{PY1}" stroke="#444" stroke-width="1.2"/>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-30}" text-anchor="middle" font-size="13" fill="#222">bond dimension  &#967;</text>')
-s.append(f'<text x="22" y="{(PY0+PY1)/2:.0f}" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 22 {(PY0+PY1)/2:.0f})">speedup  (GPU / CPU)</text>')
+s.append(f'<text x="22" y="{(PY0+PY1)/2:.0f}" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 22 {(PY0+PY1)/2:.0f})">speedup  (CPU time / GPU time)</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Finite-T dynamics: GPU vs CPU SVD throughput</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="46" text-anchor="middle" font-size="12" fill="#555">purified real-time evolution &#8212; the advantage grows with &#967;</text>')
 pts = " ".join(f"{xpx(c):.1f},{ypx(v):.1f}" for c, v in zip(CHI, SPEED))

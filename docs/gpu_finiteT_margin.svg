@@ -21,7 +21,7 @@
 <line x1="78" y1="70" x2="78" y2="390" stroke="#444" stroke-width="1.2"/>
 <line x1="78" y1="390" x2="600" y2="390" stroke="#444" stroke-width="1.2"/>
 <text x="339" y="430" text-anchor="middle" font-size="13" fill="#222">bond dimension  &#967;</text>
-<text x="22" y="230" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 22 230)">speedup  (GPU / CPU)</text>
+<text x="22" y="230" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 22 230)">speedup  (CPU time / GPU time)</text>
 <text x="339" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Finite-T dynamics: GPU vs CPU SVD throughput</text>
 <text x="339" y="46" text-anchor="middle" font-size="12" fill="#555">purified real-time evolution &#8212; the advantage grows with &#967;</text>
 <polyline points="78.0,248.2 600.0,111.7" fill="none" stroke="#1f77b4" stroke-width="2.6"/>
