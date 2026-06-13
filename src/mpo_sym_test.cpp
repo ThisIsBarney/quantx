@@ -75,6 +75,14 @@ int main() {
         std::printf("  TFIM bond  threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
         fails += !threw;
     }
+    // A chain too short to have a square bulk site (n=2) must be rejected, not
+    // read out of bounds.
+    {
+        bool threw=false;
+        try { derive_mpo_sym(build_xxz_mpo(2, 1.0, 1.0)); } catch (const std::exception&) { threw=true; }
+        std::printf("  n=2 (no bulk) threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
+        fails += !threw;
+    }
 
     // J1-J2 MPO correctness: dense DMRG vs exact diagonalization (N=8).
     std::printf("== J1-J2 MPO: dense DMRG vs ED (N=8) ==\n");

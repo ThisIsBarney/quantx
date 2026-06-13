@@ -94,9 +94,11 @@ struct MPOSym {
 // reproduces HB_DELTA={0,+2,-2,0,0} for the Heisenberg MPO; for a wider MPO
 // (J1-J2, longer range) it yields the charge array the block kernels consume.
 inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
-    int bulk = 0, w = 0;                        // a full-width (square) bulk site
+    int bulk = -1, w = 0;                       // a full-width (square) bulk site
     for (int i = 0; i < (int)mpo.size(); ++i)
-        if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l > w) { w = mpo[i].chi_l; bulk = i; }
+        if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l >= w) { w = mpo[i].chi_l; bulk = i; }
+    if (bulk < 0)   // n<=2: only boundary sites (chi_l!=chi_r) -> no bulk to read
+        throw std::runtime_error("derive_mpo_sym: no square bulk MPO site (chain too short, need n>=3)");
     const MPOSite& W = mpo[bulk];
     const int chi = W.chi_r;
     auto szf = [](int s) { return s == 0 ? +1 : -1; };
