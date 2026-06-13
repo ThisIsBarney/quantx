@@ -260,19 +260,20 @@ static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
 
 // -- Block-sparse environment -------------------------------------------------
 //
-// Heisenberg MPO bond -> QN shift of bra vs ket:
+// The block-sparse path is U(1)/Sz-symmetric: every MPO bond index carries a
+// definite Sz charge (the bra-vs-ket QN shift the env block at that bond holds).
+// For the Heisenberg MPO this is the fixed {0,+2,-2,0,0}; for a general
+// Sz-conserving MPO it is *derived* from the operator structure (see
+// derive_mpo_sym below), which is what lets the same fast engine run arbitrary
+// Sz-conserving Hamiltonians, not just XXZ. The reference Heisenberg charges:
 //   b=0 (I)    DeltaQN=0    b=1 (S+/X) DeltaQN=+2   b=2 (S-/X) DeltaQN=-2
 //   b=3 (Sz/Z) DeltaQN=0    b=4 (full) DeltaQN=0
 static constexpr int HB_CHI_W = 5;
 static constexpr int HB_DELTA[5] = {0, +2, -2, 0, 0};
-
-// Map DELTA value to the set of MPO bond indices with that delta
-static std::vector<int> bonds_with_delta(int delta) {
-    std::vector<int> res;
-    for (int b = 0; b < HB_CHI_W; ++b)
-        if (HB_DELTA[b] == delta) res.push_back(b);
-    return res;
-}
+// MPOSym + derive_mpo_sym (the general per-bond Sz-charge derivation) live in
+// dmrg_internal.hpp so the validation test can reach them; the block kernels
+// below still use the Heisenberg HB_DELTA until the phase-1b rewiring threads the
+// derived charges through them.
 
 // =============================================================================
 // Scalar-templated core. Everything below uses the member aliases Mat/Vec, so
