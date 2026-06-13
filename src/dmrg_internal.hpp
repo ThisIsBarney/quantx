@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <stdexcept>
 #include <Eigen/Dense>
 #include <nlohmann/json.hpp>
 
@@ -69,6 +70,72 @@ std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J = 1.0,
 // bond structure as build_xxz_purified_mpo, so apply_mpo_to_bmps applies it
 // unchanged. J_tot = sum_l i*J(sigma+_{2l} sigma-_{2l+2} - h.c.) over physical l.
 std::vector<MPOSite> build_current_purified_mpo(int n_phys, double J = 1.0);
+
+// J1-J2 (next-nearest-neighbour) XXZ chain:
+//   H = sum_i [ J1 h_{i,i+1} + J2 h_{i,i+2} ],  h = XX+YY+delta ZZ.
+// An 8-wide Sz-conserving MPO (each emitted operator can complete at range 1 or,
+// after passing one identity, range 2) -- the first model that needs the general
+// derived charge array (its bond structure is wider than Heisenberg's 5).
+std::vector<MPOSite> build_j1j2_mpo(int n, double J1 = 1.0, double J2 = 0.0,
+                                    double delta = 1.0);
+
+// -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
+// delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
+struct MPOSym {
+    int chi = 1;                  // MPO bulk bond dimension
+    std::vector<int> delta{0};    // per-bond-index Sz charge (sigma units)
+};
+
+// Derive the per-bond Sz charge from a uniform-bulk Sz-conserving MPO by
+// propagating  delta[b] = delta[a] + sz(s) - sz(s')  over every nonzero
+// W(a,b)(s,s')  (sz(0)=+1 up, sz(1)=-1 dn), anchored at delta[0]=0 (the standard
+// lower-triangular 'done'/right-vacuum bond). Throws std::runtime_error if the
+// MPO is not Sz-conserving (a bond carrying mixed/inconsistent charge). It
+// reproduces HB_DELTA={0,+2,-2,0,0} for the Heisenberg MPO; for a wider MPO
+// (J1-J2, longer range) it yields the charge array the block kernels consume.
+inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
+    int bulk = -1, w = 0;                       // a full-width (square) bulk site
+    for (int i = 0; i < (int)mpo.size(); ++i)
+        if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l >= w) { w = mpo[i].chi_l; bulk = i; }
+    if (bulk < 0)   // n<=2: only boundary sites (chi_l!=chi_r) -> no bulk to read
+        throw std::runtime_error("derive_mpo_sym: no square bulk MPO site (chain too short, need n>=3)");
+    const MPOSite& W = mpo[bulk];
+    const int chi = W.chi_r;
+    auto szf = [](int s) { return s == 0 ? +1 : -1; };
+
+    std::vector<std::array<int,3>> edges;       // (a,b,d): bond a->b carries d
+    for (int a = 0; a < chi; ++a)
+        for (int b = 0; b < chi; ++b) {
+            const Mat2& m = W.W(a, b);
+            int d = 0; bool any = false;
+            for (int s = 0; s < 2; ++s)
+                for (int sp = 0; sp < 2; ++sp)
+                    if (std::abs(m(s, sp)) > 1e-13) {
+                        int dd = szf(s) - szf(sp);
+                        if (!any) { d = dd; any = true; }
+                        else if (dd != d)
+                            throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
+                                                     "(bond carries mixed charge)");
+                    }
+            if (any) edges.push_back({a, b, d});
+        }
+
+    MPOSym sym; sym.chi = chi; sym.delta.assign(chi, 0);
+    std::vector<char> known(chi, 0); known[0] = 1;     // anchor delta[0]=0
+    bool changed = true; int guard = 0;
+    while (changed && guard++ <= chi + 1) {
+        changed = false;
+        for (auto& e : edges) {
+            int a = e[0], b = e[1], d = e[2];
+            if (known[a] && !known[b])      { sym.delta[b] = sym.delta[a] + d; known[b] = 1; changed = true; }
+            else if (known[b] && !known[a]) { sym.delta[a] = sym.delta[b] - d; known[a] = 1; changed = true; }
+            else if (known[a] && known[b] && sym.delta[b] - sym.delta[a] != d)
+                throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
+                                         "(inconsistent bond charges)");
+        }
+    }
+    return sym;  // bonds unreachable from b=0 keep charge 0 (unused states)
+}
 std::vector<MPOSite> build_pauli_sum_mpo(int n,
     const std::vector<std::pair<double, std::string>>& terms);
 

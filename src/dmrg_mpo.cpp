@@ -78,6 +78,42 @@ std::vector<MPOSite> build_xxz_mpo(int n, double J, double delta) {
     return mpo;
 }
 
+// J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
+// h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
+// 8-wide: each emitted operator completes at range 1, or passes one identity and
+// completes at range 2. States: 0 done, {1,2}=sigma+ {range1,range2}, {3,4}=sigma-,
+// {5,6}=Z, 7 start. Same lower-triangular convention as build_xxz_mpo (left
+// boundary = start row, right boundary = done col 0), so derive_mpo_sym yields
+// charges {0,+2,+2,-2,-2,0,0,0} and the block path can consume it.
+std::vector<MPOSite> build_j1j2_mpo(int n, double J1, double J2, double delta) {
+    const int chi = 8;
+    Mat2 sp; sp << 0, 1, 0, 0;   // sigma+ = |up><dn|
+    Mat2 sm; sm << 0, 0, 1, 0;   // sigma-
+    Mat2 Z = pauli('Z'), I = pauli('I');
+    std::array<std::array<Mat2, 8>, 8> W{};
+    for (auto& row : W) for (auto& e : row) e.setZero();
+    W[0][0] = I;                       // done -> done
+    W[7][7] = I;                       // start -> start
+    W[7][1] = sp;  W[7][3] = sm;  W[7][5] = Z;          // emit (bare) from start
+    W[1][0] = (2.0 * J1) * sm;  W[1][2] = I;  W[2][0] = (2.0 * J2) * sm;   // sigma+ chain
+    W[3][0] = (2.0 * J1) * sp;  W[3][4] = I;  W[4][0] = (2.0 * J2) * sp;   // sigma- chain
+    W[5][0] = (J1 * delta) * Z; W[5][6] = I;  W[6][0] = (J2 * delta) * Z;  // Z chain
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.ops.assign(cl * cr, Mat2::Zero());
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 7 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // Spin-current MPO for the XXZ chain: J_tot = sum_l i*J (sigma+_l sigma-_{l+1} -
 // sigma-_l sigma+_{l+1}) (the Z term carries no spin current). Hermitian; same Sz
 // bond structure as the Heisenberg MPO, so the block engine applies it unchanged.
