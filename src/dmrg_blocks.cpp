@@ -268,12 +268,15 @@ static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
 // Sz-conserving Hamiltonians, not just XXZ. The reference Heisenberg charges:
 //   b=0 (I)    DeltaQN=0    b=1 (S+/X) DeltaQN=+2   b=2 (S-/X) DeltaQN=-2
 //   b=3 (Sz/Z) DeltaQN=0    b=4 (full) DeltaQN=0
-static constexpr int HB_CHI_W = 5;
-static constexpr int HB_DELTA[5] = {0, +2, -2, 0, 0};
+// Reference Heisenberg charges (what derive_mpo_sym reproduces for build_xxz_mpo);
+// kept for documentation. The kernels below take a per-MPO `delta` array
+// (= derive_mpo_sym(mpo).delta) so the same engine runs any Sz-conserving MPO,
+// not just the 5-wide Heisenberg one. Comments mentioning HB_DELTA[b] describe
+// the role that delta[b] now plays generally.
+[[maybe_unused]] static constexpr int HB_CHI_W = 5;
+[[maybe_unused]] static constexpr int HB_DELTA[5] = {0, +2, -2, 0, 0};
 // MPOSym + derive_mpo_sym (the general per-bond Sz-charge derivation) live in
-// dmrg_internal.hpp so the validation test can reach them; the block kernels
-// below still use the Heisenberg HB_DELTA until the phase-1b rewiring threads the
-// derived charges through them.
+// dmrg_internal.hpp so the validation test can reach them.
 
 // =============================================================================
 // Scalar-templated core. Everything below uses the member aliases Mat/Vec, so
@@ -294,20 +297,23 @@ struct BlockDMRG {
     }
 
 struct BlockEnv {
-    // blocks[b][q_ket] = Mat(dim_bra, dim_ket),  bra_qn = q_ket + HB_DELTA[b]
-    std::array<std::map<int,Mat>, HB_CHI_W> blocks;
+    // blocks[b][q_ket] = Mat(dim_bra, dim_ket),  bra_qn = q_ket + delta[b]
+    // (delta = the MPO's per-bond Sz charges). Sized to the MPO bond dimension by
+    // init_block_env; boundary envs use only blocks[0] (the charge-0 vacuum),
+    // hence the default size 1.
+    std::vector<std::map<int,Mat>> blocks{ std::map<int,Mat>{} };
     BondSpace bs;  // ket bond space
 };
 
-// Pre-allocate zero blocks for a BlockEnv with a given bond space.
-static void init_block_env(BlockEnv& env, const BondSpace& bs) {
+// Pre-allocate zero blocks for a BlockEnv over an MPO with bond charges `delta`.
+static void init_block_env(BlockEnv& env, const BondSpace& bs,
+                           const std::vector<int>& delta) {
     env.bs = bs;
-    for (int b = 0; b < HB_CHI_W; ++b) {
-        env.blocks[b].clear();
-        int delta = HB_DELTA[b];
+    env.blocks.assign(delta.size(), {});
+    for (int b = 0; b < (int)delta.size(); ++b) {
         for (int qi = 0; qi < bs.n_sectors(); ++qi) {
             int q_ket = bs.qns[qi], d_ket = bs.dims[qi];
-            int d_bra = bs.dim(q_ket + delta);
+            int d_bra = bs.dim(q_ket + delta[b]);
             if (d_bra > 0)
                 env.blocks[b][q_ket] = Mat::Zero(d_bra, d_ket);
         }
@@ -333,9 +339,10 @@ static BlockEnv block_update_left(const BlockEnv& L,
                                   const std::map<int,Mat>& block_A,
                                   const BondSpace& bs_L,
                                   const BondSpace& bs_R,
-                                  const MPOSite& W) {
+                                  const MPOSite& W,
+                                  const std::vector<int>& delta) {
     BlockEnv L_new;
-    init_block_env(L_new, bs_R);
+    init_block_env(L_new, bs_R, delta);
 
     for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
         int q_ket_L = bs_L.qns[qi];
@@ -350,11 +357,11 @@ static BlockEnv block_update_left(const BlockEnv& L,
         for (int b_in = 0; b_in < W.chi_l; ++b_in) {
             auto it_L = L.blocks[b_in].find(q_ket_L);
             if (it_L == L.blocks[b_in].end()) continue;
-            const Mat& Lblk = it_L->second;  // (dL_bra, dL_ket), bra_qn = q_ket_L + HB_DELTA[b_in]
+            const Mat& Lblk = it_L->second;  // (dL_bra, dL_ket), bra_qn = q_ket_L + delta[b_in]
             if (Lblk.size() == 0) continue;
 
-            // Bra A tensor: bra left QN = q_ket_L + HB_DELTA[b_in]
-            int q_bra_L = q_ket_L + HB_DELTA[b_in];
+            // Bra A tensor: bra left QN = q_ket_L + delta[b_in]
+            int q_bra_L = q_ket_L + delta[b_in];
             auto it_A_bra = block_A.find(q_bra_L);
             if (it_A_bra == block_A.end()) continue;
             const Mat& Ablk_bra = it_A_bra->second;  // (dL_bra, dR_up_bra + dR_dn_bra)
@@ -379,9 +386,9 @@ static BlockEnv block_update_left(const BlockEnv& L,
                         if (dR_sp == 0) continue;
 
                         int q_ket_R = q_ket_L + spz;  // new ket right bond QN
-                        // QN consistency: HB_DELTA[b_out] = HB_DELTA[b_in] + sz - spz
-                        int req_delta = HB_DELTA[b_in] + sz - spz;
-                        if (HB_DELTA[b_out] != req_delta) continue;
+                        // QN consistency: delta[b_out] = delta[b_in] + sz - spz
+                        int req_delta = delta[b_in] + sz - spz;
+                        if (delta[b_out] != req_delta) continue;
 
                         auto jt = L_new.blocks[b_out].find(q_ket_R);
                         if (jt == L_new.blocks[b_out].end()) continue;
@@ -419,9 +426,10 @@ static BlockEnv block_update_right(const BlockEnv& R,
                                    const std::map<int,Mat>& block_A,
                                    const BondSpace& bs_L,
                                    const BondSpace& bs_R,
-                                   const MPOSite& W) {
+                                   const MPOSite& W,
+                                   const std::vector<int>& delta) {
     BlockEnv R_new;
-    init_block_env(R_new, bs_L);
+    init_block_env(R_new, bs_L, delta);
 
     for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
         int q_ket_L = bs_L.qns[qi];
@@ -437,8 +445,8 @@ static BlockEnv block_update_right(const BlockEnv& R,
             auto jt = R_new.blocks[b_out].find(q_ket_L);
             if (jt == R_new.blocks[b_out].end()) continue;
 
-            // Bra A tensor: bra left QN = q_ket_L + HB_DELTA[b_out]
-            int q_bra_L = q_ket_L + HB_DELTA[b_out];
+            // Bra A tensor: bra left QN = q_ket_L + delta[b_out]
+            int q_bra_L = q_ket_L + delta[b_out];
             auto it_A_bra = block_A.find(q_bra_L);
             if (it_A_bra == block_A.end()) continue;
             const Mat& Ablk_bra = it_A_bra->second;  // (dL_bra, dR_up_bra + dR_dn_bra)
@@ -463,10 +471,10 @@ static BlockEnv block_update_right(const BlockEnv& R,
                         int dR_sp = (spz == +1) ? dR_up_bra : dR_dn_bra;
                         if (dR_sp == 0) continue;
 
-                        // QN consistency: HB_DELTA[b_out] = HB_DELTA[b_in] + sz - spz
+                        // QN consistency: delta[b_out] = delta[b_in] + sz - spz
                         // (here s is the KET spin, sp is the BRA spin).
-                        int req_delta = HB_DELTA[b_in] + sz - spz;
-                        if (HB_DELTA[b_out] != req_delta) continue;
+                        int req_delta = delta[b_in] + sz - spz;
+                        if (delta[b_out] != req_delta) continue;
 
                         auto it_R = R.blocks[b_in].find(q_ket_R);
                         if (it_R == R.blocks[b_in].end()) continue;
@@ -505,24 +513,30 @@ static BlockEnv block_update_right(const BlockEnv& R,
 // Crucially, q_mid_bra can differ from q_mid_ket (by +-2) when s1b != s1k.
 // This cross-sector coupling is what mediates the XY term in the Heisenberg Hamiltonian.
 
-// Combined two-site MPO weights, fixed per bond:
-//   Wc[bL][bR][s1b*2+s2b][s1k*2+s2k] = sum_bm Wi(bL,bm)(s1b,s1k) * Wj(bm,bR)(s2b,s2k)
+// Combined two-site MPO weights, fixed per bond (sized to the MPO bond dims):
+//   at(bL,bR)[s1b*2+s2b][s1k*2+s2k] = sum_bm Wi(bL,bm)(s1b,s1k) * Wj(bm,bR)(s2b,s2k)
 struct WComb {
-    std::array<std::array<std::array<std::array<S,4>,4>,HB_CHI_W>,HB_CHI_W> w{};
+    int nR = 0;                                          // Wj.chi_r (column stride)
+    std::vector<std::array<std::array<S,4>,4>> w;        // [bL*nR + bR]
+    std::array<std::array<S,4>,4>&       at(int bL, int bR)       { return w[bL*nR + bR]; }
+    const std::array<std::array<S,4>,4>& at(int bL, int bR) const { return w[bL*nR + bR]; }
 };
 
 static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
     WComb wc;
+    wc.nR = Wj.chi_r;
+    wc.w.assign((size_t)Wi.chi_l * Wj.chi_r, {});
     for (int bL = 0; bL < Wi.chi_l; ++bL)
         for (int bm = 0; bm < Wi.chi_r; ++bm)
             for (int bR = 0; bR < Wj.chi_r; ++bR) {
                 const Mat2& wi = Wi.W(bL, bm);
                 const Mat2& wj = Wj.W(bm, bR);
+                auto& cell = wc.at(bL, bR);
                 for (int s1b = 0; s1b < 2; ++s1b)
                     for (int s2b = 0; s2b < 2; ++s2b)
                         for (int s1k = 0; s1k < 2; ++s1k)
                             for (int s2k = 0; s2k < 2; ++s2k)
-                                wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k] += mscal(wi(s1b,s1k) * wj(s2b,s2k));
+                                cell[s1b*2+s2b][s1k*2+s2k] += mscal(wi(s1b,s1k) * wj(s2b,s2k));
             }
     return wc;
 }
@@ -566,7 +580,7 @@ struct HeffPlan {
 static HeffPlan build_heff_plan(
     const BlockEnv& L, const MPOSite& Wi, const MPOSite& Wj, const BlockEnv& R,
     const WComb& Wc, const std::vector<int>& ket_keys,
-    const BondSpace& bs_L, const BondSpace& bs_R2)
+    const BondSpace& bs_L, const BondSpace& bs_R2, const std::vector<int>& delta)
 {
     HeffPlan plan;
     std::map<int,int> out_index;  // q_mid_bra -> out idx
@@ -608,7 +622,7 @@ static HeffPlan build_heff_plan(
                     const Mat& Rblk = it_R->second;
                     if (Rblk.cols() != dR_k) continue;
                     int dR_bra = (int)Rblk.rows();
-                    int q_R_bra = q_R_ket + HB_DELTA[bR];
+                    int q_R_bra = q_R_ket + delta[bR];
 
                     typename HeffPlan::T1Group g;
                     g.ket_idx = ket_idx;
@@ -618,7 +632,7 @@ static HeffPlan build_heff_plan(
                     plan.max_t1 = std::max(plan.max_t1, dL_k * dR_bra);
 
                     for (int bL = 0; bL < Wi.chi_l; ++bL) {
-                        int q_L_bra = q_L_ket + HB_DELTA[bL];
+                        int q_L_bra = q_L_ket + delta[bL];
                         int dL_bra  = bs_L.dim(q_L_bra);
                         if (dL_bra == 0) continue;
                         auto it_L = L.blocks[bL].find(q_L_ket);
@@ -646,7 +660,7 @@ static HeffPlan build_heff_plan(
                             int row_b = (s1b == 0) ? 0 : dL_up_bra;
 
                             for (int s2b = 0; s2b < 2; ++s2b) {
-                                S w = Wc.w[bL][bR][s1b*2+s2b][s1k*2+s2k];
+                                S w = Wc.at(bL, bR)[s1b*2+s2b][s1k*2+s2k];
                                 if (std::abs(w) < 1e-15) continue;
                                 int s2bz = (s2b == 0) ? +1 : -1;
                                 int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
@@ -801,7 +815,8 @@ static std::map<int,Mat> apply_heff_plan(const HeffPlan& plan,
 static std::map<int,Mat> apply_heff_1site(
     const BlockEnv& L, const MPOSite& W, const BlockEnv& R,
     const std::map<int,Mat>& M,
-    const BondSpace& bs_L, const BondSpace& bs_R)
+    const BondSpace& bs_L, const BondSpace& bs_R,
+    const std::vector<int>& delta)
 {
     ++g_block_matvecs;
     std::map<int,Mat> out;
@@ -820,7 +835,7 @@ static std::map<int,Mat> apply_heff_1site(
             Eigen::Ref<const Mat> M_sub = Mblk.block(0, col_k, dL_ket, dR_s_ket);
 
             for (int b_in = 0; b_in < W.chi_l; ++b_in) {
-                int q_L_bra = q_L_ket + HB_DELTA[b_in];
+                int q_L_bra = q_L_ket + delta[b_in];
                 int dL_bra  = bs_L.dim(q_L_bra);
                 if (dL_bra == 0) continue;
                 auto it_L = L.blocks[b_in].find(q_L_ket);
@@ -836,7 +851,7 @@ static std::map<int,Mat> apply_heff_1site(
                     const Mat& Rblk = it_R->second;   // (dR_bra, dR_s_ket)
                     if (Rblk.cols() != dR_s_ket) continue;
                     int dR_bra = (int)Rblk.rows();
-                    int q_R_bra = q_R_ket + HB_DELTA[b_out];
+                    int q_R_bra = q_R_ket + delta[b_out];
 
                     // s_bra fixed by q_R_bra = q_L_bra + s_bra_z
                     int s_bra = (q_R_bra == q_L_bra + 1) ? 0
@@ -1541,10 +1556,11 @@ static void bt_evolve_theta(std::map<int,Mat>& theta, const HeffPlan& plan, Cx t
     std::map<int,Mat> out; vec_to_theta(ev, theta, out); theta = out;
 }
 static void bt_evolve_site(std::map<int,Mat>& M, const BlockEnv& Le, const MPOSite& W,
-                           const BlockEnv& Re, const BondSpace& bsL, const BondSpace& bsR, Cx tau) {
+                           const BlockEnv& Re, const BondSpace& bsL, const BondSpace& bsR, Cx tau,
+                           const std::vector<int>& delta) {
     auto mv = [&](const Vec& vin) -> Vec {
         std::map<int,Mat> tb; vec_to_theta(vin, M, tb);
-        auto raw = apply_heff_1site(Le, W, Re, tb, bsL, bsR);
+        auto raw = apply_heff_1site(Le, W, Re, tb, bsL, bsR, delta);
         std::map<int,Mat> outn;
         for (auto& [q, ref] : M) { auto it = raw.find(q);
             outn[q] = (it!=raw.end()&&it->second.rows()==ref.rows()&&it->second.cols()==ref.cols())
@@ -1611,11 +1627,12 @@ static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<i
         blk(0, (sz[i] == +1) ? 0 : dR_up) = S(1);
         s.A[i][q_L] = blk;
     }
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
     s.L.assign(n + 1, BlockEnv()); s.R.assign(n + 1, BlockEnv());
     { BlockEnv L0; L0.bs = s.bond[0]; L0.blocks[0][qb[0]] = Mat::Constant(1,1,S(1)); s.L[0] = L0; }
     { BlockEnv Rn; Rn.bs = s.bond[n]; Rn.blocks[0][qb[n]] = Mat::Constant(1,1,S(1)); s.R[n] = Rn; }
     for (int i = n - 1; i >= 0; --i)
-        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i]);
+        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i], delta);
     return s;
 }
 
@@ -1625,6 +1642,7 @@ static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
     const int n = s.n;
     const Cx fwd = imag ? Cx(-dt/2,0) : Cx(0,-dt/2);
     const Cx bwd = imag ? Cx(+dt/2,0) : Cx(0,+dt/2);
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
     const std::map<int,RVec> no_sv;
     auto& A = s.A; auto& bond = s.bond; auto& L = s.L; auto& R = s.R;
     for (int i = 0; i < n - 1; ++i) {                      // left -> right
@@ -1632,14 +1650,14 @@ static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
         bt_expand_theta(theta, bond[i], bond[i+2]);
         WComb wc = build_wcomb(mpo[i], mpo[i+1]);
         std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
-        HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
+        HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2], delta);
         bt_evolve_theta(theta, plan, fwd);
         auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
         bond[i+1] = svd.new_mid_bs;
         A[i] = bt_A_from_U(svd, bond[i], bond[i+1]);
-        L[i+1] = block_update_left(L[i], A[i], bond[i], bond[i+1], mpo[i]);
+        L[i+1] = block_update_left(L[i], A[i], bond[i], bond[i+1], mpo[i], delta);
         auto M = bt_center_LR(svd);
-        if (i < n - 2) bt_evolve_site(M, L[i+1], mpo[i+1], R[i+2], bond[i+1], bond[i+2], bwd);
+        if (i < n - 2) bt_evolve_site(M, L[i+1], mpo[i+1], R[i+2], bond[i+1], bond[i+2], bwd, delta);
         A[i+1] = M;
     }
     for (int i = n - 2; i >= 0; --i) {                    // right -> left
@@ -1647,14 +1665,14 @@ static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
         bt_expand_theta(theta, bond[i], bond[i+2]);
         WComb wc = build_wcomb(mpo[i], mpo[i+1]);
         std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
-        HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2]);
+        HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2], delta);
         bt_evolve_theta(theta, plan, fwd);
         auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
         bond[i+1] = svd.new_mid_bs;
         A[i+1] = svd.Vt;
-        R[i+1] = block_update_right(R[i+2], A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
+        R[i+1] = block_update_right(R[i+2], A[i+1], bond[i+1], bond[i+2], mpo[i+1], delta);
         auto M = bt_center_RL(svd, bond[i], bond[i+1]);
-        if (i > 0) bt_evolve_site(M, L[i], mpo[i], R[i+1], bond[i], bond[i+1], bwd);
+        if (i > 0) bt_evolve_site(M, L[i], mpo[i], R[i+1], bond[i], bond[i+1], bwd, delta);
         A[i] = M;
     }
     if (imag) {   // renormalize (centre at site 0)
@@ -1766,7 +1784,8 @@ static double bt_energy(const BMPS& s, const std::vector<MPOSite>& mpo) {
     auto theta = form_theta(s.A[0], s.A[1], no_sv, s.bond[0], s.bond[1], s.bond[2], true);
     WComb wc = build_wcomb(mpo[0], mpo[1]);
     std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
-    HeffPlan plan = build_heff_plan(s.L[0], mpo[0], mpo[1], s.R[2], wc, kk, s.bond[0], s.bond[2]);
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+    HeffPlan plan = build_heff_plan(s.L[0], mpo[0], mpo[1], s.R[2], wc, kk, s.bond[0], s.bond[2], delta);
     auto Hth = apply_heff_plan(plan, theta);
     Vec tv = theta_to_vec(theta);
     std::map<int,Mat> Hn;
@@ -1863,8 +1882,9 @@ static void rebuild_mpo_envs(BMPS& s, const std::vector<MPOSite>& mpo) {
       for (int qi = 0; qi < s.bond[n].n_sectors(); ++qi)
           Rn.blocks[0][s.bond[n].qns[qi]] = Mat::Constant(1,1,S(1));
       s.R[n] = Rn; }
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
     for (int i = n - 1; i >= 0; --i)
-        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i]);
+        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i], delta);
 }
 
 // Two-MPS overlap left environments OL[i][q] = <bra[0..i-1] | ket[0..i-1]> as a
@@ -2077,16 +2097,18 @@ static void compress_bmps(BMPS& p, int chi_max, double cutoff) {
     }
 }
 
-// phi = W|psi> for a block MPO W with the Heisenberg Sz bond structure. The
-// combined bond carries q_c = q_mps + HB_DELTA[mpo_bond]; the product is built
-// exactly (combined bonds up to 5x larger), then SVD-compressed to chi_max.
+// phi = W|psi> for a block MPO W with any Sz-conserving bond structure. The
+// combined bond carries q_c = q_mps + delta[mpo_bond] (delta = the MPO's derived
+// per-bond charges); the product is built exactly (combined bonds up to W-wide
+// larger), then SVD-compressed to chi_max.
 static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
                               int chi_max, double cutoff) {
     const int n = s.n;
+    const std::vector<int> wdelta = derive_mpo_sym(W).delta;
     BMPS p; p.n = n; p.A.resize(n); p.bond.resize(n + 1);
     p.L.assign(n + 1, BlockEnv()); p.R.assign(n + 1, BlockEnv());
     auto mpodim = [&](int ib) { return (ib == 0) ? W[0].chi_l : W[ib-1].chi_r; };
-    auto hbd    = [&](int ib, int b) { return (mpodim(ib) == 1) ? 0 : HB_DELTA[b]; };
+    auto hbd    = [&](int ib, int b) { return (mpodim(ib) == 1) ? 0 : wdelta[b]; };
 
     // Combined bond spaces + layout: each q_c is composed of (q_mps, b) sub-blocks.
     struct Comp { int q_mps, b, off, dim; };
@@ -2561,6 +2583,13 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                       BMPS* out_state = nullptr) {
     auto t_start = std::chrono::steady_clock::now();
 
+    // MPO bond Sz charges (Heisenberg's {0,+2,-2,0,0} or whatever the operator
+    // structure implies for a general Sz-conserving model) -- threaded into every
+    // env / H_eff kernel below. The MPS bond Sz sectors themselves depend only on
+    // the spin-1/2 chain (not the Hamiltonian), so make_heisenberg_bond_space and
+    // the Neel start are reused unchanged.
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+
     // Build bond spaces
     std::vector<BondSpace> bond(n + 1);
     bond[0] = BondSpace::from_pairs({{0, 1}});   // left boundary: qn=0, dim=1
@@ -2623,7 +2652,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         R[n] = Rn;
     }
     for (int i = n - 1; i >= 0; --i)
-        R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+        R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i], delta);
 
     // Initial left environments
     {
@@ -2701,7 +2730,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             std::vector<int> ket_keys; ket_keys.reserve(theta.size());
             for (auto& [q, _] : theta) ket_keys.push_back(q);
             HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2],
-                                            wc, ket_keys, bond[i], bond[i+2]);
+                                            wc, ket_keys, bond[i], bond[i+2], delta);
             tick(t_theta, tt);
             auto mv = [&](const std::map<int,Mat>& v) {
                 return apply_heff_plan(plan, v);
@@ -2733,7 +2762,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             block_A[i+1] = svd.Vt;
 
             tt = clk::now();
-            L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
+            L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i], delta);
             tick(t_env, tt);
         }
 
@@ -2747,7 +2776,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             std::vector<int> ket_keys; ket_keys.reserve(theta.size());
             for (auto& [q, _] : theta) ket_keys.push_back(q);
             HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2],
-                                            wc, ket_keys, bond[i], bond[i+2]);
+                                            wc, ket_keys, bond[i], bond[i+2], delta);
             tick(t_theta, tt);
             auto mv = [&](const std::map<int,Mat>& v) {
                 return apply_heff_plan(plan, v);
@@ -2776,7 +2805,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             block_A[i+1] = svd.Vt;
 
             auto te = clk::now();
-            R[i+1] = block_update_right(R[i+2], block_A[i+1], bond[i+1], bond[i+2], mpo[i+1]);
+            R[i+1] = block_update_right(R[i+2], block_A[i+1], bond[i+1], bond[i+2], mpo[i+1], delta);
             tick(t_env, te);
         }
 
@@ -2816,7 +2845,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             // L->R: optimise each site, move the centre rightward.
             for (int i = 0; i < n; ++i) {
                 auto mv = [&](const std::map<int,Mat>& v) {
-                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1]);
+                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1], delta);
                 };
                 auto tt = clk::now();
                 auto [E, Mopt] = block_lanczos(mv, M);
@@ -2835,7 +2864,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                     }
                     M = std::move(Mn);
                     tt = clk::now();
-                    L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i]);
+                    L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i], delta);
                     tick(t_env, tt);
                 } else {
                     M = std::move(Mopt);
@@ -2844,7 +2873,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             // R->L: optimise each site, move the centre leftward.
             for (int i = n - 1; i >= 0; --i) {
                 auto mv = [&](const std::map<int,Mat>& v) {
-                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1]);
+                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1], delta);
                 };
                 auto tt = clk::now();
                 auto [E, Mopt] = block_lanczos(mv, M);
@@ -2871,7 +2900,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                     }
                     M = std::move(Mp);
                     tt = clk::now();
-                    R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+                    R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i], delta);
                     tick(t_env, tt);
                 } else {
                     M = std::move(Mopt);
@@ -2907,7 +2936,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                 for (int c = 0; c < dR_dn && c < s.size(); ++c) blk.col(dR_up + c) *= s[c];
             }
         }
-        auto HM = apply_heff_1site(L[0], mpo[0], R[1], M0, bond[0], bond[1]);
+        auto HM = apply_heff_1site(L[0], mpo[0], R[1], M0, bond[0], bond[1], delta);
         double num = 0, den = 0;
         for (auto& [q, blk] : M0) {
             den += blk.squaredNorm();
@@ -2966,7 +2995,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
               Rn.blocks[0][bond[n].qns[qi]] = Mat::Constant(1,1,S(1));
           out_state->R[n] = Rn; }
         for (int i = n - 1; i >= 0; --i)
-            out_state->R[i] = block_update_right(out_state->R[i+1], block_A[i], bond[i], bond[i+1], mpo[i]);
+            out_state->R[i] = block_update_right(out_state->R[i+1], block_A[i], bond[i], bond[i+1], mpo[i], delta);
     }
 
     auto t_end = std::chrono::steady_clock::now();

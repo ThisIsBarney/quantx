@@ -84,26 +84,30 @@ int main() {
         fails += !threw;
     }
 
-    // J1-J2 MPO correctness: dense DMRG vs exact diagonalization (N=8).
-    std::printf("== J1-J2 MPO: dense DMRG vs ED (N=8) ==\n");
-    {
-        const int n=8; const double J1=1.0, J2=0.5, d=1.0;
+    // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
+    // agnostic) and -- the phase-1b payoff -- the FAST block-sparse path, which
+    // now consumes the derived 8-wide charge array instead of the hard-coded
+    // Heisenberg HB_DELTA. Both must match ED.
+    std::printf("== J1-J2 ground state: ED vs dense DMRG vs block DMRG ==\n");
+    auto j1j2_check = [&](int n, double J1, double J2, double d) {
         Mat2 Xp=pauli('X'), Yp=pauli('Y'), Zp=pauli('Z');
         Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(1<<n, 1<<n);
-        for (int i=0;i<n;++i){
+        for (int i=0;i<n;++i)
             for (int r=1;r<=2;++r){ int j=i+r; if(j>=n) continue; double Jr=(r==1)?J1:J2;
                 H += Jr*(site_op(n,i,Xp)*site_op(n,j,Xp) + site_op(n,i,Yp)*site_op(n,j,Yp)
-                       + d*site_op(n,i,Zp)*site_op(n,j,Zp)); } }
-        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(H);
-        double E_ed = es.eigenvalues()(0);
-        auto r = run_dmrg(build_j1j2_mpo(n, J1, J2, d), n, /*chi*/64, /*cutoff*/1e-10,
-                          /*sweeps*/60, /*tol*/1e-10);
-        double err = std::abs(r.energy - E_ed);
-        bool ok = err < 1e-6;
-        std::printf("  E(dense DMRG)=%.8f  E(ED)=%.8f  err=%.2e  %s\n",
-                    r.energy, E_ed, err, ok?"OK":"FAIL");
+                       + d*site_op(n,i,Zp)*site_op(n,j,Zp)); }
+        double E_ed = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(H).eigenvalues()(0);
+        auto mpo = build_j1j2_mpo(n, J1, J2, d);
+        double E_dense = run_dmrg(mpo, n, 96, 1e-11, 80, 1e-11).energy;
+        double E_block = run_dmrg_blocks(mpo, n, 96, 1e-11, 80, 1e-11).energy;
+        double eD = std::abs(E_dense - E_ed), eB = std::abs(E_block - E_ed);
+        bool ok = eD < 1e-6 && eB < 1e-6;
+        std::printf("  N=%d J2=%.2f d=%.2f : E(ED)=%.8f  dense err=%.2e  block err=%.2e  %s\n",
+                    n, J2, d, E_ed, eD, eB, ok ? "OK" : "FAIL");
         fails += !ok;
-    }
+    };
+    j1j2_check(8,  1.0, 0.5, 1.0);
+    j1j2_check(10, 1.0, 0.4, 0.8);   // different J2 / anisotropy / size
 
     std::printf("%s\n", fails ? "MPO SYM TEST: FAIL" : "MPO SYM TEST: ALL OK");
     return fails ? 1 : 0;
