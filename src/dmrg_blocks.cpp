@@ -1256,7 +1256,8 @@ static BlockSVDResult block_svd_truncate(
     const BondSpace& bs_L,
     const BondSpace& bs_R2,
     int max_bond, double cutoff,
-    bool allow_fp32 = false)   // Phase C: FP32 GPU SVD permitted (real-time TEBD only)
+    bool allow_fp32 = false,   // Phase C: FP32 GPU SVD permitted (real-time TEBD only)
+    bool stable = false)       // direct (BDCSVD) SVD instead of the Gram trick
 {
     // SVD per q_mid sector (independent across sectors -> parallelise). Use
     // JacobiSVD for small blocks (much lower fixed overhead than BDCSVD, which
@@ -1276,8 +1277,22 @@ static BlockSVDResult block_svd_truncate(
     // restoring the host's setting when the guard leaves scope at function return.
     OpenBlasSingleThreadGuard _blas_guard;
 #endif
+    // `stable`: a direct SVD (Eigen BDCSVD) instead of the Gram trick. The Gram
+    // trick (eigensolve of M*M^dag) squares the condition number, so at a degenerate
+    // Schmidt spectrum (e.g. a DMRG ground state sitting exactly at a level crossing
+    // like the J1-J2 Majumdar-Ghosh point) it amplifies the ~1e-15 FP differences of
+    // multi-threaded GEMMs into non-orthonormal Schmidt vectors -> a non-canonical
+    // MPS -> a (wrong) energy below the true ground state. The direct SVD is
+    // condition-number stable and keeps the state canonical. Used by the DMRG
+    // ground-state path; the real-time dynamics keep the fast Gram/GPU route (no
+    // exact degeneracy there, and speed matters).
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
     for (int i = 0; i < (int)svq.size(); ++i) {
+        if (stable) {
+            Eigen::BDCSVD<Mat> bsvd(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
+            sb[i].U = bsvd.matrixU(); sb[i].V = bsvd.matrixV(); sb[i].s = bsvd.singularValues();
+            continue;
+        }
 #ifdef QX_USE_CUDA
         // Large blocks -> GPU (cuSOLVER) Gram-eigensolve; the dominant central-Sz
         // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
@@ -2589,6 +2604,12 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     // the spin-1/2 chain (not the Hamiltonian), so make_heisenberg_bond_space and
     // the Neel start are reused unchanged.
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+    // Use the numerically-stable direct SVD for the ground-state truncation so a
+    // DMRG that lands on an exactly degenerate ground state (e.g. a frustrated
+    // chain at a level crossing) stays canonical/variational. Opt back into the
+    // fast Gram/LAPACKE/GPU path with QX_DMRG_FAST_SVD for known-non-degenerate
+    // problems (and to exercise those backends).
+    const bool dmrg_stable = (std::getenv("QX_DMRG_FAST_SVD") == nullptr);
 
     // Build bond spaces
     std::vector<BondSpace> bond(n + 1);
@@ -2741,7 +2762,8 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             E0 = E;
 
             tt = clk::now();
-            auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff);
+            auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff,
+                                          /*allow_fp32*/false, /*stable*/dmrg_stable);
             tick(t_svd, tt);
             sweep_trunc += svd.trunc_err;
             bond[i+1] = svd.new_mid_bs;
@@ -2787,7 +2809,8 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             E0 = E;
 
             tt = clk::now();
-            auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff);
+            auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff,
+                                          /*allow_fp32*/false, /*stable*/dmrg_stable);
             tick(t_svd, tt);
             sweep_trunc += svd.trunc_err;
             bond[i+1] = svd.new_mid_bs;

@@ -109,6 +109,26 @@ int main() {
     j1j2_check(8,  1.0, 0.5, 1.0);
     j1j2_check(10, 1.0, 0.4, 0.8);   // different J2 / anisotropy / size
 
+    // Majumdar-Ghosh degeneracy regression: at J2=J1/2 the open-chain ground state
+    // is the exact dimer product (E/N = -1.5). Under truncation the Gram-trick SVD
+    // squares the condition number and, at this degenerate Schmidt spectrum,
+    // amplified the ~1e-15 FP differences of multi-threaded GEMMs into a
+    // non-orthonormal (non-canonical) state -> a NON-VARIATIONAL energy below the
+    // true GS, varying run-to-run. The direct (BDCSVD) SVD on the DMRG path keeps
+    // the state canonical: the energy must equal -1.5 and be deterministic. (This
+    // test runs multi-threaded, so it exercises exactly the failing condition;
+    // chi=192 > the level where the Gram trick used to break.)
+    std::printf("== Majumdar-Ghosh degeneracy (stable-SVD regression, multi-threaded) ==\n");
+    {
+        auto mpo = build_j1j2_mpo(24, 1.0, 0.5, 1.0);
+        double e1 = run_dmrg_blocks(mpo, 24, 192, 1e-11, 50, 1e-11).energy / 24;
+        double e2 = run_dmrg_blocks(mpo, 24, 192, 1e-11, 50, 1e-11).energy / 24;
+        bool ok = std::abs(e1 - (-1.5)) < 1e-5 && e1 == e2;   // exact GS, deterministic, variational
+        std::printf("  N=24 chi=192: E/N=%.8f (exact -1.5)  deterministic=%d  %s\n",
+                    e1, (int)(e1 == e2), ok ? "OK" : "FAIL");
+        fails += !ok;
+    }
+
     std::printf("%s\n", fails ? "MPO SYM TEST: FAIL" : "MPO SYM TEST: ALL OK");
     return fails ? 1 : 0;
 }
