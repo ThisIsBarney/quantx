@@ -109,7 +109,7 @@ inline Env update_left(const Env& L, const Mat& A, const MPOSite& W) {
     std::array<Mat,2> T1;
     for (int s=0;s<2;++s) T1[s] = A.block(s*chi_old,0,chi_old,chi_new).conjugate().transpose() * L_flat;
     for (int a=0;a<chi_wl;++a) for (int b=0;b<chi_wr;++b) {
-        const Mat2& Wab = W.W(a,b);
+        const auto& Wab = W.W(a,b);
         for (int s=0;s<2;++s) {
             Mat T1as = T1[s].block(0,a*chi_old,chi_new,chi_old);
             for (int sp=0;sp<2;++sp) {
@@ -132,7 +132,7 @@ inline Env update_right(const Env& R, const Mat& A, const MPOSite& W) {
     std::array<Mat,2> T1;
     for (int sp=0;sp<2;++sp) T1[sp] = A.block(sp*chi_l,0,chi_l,chi_r).conjugate() * RT;
     for (int a=0;a<chi_wl;++a) for (int b=0;b<chi_wr;++b) {
-        const Mat2& Wab = W.W(a,b);
+        const auto& Wab = W.W(a,b);
         for (int s=0;s<2;++s) {
             Mat A_s = A.block(s*chi_l,0,chi_l,chi_r);
             for (int sp=0;sp<2;++sp) {
@@ -156,7 +156,7 @@ inline Mat apply_h1(const Env& L, const MPOSite& W, const Env& R, const Mat& X) 
         Mat Lwl(L.chi1, L.chi2);                       // (bra a', ket a)
         for (int ap=0;ap<L.chi1;++ap) for (int a=0;a<L.chi2;++a) Lwl(ap,a) = L.at(ap,wl,a);
         for (int wr=0; wr<Dwr; ++wr) {
-            const Mat2& Wm = W.W(wl,wr); if (Wm.isZero(1e-15)) continue;
+            const auto& Wm = W.W(wl,wr); if (Wm.isZero(1e-15)) continue;
             Mat Rwr(R.chi1, R.chi2);                    // (ket b, bra b')
             for (int b=0;b<R.chi1;++b) for (int bp=0;bp<R.chi2;++bp) Rwr(b,bp) = R.at(b,wr,bp);
             for (int s=0;s<2;++s) {
@@ -185,9 +185,9 @@ inline Mat apply_h2(const Env& L, const MPOSite& Wi, const MPOSite& Wj,
     std::vector<std::vector<M4>> Wc(Dwl, std::vector<M4>(Dwr, M4::Zero()));
     for (int wl=0; wl<Dwl; ++wl)
         for (int wm=0; wm<Dwm; ++wm) {
-            const Mat2& Wim = Wi.W(wl,wm); if (Wim.isZero(1e-15)) continue;
+            const auto& Wim = Wi.W(wl,wm); if (Wim.isZero(1e-15)) continue;
             for (int wr=0; wr<Dwr; ++wr) {
-                const Mat2& Wjm = Wj.W(wm,wr); if (Wjm.isZero(1e-15)) continue;
+                const auto& Wjm = Wj.W(wm,wr); if (Wjm.isZero(1e-15)) continue;
                 for (int s1p=0;s1p<2;++s1p) for (int s2p=0;s2p<2;++s2p)
                     for (int s1=0;s1<2;++s1) for (int s2=0;s2<2;++s2)
                         Wc[wl][wr](s1p*2+s2p, s1*2+s2) += Wim(s1p,s1)*Wjm(s2p,s2);

@@ -48,6 +48,35 @@ static Eigen::MatrixXcd site_op(int n, int s, const Mat2& o) {
     return O;
 }
 
+// general d-dim single-site operator embedding (d x d op at `site`, identity else)
+static Eigen::MatrixXcd site_opd(int n, int site, const Eigen::MatrixXcd& o, int d) {
+    Eigen::MatrixXcd O = Eigen::MatrixXcd::Identity(1, 1);
+    for (int i = 0; i < n; ++i)
+        O = kron(O, (i == site) ? o : Eigen::MatrixXcd(Eigen::MatrixXcd::Identity(d, d)));
+    return O;
+}
+
+// Contract an MPO chain into the full d^n x d^n operator (boundary: site 0 row,
+// last site col 0). Validates the MPO without needing a (not-yet-generalized for
+// d>2) DMRG path.
+static Eigen::MatrixXcd contract_mpo(const std::vector<qx_dmrg::MPOSite>& mpo) {
+    std::vector<Eigen::MatrixXcd> partial;
+    for (int a = 0; a < mpo[0].chi_r; ++a) partial.push_back(mpo[0].W(0, a));
+    for (size_t i = 1; i < mpo.size(); ++i) {
+        std::vector<Eigen::MatrixXcd> next(mpo[i].chi_r);
+        for (int b = 0; b < mpo[i].chi_r; ++b) {
+            Eigen::MatrixXcd acc; bool first = true;
+            for (int a = 0; a < mpo[i].chi_l; ++a) {
+                Eigen::MatrixXcd term = kron(partial[a], mpo[i].W(a, b));
+                if (first) { acc = term; first = false; } else acc += term;
+            }
+            next[b] = acc;
+        }
+        partial = std::move(next);
+    }
+    return partial[0];
+}
+
 int main() {
     int fails = 0;
     std::printf("== derive_mpo_sym charge derivation ==\n");
@@ -57,6 +86,32 @@ int main() {
     fails += !check_charges(build_current_mpo(6, 1.0),   {0,2,-2,0,0}, "current");
     // J1-J2: 8-wide, each operator has a range-1 and a range-2 (delayed) state.
     fails += !check_charges(build_j1j2_mpo(6, 1.0, 0.5, 1.0), {0,2,2,-2,-2,0,0,0}, "J1-J2");
+    // Spin-1 (d=3): same 5-wide BOND charges as spin-1/2 (S+- still shift Sz by 1),
+    // but the local dimension and operators differ -- the first d>2 model.
+    fails += !check_charges(build_spin1_heisenberg_mpo(6, 1.0), {0,2,-2,0,0}, "spin-1");
+
+    // Arbitrary local dimension (phase 2a): the generalized MPOSite (d, phys_charge,
+    // d x d ops) holds the spin-1 (d=3) MPO and it encodes the correct Hamiltonian.
+    std::printf("== spin-1 (d=3) MPO reconstructs H = J sum S.S ==\n");
+    {
+        const int n = 4; const double J = 1.0; const double r2 = std::sqrt(2.0);
+        Eigen::MatrixXcd Sp = Eigen::MatrixXcd::Zero(3,3); Sp(0,1)=r2; Sp(1,2)=r2;
+        Eigen::MatrixXcd Sm = Eigen::MatrixXcd::Zero(3,3); Sm(1,0)=r2; Sm(2,1)=r2;
+        Eigen::MatrixXcd Sz = Eigen::MatrixXcd::Zero(3,3); Sz(0,0)=1; Sz(2,2)=-1;
+        Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(81, 81);   // 3^4
+        for (int i = 0; i < n-1; ++i)
+            H += J * (0.5*(site_opd(n,i,Sp,3)*site_opd(n,i+1,Sm,3)
+                         + site_opd(n,i,Sm,3)*site_opd(n,i+1,Sp,3))
+                    + site_opd(n,i,Sz,3)*site_opd(n,i+1,Sz,3));
+        Eigen::MatrixXcd H_mpo = contract_mpo(build_spin1_heisenberg_mpo(n, J));
+        double err = (H - H_mpo).cwiseAbs().maxCoeff();
+        bool ok = err < 1e-12;
+        // ED ground energy (sanity: the spin-1 Heisenberg GS is gapped/Haldane)
+        double E_ed = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(H_mpo).eigenvalues()(0);
+        std::printf("  N=%d: ||H_MPO - H_direct||=%.2e  E_GS=%.6f  %s\n",
+                    n, err, E_ed, ok ? "OK" : "FAIL");
+        fails += !ok;
+    }
 
     // A non-Sz-conserving MPO (transverse-field Ising bond H=sum X_i X_{i+1})
     // must be rejected: the X completion bond carries both +2 and -2.
@@ -82,6 +137,17 @@ int main() {
         try { derive_mpo_sym(build_xxz_mpo(2, 1.0, 1.0)); } catch (const std::exception&) { threw=true; }
         std::printf("  n=2 (no bulk) threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
         fails += !threw;
+    }
+    // The d=2 contraction kernels can't yet run a d>2 MPO (phase 2b). Feeding the
+    // spin-1 (d=3) MPO to the DMRG paths must throw, not silently truncate to s<2.
+    {
+        auto s1 = build_spin1_heisenberg_mpo(6, 1.0);
+        bool tb=false, td=false;
+        try { run_dmrg_blocks(s1, 6, 32, 1e-10, 4, 1e-10); } catch (const std::exception&) { tb=true; }
+        try { run_dmrg(s1, 6, 32, 1e-10, 4, 1e-10); }        catch (const std::exception&) { td=true; }
+        std::printf("  spin-1 -> block threw=%d  dense threw=%d  %s\n",
+                    (int)tb, (int)td, (tb&&td)?"OK":"FAIL");
+        fails += !(tb && td);
     }
 
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-

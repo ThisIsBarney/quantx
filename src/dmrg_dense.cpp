@@ -101,7 +101,7 @@ static Env update_left(const Env& L, const Mat& A, const MPOSite& W) {
     // Phase 2: accumulate into L_new
     for (int a = 0; a < chi_wl; ++a) {
         for (int b = 0; b < chi_wr; ++b) {
-            const Mat2& Wab = W.W(a, b);
+            const auto& Wab = W.W(a, b);
             for (int s = 0; s < 2; ++s) {
                 Mat T1_a_s = T1[s].block(0, a * chi_old, chi_new, chi_old);
                 for (int sp = 0; sp < 2; ++sp) {
@@ -144,7 +144,7 @@ static Env update_right(const Env& R, const Mat& A, const MPOSite& W) {
     // Phase 2: accumulate into R_new
     for (int a = 0; a < chi_wl; ++a) {
         for (int b = 0; b < chi_wr; ++b) {
-            const Mat2& Wab = W.W(a, b);
+            const auto& Wab = W.W(a, b);
             for (int s = 0; s < 2; ++s) {
                 Mat A_s = A.block(s * chi_l, 0, chi_l, chi_r);
                 for (int sp = 0; sp < 2; ++sp) {
@@ -381,6 +381,7 @@ double compute_energy(const MPS& mps, const std::vector<MPOSite>& mpo) {
 DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
                     int max_bond, double cutoff,
                     int n_sweeps, double tol) {
+    require_local_dim2(mpo, "run_dmrg");
     auto t_start = std::chrono::steady_clock::now();
 
     MPS mps = init_neel_state(n);
