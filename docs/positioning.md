@@ -52,6 +52,15 @@ here too — **2.86× at χ=1024** on the purified evolution (vs ~2.2× for the 
 Néel-quench: the finite-T correlator evolves two states, doubling the SVD load).
 See [finite_temperature.md](finite_temperature.md).
 
+**5. Not just XXZ — *any* Sz-conserving model.**
+The block-sparse bond structure is now **derived from the MPO** rather than hard-wired to
+Heisenberg, so the entire fast/GPU pipeline runs arbitrary Sz-conserving Hamiltonians
+(next-nearest-neighbour, longer-range, fields…). Demonstrated on the frustrated **J1–J2**
+chain (an 8-wide MPO): block-DMRG matches ED to ~1e-13, and a pure-energy run recovers the
+**Majumdar–Ghosh dimerization** (the χ=8 gap collapses ~1300× toward J2=J1/2, where χ=8
+returns the exact dimer energy). Heisenberg stays bit-identical. See
+[universal_mpo.md](universal_mpo.md).
+
 ## What "complete" means
 
 The killer feature is the *system*, not a component: a single engine where the
