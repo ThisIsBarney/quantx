@@ -1,6 +1,7 @@
 #include "dmrg_internal.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
@@ -74,6 +75,43 @@ std::vector<MPOSite> build_xxz_mpo(int n, double J, double delta) {
                 site.W(a, b) = W5[ar][br];
             }
         }
+    }
+    return mpo;
+}
+
+// Spin-1 Heisenberg chain MPO: H = J sum_i S_i . S_{i+1}, with the spin-1 (d=3)
+// operators. S.S = (1/2)(S+ S- + S- S+) + Sz Sz. Same 5-wide bond structure as the
+// spin-1/2 Heisenberg MPO (so derive_mpo_sym yields {0,+2,-2,0,0}), but the local
+// dimension is 3 and the operators are 3x3 -- the first d>2 model on the engine.
+// Basis (|+1>,|0>,|-1>), Sz charges (2*Sz) = {+2,0,-2}.
+std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J) {
+    const int chi = 5, d = 3;
+    const double r2 = std::sqrt(2.0);
+    Mat Sp = Mat::Zero(3, 3); Sp(0, 1) = r2; Sp(1, 2) = r2;   // S+ raises Sz
+    Mat Sm = Mat::Zero(3, 3); Sm(1, 0) = r2; Sm(2, 1) = r2;   // S- = (S+)^dag
+    Mat Sz = Mat::Zero(3, 3); Sz(0, 0) = 1.0; Sz(2, 2) = -1.0; // diag(+1,0,-1)
+    Mat I3 = Mat::Identity(3, 3);
+    std::array<std::array<Mat, 5>, 5> W5;
+    for (auto& row : W5) for (auto& e : row) e = Mat::Zero(3, 3);
+    W5[0][0] = I3;
+    W5[1][0] = Sm; W5[2][0] = Sp; W5[3][0] = Sz;
+    W5[4][1] = (0.5 * J) * Sp;   // emit (J/2)S+, complete with S-  -> (J/2) S+ S-
+    W5[4][2] = (0.5 * J) * Sm;   // emit (J/2)S-, complete with S+  -> (J/2) S- S+
+    W5[4][3] = J * Sz;           // emit J Sz, complete with Sz     -> J Sz Sz
+    W5[4][4] = I3;
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d; site.phys_charge = {+2, 0, -2};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 4 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W5[ar][br];
+            }
     }
     return mpo;
 }

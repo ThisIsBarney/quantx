@@ -369,7 +369,7 @@ static BlockEnv block_update_left(const BlockEnv& L,
             int dR_dn_bra = bs_R.dim(q_bra_L - 1);
 
             for (int b_out = 0; b_out < W.chi_r; ++b_out) {
-                const Mat2& Wab = W.W(b_in, b_out);
+                const auto& Wab = W.W(b_in, b_out);
 
                 for (int s = 0; s < 2; ++s) {   // bra spin (conjugate A)
                     int sz   = (s == 0) ? +1 : -1;
@@ -454,7 +454,7 @@ static BlockEnv block_update_right(const BlockEnv& R,
             int dR_dn_bra = bs_R.dim(q_bra_L - 1);
 
             for (int b_in = 0; b_in < W.chi_r; ++b_in) {
-                const Mat2& Wab = W.W(b_out, b_in);
+                const auto& Wab = W.W(b_out, b_in);
 
                 for (int s = 0; s < 2; ++s) {   // ket spin
                     int sz   = (s == 0) ? +1 : -1;
@@ -529,8 +529,8 @@ static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
     for (int bL = 0; bL < Wi.chi_l; ++bL)
         for (int bm = 0; bm < Wi.chi_r; ++bm)
             for (int bR = 0; bR < Wj.chi_r; ++bR) {
-                const Mat2& wi = Wi.W(bL, bm);
-                const Mat2& wj = Wj.W(bm, bR);
+                const auto& wi = Wi.W(bL, bm);
+                const auto& wj = Wj.W(bm, bR);
                 auto& cell = wc.at(bL, bR);
                 for (int s1b = 0; s1b < 2; ++s1b)
                     for (int s2b = 0; s2b < 2; ++s2b)

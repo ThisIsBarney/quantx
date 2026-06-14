@@ -22,12 +22,17 @@ using nlj  = nlohmann::json;
 
 // -- Shared data structures ---------------------------------------------------
 
-// MPO site tensor: ops[alpha][beta] is a 2x2 matrix W^{alpha,beta}_{s,s'}
+// MPO site tensor: ops[alpha][beta] is a d x d matrix W^{alpha,beta}_{s,s'} acting
+// on the local Hilbert space. d=2 (spin-1/2) by default; d>2 for spin-1, Hubbard,
+// etc. phys_charge[s] is the U(1)/Sz charge of local state s in 2*Sz integer units
+// (spin-1/2 = {+1,-1}, spin-1 = {+2,0,-2}) -- the block-sparse path needs it.
 struct MPOSite {
     int chi_l, chi_r;
-    std::vector<Mat2> ops;
-    const Mat2& W(int a, int b) const { return ops[a * chi_r + b]; }
-    Mat2& W(int a, int b)             { return ops[a * chi_r + b]; }
+    int d = 2;
+    std::vector<int> phys_charge{+1, -1};
+    std::vector<Mat> ops;   // each is d x d
+    const Mat& W(int a, int b) const { return ops[a * chi_r + b]; }
+    Mat& W(int a, int b)             { return ops[a * chi_r + b]; }
 };
 
 struct MPS {
@@ -79,6 +84,11 @@ std::vector<MPOSite> build_current_purified_mpo(int n_phys, double J = 1.0);
 std::vector<MPOSite> build_j1j2_mpo(int n, double J1 = 1.0, double J2 = 0.0,
                                     double delta = 1.0);
 
+// Spin-1 Heisenberg chain: H = J sum_i S_i.S_{i+1} with the d=3 spin-1 operators.
+// The first model with local dimension > 2 (phys_charge = {+2,0,-2}); validates
+// the arbitrary-local-dimension generalization of MPOSite / derive_mpo_sym.
+std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J = 1.0);
+
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
 struct MPOSym {
@@ -101,23 +111,24 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
         throw std::runtime_error("derive_mpo_sym: no square bulk MPO site (chain too short, need n>=3)");
     const MPOSite& W = mpo[bulk];
     const int chi = W.chi_r;
-    auto szf = [](int s) { return s == 0 ? +1 : -1; };
+    const int ld = W.d;                          // local Hilbert-space dimension
+    const std::vector<int>& qphys = W.phys_charge;   // Sz charge of each local state
 
-    std::vector<std::array<int,3>> edges;       // (a,b,d): bond a->b carries d
+    std::vector<std::array<int,3>> edges;       // (a,b,c): bond a->b carries charge c
     for (int a = 0; a < chi; ++a)
         for (int b = 0; b < chi; ++b) {
-            const Mat2& m = W.W(a, b);
-            int d = 0; bool any = false;
-            for (int s = 0; s < 2; ++s)
-                for (int sp = 0; sp < 2; ++sp)
+            const Mat& m = W.W(a, b);
+            int c = 0; bool any = false;
+            for (int s = 0; s < ld; ++s)
+                for (int sp = 0; sp < ld; ++sp)
                     if (std::abs(m(s, sp)) > 1e-13) {
-                        int dd = szf(s) - szf(sp);
-                        if (!any) { d = dd; any = true; }
-                        else if (dd != d)
+                        int cc = qphys[s] - qphys[sp];   // bra charge - ket charge
+                        if (!any) { c = cc; any = true; }
+                        else if (cc != c)
                             throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
                                                      "(bond carries mixed charge)");
                     }
-            if (any) edges.push_back({a, b, d});
+            if (any) edges.push_back({a, b, c});
         }
 
     MPOSym sym; sym.chi = chi; sym.delta.assign(chi, 0);
