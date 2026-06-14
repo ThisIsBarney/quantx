@@ -35,6 +35,17 @@ struct MPOSite {
     Mat& W(int a, int b)             { return ops[a * chi_r + b]; }
 };
 
+// The DMRG/TDVP contraction kernels still hard-loop the two spin-1/2 states (the
+// d>2 contractions are phase 2b). Until then, fail loud at the public entry points
+// rather than silently truncating a d>2 MPO to its s<2 subspace.
+inline void require_local_dim2(const std::vector<MPOSite>& mpo, const char* where) {
+    for (const MPOSite& W : mpo)
+        if (W.d != 2)
+            throw std::runtime_error(std::string(where) + ": local dimension d=" +
+                std::to_string(W.d) + " not yet supported (phase 2a generalizes the MPO "
+                "representation only; the contraction kernels are still d=2)");
+}
+
 struct MPS {
     int n;
     std::vector<Mat> A;    // A[i]: (chi_L*2, chi_R), left-canonical
@@ -113,6 +124,9 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
     const int chi = W.chi_r;
     const int ld = W.d;                          // local Hilbert-space dimension
     const std::vector<int>& qphys = W.phys_charge;   // Sz charge of each local state
+    if ((int)qphys.size() != ld || W.W(0, 0).rows() != ld)
+        throw std::runtime_error("derive_mpo_sym: MPOSite invariant violated "
+                                 "(d, phys_charge size, and op rows must all agree)");
 
     std::vector<std::array<int,3>> edges;       // (a,b,c): bond a->b carries charge c
     for (int a = 0; a < chi; ++a)

@@ -138,6 +138,17 @@ int main() {
         std::printf("  n=2 (no bulk) threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
         fails += !threw;
     }
+    // The d=2 contraction kernels can't yet run a d>2 MPO (phase 2b). Feeding the
+    // spin-1 (d=3) MPO to the DMRG paths must throw, not silently truncate to s<2.
+    {
+        auto s1 = build_spin1_heisenberg_mpo(6, 1.0);
+        bool tb=false, td=false;
+        try { run_dmrg_blocks(s1, 6, 32, 1e-10, 4, 1e-10); } catch (const std::exception&) { tb=true; }
+        try { run_dmrg(s1, 6, 32, 1e-10, 4, 1e-10); }        catch (const std::exception&) { td=true; }
+        std::printf("  spin-1 -> block threw=%d  dense threw=%d  %s\n",
+                    (int)tb, (int)td, (tb&&td)?"OK":"FAIL");
+        fails += !(tb && td);
+    }
 
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
     // agnostic) and -- the phase-1b payoff -- the FAST block-sparse path, which

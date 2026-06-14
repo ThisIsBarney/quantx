@@ -3051,6 +3051,7 @@ static bool mpo_is_real(const std::vector<MPOSite>& mpo) {
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff,
                            int n_sweeps, double tol) {
+    require_local_dim2(mpo, "run_dmrg_blocks");
     if (mpo_is_real(mpo))
         return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
     return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
@@ -3060,6 +3061,7 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
 TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag) {
+    require_local_dim2(mpo, "run_tdvp2_blocks");
     auto o = BlockDMRG<Cx>::run_tdvp2(mpo, n, dt, n_steps, chi_max, cutoff, imag);
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;

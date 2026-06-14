@@ -381,6 +381,7 @@ double compute_energy(const MPS& mps, const std::vector<MPOSite>& mpo) {
 DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
                     int max_bond, double cutoff,
                     int n_sweeps, double tol) {
+    require_local_dim2(mpo, "run_dmrg");
     auto t_start = std::chrono::steady_clock::now();
 
     MPS mps = init_neel_state(n);
