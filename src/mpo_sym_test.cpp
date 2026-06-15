@@ -113,11 +113,11 @@ int main() {
         fails += !ok;
     }
 
-    // Phase 2b: the dense DMRG path now runs arbitrary local dimension d. The
-    // spin-1 (d=3) Heisenberg ground state must match exact diagonalization (the
-    // gapped Haldane phase). For N=4,6 the bond stays below truncation so DMRG is
-    // effectively exact. (The block path stays d=2 for now -- see the guard below.)
-    std::printf("== spin-1 (d=3) dense DMRG vs ED ==\n");
+    // Phase 2b/2c: the dense AND block-sparse DMRG paths now run arbitrary local
+    // dimension d. The spin-1 (d=3) Heisenberg ground state must match exact
+    // diagonalization on both (the gapped Haldane phase). For N=4,6 the bond stays
+    // below truncation so DMRG is effectively exact.
+    std::printf("== spin-1 (d=3) DMRG vs ED (dense + block) ==\n");
     {
         const double r2 = std::sqrt(2.0);
         Eigen::MatrixXcd Sp = Eigen::MatrixXcd::Zero(3,3); Sp(0,1)=r2; Sp(1,2)=r2;
@@ -134,11 +134,13 @@ int main() {
         };
         for (int n : {4, 6}) {
             double E_ed = spin1_ed(n);
-            double E_dmrg = run_dmrg(build_spin1_heisenberg_mpo(n, 1.0), n, 64, 1e-11, 80, 1e-11).energy;
-            double e = std::abs(E_dmrg - E_ed);
-            bool ok = e < 1e-6;
-            std::printf("  N=%d : E(ED)=%.8f  dense DMRG err=%.2e  %s\n",
-                        n, E_ed, e, ok ? "OK" : "FAIL");
+            auto mpo = build_spin1_heisenberg_mpo(n, 1.0);
+            double E_dense = run_dmrg(mpo, n, 64, 1e-11, 80, 1e-11).energy;
+            double E_block = run_dmrg_blocks(mpo, n, 64, 1e-11, 80, 1e-11).energy;
+            double eD = std::abs(E_dense - E_ed), eB = std::abs(E_block - E_ed);
+            bool ok = eD < 1e-6 && eB < 1e-6;
+            std::printf("  N=%d : E(ED)=%.8f  dense err=%.2e  block err=%.2e  %s\n",
+                        n, E_ed, eD, eB, ok ? "OK" : "FAIL");
             fails += !ok;
         }
     }
@@ -168,14 +170,14 @@ int main() {
         std::printf("  n=2 (no bulk) threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
         fails += !threw;
     }
-    // The block contraction kernel can't yet run a d>2 MPO (phase 2c); it must
-    // throw, not silently truncate the spin-1 state to its s<2 subspace. (The dense
-    // path DOES run it now -- validated above.)
+    // The block TDVP (dynamics) path is still d=2 (phase 2c covers the GS only); a
+    // spin-1 MPO into run_tdvp2_blocks must throw, not silently truncate to s<2.
     {
         auto s1 = build_spin1_heisenberg_mpo(6, 1.0);
         bool tb=false;
-        try { run_dmrg_blocks(s1, 6, 32, 1e-10, 4, 1e-10); } catch (const std::exception&) { tb=true; }
-        std::printf("  spin-1 -> block threw=%d  %s\n", (int)tb, tb?"OK":"FAIL");
+        try { run_tdvp2_blocks(s1, 6, 0.05, 1, 16, 1e-10, false); }
+        catch (const std::exception&) { tb=true; }
+        std::printf("  spin-1 -> block TDVP threw=%d  %s\n", (int)tb, tb?"OK":"FAIL");
         fails += !tb;
     }
 
