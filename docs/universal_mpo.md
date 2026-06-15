@@ -35,16 +35,40 @@ singlets — a **bond-dimension-2** state — so its entanglement collapses and 
 (2.5e-4 → 1.9e-7) approaching MG. Exactly at J2=J1/2, χ=8 returns the **exact
 Majumdar–Ghosh dimer energy** E/N = −1.500000.
 
+## Showcase: the spin-1 Haldane chain (arbitrary local dimension)
+
+Phase 1 generalized the *bond* structure; **phase 2 generalizes the *local*
+dimension**. The same engine now runs `H = J Σ S_i·S_{i+1}` with the **physical
+spin-1 operators** (local dimension d=3, `build_spin1_heisenberg_mpo`) — the
+gapped **Haldane phase**, a different universality class from the critical
+spin-1/2 chain. It matches exact diagonalization to **~1e-13** (`qx_mpo_sym_test`,
+N=4 and N=6, on both the dense and the fast block path).
+
+![Spin-1 Haldane energy density](spin1_haldane.svg)
+
+`qx_spin1_showcase` runs the chain on the fast block path at growing N. The
+**incremental bulk energy** `e_bulk(N) = (E_N − E_{N−ΔN})/ΔN` removes the
+open-chain edge offset and converges to the known spin-1 Heisenberg energy
+density **−1.401484039 J to ~2e-8** by N=96. And because the Haldane ground state
+is gapped (area-law entanglement), the energy **saturates by χ≈16** — unlike the
+critical spin-1/2 chain whose entanglement grows with N. Both signatures come
+from ground-state energies alone, on the same fast path as spin-1/2.
+
 ## Scope and limits
 
 - **Phase 1 (done):** any *uniform-bulk* Sz-conserving MPO at local dimension
   d=2 — next-nearest / longer-range, fields, etc. Non-uniform MPOs
   (`build_pauli_sum_mpo`) stay on the dense path; `derive_mpo_sym` throws
   fail-loud if one reaches the block path.
+- **Phase 2 (done — ground state):** arbitrary local dimension d>2. The MPO
+  representation (`MPOSite.d`/`phys_charge`), the dense DMRG, and the **fast
+  block-sparse DMRG** all run any uniform d (spin-1 d=3 validated vs ED). The
+  block path folds the local index into d charge-shifted column groups
+  (`phys_groups`) in place of the old up/dn split.
 - **Known issue:** the single-site DMRG refinement phase loses variationality at
   an *exactly degenerate* ground state with truncation (e.g. the MG point itself
   at large N); the two-site path is unaffected (use `QX_DMRG_NO_SINGLESITE=1`).
   Tracked separately.
-- **Phase 2 (future):** arbitrary local dimension d>2 (Hubbard, spin-1) — the
-  d=2/±1-spin-sector assumption is still pervasive (`form_theta`, the recombine
-  kernels, the GPU `form_theta`).
+- **Phase 2 (remaining):** the block-sparse *dynamics* (TEBD/TDVP) and the GPU
+  `form_theta` are still d=2 (the d>2 entry points throw fail-loud); generalizing
+  them brings spin-1 real-time/finite-T spectroscopy onto the fast path.
