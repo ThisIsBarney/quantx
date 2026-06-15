@@ -1566,27 +1566,32 @@ struct TDVP2Out {
     double wall_s = 0;
 };
 
-// <sigma^z_i> for a center tensor M (block_A layout): up cols (+1) vs dn cols (-1).
-static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR) {
-    double up = 0, dn = 0;
+// <2 S^z_i> (the Sz charge, = <sigma^z> for spin-1/2) for a center tensor M: each
+// physical-state column group s carries charge qphys[s], weighted by its probability.
+static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR,
+                        const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
+    double num = 0, z = 0;
     for (auto& [q_L, blk] : M) {
-        int dR_up = bsR.dim(q_L + 1);
-        int dR_dn = bsR.dim(q_L - 1);
-        if (dR_up > 0) up += blk.leftCols(dR_up).squaredNorm();
-        if (dR_dn > 0) dn += blk.rightCols(dR_dn).squaredNorm();
+        auto cols = phys_groups(bsR, q_L, +1, qphys);
+        for (int s = 0; s < (int)qphys.size(); ++s) {
+            if (cols[s].width == 0) continue;
+            double w = blk.middleCols(cols[s].off, cols[s].width).squaredNorm();
+            num += qphys[s] * w;   // qphys = 2*Sz
+            z += w;
+        }
     }
-    double z = up + dn;
-    return z > 0 ? (up - dn) / z : 0.0;
+    return z > 0 ? num / z : 0.0;
 }
 
 // staggered magnetization on a COPY (center sweep L->R, non-destructive).
 static double measure_stag(std::vector<std::map<int,Mat>> A,
-                           std::vector<BondSpace> bond, int n) {
+                           std::vector<BondSpace> bond, int n,
+                           const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     double m = 0;
     for (int i = 0; i < n; ++i) {
-        m += ((i % 2 == 0) ? 1.0 : -1.0) * center_sz(A[i], bond[i+1]);
+        m += ((i % 2 == 0) ? 1.0 : -1.0) * center_sz(A[i], bond[i+1], qphys);
         if (i < n - 1) {
-            SiteMove mv = singlesite_split_LR(A[i], bond[i], bond[i+1]);
+            SiteMove mv = singlesite_split_LR(A[i], bond[i], bond[i+1], qphys);
             A[i] = mv.A; bond[i+1] = mv.new_mid;
             // absorb centre matrices C[q_R] into A[i+1] (left bond)
             std::map<int,Mat> next;
@@ -1609,14 +1614,15 @@ struct BMPS {
     int n = 0;
 };
 
-static void bt_expand_theta(std::map<int,Mat>& theta, const BondSpace& bsL, const BondSpace& bsR2) {
+static void bt_expand_theta(std::map<int,Mat>& theta, const BondSpace& bsL, const BondSpace& bsR2,
+                            const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
         int q_L = bsL.qns[qi];
-        for (int s = 0; s < 2; ++s) {
-            int q_mid = q_L + ((s==0)?+1:-1);
+        for (int s = 0; s < (int)qphys.size(); ++s) {
+            int q_mid = q_L + qphys[s];
             if (theta.count(q_mid)) continue;
-            int nr = bsL.dim(q_mid-1) + bsL.dim(q_mid+1);
-            int nc = bsR2.dim(q_mid+1) + bsR2.dim(q_mid-1);
+            int nr = phys_total(phys_groups(bsL,  q_mid, -1, qphys));
+            int nc = phys_total(phys_groups(bsR2, q_mid, +1, qphys));
             if (nr > 0 && nc > 0) theta[q_mid] = Mat::Zero(nr, nc);
         }
     }
@@ -1649,18 +1655,21 @@ static void bt_evolve_site(std::map<int,Mat>& M, const BlockEnv& Le, const MPOSi
     Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(M));
     std::map<int,Mat> out; vec_to_theta(ev, M, out); M = out;
 }
-// NOTE: the bt_* / cps_init / measurement helpers below are spin-1/2-only (they
-// index U_grp[0]/U_grp[1] and the q_L+-1 sectors directly). They serve the block
-// TDVP/TEBD/thermal dynamics, which are reached only through require_local_dim2-
-// guarded entry points; generalizing them for d>2 is the phase 2c-dynamics step.
-static std::map<int,Mat> bt_A_from_U(const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
+// The bt_* / cps_init / measurement helpers fold the physical index into d charge-
+// shifted column groups (phys_groups), like the GS path. They default qphys to
+// spin-1/2 so the TEBD/thermal callers (still d=2) are unchanged; the TDVP path
+// passes the real qphys, so spin-1 (d=3) TDVP runs. (TEBD's gates are still d=2.)
+static std::map<int,Mat> bt_A_from_U(const BlockSVDResult& svd, const BondSpace& bsL,
+                                     const BondSpace& bsMid,
+                                     const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     std::map<int,Mat> A;
     for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
         int q_L = bsL.qns[qi], dL = bsL.dims[qi];
-        int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
-        Mat blk = Mat::Zero(dL, n_up + n_dn);
-        if (n_up > 0 && svd.U_grp[0].count(q_L+1)) blk.leftCols(n_up)  = svd.U_grp[0].at(q_L+1);
-        if (n_dn > 0 && svd.U_grp[1].count(q_L-1)) blk.rightCols(n_dn) = svd.U_grp[1].at(q_L-1);
+        auto cols = phys_groups(bsMid, q_L, +1, qphys);
+        Mat blk = Mat::Zero(dL, phys_total(cols));
+        for (int s = 0; s < (int)qphys.size(); ++s)
+            if (cols[s].width > 0 && svd.U_grp[s].count(cols[s].q))
+                blk.middleCols(cols[s].off, cols[s].width) = svd.U_grp[s].at(cols[s].q);
         A[q_L] = blk;
     }
     return A;
@@ -1676,27 +1685,32 @@ static std::map<int,Mat> bt_center_LR(const BlockSVDResult& svd) {     // M (at 
     }
     return M;
 }
-static std::map<int,Mat> bt_center_RL(const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
+static std::map<int,Mat> bt_center_RL(const BlockSVDResult& svd, const BondSpace& bsL,
+                                      const BondSpace& bsMid,
+                                      const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     std::map<int,Mat> M;
+    auto scaled = [&](Mat u, int q) {
+        auto it = svd.sv.find(q);
+        if (it != svd.sv.end()) { const RVec& s=it->second;
+            int L2=std::min((int)s.size(),(int)u.cols()); for(int k=0;k<L2;++k) u.col(k)*=s[k]; }
+        return u;
+    };
     for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
         int q_L = bsL.qns[qi], dL = bsL.dims[qi];
-        int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
-        Mat blk = Mat::Zero(dL, n_up + n_dn);
-        auto scaled = [&](Mat u, int q) {
-            auto it = svd.sv.find(q);
-            if (it != svd.sv.end()) { const RVec& s=it->second;
-                int L2=std::min((int)s.size(),(int)u.cols()); for(int k=0;k<L2;++k) u.col(k)*=s[k]; }
-            return u;
-        };
-        if (n_up > 0 && svd.U_grp[0].count(q_L+1)) blk.leftCols(n_up)  = scaled(svd.U_grp[0].at(q_L+1), q_L+1);
-        if (n_dn > 0 && svd.U_grp[1].count(q_L-1)) blk.rightCols(n_dn) = scaled(svd.U_grp[1].at(q_L-1), q_L-1);
+        auto cols = phys_groups(bsMid, q_L, +1, qphys);
+        Mat blk = Mat::Zero(dL, phys_total(cols));
+        for (int s = 0; s < (int)qphys.size(); ++s)
+            if (cols[s].width > 0 && svd.U_grp[s].count(cols[s].q))
+                blk.middleCols(cols[s].off, cols[s].width) = scaled(svd.U_grp[s].at(cols[s].q), cols[s].q);
         M[q_L] = blk;
     }
     return M;
 }
 
-// Build a block-MPS for an arbitrary Sz product state (sz[i] = +1 up, -1 dn).
-static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<int>& sz) {
+// Build a block-MPS for an arbitrary Sz product state; sz[i] is the per-site Sz
+// charge (= qphys[state], e.g. +1/-1 for spin-1/2, +2/-2 for a spin-1 Neel state).
+static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<int>& sz,
+                     const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     BMPS s; s.n = n;
     std::vector<int> qb(n + 1); qb[0] = 0;
     for (int i = 0; i < n; ++i) qb[i+1] = qb[i] + sz[i];
@@ -1705,9 +1719,10 @@ static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<i
     s.A.resize(n);
     for (int i = 0; i < n; ++i) {
         int q_L = qb[i];
-        int dR_up = s.bond[i+1].dim(q_L + 1), dR_dn = s.bond[i+1].dim(q_L - 1);
-        Mat blk = Mat::Zero(1, dR_up + dR_dn);
-        blk(0, (sz[i] == +1) ? 0 : dR_up) = S(1);
+        auto cols = phys_groups(s.bond[i+1], q_L, +1, qphys);
+        Mat blk = Mat::Zero(1, phys_total(cols));
+        for (int t = 0; t < (int)qphys.size(); ++t)   // the column group of state sz[i]
+            if (qphys[t] == sz[i]) { blk(0, cols[t].off) = S(1); break; }
         s.A[i][q_L] = blk;
     }
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
@@ -1726,35 +1741,36 @@ static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
     const Cx fwd = imag ? Cx(-dt/2,0) : Cx(0,-dt/2);
     const Cx bwd = imag ? Cx(+dt/2,0) : Cx(0,+dt/2);
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+    const std::vector<int>& qphys = mpo[0].phys_charge;
     const std::map<int,RVec> no_sv;
     auto& A = s.A; auto& bond = s.bond; auto& L = s.L; auto& R = s.R;
     for (int i = 0; i < n - 1; ++i) {                      // left -> right
-        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-        bt_expand_theta(theta, bond[i], bond[i+2]);
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
+        bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         WComb wc = build_wcomb(mpo[i], mpo[i+1]);
         std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
         HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2], delta);
         bt_evolve_theta(theta, plan, fwd);
-        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, false, false, qphys);
         bond[i+1] = svd.new_mid_bs;
-        A[i] = bt_A_from_U(svd, bond[i], bond[i+1]);
+        A[i] = bt_A_from_U(svd, bond[i], bond[i+1], qphys);
         L[i+1] = block_update_left(L[i], A[i], bond[i], bond[i+1], mpo[i], delta);
         auto M = bt_center_LR(svd);
         if (i < n - 2) bt_evolve_site(M, L[i+1], mpo[i+1], R[i+2], bond[i+1], bond[i+2], bwd, delta);
         A[i+1] = M;
     }
     for (int i = n - 2; i >= 0; --i) {                    // right -> left
-        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-        bt_expand_theta(theta, bond[i], bond[i+2]);
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
+        bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         WComb wc = build_wcomb(mpo[i], mpo[i+1]);
         std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
         HeffPlan plan = build_heff_plan(L[i], mpo[i], mpo[i+1], R[i+2], wc, kk, bond[i], bond[i+2], delta);
         bt_evolve_theta(theta, plan, fwd);
-        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, false, false, qphys);
         bond[i+1] = svd.new_mid_bs;
         A[i+1] = svd.Vt;
         R[i+1] = block_update_right(R[i+2], A[i+1], bond[i+1], bond[i+2], mpo[i+1], delta);
-        auto M = bt_center_RL(svd, bond[i], bond[i+1]);
+        auto M = bt_center_RL(svd, bond[i], bond[i+1], qphys);
         if (i > 0) bt_evolve_site(M, L[i], mpo[i], R[i+1], bond[i], bond[i+1], bwd, delta);
         A[i] = M;
     }
@@ -1864,7 +1880,8 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
 // Energy <H> via the two-site H_eff at the centre (assumes centre at site 0).
 static double bt_energy(const BMPS& s, const std::vector<MPOSite>& mpo) {
     const std::map<int,RVec> no_sv;
-    auto theta = form_theta(s.A[0], s.A[1], no_sv, s.bond[0], s.bond[1], s.bond[2], true);
+    auto theta = form_theta(s.A[0], s.A[1], no_sv, s.bond[0], s.bond[1], s.bond[2], true,
+                            mpo[0].phys_charge);
     WComb wc = build_wcomb(mpo[0], mpo[1]);
     std::vector<int> kk; for (auto& [q,_] : theta) kk.push_back(q);
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
@@ -1882,17 +1899,21 @@ static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
                           bool imag) {
     static_assert(std::is_same_v<S, Cx>, "TDVP2 requires complex scalar");
     using clk = std::chrono::steady_clock;
-    std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
-    BMPS s = cps_init(mpo, n, neel);
+    // Neel start: alternate the highest-Sz local state (charge qphys[0]) and the
+    // lowest (qphys.back()) -> |up dn ...> for spin-1/2, |+1 -1 ...> for spin-1.
+    const std::vector<int>& qphys = mpo[0].phys_charge;
+    std::vector<int> neel(n);
+    for (int i=0;i<n;++i) neel[i] = (i%2==0) ? qphys.front() : qphys.back();
+    BMPS s = cps_init(mpo, n, neel, qphys);
 
     TDVP2Out out;
     out.times.push_back(0.0);
-    out.stag.push_back(measure_stag(s.A, s.bond, n));
+    out.stag.push_back(measure_stag(s.A, s.bond, n, qphys));
     auto t0 = clk::now();
     for (int step = 0; step < n_steps; ++step) {
         tdvp2_step_blocks(s, mpo, dt, imag, chi_max, cutoff);
         out.times.push_back((step+1)*dt);
-        out.stag.push_back(measure_stag(s.A, s.bond, n));
+        out.stag.push_back(measure_stag(s.A, s.bond, n, qphys));
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     out.energy = bt_energy(s, mpo);
@@ -3126,7 +3147,7 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
 TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag) {
-    require_local_dim2(mpo, "run_tdvp2_blocks");
+    require_uniform_local_dim(mpo, "run_tdvp2_blocks");   // TDVP2 supports d>2
     auto o = BlockDMRG<Cx>::run_tdvp2(mpo, n, dt, n_steps, chi_max, cutoff, imag);
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;
@@ -3139,6 +3160,7 @@ TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag, int measure_stride,
                                  double J, double delta) {
+    require_local_dim2(mpo, "run_tebd2_blocks");   // TEBD gates are spin-1/2-only
     auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride, J, delta);
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;
@@ -3150,6 +3172,7 @@ TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
 SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double dt, int n_steps, int chi_max,
                                    double cutoff, int n_sweeps, double J, double delta) {
+    require_local_dim2(mpo, "run_spectral_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta);
     SpectralResult r;
     r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
@@ -3162,6 +3185,7 @@ LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
                                      double dt, int n_steps, int chi_max,
                                      double cutoff, int n_sweeps,
                                      double Jf, double deltaf) {
+    require_local_dim2(mpo_i, "run_loschmidt_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_loschmidt(mpo_i, n, dt, n_steps, chi_max, cutoff,
                                           n_sweeps, Jf, deltaf);
     LoschmidtResult r;
@@ -3175,6 +3199,7 @@ ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, in
                                            double dt, int n_steps, int chi_max,
                                            double cutoff, int n_sweeps,
                                            double J, double delta) {
+    require_local_dim2(mpo_H, "run_conductivity_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_conductivity(mpo_H, n, dt, n_steps, chi_max, cutoff,
                                              n_sweeps, J, delta);
     ConductivityResult r;
