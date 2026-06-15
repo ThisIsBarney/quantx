@@ -3172,6 +3172,7 @@ TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
 SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double dt, int n_steps, int chi_max,
                                    double cutoff, int n_sweeps, double J, double delta) {
+    require_local_dim2(mpo, "run_spectral_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta);
     SpectralResult r;
     r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
@@ -3184,6 +3185,7 @@ LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
                                      double dt, int n_steps, int chi_max,
                                      double cutoff, int n_sweeps,
                                      double Jf, double deltaf) {
+    require_local_dim2(mpo_i, "run_loschmidt_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_loschmidt(mpo_i, n, dt, n_steps, chi_max, cutoff,
                                           n_sweeps, Jf, deltaf);
     LoschmidtResult r;
@@ -3197,6 +3199,7 @@ ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, in
                                            double dt, int n_steps, int chi_max,
                                            double cutoff, int n_sweeps,
                                            double J, double delta) {
+    require_local_dim2(mpo_H, "run_conductivity_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_conductivity(mpo_H, n, dt, n_steps, chi_max, cutoff,
                                              n_sweeps, J, delta);
     ConductivityResult r;
