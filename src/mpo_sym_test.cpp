@@ -170,14 +170,29 @@ int main() {
         std::printf("  n=2 (no bulk) threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
         fails += !threw;
     }
-    // The block TDVP (dynamics) path is still d=2 (phase 2c covers the GS only); a
-    // spin-1 MPO into run_tdvp2_blocks must throw, not silently truncate to s<2.
+    // Phase 2c-dynamics: block TDVP2 now runs d>2. Spin-1 (d=3) checks: real-time
+    // TDVP2 conserves energy (the Neel product state has bond energy <S^z S^z> = -1,
+    // so <H> = -(N-1)); imaginary-time TDVP2 cools the Neel start to the GS.
+    {
+        const int N = 6; const double E_neel = -(N - 1);
+        auto s1 = build_spin1_heisenberg_mpo(N, 1.0);
+        double E_gs = run_dmrg_blocks(s1, N, 48, 1e-11, 80, 1e-11).energy;   // == ED
+        double E_rt = run_tdvp2_blocks(s1, N, 0.05, 8, 24, 1e-12, /*imag*/false).energy;
+        double E_it = run_tdvp2_blocks(s1, N, 0.1, 400, 24, 1e-12, /*imag*/true).energy;
+        bool okrt = std::abs(E_rt - E_neel) < 1e-6;
+        bool okit = std::abs(E_it - E_gs)   < 1e-3;
+        std::printf("  spin-1 TDVP2 real-time <H>=%.6f (=%.0f) %s ; imag->GS=%.6f (ED %.6f) %s\n",
+                    E_rt, E_neel, okrt?"OK":"FAIL", E_it, E_gs, okit?"OK":"FAIL");
+        fails += !(okrt && okit);
+    }
+    // TEBD's Trotter gates are still spin-1/2-only: a spin-1 MPO into run_tebd2_blocks
+    // must throw, not silently truncate to s<2.
     {
         auto s1 = build_spin1_heisenberg_mpo(6, 1.0);
         bool tb=false;
-        try { run_tdvp2_blocks(s1, 6, 0.05, 1, 16, 1e-10, false); }
+        try { run_tebd2_blocks(s1, 6, 0.05, 1, 16, 1e-10, false, 1, 1.0, 1.0); }
         catch (const std::exception&) { tb=true; }
-        std::printf("  spin-1 -> block TDVP threw=%d  %s\n", (int)tb, tb?"OK":"FAIL");
+        std::printf("  spin-1 -> block TEBD threw=%d  %s\n", (int)tb, tb?"OK":"FAIL");
         fails += !tb;
     }
 
