@@ -900,7 +900,9 @@ static std::map<int,Mat> apply_heff_1site(
                     int dR_bra = (int)Rblk.rows();
                     int q_R_bra = q_R_ket + delta[b_out];
 
-                    // s_bra fixed by q_R_bra = q_L_bra + qphys[s_bra]
+                    // s_bra fixed by q_R_bra = q_L_bra + qphys[s_bra]. qphys is
+                    // injective (one local state per Sz charge) for every model here
+                    // (spin-1/2, spin-1, Hubbard), so the first match is the only one.
                     int s_bra = -1;
                     for (int t = 0; t < (int)qphys.size(); ++t)
                         if (q_L_bra + qphys[t] == q_R_bra) { s_bra = t; break; }
@@ -1647,6 +1649,10 @@ static void bt_evolve_site(std::map<int,Mat>& M, const BlockEnv& Le, const MPOSi
     Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(M));
     std::map<int,Mat> out; vec_to_theta(ev, M, out); M = out;
 }
+// NOTE: the bt_* / cps_init / measurement helpers below are spin-1/2-only (they
+// index U_grp[0]/U_grp[1] and the q_L+-1 sectors directly). They serve the block
+// TDVP/TEBD/thermal dynamics, which are reached only through require_local_dim2-
+// guarded entry points; generalizing them for d>2 is the phase 2c-dynamics step.
 static std::map<int,Mat> bt_A_from_U(const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
     std::map<int,Mat> A;
     for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
