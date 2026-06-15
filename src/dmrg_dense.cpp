@@ -17,15 +17,17 @@ namespace qx_dmrg {
 
 // -- MPS initialization -------------------------------------------------------
 
-// Initialize MPS to |0...0> (all qubits in |0> state), bond dim = 1
-MPS init_zero_state(int n) {
+// Initialize MPS to |0...0> (every site in local state 0), bond dim = 1, for any
+// local dimension d (the contraction kernels fold A as d*chi rows, so the state
+// dimension must match the MPO's d).
+MPS init_zero_state(int n, int d) {
     MPS mps;
     mps.n = n;
     mps.A.resize(n);
     mps.sv.resize(n - 1);
     for (int i = 0; i < n; ++i) {
-        mps.A[i] = Mat::Zero(2, 1);
-        mps.A[i](0, 0) = 1.0;  // all |up>
+        mps.A[i] = Mat::Zero(d, 1);
+        mps.A[i](0, 0) = 1.0;  // all in local state 0 (highest Sz)
     }
     for (int i = 0; i < n - 1; ++i)
         mps.sv[i] = RVec::Ones(1);
@@ -385,6 +387,7 @@ double compute_energy(const MPS& mps, const std::vector<MPOSite>& mpo) {
 DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
                     int max_bond, double cutoff,
                     int n_sweeps, double tol) {
+    require_uniform_local_dim(mpo, "run_dmrg");
     const int d = mpo[0].d;   // local Hilbert-space dimension (uniform chain)
     auto t_start = std::chrono::steady_clock::now();
 
