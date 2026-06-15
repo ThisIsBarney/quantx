@@ -113,6 +113,36 @@ int main() {
         fails += !ok;
     }
 
+    // Phase 2b: the dense DMRG path now runs arbitrary local dimension d. The
+    // spin-1 (d=3) Heisenberg ground state must match exact diagonalization (the
+    // gapped Haldane phase). For N=4,6 the bond stays below truncation so DMRG is
+    // effectively exact. (The block path stays d=2 for now -- see the guard below.)
+    std::printf("== spin-1 (d=3) dense DMRG vs ED ==\n");
+    {
+        const double r2 = std::sqrt(2.0);
+        Eigen::MatrixXcd Sp = Eigen::MatrixXcd::Zero(3,3); Sp(0,1)=r2; Sp(1,2)=r2;
+        Eigen::MatrixXcd Sm = Eigen::MatrixXcd::Zero(3,3); Sm(1,0)=r2; Sm(2,1)=r2;
+        Eigen::MatrixXcd Sz = Eigen::MatrixXcd::Zero(3,3); Sz(0,0)=1; Sz(2,2)=-1;
+        auto spin1_ed = [&](int n) {
+            int dim = 1; for (int k=0;k<n;++k) dim*=3;
+            Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(dim, dim);
+            for (int i = 0; i < n-1; ++i)
+                H += 0.5*(site_opd(n,i,Sp,3)*site_opd(n,i+1,Sm,3)
+                        + site_opd(n,i,Sm,3)*site_opd(n,i+1,Sp,3))
+                   + site_opd(n,i,Sz,3)*site_opd(n,i+1,Sz,3);
+            return Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(H).eigenvalues()(0);
+        };
+        for (int n : {4, 6}) {
+            double E_ed = spin1_ed(n);
+            double E_dmrg = run_dmrg(build_spin1_heisenberg_mpo(n, 1.0), n, 64, 1e-11, 80, 1e-11).energy;
+            double e = std::abs(E_dmrg - E_ed);
+            bool ok = e < 1e-6;
+            std::printf("  N=%d : E(ED)=%.8f  dense DMRG err=%.2e  %s\n",
+                        n, E_ed, e, ok ? "OK" : "FAIL");
+            fails += !ok;
+        }
+    }
+
     // A non-Sz-conserving MPO (transverse-field Ising bond H=sum X_i X_{i+1})
     // must be rejected: the X completion bond carries both +2 and -2.
     std::printf("== rejects non-Sz-conserving MPO ==\n");
@@ -138,16 +168,15 @@ int main() {
         std::printf("  n=2 (no bulk) threw=%d  %s\n", (int)threw, threw?"OK":"FAIL");
         fails += !threw;
     }
-    // The d=2 contraction kernels can't yet run a d>2 MPO (phase 2b). Feeding the
-    // spin-1 (d=3) MPO to the DMRG paths must throw, not silently truncate to s<2.
+    // The block contraction kernel can't yet run a d>2 MPO (phase 2c); it must
+    // throw, not silently truncate the spin-1 state to its s<2 subspace. (The dense
+    // path DOES run it now -- validated above.)
     {
         auto s1 = build_spin1_heisenberg_mpo(6, 1.0);
-        bool tb=false, td=false;
+        bool tb=false;
         try { run_dmrg_blocks(s1, 6, 32, 1e-10, 4, 1e-10); } catch (const std::exception&) { tb=true; }
-        try { run_dmrg(s1, 6, 32, 1e-10, 4, 1e-10); }        catch (const std::exception&) { td=true; }
-        std::printf("  spin-1 -> block threw=%d  dense threw=%d  %s\n",
-                    (int)tb, (int)td, (tb&&td)?"OK":"FAIL");
-        fails += !(tb && td);
+        std::printf("  spin-1 -> block threw=%d  %s\n", (int)tb, tb?"OK":"FAIL");
+        fails += !tb;
     }
 
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-

@@ -46,6 +46,16 @@ inline void require_local_dim2(const std::vector<MPOSite>& mpo, const char* wher
                 "representation only; the contraction kernels are still d=2)");
 }
 
+// The arbitrary-d dense kernels read a single local dimension (mpo[0].d) and fold
+// every two-site theta with it, so a non-uniform chain would mis-stride silently.
+// All physical models are uniform; fail loud if that ever breaks.
+inline void require_uniform_local_dim(const std::vector<MPOSite>& mpo, const char* where) {
+    for (const MPOSite& W : mpo)
+        if (W.d != mpo[0].d)
+            throw std::runtime_error(std::string(where) + ": non-uniform local dimension "
+                "across the chain is not supported");
+}
+
 struct MPS {
     int n;
     std::vector<Mat> A;    // A[i]: (chi_L*2, chi_R), left-canonical
@@ -165,7 +175,7 @@ std::vector<MPOSite> build_pauli_sum_mpo(int n,
     const std::vector<std::pair<double, std::string>>& terms);
 
 // dmrg_dense.cpp
-MPS  init_zero_state(int n);
+MPS  init_zero_state(int n, int d = 2);
 double compute_energy(const MPS& mps, const std::vector<MPOSite>& mpo);
 DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
                     int max_bond, double cutoff, int n_sweeps, double tol);

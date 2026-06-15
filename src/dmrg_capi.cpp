@@ -320,7 +320,7 @@ QX_API const char* qx_mps_energy(const char* problem_json) {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
         int n    = prob.value("n_qubits", 8);
         auto mpo = parse_ham(prob, n);
-        MPS mps  = init_zero_state(n);
+        MPS mps  = init_zero_state(n, mpo[0].d);
         double E = compute_energy(mps, mpo);
         nlj out;
         out["ok"]     = true;
