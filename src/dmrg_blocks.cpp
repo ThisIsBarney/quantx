@@ -199,29 +199,65 @@ struct BondSpace {
     }
 };
 
-// Build the BondSpace at bond i for a length-n chain, total Sz=0, max_bond chi.
-// Distributes chi states proportionally to the number of paths through each sector.
-static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
-    int sites_L = bond_i + 1;   // sites on the left of this bond
-    int sites_R = n - sites_L;  // sites on the right
+// The physical (Sz) charges of the local Hilbert space, in 2*Sz integer units.
+// Spin-1/2 is the default ({+1,-1}); the kernels below take a phys_charge array so
+// the same code runs spin-1 ({+2,0,-2}), Hubbard, etc.
+static const std::vector<int> SPIN_HALF_CHARGES = {+1, -1};
 
-    // Enumerate reachable QN sectors. Path counts are only used as relative weights
-    // for the proportional allocation, so use double to avoid integer overflow
-    // (binom(100,50)^2 ~ 1e29 overflows long long and corrupts the bond dims).
-    auto binom = [](int nn, int kk) -> double {
-        if (kk < 0 || kk > nn) return 0.0;
-        double r = 1.0;
-        for (int j = 0; j < kk; ++j) r = r * (nn - j) / (j + 1);
-        return r;
-    };
+// One physical-state column/row group in a folded block tensor. A block tensor
+// block_A[q_L] = Mat(dL, sum_s width_s) lays the local index s into contiguous
+// column groups: group s maps the left bond q_L to right bond q = q_L + qphys[s],
+// width = bs.dim(q), offset = cumulative width of the earlier states. theta rows use
+// the same scheme with the opposite sign (left bond q = q_mid - qphys[s]).
+struct PhysGroup { int s, q, off, width; };
+static std::vector<PhysGroup> phys_groups(const BondSpace& bs, int base, int sign,
+                                          const std::vector<int>& qphys) {
+    std::vector<PhysGroup> g(qphys.size());
+    int off = 0;
+    for (int s = 0; s < (int)qphys.size(); ++s) {
+        int q = base + sign * qphys[s];
+        int w = bs.dim(q);
+        g[s] = {s, q, off, w};
+        off += w;
+    }
+    return g;
+}
+// Total folded width of all the groups (= number of columns/rows of the block).
+static int phys_total(const std::vector<PhysGroup>& g) {
+    int t = 0; for (auto& e : g) t += e.width; return t;
+}
 
-    std::vector<std::pair<int,double>> sectors;
-    int qn_max = std::min(sites_L, sites_R);
-    for (int q = -qn_max; q <= qn_max; q += 2) {
-        int ups_L = (sites_L + q) / 2;
-        int ups_R = (sites_R - q) / 2;
-        if ((sites_L + q) % 2 != 0) continue;
-        double w = binom(sites_L, ups_L) * binom(sites_R, ups_R);
+// Distribution of total charge over k sites, each drawing one local state from
+// qphys (equal weight). DP convolution; path counts are relative weights only.
+static std::map<int,double> charge_dist(int k, const std::vector<int>& qphys) {
+    std::map<int,double> d; d[0] = 1.0;
+    for (int i = 0; i < k; ++i) {
+        std::map<int,double> nd;
+        for (auto& [q, w] : d)
+            for (int qs : qphys) nd[q + qs] += w;
+        d.swap(nd);
+    }
+    return d;
+}
+
+// Build the BondSpace at bond i for a length-n chain, total Sz=0, max_bond chi, for
+// a local Hilbert space with charges qphys. Distributes chi states proportionally to
+// the number of paths through each reachable sector (left block at charge q, right
+// block at -q). For spin-1/2 ({+1,-1}) the path weights are exactly the binomials,
+// so this reproduces the original Heisenberg bond space bit-identically.
+static BondSpace make_bond_space(int bond_i, int n, int max_bond,
+                                 const std::vector<int>& qphys) {
+    int sites_L = bond_i + 1;
+    int sites_R = n - sites_L;
+
+    std::map<int,double> distL = charge_dist(sites_L, qphys);
+    std::map<int,double> distR = charge_dist(sites_R, qphys);
+
+    std::vector<std::pair<int,double>> sectors;   // (bond charge q, weight)
+    for (auto& [q, wL] : distL) {
+        auto it = distR.find(-q);                 // right block must carry -q (total Sz=0)
+        if (it == distR.end()) continue;
+        double w = wL * it->second;
         if (w > 0) sectors.emplace_back(q, w);
     }
     if (sectors.empty()) {
@@ -230,19 +266,19 @@ static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
         bs.total_dim = max_bond;
         return bs;
     }
+    std::sort(sectors.begin(), sectors.end());
 
     double total_w = 0;
-    for (auto& [q,w] : sectors) total_w += w;
+    for (auto& [q, w] : sectors) total_w += w;
 
     // Proportional allocation, at least 1 per sector
     std::vector<std::pair<int,int>> raw;
     int allocated = 0;
-    for (auto& [q,w] : sectors) {
+    for (auto& [q, w] : sectors) {
         int d = std::max(1, (int)std::round((double)w / total_w * max_bond));
         raw.emplace_back(q, d);
         allocated += d;
     }
-    // Trim or pad to exactly max_bond
     while (allocated > max_bond) {
         auto it = std::max_element(raw.begin(), raw.end(),
             [](auto& a, auto& b){ return a.second < b.second; });
@@ -256,6 +292,13 @@ static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
     }
     std::sort(raw.begin(), raw.end());
     return BondSpace::from_pairs(raw);
+}
+
+// Build the BondSpace at bond i for a length-n chain, total Sz=0, max_bond chi.
+// Distributes chi states proportionally to the number of paths through each sector.
+static BondSpace make_heisenberg_bond_space(int bond_i, int n, int max_bond) {
+    // Spin-1/2 special case of the general builder (path weights = binomials).
+    return make_bond_space(bond_i, n, max_bond, SPIN_HALF_CHARGES);
 }
 
 // -- Block-sparse environment -------------------------------------------------
@@ -344,15 +387,16 @@ static BlockEnv block_update_left(const BlockEnv& L,
     BlockEnv L_new;
     init_block_env(L_new, bs_R, delta);
 
+    const std::vector<int>& qphys = W.phys_charge;
+
     for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
         int q_ket_L = bs_L.qns[qi];
 
-        // Ket A tensor (row sector = q_ket_L)
+        // Ket A tensor (row sector = q_ket_L); columns grouped by physical state.
         auto it_A_ket = block_A.find(q_ket_L);
         if (it_A_ket == block_A.end()) continue;
-        const Mat& Ablk_ket = it_A_ket->second;  // (dL_ket, dR_up_ket + dR_dn_ket)
-        int dR_up_ket = bs_R.dim(q_ket_L + 1);
-        int dR_dn_ket = bs_R.dim(q_ket_L - 1);
+        const Mat& Ablk_ket = it_A_ket->second;
+        auto ket_cols = phys_groups(bs_R, q_ket_L, +1, qphys);
 
         for (int b_in = 0; b_in < W.chi_l; ++b_in) {
             auto it_L = L.blocks[b_in].find(q_ket_L);
@@ -364,26 +408,23 @@ static BlockEnv block_update_left(const BlockEnv& L,
             int q_bra_L = q_ket_L + delta[b_in];
             auto it_A_bra = block_A.find(q_bra_L);
             if (it_A_bra == block_A.end()) continue;
-            const Mat& Ablk_bra = it_A_bra->second;  // (dL_bra, dR_up_bra + dR_dn_bra)
-            int dR_up_bra = bs_R.dim(q_bra_L + 1);
-            int dR_dn_bra = bs_R.dim(q_bra_L - 1);
+            const Mat& Ablk_bra = it_A_bra->second;
+            auto bra_cols = phys_groups(bs_R, q_bra_L, +1, qphys);
 
             for (int b_out = 0; b_out < W.chi_r; ++b_out) {
                 const auto& Wab = W.W(b_in, b_out);
 
-                for (int s = 0; s < 2; ++s) {   // bra spin (conjugate A)
-                    int sz   = (s == 0) ? +1 : -1;
-                    int dR_s = (sz == +1) ? dR_up_bra : dR_dn_bra;
-                    if (dR_s == 0) continue;
-                    Eigen::Ref<const Mat> A_s_bra = (sz == +1)
-                        ? Ablk_bra.leftCols(dR_up_bra) : Ablk_bra.rightCols(dR_dn_bra);
+                for (int s = 0; s < (int)qphys.size(); ++s) {   // bra spin (conjugate A)
+                    if (bra_cols[s].width == 0) continue;
+                    int sz = qphys[s];
+                    Eigen::Ref<const Mat> A_s_bra =
+                        Ablk_bra.middleCols(bra_cols[s].off, bra_cols[s].width);
 
-                    for (int sp = 0; sp < 2; ++sp) {  // ket spin
+                    for (int sp = 0; sp < (int)qphys.size(); ++sp) {  // ket spin
                         S w = mscal(Wab(s, sp));
                         if (std::abs(w) < 1e-15) continue;
-                        int spz   = (sp == 0) ? +1 : -1;
-                        int dR_sp = (spz == +1) ? dR_up_ket : dR_dn_ket;
-                        if (dR_sp == 0) continue;
+                        if (ket_cols[sp].width == 0) continue;
+                        int spz = qphys[sp];
 
                         int q_ket_R = q_ket_L + spz;  // new ket right bond QN
                         // QN consistency: delta[b_out] = delta[b_in] + sz - spz
@@ -393,8 +434,8 @@ static BlockEnv block_update_left(const BlockEnv& L,
                         auto jt = L_new.blocks[b_out].find(q_ket_R);
                         if (jt == L_new.blocks[b_out].end()) continue;
 
-                        Eigen::Ref<const Mat> A_sp_ket = (spz == +1)
-                            ? Ablk_ket.leftCols(dR_up_ket) : Ablk_ket.rightCols(dR_dn_ket);
+                        Eigen::Ref<const Mat> A_sp_ket =
+                            Ablk_ket.middleCols(ket_cols[sp].off, ket_cols[sp].width);
 
                         // L_new(dR_s_bra, dR_sp_ket) += w * A_s_bra^H * Lblk * A_sp_ket
                         jt->second.noalias() += w * (A_s_bra.adjoint() * (Lblk * A_sp_ket));
@@ -431,15 +472,16 @@ static BlockEnv block_update_right(const BlockEnv& R,
     BlockEnv R_new;
     init_block_env(R_new, bs_L, delta);
 
+    const std::vector<int>& qphys = W.phys_charge;
+
     for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
         int q_ket_L = bs_L.qns[qi];
 
-        // Ket A tensor (row sector = q_ket_L)
+        // Ket A tensor (row sector = q_ket_L); columns grouped by physical state.
         auto it_A_ket = block_A.find(q_ket_L);
         if (it_A_ket == block_A.end()) continue;
-        const Mat& Ablk_ket = it_A_ket->second;  // (dL_ket, dR_up_ket + dR_dn_ket)
-        int dR_up_ket = bs_R.dim(q_ket_L + 1);
-        int dR_dn_ket = bs_R.dim(q_ket_L - 1);
+        const Mat& Ablk_ket = it_A_ket->second;
+        auto ket_cols = phys_groups(bs_R, q_ket_L, +1, qphys);
 
         for (int b_out = 0; b_out < W.chi_l; ++b_out) {
             auto jt = R_new.blocks[b_out].find(q_ket_L);
@@ -449,27 +491,26 @@ static BlockEnv block_update_right(const BlockEnv& R,
             int q_bra_L = q_ket_L + delta[b_out];
             auto it_A_bra = block_A.find(q_bra_L);
             if (it_A_bra == block_A.end()) continue;
-            const Mat& Ablk_bra = it_A_bra->second;  // (dL_bra, dR_up_bra + dR_dn_bra)
-            int dR_up_bra = bs_R.dim(q_bra_L + 1);
-            int dR_dn_bra = bs_R.dim(q_bra_L - 1);
+            const Mat& Ablk_bra = it_A_bra->second;
+            auto bra_cols = phys_groups(bs_R, q_bra_L, +1, qphys);
 
             for (int b_in = 0; b_in < W.chi_r; ++b_in) {
                 const auto& Wab = W.W(b_out, b_in);
 
-                for (int s = 0; s < 2; ++s) {   // ket spin
-                    int sz   = (s == 0) ? +1 : -1;
-                    int dR_s = (sz == +1) ? dR_up_ket : dR_dn_ket;
-                    if (dR_s == 0) continue;
+                for (int s = 0; s < (int)qphys.size(); ++s) {   // ket spin
+                    if (ket_cols[s].width == 0) continue;
+                    int sz = qphys[s];
+                    int dR_s = ket_cols[s].width;
                     int q_ket_R = q_ket_L + sz;
-                    Eigen::Ref<const Mat> A_s_ket = (sz == +1)
-                        ? Ablk_ket.leftCols(dR_up_ket) : Ablk_ket.rightCols(dR_dn_ket);
+                    Eigen::Ref<const Mat> A_s_ket =
+                        Ablk_ket.middleCols(ket_cols[s].off, ket_cols[s].width);
 
-                    for (int sp = 0; sp < 2; ++sp) {  // bra spin
+                    for (int sp = 0; sp < (int)qphys.size(); ++sp) {  // bra spin
                         S w = mscal(Wab(sp, s));
                         if (std::abs(w) < 1e-15) continue;
-                        int spz   = (sp == 0) ? +1 : -1;
-                        int dR_sp = (spz == +1) ? dR_up_bra : dR_dn_bra;
-                        if (dR_sp == 0) continue;
+                        if (bra_cols[sp].width == 0) continue;
+                        int spz = qphys[sp];
+                        int dR_sp = bra_cols[sp].width;
 
                         // QN consistency: delta[b_out] = delta[b_in] + sz - spz
                         // (here s is the KET spin, sp is the BRA spin).
@@ -481,8 +522,8 @@ static BlockEnv block_update_right(const BlockEnv& R,
                         const Mat& Rblk = it_R->second;  // (dR_sp_bra, dR_s_ket)
                         if (Rblk.rows() != dR_sp || Rblk.cols() != dR_s) continue;
 
-                        Eigen::Ref<const Mat> A_sp_bra = (spz == +1)
-                            ? Ablk_bra.leftCols(dR_up_bra) : Ablk_bra.rightCols(dR_dn_bra);
+                        Eigen::Ref<const Mat> A_sp_bra =
+                            Ablk_bra.middleCols(bra_cols[sp].off, bra_cols[sp].width);
 
                         // R_new(dL_bra, dL_ket) += w * conj(A_sp_bra) * Rblk * A_s_ket^T
                         jt->second.noalias() += w * (A_sp_bra.conjugate() * (Rblk * A_s_ket.transpose()));
@@ -514,29 +555,39 @@ static BlockEnv block_update_right(const BlockEnv& R,
 // This cross-sector coupling is what mediates the XY term in the Heisenberg Hamiltonian.
 
 // Combined two-site MPO weights, fixed per bond (sized to the MPO bond dims):
-//   at(bL,bR)[s1b*2+s2b][s1k*2+s2k] = sum_bm Wi(bL,bm)(s1b,s1k) * Wj(bm,bR)(s2b,s2k)
+//   at(bL,bR, s1b*d+s2b, s1k*d+s2k) = sum_bm Wi(bL,bm)(s1b,s1k) * Wj(bm,bR)(s2b,s2k)
+// The two-site bra/ket index packs the d-dimensional local states as s1*d+s2, so the
+// per-(bL,bR) cell is a flat d2 x d2 (d2=d*d) block (was a fixed 4x4 for spin-1/2).
 struct WComb {
-    int nR = 0;                                          // Wj.chi_r (column stride)
-    std::vector<std::array<std::array<S,4>,4>> w;        // [bL*nR + bR]
-    std::array<std::array<S,4>,4>&       at(int bL, int bR)       { return w[bL*nR + bR]; }
-    const std::array<std::array<S,4>,4>& at(int bL, int bR) const { return w[bL*nR + bR]; }
+    int nR = 0;                  // Wj.chi_r (column stride over bR)
+    int d = 2, d2 = 4;           // local dim and d*d
+    std::vector<S> w;            // [((bL*nR+bR)*d2 + brow)*d2 + bcol]
+    S& at(int bL, int bR, int brow, int bcol) {
+        return w[((size_t)(bL*nR + bR)*d2 + brow)*d2 + bcol];
+    }
+    const S& at(int bL, int bR, int brow, int bcol) const {
+        return w[((size_t)(bL*nR + bR)*d2 + brow)*d2 + bcol];
+    }
 };
 
 static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
     WComb wc;
     wc.nR = Wj.chi_r;
-    wc.w.assign((size_t)Wi.chi_l * Wj.chi_r, {});
+    wc.d  = Wi.d;
+    wc.d2 = wc.d * wc.d;
+    const int d = wc.d;
+    wc.w.assign((size_t)Wi.chi_l * Wj.chi_r * wc.d2 * wc.d2, S(0));
     for (int bL = 0; bL < Wi.chi_l; ++bL)
         for (int bm = 0; bm < Wi.chi_r; ++bm)
             for (int bR = 0; bR < Wj.chi_r; ++bR) {
                 const auto& wi = Wi.W(bL, bm);
                 const auto& wj = Wj.W(bm, bR);
-                auto& cell = wc.at(bL, bR);
-                for (int s1b = 0; s1b < 2; ++s1b)
-                    for (int s2b = 0; s2b < 2; ++s2b)
-                        for (int s1k = 0; s1k < 2; ++s1k)
-                            for (int s2k = 0; s2k < 2; ++s2k)
-                                cell[s1b*2+s2b][s1k*2+s2k] += mscal(wi(s1b,s1k) * wj(s2b,s2k));
+                for (int s1b = 0; s1b < d; ++s1b)
+                    for (int s2b = 0; s2b < d; ++s2b)
+                        for (int s1k = 0; s1k < d; ++s1k)
+                            for (int s2k = 0; s2k < d; ++s2k)
+                                wc.at(bL, bR, s1b*d+s2b, s1k*d+s2k) +=
+                                    mscal(wi(s1b,s1k) * wj(s2b,s2k));
             }
     return wc;
 }
@@ -594,27 +645,27 @@ static HeffPlan build_heff_plan(
         return idx;
     };
 
+    const std::vector<int>& qphys = Wi.phys_charge;
+    const int d = Wi.d;
+
     for (int q_mid_ket : ket_keys) {
         int ket_idx = (int)plan.ket_sectors.size();
         plan.ket_sectors.push_back(q_mid_ket);
-        int dL_up_ket = bs_L.dim(q_mid_ket - 1);
-        int dL_dn_ket = bs_L.dim(q_mid_ket + 1);
-        int dR_up_ket = bs_R2.dim(q_mid_ket + 1);
-        int dR_dn_ket = bs_R2.dim(q_mid_ket - 1);
+        // theta[q_mid_ket] rows grouped by left-site state s1k, cols by right-site s2k.
+        auto ket_rows = phys_groups(bs_L,  q_mid_ket, -1, qphys);
+        auto ket_cols = phys_groups(bs_R2, q_mid_ket, +1, qphys);
 
-        for (int s1k = 0; s1k < 2; ++s1k) {
-            int s1kz = (s1k == 0) ? +1 : -1;
-            int dL_k = (s1k == 0) ? dL_up_ket : dL_dn_ket;
+        for (int s1k = 0; s1k < d; ++s1k) {
+            int dL_k = ket_rows[s1k].width;
             if (dL_k == 0) continue;
-            int row_k = (s1k == 0) ? 0 : dL_up_ket;
-            int q_L_ket = q_mid_ket - s1kz;
+            int row_k = ket_rows[s1k].off;
+            int q_L_ket = ket_rows[s1k].q;   // = q_mid_ket - qphys[s1k]
 
-            for (int s2k = 0; s2k < 2; ++s2k) {
-                int s2kz = (s2k == 0) ? +1 : -1;
-                int dR_k = (s2k == 0) ? dR_up_ket : dR_dn_ket;
+            for (int s2k = 0; s2k < d; ++s2k) {
+                int dR_k = ket_cols[s2k].width;
                 if (dR_k == 0) continue;
-                int col_k = (s2k == 0) ? 0 : dR_up_ket;
-                int q_R_ket = q_mid_ket + s2kz;
+                int col_k = ket_cols[s2k].off;
+                int q_R_ket = ket_cols[s2k].q;  // = q_mid_ket + qphys[s2k]
 
                 for (int bR = 0; bR < Wj.chi_r; ++bR) {
                     auto it_R = R.blocks[bR].find(q_R_ket);
@@ -645,29 +696,25 @@ static HeffPlan build_heff_plan(
                         plan.flops += 2.0 * dL_bra * dL_k * dR_bra;  // LT1 = L * T1
                         plan.max_lt1 = std::max(plan.max_lt1, dL_bra * dR_bra);
 
-                        for (int s1b = 0; s1b < 2; ++s1b) {
-                            int s1bz = (s1b == 0) ? +1 : -1;
-                            int q_mid_bra = q_L_bra + s1bz;
-                            int dL_up_bra = bs_L.dim(q_mid_bra - 1);
-                            int dL_dn_bra = bs_L.dim(q_mid_bra + 1);
-                            int dR_up_bra = bs_R2.dim(q_mid_bra + 1);
-                            int dR_dn_bra = bs_R2.dim(q_mid_bra - 1);
-                            int n_row = dL_up_bra + dL_dn_bra;
-                            int n_col = dR_up_bra + dR_dn_bra;
+                        for (int s1b = 0; s1b < d; ++s1b) {
+                            int q_mid_bra = q_L_bra + qphys[s1b];
+                            auto bra_rows = phys_groups(bs_L,  q_mid_bra, -1, qphys);
+                            auto bra_cols = phys_groups(bs_R2, q_mid_bra, +1, qphys);
+                            int n_row = phys_total(bra_rows);
+                            int n_col = phys_total(bra_cols);
                             if (n_row == 0 || n_col == 0) continue;
-                            int dL_b = (s1b == 0) ? dL_up_bra : dL_dn_bra;
+                            int dL_b = bra_rows[s1b].width;
                             if (dL_b != dL_bra) continue;
-                            int row_b = (s1b == 0) ? 0 : dL_up_bra;
+                            int row_b = bra_rows[s1b].off;
 
-                            for (int s2b = 0; s2b < 2; ++s2b) {
-                                S w = Wc.at(bL, bR)[s1b*2+s2b][s1k*2+s2k];
+                            for (int s2b = 0; s2b < d; ++s2b) {
+                                S w = Wc.at(bL, bR, s1b*d+s2b, s1k*d+s2k);
                                 if (std::abs(w) < 1e-15) continue;
-                                int s2bz = (s2b == 0) ? +1 : -1;
-                                int dR_b = (s2b == 0) ? dR_up_bra : dR_dn_bra;
+                                int dR_b = bra_cols[s2b].width;
                                 if (dR_b == 0) continue;
-                                if (q_mid_bra + s2bz != q_R_bra) continue;
+                                if (q_mid_bra + qphys[s2b] != q_R_bra) continue;
                                 if (dR_bra != dR_b) continue;
-                                int col_b = (s2b == 0) ? 0 : dR_up_bra;
+                                int col_b = bra_cols[s2b].off;
 
                                 int idx = get_out_idx(q_mid_bra, n_row, n_col);
                                 lg.writes.push_back({w, idx, row_b, col_b, dL_b, dR_b});
@@ -820,18 +867,17 @@ static std::map<int,Mat> apply_heff_1site(
 {
     ++g_block_matvecs;
     std::map<int,Mat> out;
+    const std::vector<int>& qphys = W.phys_charge;
 
     for (auto& [q_L_ket, Mblk] : M) {
-        int dL_ket   = bs_L.dim(q_L_ket);
-        int dR_up_ket = bs_R.dim(q_L_ket + 1);
-        int dR_dn_ket = bs_R.dim(q_L_ket - 1);
+        int dL_ket = bs_L.dim(q_L_ket);
+        auto ket_cols = phys_groups(bs_R, q_L_ket, +1, qphys);
 
-        for (int s_ket = 0; s_ket < 2; ++s_ket) {
-            int skz   = (s_ket == 0) ? +1 : -1;
-            int dR_s_ket = (s_ket == 0) ? dR_up_ket : dR_dn_ket;
-            if (dR_s_ket == 0) continue;
-            int col_k = (s_ket == 0) ? 0 : dR_up_ket;
-            int q_R_ket = q_L_ket + skz;
+        for (int s_ket = 0; s_ket < (int)qphys.size(); ++s_ket) {
+            if (ket_cols[s_ket].width == 0) continue;
+            int dR_s_ket = ket_cols[s_ket].width;
+            int col_k = ket_cols[s_ket].off;
+            int q_R_ket = ket_cols[s_ket].q;   // = q_L_ket + qphys[s_ket]
             Eigen::Ref<const Mat> M_sub = Mblk.block(0, col_k, dL_ket, dR_s_ket);
 
             for (int b_in = 0; b_in < W.chi_l; ++b_in) {
@@ -844,6 +890,7 @@ static std::map<int,Mat> apply_heff_1site(
                 if (Lblk.rows() != dL_bra || Lblk.cols() != dL_ket) continue;
 
                 Mat LM = Lblk * M_sub;            // (dL_bra, dR_s_ket)
+                auto bra_cols = phys_groups(bs_R, q_L_bra, +1, qphys);
 
                 for (int b_out = 0; b_out < W.chi_r; ++b_out) {
                     auto it_R = R.blocks[b_out].find(q_R_ket);
@@ -853,23 +900,24 @@ static std::map<int,Mat> apply_heff_1site(
                     int dR_bra = (int)Rblk.rows();
                     int q_R_bra = q_R_ket + delta[b_out];
 
-                    // s_bra fixed by q_R_bra = q_L_bra + s_bra_z
-                    int s_bra = (q_R_bra == q_L_bra + 1) ? 0
-                              : (q_R_bra == q_L_bra - 1) ? 1 : -1;
+                    // s_bra fixed by q_R_bra = q_L_bra + qphys[s_bra]. qphys is
+                    // injective (one local state per Sz charge) for every model here
+                    // (spin-1/2, spin-1, Hubbard), so the first match is the only one.
+                    int s_bra = -1;
+                    for (int t = 0; t < (int)qphys.size(); ++t)
+                        if (q_L_bra + qphys[t] == q_R_bra) { s_bra = t; break; }
                     if (s_bra < 0) continue;
                     S w = mscal(W.W(b_in, b_out)(s_bra, s_ket));
                     if (std::abs(w) < 1e-15) continue;
-                    int dR_up_bra = bs_R.dim(q_L_bra + 1);
-                    int dR_dn_bra = bs_R.dim(q_L_bra - 1);
-                    int dR_s_bra  = (s_bra == 0) ? dR_up_bra : dR_dn_bra;
+                    int dR_s_bra = bra_cols[s_bra].width;
                     if (dR_s_bra != dR_bra) continue;
-                    int col_b = (s_bra == 0) ? 0 : dR_up_bra;
+                    int col_b = bra_cols[s_bra].off;
 
                     Mat T = LM * Rblk.transpose();   // (dL_bra, dR_bra)
 
                     auto it_out = out.find(q_L_bra);
                     if (it_out == out.end()) {
-                        out[q_L_bra] = Mat::Zero(dL_bra, dR_up_bra + dR_dn_bra);
+                        out[q_L_bra] = Mat::Zero(dL_bra, phys_total(bra_cols));
                         it_out = out.find(q_L_bra);
                     }
                     it_out->second.block(0, col_b, dL_bra, dR_bra).noalias() += w * T;
@@ -897,28 +945,34 @@ struct SiteMove {
 };
 
 static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
-                                    const BondSpace& bs_L, const BondSpace& bs_mid) {
+                                    const BondSpace& bs_L, const BondSpace& bs_mid,
+                                    const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     SiteMove mv;
     std::map<int,Mat> Umap;     // q_R -> U (rows x keep)
-    std::map<int,int> keepmap;  // q_R -> keep
     std::vector<std::pair<int,int>> new_sectors;
 
+    // Every right-bond sector q_R reachable as q_L + qphys[s] from some present M[q_L].
     std::set<int> qRs;
-    for (auto& [q_L, _] : M) { qRs.insert(q_L + 1); qRs.insert(q_L - 1); }
+    for (auto& [q_L, _] : M)
+        for (int qs : qphys) qRs.insert(q_L + qs);
 
     for (int q_R : qRs) {
         int dRmid = bs_mid.dim(q_R);
         if (dRmid == 0) continue;
-        int dL_up = bs_L.dim(q_R - 1);   // s=up rows come from M[q_R-1]
-        int dL_dn = bs_L.dim(q_R + 1);   // s=dn rows come from M[q_R+1]
-        int rows = dL_up + dL_dn;
+        // Stack the rows that map to q_R, grouped by physical state s: the s-rows come
+        // from M[q_L=q_R-qphys[s]], the column block of M[q_L] mapping to q_R.
+        auto src = phys_groups(bs_L, q_R, -1, qphys);
+        int rows = phys_total(src);
         if (rows == 0) continue;
         Mat X = Mat::Zero(rows, dRmid);
-        if (dL_up > 0 && M.count(q_R - 1))
-            X.topRows(dL_up) = M.at(q_R - 1).leftCols(dRmid);            // up-block
-        if (dL_dn > 0 && M.count(q_R + 1)) {
-            int dRup_p = bs_mid.dim(q_R + 2);                            // up-width of M[q_R+1]
-            X.bottomRows(dL_dn) = M.at(q_R + 1).block(0, dRup_p, dL_dn, dRmid);  // dn-block
+        for (int s = 0; s < (int)qphys.size(); ++s) {
+            if (src[s].width == 0) continue;
+            int q_L = src[s].q;                 // = q_R - qphys[s]
+            auto it = M.find(q_L);
+            if (it == M.end()) continue;
+            auto mcols = phys_groups(bs_mid, q_L, +1, qphys);  // M[q_L] column groups
+            X.middleRows(src[s].off, src[s].width) =
+                it->second.middleCols(mcols[s].off, dRmid);
         }
         Eigen::BDCSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
         int keep = (int)svd.singularValues().size();
@@ -926,20 +980,26 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
         Mat Vt = svd.matrixV().adjoint().topRows(keep);                 // keep x dRmid
         for (int k = 0; k < keep; ++k) Vt.row(k) *= svd.singularValues()[k];
         mv.C[q_R] = Vt;                                                 // S V^dag
-        keepmap[q_R] = keep;
         new_sectors.emplace_back(q_R, keep);
     }
     std::sort(new_sectors.begin(), new_sectors.end());
     mv.new_mid = BondSpace::from_pairs(new_sectors);
 
-    // Reassemble A[q_L]: up-cols from split(q_L+1) top rows, dn-cols from split(q_L-1) bottom rows.
+    // Reassemble A[q_L]: column group s comes from U[q_R=q_L+qphys[s]], the rows of
+    // that U belonging to physical state s (which map back to q_L).
     for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
         int q_L = bs_L.qns[qi], dL = bs_L.dims[qi];
-        int keep_up = keepmap.count(q_L + 1) ? keepmap[q_L + 1] : 0;
-        int keep_dn = keepmap.count(q_L - 1) ? keepmap[q_L - 1] : 0;
-        Mat A = Mat::Zero(dL, keep_up + keep_dn);
-        if (keep_up > 0) A.leftCols(keep_up)  = Umap[q_L + 1].topRows(dL);
-        if (keep_dn > 0) A.rightCols(keep_dn) = Umap[q_L - 1].bottomRows(dL);
+        auto acols = phys_groups(mv.new_mid, q_L, +1, qphys);
+        Mat A = Mat::Zero(dL, phys_total(acols));
+        for (int s = 0; s < (int)qphys.size(); ++s) {
+            int keep = acols[s].width;
+            if (keep == 0) continue;
+            int q_R = acols[s].q;               // = q_L + qphys[s]
+            auto it = Umap.find(q_R);
+            if (it == Umap.end()) continue;
+            auto urows = phys_groups(bs_L, q_R, -1, qphys);
+            A.middleCols(acols[s].off, keep) = it->second.middleRows(urows[s].off, dL);
+        }
         mv.A[q_L] = A;
     }
     return mv;
@@ -1111,8 +1171,10 @@ static std::pair<double, std::map<int,Mat>> block_lanczos(
 // -- Block-sparse SVD and MPS update ------------------------------------------
 
 struct BlockSVDResult {
-    std::map<int,Mat>  U_up;   // q_mid -> (dL_up(q_mid), n_keep) -- up rows of U
-    std::map<int,Mat>  U_dn;   // q_mid -> (dL_dn(q_mid), n_keep) -- dn rows of U
+    // U_grp[s][q_mid] = the left-site-state-s rows of U at q_mid (was U_up/U_dn for
+    // spin-1/2). Group s spans the rows of theta[q_mid] coming from left bond
+    // q_mid - qphys[s]; size = qphys.size() (2 for spin-1/2, 3 for spin-1, ...).
+    std::vector<std::map<int,Mat>> U_grp;
     std::map<int,Mat>  Vt;     // q_mid -> (n_keep, n_cols)
     std::map<int,RVec> sv;
     BondSpace          new_mid_bs;
@@ -1257,7 +1319,8 @@ static BlockSVDResult block_svd_truncate(
     const BondSpace& bs_R2,
     int max_bond, double cutoff,
     bool allow_fp32 = false,   // Phase C: FP32 GPU SVD permitted (real-time TEBD only)
-    bool stable = false)       // direct (BDCSVD) SVD instead of the Gram trick
+    bool stable = false,       // direct (BDCSVD) SVD instead of the Gram trick
+    const std::vector<int>& qphys = SPIN_HALF_CHARGES)
 {
     // SVD per q_mid sector (independent across sectors -> parallelise). Use
     // JacobiSVD for small blocks (much lower fixed overhead than BDCSVD, which
@@ -1346,20 +1409,22 @@ static BlockSVDResult block_svd_truncate(
     for (int k = 0; k < n_keep; ++k) keep_per_q[all_sv[k].q]++;
 
     BlockSVDResult res;
+    res.U_grp.assign(qphys.size(), {});
     res.trunc_err = 0;
     for (int k = n_keep; k < (int)all_sv.size(); ++k)
         res.trunc_err += all_sv[k].sv * all_sv[k].sv;
 
-    // Build new bond space and extract U/Vt blocks
+    // Build new bond space and extract U/Vt blocks. U's rows are grouped by the
+    // left-site physical state s (rows from left bond q_mid - qphys[s]).
     std::vector<std::pair<int,int>> new_sectors;
     for (auto& [q_mid, svd] : svds) {
         int keep = keep_per_q.count(q_mid) ? keep_per_q[q_mid] : 0;
         if (keep == 0) continue;
-        int dL_up = bs_L.dim(q_mid - 1);
-        int dL_dn = bs_L.dim(q_mid + 1);
         const Mat& U = svd->U;
-        res.U_up[q_mid] = U.topRows(dL_up).leftCols(keep);
-        res.U_dn[q_mid] = U.bottomRows(dL_dn).leftCols(keep);
+        auto rows = phys_groups(bs_L, q_mid, -1, qphys);
+        for (int s = 0; s < (int)qphys.size(); ++s)
+            if (rows[s].width > 0)
+                res.U_grp[s][q_mid] = U.middleRows(rows[s].off, rows[s].width).leftCols(keep);
         res.Vt[q_mid]   = svd->V.adjoint().topRows(keep);
         res.sv[q_mid]   = svd->s.head(keep);
         new_sectors.emplace_back(q_mid, keep);
@@ -1378,25 +1443,23 @@ static std::map<int,Mat> form_theta(
     const BondSpace& bs_L,
     const BondSpace& bs_mid,
     const BondSpace& bs_R2,
-    bool absorb_sv_into_Ai1)
+    bool absorb_sv_into_Ai1,
+    const std::vector<int>& qphys = SPIN_HALF_CHARGES)
 {
     std::map<int,Mat> theta;
+    const bool d2 = (qphys.size() == 2 && qphys[0] == +1 && qphys[1] == -1);
 
-    // Find all q_mid values
+    // Find all q_mid values: q_mid = q_L + qphys[s] for some present left sector.
     std::set<int> q_mids;
-    for (auto& [q_L, _] : block_Ai) {
-        int q_up = q_L + 1, q_dn = q_L - 1;
-        if (bs_mid.dim(q_up) > 0) q_mids.insert(q_up);
-        if (bs_mid.dim(q_dn) > 0) q_mids.insert(q_dn);
-    }
+    for (auto& [q_L, _] : block_Ai)
+        for (int qs : qphys) { int q = q_L + qs; if (bs_mid.dim(q) > 0) q_mids.insert(q); }
 
     for (int q_mid : q_mids) {
-        int dL_up = bs_L.dim(q_mid - 1);
-        int dL_dn = bs_L.dim(q_mid + 1);
-        int dR_up = bs_R2.dim(q_mid + 1);
-        int dR_dn = bs_R2.dim(q_mid - 1);
-        int n_row = dL_up + dL_dn;
-        int n_col = dR_up + dR_dn;
+        // theta[q_mid] rows grouped by left-site state, cols by right-site state.
+        auto rows = phys_groups(bs_L,  q_mid, -1, qphys);
+        auto cols = phys_groups(bs_R2, q_mid, +1, qphys);
+        int n_row = phys_total(rows);
+        int n_col = phys_total(cols);
         if (n_row == 0 || n_col == 0) continue;
 
         // Get A[i+1][q_mid] with optional sv absorption
@@ -1405,9 +1468,11 @@ static std::map<int,Mat> form_theta(
 
 #ifdef QX_USE_CUDA
         // Phase B residency: build large theta blocks on the GPU (no sv-absorption
-        // case = TEBD; pure GEMMs). Both spin sectors run on-device sharing one Ai1
-        // upload. Falls through to the CPU path on miss/error.
+        // case = TEBD; pure GEMMs). The on-device kernel handles the two spin-1/2
+        // sectors; for d>2 it falls through to the CPU path below.
         if constexpr (std::is_same_v<S, Cx>) {
+          if (d2) {
+            int dL_up = rows[0].width, dL_dn = rows[1].width;
             const int n_keep_mid = bs_mid.dim(q_mid);
             const Mat& Ai1r = it1->second;
             if (sv_mid.empty() && n_keep_mid > 0 &&
@@ -1444,11 +1509,12 @@ static std::map<int,Mat> form_theta(
                     }
                 }
             }
+          }
         }
 #endif
 
         Mat th = Mat::Zero(n_row, n_col);
-        Mat Ai1 = it1->second;  // (n_keep_mid, dR_up+dR_dn)
+        Mat Ai1 = it1->second;  // (n_keep_mid, n_col)
         if (absorb_sv_into_Ai1) {
             auto it_sv = sv_mid.find(q_mid);
             if (it_sv != sv_mid.end()) {
@@ -1458,19 +1524,17 @@ static std::map<int,Mat> form_theta(
             }
         }
 
-        // For each (s1, q_L): A[i][q_L] contributes rows to th
-        for (int s1 = 0; s1 < 2; ++s1) {
-            int s1z = (s1 == 0) ? +1 : -1;
-            int q_L = q_mid - s1z;
-            int dL  = bs_L.dim(q_L);
+        // For each left-site state s1: A[i][q_L=q_mid-qphys[s1]] contributes rows to th.
+        int n_keep_mid = bs_mid.dim(q_mid);
+        for (int s1 = 0; s1 < (int)qphys.size(); ++s1) {
+            int q_L = rows[s1].q;       // = q_mid - qphys[s1]
+            int dL  = rows[s1].width;
             if (dL == 0) continue;
             auto it0 = block_Ai.find(q_L);
             if (it0 == block_Ai.end()) continue;
-            const Mat& Ai = it0->second;   // (dL, dR_up_mid + dR_dn_mid)
-            int dR_up_mid = bs_mid.dim(q_L + 1);
-            int dR_dn_mid = bs_mid.dim(q_L - 1);
-            int col_off_Ai = (s1 == 0) ? 0 : dR_up_mid;
-            int n_keep_mid = bs_mid.dim(q_mid);
+            const Mat& Ai = it0->second;
+            auto mcols = phys_groups(bs_mid, q_L, +1, qphys);  // A[i][q_L] column groups
+            int col_off_Ai = mcols[s1].off;     // group mapping q_L -> q_mid is state s1
             if (col_off_Ai + n_keep_mid > Ai.cols()) continue;
             Mat Ai_s1 = Ai.block(0, col_off_Ai, dL, n_keep_mid); // (dL, n_keep_mid)
             if (!absorb_sv_into_Ai1) {
@@ -1482,7 +1546,7 @@ static std::map<int,Mat> form_theta(
                     for (int k = 0; k < sv_len; ++k) Ai_s1.col(k) *= sv[k];
                 }
             }
-            int row_off = (s1 == 0) ? 0 : dL_up;
+            int row_off = rows[s1].off;
             if (row_off + dL > n_row) continue;
             th.block(row_off, 0, dL, n_col).noalias() += Ai_s1 * Ai1;
         }
@@ -1585,14 +1649,18 @@ static void bt_evolve_site(std::map<int,Mat>& M, const BlockEnv& Le, const MPOSi
     Vec ev = qx_tdvp::expmv(tau, mv, theta_to_vec(M));
     std::map<int,Mat> out; vec_to_theta(ev, M, out); M = out;
 }
+// NOTE: the bt_* / cps_init / measurement helpers below are spin-1/2-only (they
+// index U_grp[0]/U_grp[1] and the q_L+-1 sectors directly). They serve the block
+// TDVP/TEBD/thermal dynamics, which are reached only through require_local_dim2-
+// guarded entry points; generalizing them for d>2 is the phase 2c-dynamics step.
 static std::map<int,Mat> bt_A_from_U(const BlockSVDResult& svd, const BondSpace& bsL, const BondSpace& bsMid) {
     std::map<int,Mat> A;
     for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
         int q_L = bsL.qns[qi], dL = bsL.dims[qi];
         int n_up = bsMid.dim(q_L+1), n_dn = bsMid.dim(q_L-1);
         Mat blk = Mat::Zero(dL, n_up + n_dn);
-        if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = svd.U_up.at(q_L+1);
-        if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = svd.U_dn.at(q_L-1);
+        if (n_up > 0 && svd.U_grp[0].count(q_L+1)) blk.leftCols(n_up)  = svd.U_grp[0].at(q_L+1);
+        if (n_dn > 0 && svd.U_grp[1].count(q_L-1)) blk.rightCols(n_dn) = svd.U_grp[1].at(q_L-1);
         A[q_L] = blk;
     }
     return A;
@@ -1620,8 +1688,8 @@ static std::map<int,Mat> bt_center_RL(const BlockSVDResult& svd, const BondSpace
                 int L2=std::min((int)s.size(),(int)u.cols()); for(int k=0;k<L2;++k) u.col(k)*=s[k]; }
             return u;
         };
-        if (n_up > 0 && svd.U_up.count(q_L+1)) blk.leftCols(n_up)  = scaled(svd.U_up.at(q_L+1), q_L+1);
-        if (n_dn > 0 && svd.U_dn.count(q_L-1)) blk.rightCols(n_dn) = scaled(svd.U_dn.at(q_L-1), q_L-1);
+        if (n_up > 0 && svd.U_grp[0].count(q_L+1)) blk.leftCols(n_up)  = scaled(svd.U_grp[0].at(q_L+1), q_L+1);
+        if (n_dn > 0 && svd.U_grp[1].count(q_L-1)) blk.rightCols(n_dn) = scaled(svd.U_grp[1].at(q_L-1), q_L-1);
         M[q_L] = blk;
     }
     return M;
@@ -2600,10 +2668,11 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 
     // MPO bond Sz charges (Heisenberg's {0,+2,-2,0,0} or whatever the operator
     // structure implies for a general Sz-conserving model) -- threaded into every
-    // env / H_eff kernel below. The MPS bond Sz sectors themselves depend only on
-    // the spin-1/2 chain (not the Hamiltonian), so make_heisenberg_bond_space and
-    // the Neel start are reused unchanged.
+    // env / H_eff kernel below. qphys are the local Sz charges (spin-1/2 {+1,-1},
+    // spin-1 {+2,0,-2}, ...); the bond spaces and the Neel start derive from them.
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+    const std::vector<int>& qphys = mpo[0].phys_charge;
+    const int d = mpo[0].d;
     // Use the numerically-stable direct SVD for the ground-state truncation so a
     // DMRG that lands on an exactly degenerate ground state (e.g. a frustrated
     // chain at a level crossing) stays canonical/variational. Opt back into the
@@ -2616,42 +2685,38 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     bond[0] = BondSpace::from_pairs({{0, 1}});   // left boundary: qn=0, dim=1
     bond[n] = BondSpace::from_pairs({{0, 1}});   // right boundary: qn=0, dim=1
     for (int i = 0; i < n - 1; ++i)
-        bond[i + 1] = make_heisenberg_bond_space(i, n, max_bond);
+        bond[i + 1] = make_bond_space(i, n, max_bond, qphys);
 
-    // Initialize block MPS to the Neel state |up dn up dn ...>.
-    // This matches the strategy used by the dense DMRG (init_neel_state in dmrg_dense.cpp).
-    // Random initialization leads to self-consistent local minima: the random right
-    // environments R[i] bias the first sweep toward an excited state, and the resulting
-    // wrong-subspace MPS is self-consistent under all subsequent sweeps.  Starting from
-    // the Neel state gives physically motivated environments that allow the first L->R sweep
-    // to find the correct subspace.
+    // Initialize block MPS to a Neel-like product state: alternate the highest-Sz
+    // local state (index 0) and lowest (index d-1) -- |up dn ...> for spin-1/2,
+    // |+1 -1 ...> for spin-1 -- so the start sits in the Sz_total=0 sector.
+    // Random initialization leads to self-consistent local minima; the Neel start
+    // gives physically motivated environments so the first L->R sweep finds the
+    // correct subspace.
     std::vector<std::map<int,Mat>> block_A(n);
     std::vector<std::map<int,RVec>> block_sv(n - 1);
 
     {
-        // q_neel: accumulated Sz of the Neel state before site i
-        // Neel: up at even sites, dn at odd sites -> q_neel follows 0, +1, 0, +1, ...
-        int q_neel = 0;
+        int q_neel = 0;   // accumulated Sz before site i
         for (int i = 0; i < n; ++i) {
             const BondSpace& bsL = bond[i], &bsR = bond[i + 1];
             // Zero-initialise all sectors at this site
             for (int qi = 0; qi < bsL.n_sectors(); ++qi) {
                 int q_L = bsL.qns[qi], dL = bsL.dims[qi];
-                int dR = bsR.dim(q_L + 1) + bsR.dim(q_L - 1);
-                block_A[i][q_L] = Mat::Zero(dL, dR);
+                block_A[i][q_L] = Mat::Zero(dL, phys_total(phys_groups(bsR, q_L, +1, qphys)));
             }
-            // Place the Neel amplitude in the correct sector and column
-            int neel_sz = (i % 2 == 0) ? +1 : -1;   // up=+1 at even, dn=-1 at odd
+            // Place the Neel amplitude in the correct sector and physical-state column
+            int s_neel = (i % 2 == 0) ? 0 : d - 1;   // highest Sz at even, lowest at odd
             if (bsL.dim(q_neel) > 0) {
                 auto it = block_A[i].find(q_neel);
                 if (it != block_A[i].end() && it->second.rows() > 0) {
-                    int dR_up = bsR.dim(q_neel + 1);
-                    int col_off = (neel_sz == +1) ? 0 : dR_up;  // up->leftCols, dn->rightCols
+                    auto cols = phys_groups(bsR, q_neel, +1, qphys);
+                    int col_off = cols[s_neel].off;
                     if (col_off < it->second.cols())
                         it->second(0, col_off) = S(1.0);
                 }
             }
-            q_neel += neel_sz;
+            q_neel += qphys[s_neel];
         }
     }
     // Initialize singular values to 1 (will be overwritten after first sweep step)
@@ -2691,16 +2756,15 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     // Note: block_apply_heff with input {-2:0, 0:nonzero, +2:0} WILL produce nonzero
     // output in the +-2 sectors (via XY cross-coupling), so the Lanczos naturally
     // populates them from the first matvec application.
-    auto expand_theta_sectors = [](std::map<int,Mat>& theta,
+    auto expand_theta_sectors = [&qphys](std::map<int,Mat>& theta,
                                    const BondSpace& bs_L, const BondSpace& bs_R2) {
         for (int qi = 0; qi < bs_L.n_sectors(); ++qi) {
             int q_L = bs_L.qns[qi];
-            for (int s = 0; s < 2; ++s) {
-                int sz = (s == 0) ? +1 : -1;
-                int q_mid = q_L + sz;
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                int q_mid = q_L + qphys[s];
                 if (theta.count(q_mid)) continue;
-                int n_row = bs_L.dim(q_mid - 1) + bs_L.dim(q_mid + 1);
-                int n_col = bs_R2.dim(q_mid + 1) + bs_R2.dim(q_mid - 1);
+                int n_row = phys_total(phys_groups(bs_L,  q_mid, -1, qphys));
+                int n_col = phys_total(phys_groups(bs_R2, q_mid, +1, qphys));
                 if (n_row > 0 && n_col > 0)
                     theta[q_mid] = Mat::Zero(n_row, n_col);
             }
@@ -2745,7 +2809,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         for (int i = 0; i < n - 1; ++i) {
             auto tt = clk::now();
             auto theta = form_theta(block_A[i], block_A[i+1], block_sv[i],
-                                    bond[i], bond[i+1], bond[i+2], true);
+                                    bond[i], bond[i+1], bond[i+2], true, qphys);
             expand_theta_sectors(theta, bond[i], bond[i+2]);
             WComb wc = build_wcomb(mpo[i], mpo[i+1]);  // fixed per bond
             std::vector<int> ket_keys; ket_keys.reserve(theta.size());
@@ -2763,21 +2827,20 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 
             tt = clk::now();
             auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff,
-                                          /*allow_fp32*/false, /*stable*/dmrg_stable);
+                                          /*allow_fp32*/false, /*stable*/dmrg_stable, qphys);
             tick(t_svd, tt);
             sweep_trunc += svd.trunc_err;
             bond[i+1] = svd.new_mid_bs;
 
-            // Update A[i]: for each q_mid, U_up/U_dn go into the up/dn blocks of A[i][q_L]
+            // Rebuild A[i]: U_grp[s][q_mid] fills the physical-state-s column group of A[i][q_L].
             for (int qi = 0; qi < bond[i].n_sectors(); ++qi) {
                 int q_L = bond[i].qns[qi], dL = bond[i].dims[qi];
-                int q_up = q_L + 1, q_dn = q_L - 1;
-                int n_up = bond[i+1].dim(q_up), n_dn = bond[i+1].dim(q_dn);
-                Mat blk = Mat::Zero(dL, n_up + n_dn);
-                if (n_up > 0 && svd.U_up.count(q_up))
-                    blk.leftCols(n_up) = svd.U_up.at(q_up);
-                if (n_dn > 0 && svd.U_dn.count(q_dn))
-                    blk.rightCols(n_dn) = svd.U_dn.at(q_dn);
+                auto acols = phys_groups(bond[i+1], q_L, +1, qphys);
+                Mat blk = Mat::Zero(dL, phys_total(acols));
+                for (int s = 0; s < (int)qphys.size(); ++s) {
+                    if (acols[s].width == 0 || !svd.U_grp[s].count(acols[s].q)) continue;
+                    blk.middleCols(acols[s].off, acols[s].width) = svd.U_grp[s].at(acols[s].q);
+                }
                 block_A[i][q_L] = blk;
             }
             block_sv[i] = svd.sv;
@@ -2792,7 +2855,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         for (int i = n - 2; i >= 0; --i) {
             auto tt = clk::now();
             auto theta = form_theta(block_A[i], block_A[i+1], block_sv[i],
-                                    bond[i], bond[i+1], bond[i+2], false);
+                                    bond[i], bond[i+1], bond[i+2], false, qphys);
             expand_theta_sectors(theta, bond[i], bond[i+2]);
             WComb wc = build_wcomb(mpo[i], mpo[i+1]);  // fixed per bond
             std::vector<int> ket_keys; ket_keys.reserve(theta.size());
@@ -2810,18 +2873,19 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 
             tt = clk::now();
             auto svd = block_svd_truncate(psi_blk, bond[i], bond[i+2], max_bond, cutoff,
-                                          /*allow_fp32*/false, /*stable*/dmrg_stable);
+                                          /*allow_fp32*/false, /*stable*/dmrg_stable, qphys);
             tick(t_svd, tt);
             sweep_trunc += svd.trunc_err;
             bond[i+1] = svd.new_mid_bs;
 
             for (int qi = 0; qi < bond[i].n_sectors(); ++qi) {
                 int q_L = bond[i].qns[qi], dL = bond[i].dims[qi];
-                int q_up = q_L+1, q_dn = q_L-1;
-                int n_up = bond[i+1].dim(q_up), n_dn = bond[i+1].dim(q_dn);
-                Mat blk = Mat::Zero(dL, n_up + n_dn);
-                if (n_up > 0 && svd.U_up.count(q_up)) blk.leftCols(n_up)  = svd.U_up.at(q_up);
-                if (n_dn > 0 && svd.U_dn.count(q_dn)) blk.rightCols(n_dn) = svd.U_dn.at(q_dn);
+                auto acols = phys_groups(bond[i+1], q_L, +1, qphys);
+                Mat blk = Mat::Zero(dL, phys_total(acols));
+                for (int s = 0; s < (int)qphys.size(); ++s) {
+                    if (acols[s].width == 0 || !svd.U_grp[s].count(acols[s].q)) continue;
+                    blk.middleCols(acols[s].off, acols[s].width) = svd.U_grp[s].at(acols[s].q);
+                }
                 block_A[i][q_L] = blk;
             }
             block_sv[i] = svd.sv;
@@ -2849,17 +2913,16 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 
     // ---- Single-site refinement phase (hybrid) ------------------------------
     if (do_ss && ss_start < n_sweeps) {
-        // Centre on site 0 (after the warm-up's final R->L it sits at bond 1).
+        // Centre on site 0 (after the warm-up's final R->L it sits at bond 1):
+        // absorb the bond-1 singular values into each physical-state column group.
         std::map<int,Mat> M = block_A[0];
         for (auto& [q_L, blk] : M) {
-            int dR_up = bond[1].dim(q_L + 1), dR_dn = bond[1].dim(q_L - 1);
-            if (dR_up > 0 && block_sv[0].count(q_L + 1)) {
-                const RVec& s = block_sv[0].at(q_L + 1);
-                for (int c = 0; c < dR_up && c < s.size(); ++c) blk.col(c) *= s[c];
-            }
-            if (dR_dn > 0 && block_sv[0].count(q_L - 1)) {
-                const RVec& s = block_sv[0].at(q_L - 1);
-                for (int c = 0; c < dR_dn && c < s.size(); ++c) blk.col(dR_up + c) *= s[c];
+            auto cols = phys_groups(bond[1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                if (cols[s].width == 0 || !block_sv[0].count(cols[s].q)) continue;
+                const RVec& sv = block_sv[0].at(cols[s].q);
+                for (int c = 0; c < cols[s].width && c < sv.size(); ++c)
+                    blk.col(cols[s].off + c) *= sv[c];
             }
         }
 
@@ -2876,7 +2939,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                 E0 = E;
                 if (i < n - 1) {
                     tt = clk::now();
-                    SiteMove sp = singlesite_split_LR(Mopt, bond[i], bond[i+1]);
+                    SiteMove sp = singlesite_split_LR(Mopt, bond[i], bond[i+1], qphys);
                     tick(t_svd, tt);
                     block_A[i] = sp.A;
                     bond[i+1] = sp.new_mid;
@@ -2912,13 +2975,15 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                     std::map<int,Mat> Mp;       // absorb centre into the previous site
                     for (auto& [q_Lp, Ab] : block_A[i-1]) {
                         int dLp = bond[i-1].dim(q_Lp);
-                        int oldRup = old_bond_i.dim(q_Lp + 1);  // up-block width of A[i-1]
-                        int ku = sp.new_mid.dim(q_Lp + 1), kd = sp.new_mid.dim(q_Lp - 1);
-                        Mat Mb = Mat::Zero(dLp, ku + kd);
-                        if (ku > 0 && sp.C.count(q_Lp + 1))
-                            Mb.leftCols(ku)  = Ab.leftCols(oldRup) * sp.C[q_Lp + 1];
-                        if (kd > 0 && sp.C.count(q_Lp - 1))
-                            Mb.rightCols(kd) = Ab.middleCols(oldRup, old_bond_i.dim(q_Lp - 1)) * sp.C[q_Lp - 1];
+                        auto oldcols = phys_groups(old_bond_i, q_Lp, +1, qphys); // A[i-1] old cols
+                        auto newcols = phys_groups(sp.new_mid, q_Lp, +1, qphys); // new (kept) cols
+                        Mat Mb = Mat::Zero(dLp, phys_total(newcols));
+                        for (int s = 0; s < (int)qphys.size(); ++s) {
+                            int q_R = newcols[s].q;             // = q_Lp + qphys[s]
+                            if (newcols[s].width == 0 || !sp.C.count(q_R)) continue;
+                            Mb.middleCols(newcols[s].off, newcols[s].width) =
+                                Ab.middleCols(oldcols[s].off, oldcols[s].width) * sp.C[q_R];
+                        }
                         Mp[q_Lp] = Mb;
                     }
                     M = std::move(Mp);
@@ -2946,7 +3011,7 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     // Validation of the single-site H_eff: after the final R->L half-sweep the
     // orthogonality centre is at bond 1 (block_sv[0]); putting that centre on site 0
     // gives M0 whose single-site Rayleigh quotient must equal the ground energy.
-    if (std::getenv("QX_DMRG_1SITE_CHECK")) {
+    if (d == 2 && std::getenv("QX_DMRG_1SITE_CHECK")) {   // spin-1/2-only debug check
         std::map<int,Mat> M0 = block_A[0];
         for (auto& [q_L, blk] : M0) {
             int dR_up = bond[1].dim(q_L + 1), dR_dn = bond[1].dim(q_L - 1);
@@ -3041,8 +3106,8 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 static bool mpo_is_real(const std::vector<MPOSite>& mpo) {
     for (const auto& site : mpo)
         for (const auto& op : site.ops)
-            for (int a = 0; a < 2; ++a)
-                for (int b = 0; b < 2; ++b)
+            for (int a = 0; a < op.rows(); ++a)
+                for (int b = 0; b < op.cols(); ++b)
                     if (std::abs(op(a, b).imag()) > 1e-13) return false;
     return true;
 }
@@ -3051,7 +3116,7 @@ static bool mpo_is_real(const std::vector<MPOSite>& mpo) {
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff,
                            int n_sweeps, double tol) {
-    require_local_dim2(mpo, "run_dmrg_blocks");
+    require_uniform_local_dim(mpo, "run_dmrg_blocks");
     if (mpo_is_real(mpo))
         return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
     return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
