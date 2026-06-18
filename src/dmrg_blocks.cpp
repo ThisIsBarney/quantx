@@ -1834,7 +1834,11 @@ static void apply_gate_theta(std::map<int,Mat>& theta, const BondSpace& bsL,
 // uniform lower-triangular nearest-neighbour MPO is h2 = sum_b W(start,b) (x) W(b,done),
 // with start = chi-1 (the emit row) and done = 0 (the complete column): the carry-
 // identity channels (b=done and b=start) contribute zero here, leaving exactly the
-// one-bond term. The gate is G = exp(tau * h2).
+// one-bond term. The gate is G = exp(tau * h2). NOTE: assumes a pure two-site
+// coupling with NO on-site term -- an on-site field/anisotropy sits at W(start,done)
+// and would be double-counted into both sites of every bond; the shipped d>2 model
+// (spin-1 Heisenberg) has W(start,done)=0. Add on-site handling before using a
+// field / single-ion (D Sz^2) model on the d>2 TEBD path.
 static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau) {
     int bulk = -1, w = 0;
     for (int i = 0; i < (int)mpo.size(); ++i)
@@ -1868,11 +1872,11 @@ static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau) {
 static void apply_gate_theta_general(std::map<int,Mat>& theta, const BondSpace& bsL,
                                      const BondSpace& bsR, const Mat& G, int d,
                                      const std::vector<int>& qphys) {
+    // distinct two-site totals (qphys[s1]+qphys[s2]); for each q_L, q_R = q_L + tot.
+    std::set<int> tots;
+    for (int a : qphys) for (int b : qphys) tots.insert(a + b);
     for (int li = 0; li < bsL.n_sectors(); ++li) {
         int q_L = bsL.qns[li], dL = bsL.dims[li];
-        // distinct two-site totals (qphys[s1]+qphys[s2]); for each, q_R = q_L + tot.
-        std::set<int> tots;
-        for (int a : qphys) for (int b : qphys) tots.insert(a + b);
         for (int tot : tots) {
             int q_R = q_L + tot, dR = bsR.dim(q_R);
             if (dR == 0) continue;
