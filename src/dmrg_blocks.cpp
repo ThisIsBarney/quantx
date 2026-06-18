@@ -1828,16 +1828,111 @@ static void apply_gate_theta(std::map<int,Mat>& theta, const BondSpace& bsL,
     }
 }
 
+// ---- General (any local dimension) two-site gate -----------------------------
+// The d=2 apply_gate_theta hand-codes the four spin-1/2 states. For d>2 we build the
+// gate from the MPO and apply it Sz-block-wise (below). The bond Hamiltonian of a
+// uniform lower-triangular nearest-neighbour MPO is h2 = sum_b W(start,b) (x) W(b,done),
+// with start = chi-1 (the emit row) and done = 0 (the complete column): the carry-
+// identity channels (b=done and b=start) contribute zero here, leaving exactly the
+// one-bond term. The gate is G = exp(tau * h2). NOTE: assumes a pure two-site
+// coupling with NO on-site term -- an on-site field/anisotropy sits at W(start,done)
+// and would be double-counted into both sites of every bond; the shipped d>2 model
+// (spin-1 Heisenberg) has W(start,done)=0. Add on-site handling before using a
+// field / single-ion (D Sz^2) model on the d>2 TEBD path.
+static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau) {
+    int bulk = -1, w = 0;
+    for (int i = 0; i < (int)mpo.size(); ++i)
+        if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l >= w) { w = mpo[i].chi_l; bulk = i; }
+    if (bulk < 0) throw std::runtime_error("build_gate_from_mpo: no square bulk MPO site");
+    const MPOSite& W = mpo[bulk];
+    const int d = W.d, d2 = d * d, chi = W.chi_r;
+    const int start = chi - 1, done = 0;
+    Eigen::MatrixXcd h2 = Eigen::MatrixXcd::Zero(d2, d2);
+    for (int b = 0; b < chi; ++b) {
+        const Mat& Wl = W.W(start, b);   // d x d (left site)
+        const Mat& Wr = W.W(b, done);    // d x d (right site)
+        for (int s1 = 0; s1 < d; ++s1)
+            for (int s2 = 0; s2 < d; ++s2)
+                for (int s1p = 0; s1p < d; ++s1p)
+                    for (int s2p = 0; s2p < d; ++s2p)
+                        h2(s1*d + s2, s1p*d + s2p) += Wl(s1, s1p) * Wr(s2, s2p);
+    }
+    h2 = 0.5 * (h2 + h2.adjoint().eval());   // symmetrize away FP non-Hermiticity
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(h2);
+    Eigen::ArrayXcd ev = (tau * es.eigenvalues().array().cast<Cx>()).exp();
+    Eigen::MatrixXcd G = es.eigenvectors() * ev.matrix().asDiagonal() * es.eigenvectors().adjoint();
+    if constexpr (std::is_same_v<S, Cx>) return G;
+    else                                 return G.real();   // (TEBD is Cx-only; dead for double)
+}
+
+// Apply a precomputed d2 x d2 Sz-conserving gate G (= exp(tau h_bond)) to theta. For
+// a fixed (q_L, q_R), every two-site state (s1,s2) with qphys[s1]+qphys[s2] = q_R-q_L
+// lives in the (dim q_L x dim q_R) sub-block of theta[q_L+qphys[s1]]; the gate mixes
+// just those (one total-Sz sector). Generalizes apply_gate_theta to any local dim.
+static void apply_gate_theta_general(std::map<int,Mat>& theta, const BondSpace& bsL,
+                                     const BondSpace& bsR, const Mat& G, int d,
+                                     const std::vector<int>& qphys) {
+    // distinct two-site totals (qphys[s1]+qphys[s2]); for each q_L, q_R = q_L + tot.
+    std::set<int> tots;
+    for (int a : qphys) for (int b : qphys) tots.insert(a + b);
+    for (int li = 0; li < bsL.n_sectors(); ++li) {
+        int q_L = bsL.qns[li], dL = bsL.dims[li];
+        for (int tot : tots) {
+            int q_R = q_L + tot, dR = bsR.dim(q_R);
+            if (dR == 0) continue;
+            // Gather the present (s1,s2) sub-blocks (copies, so writes don't alias).
+            std::vector<int> have;                  // packed index s1*d+s2
+            std::vector<Mat> oldb(d * d);
+            std::vector<std::tuple<int,int,int>> loc(d * d);  // (q_mid, row_off, col_off)
+            for (int s1 = 0; s1 < d; ++s1)
+                for (int s2 = 0; s2 < d; ++s2) {
+                    if (qphys[s1] + qphys[s2] != tot) continue;
+                    int q_mid = q_L + qphys[s1];
+                    auto it = theta.find(q_mid);
+                    if (it == theta.end()) continue;
+                    auto rows = phys_groups(bsL, q_mid, -1, qphys);
+                    auto cols = phys_groups(bsR, q_mid, +1, qphys);
+                    if (rows[s1].width != dL || cols[s2].width != dR) continue;
+                    int p = s1*d + s2;
+                    have.push_back(p);
+                    oldb[p] = it->second.block(rows[s1].off, cols[s2].off, dL, dR);
+                    loc[p]  = {q_mid, rows[s1].off, cols[s2].off};
+                }
+            // new[p1] = sum over present p0 of G(p1,p0) * old[p0]
+            for (int p1 : have) {
+                Mat acc = Mat::Zero(dL, dR);
+                for (int p0 : have) {
+                    S g = G(p1, p0);
+                    if (std::abs(g) > 1e-15) acc.noalias() += g * oldb[p0];
+                }
+                auto [q_mid, ro, co] = loc[p1];
+                theta[q_mid].block(ro, co, dL, dR) = acc;
+            }
+        }
+    }
+}
+
 // One symmetric second-order block TEBD step (L->R then R->L with half gates, so
 // every bond is acted on with the full dt and the sweep is time-symmetric).
 // No environments and no Krylov -- just a gate + SVD per bond, the reason TEBD is
 // cheaper than TDVP for nearest-neighbour models.
 static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
                               double cutoff, double J = 1.0, double delta = 1.0,
-                              bool allow_fp32 = false) {
+                              bool allow_fp32 = false,
+                              const std::vector<MPOSite>* mpo = nullptr) {
     const int n = s.n;
     const Cx tau = imag ? Cx(-dt/2, 0) : Cx(0, -dt/2);
-    const Gate g = build_xxz_gate(J, delta, tau);
+    // d=2 keeps the exact hand-coded XXZ gate (bit-identical); d>2 builds the gate
+    // from the MPO's 2-site bond Hamiltonian. qphys=spin-1/2 for d=2 (= the default
+    // everywhere below, so d=2 is unchanged).
+    const int d = (mpo && !mpo->empty()) ? (*mpo)[0].d : 2;
+    const std::vector<int>& qphys = (d > 2) ? (*mpo)[0].phys_charge : SPIN_HALF_CHARGES;
+    const Gate g = (d == 2) ? build_xxz_gate(J, delta, tau) : Gate{};
+    Mat Ggen; if (d > 2) Ggen = build_gate_from_mpo(*mpo, tau);
+    auto apply_gate = [&](std::map<int,Mat>& th, const BondSpace& bL, const BondSpace& bR) {
+        if (d == 2) apply_gate_theta(th, bL, bR, g);
+        else        apply_gate_theta_general(th, bL, bR, Ggen, d, qphys);
+    };
     const std::map<int,RVec> no_sv;
     auto& A = s.A; auto& bond = s.bond;
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
@@ -1845,30 +1940,30 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
     auto ptick = [&](double& acc, pclk::time_point t0){ if (prof) acc += std::chrono::duration<double>(pclk::now()-t0).count(); };
     for (int i = 0; i < n - 1; ++i) {                      // left -> right
         auto tt = pclk::now();
-        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-        bt_expand_theta(theta, bond[i], bond[i+2]);
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
+        bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         ptick(g_tebd_theta, tt); tt = pclk::now();
-        apply_gate_theta(theta, bond[i], bond[i+2], g);
+        apply_gate(theta, bond[i], bond[i+2]);
         ptick(g_tebd_gate, tt); tt = pclk::now();
-        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32, false, qphys);
         ptick(g_tebd_svd, tt); tt = pclk::now();
         bond[i+1] = svd.new_mid_bs;
-        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1]);
+        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1], qphys);
         A[i+1] = bt_center_LR(svd);
         ptick(g_tebd_recomb, tt);
     }
     for (int i = n - 2; i >= 0; --i) {                    // right -> left
         auto tt = pclk::now();
-        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-        bt_expand_theta(theta, bond[i], bond[i+2]);
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
+        bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         ptick(g_tebd_theta, tt); tt = pclk::now();
-        apply_gate_theta(theta, bond[i], bond[i+2], g);
+        apply_gate(theta, bond[i], bond[i+2]);
         ptick(g_tebd_gate, tt); tt = pclk::now();
-        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32);
+        auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32, false, qphys);
         ptick(g_tebd_svd, tt); tt = pclk::now();
         bond[i+1] = svd.new_mid_bs;
         A[i+1] = svd.Vt;
-        A[i]   = bt_center_RL(svd, bond[i], bond[i+1]);
+        A[i]   = bt_center_RL(svd, bond[i], bond[i+1], qphys);
         ptick(g_tebd_recomb, tt);
     }
     if (imag) {   // renormalize (centre at site 0)
@@ -1932,18 +2027,20 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
                           double J = 1.0, double delta = 1.0) {
     static_assert(std::is_same_v<S, Cx>, "TEBD2 requires complex scalar");
     using clk = std::chrono::steady_clock;
-    std::vector<int> neel(n); for (int i=0;i<n;++i) neel[i] = (i%2==0)?+1:-1;
-    BMPS s = cps_init(mpo, n, neel);
+    const std::vector<int>& qphys = mpo[0].phys_charge;   // spin-1/2 {+1,-1}, spin-1 {+2,0,-2}, ...
+    std::vector<int> neel(n);
+    for (int i=0;i<n;++i) neel[i] = (i%2==0) ? qphys.front() : qphys.back();
+    BMPS s = cps_init(mpo, n, neel, qphys);
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
     if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0; }
 
     TDVP2Out out;
     auto t0 = clk::now();
     for (int step = 0; step < n_steps; ++step) {
-        tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta, /*allow_fp32=*/!imag);
+        tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta, /*allow_fp32=*/!imag, &mpo);
         if (measure_stride > 0 && (step % measure_stride == 0 || step == n_steps - 1)) {
             out.times.push_back((step+1)*dt);
-            out.stag.push_back(measure_stag(s.A, s.bond, n));
+            out.stag.push_back(measure_stag(s.A, s.bond, n, qphys));
         }
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
@@ -3160,7 +3257,7 @@ TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag, int measure_stride,
                                  double J, double delta) {
-    require_local_dim2(mpo, "run_tebd2_blocks");   // TEBD gates are spin-1/2-only
+    require_uniform_local_dim(mpo, "run_tebd2_blocks");   // gate built from the MPO for d>2
     auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride, J, delta);
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;
