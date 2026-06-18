@@ -185,15 +185,18 @@ int main() {
                     E_rt, E_neel, okrt?"OK":"FAIL", E_it, E_gs, okit?"OK":"FAIL");
         fails += !(okrt && okit);
     }
-    // TEBD's Trotter gates are still spin-1/2-only: a spin-1 MPO into run_tebd2_blocks
-    // must throw, not silently truncate to s<2.
+    // Spin-1 (d=3) TEBD: the gate is built from the MPO's 2-site bond Hamiltonian
+    // (exp(-dt h)). Imaginary-time cooling from the Neel start reaches the GS (with
+    // a small Trotter error ~dt^2).
     {
-        auto s1 = build_spin1_heisenberg_mpo(6, 1.0);
-        bool tb=false;
-        try { run_tebd2_blocks(s1, 6, 0.05, 1, 16, 1e-10, false, 1, 1.0, 1.0); }
-        catch (const std::exception&) { tb=true; }
-        std::printf("  spin-1 -> block TEBD threw=%d  %s\n", (int)tb, tb?"OK":"FAIL");
-        fails += !tb;
+        const int N = 6;
+        auto s1 = build_spin1_heisenberg_mpo(N, 1.0);
+        double E_gs = run_dmrg_blocks(s1, N, 48, 1e-11, 80, 1e-11).energy;   // == ED
+        double E_te = run_tebd2_blocks(s1, N, 0.02, 1000, 24, 1e-12, /*imag*/true, 0, 1.0, 1.0).energy;
+        bool ok = std::abs(E_te - E_gs) < 2e-3;
+        std::printf("  spin-1 TEBD imag->GS=%.6f (ED %.6f)  %s\n",
+                    E_te, E_gs, ok ? "OK" : "FAIL");
+        fails += !ok;
     }
 
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
