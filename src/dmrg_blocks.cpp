@@ -1509,6 +1509,39 @@ static std::map<int,Mat> form_theta(
                     }
                 }
             }
+          } else {   // d>2: one GEMM per physical-state row group on-device
+            const int n_keep_mid = bs_mid.dim(q_mid);
+            const Mat& Ai1r = it1->second;
+            if (sv_mid.empty() && n_keep_mid > 0 &&
+                (int)Ai1r.rows() == n_keep_mid && (int)Ai1r.cols() == n_col &&
+                (long long)n_row * n_keep_mid * n_col >= gpu_theta_minwork()) {
+                std::vector<const Cx*> As(qphys.size(), nullptr);
+                std::vector<int> dLs(qphys.size(), 0);
+                bool gpu_ok = true;
+                for (int s1 = 0; s1 < (int)qphys.size(); ++s1) {
+                    int q_L = rows[s1].q, dL = rows[s1].width;
+                    dLs[s1] = dL;
+                    if (dL == 0) continue;          // absent group -> zero rows
+                    auto it0 = block_Ai.find(q_L);
+                    if (it0 == block_Ai.end()) continue;
+                    auto mcols = phys_groups(bs_mid, q_L, +1, qphys);
+                    int coff = mcols[s1].off;       // column group mapping q_L -> q_mid
+                    if (coff + n_keep_mid > (int)it0->second.cols()
+                        || (int)it0->second.rows() != dL) { gpu_ok = false; break; }
+                    As[s1] = reinterpret_cast<const Cx*>(it0->second.data())
+                             + (size_t)coff * dL;
+                }
+                if (gpu_ok) {
+                    Mat th(n_row, n_col);
+                    if (qx_gpu::form_theta_block_z_multi(As.data(), dLs.data(),
+                            (int)qphys.size(),
+                            reinterpret_cast<const Cx*>(Ai1r.data()), n_keep_mid, n_col,
+                            n_row, reinterpret_cast<Cx*>(th.data()))) {
+                        if (th.norm() > 1e-14) theta[q_mid] = std::move(th);
+                        continue;
+                    }
+                }
+            }
           }
         }
 #endif

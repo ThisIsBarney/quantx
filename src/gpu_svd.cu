@@ -326,4 +326,44 @@ bool form_theta_block_z(const std::complex<double>* Aup, int dLup,
     return true;
 }
 
+// Arbitrary local dimension d (spin-1, ...): nsec row groups instead of up/dn. As[s]
+// is a (dLs[s] x kmid) column-major sub-block (nullptr / dLs[s]=0 = absent, zero rows);
+// theta row s starts at the cumulative offset of the earlier groups. One GEMM per
+// present group into a shared (nrow x ncol) theta, sharing one Ai1 upload.
+bool form_theta_block_z_multi(const std::complex<double>* const* As, const int* dLs,
+                              int nsec, const std::complex<double>* Ai1, int kmid,
+                              int ncol, int nrow, std::complex<double>* theta) {
+    Ctx& c = ctx();
+    if (!c.ok || nrow <= 0 || ncol <= 0 || kmid <= 0 || nsec <= 0) return false;
+    std::lock_guard<std::mutex> lock(c.mtx);
+
+    int maxdL = 0;
+    for (int s = 0; s < nsec; ++s) if (dLs[s] > maxdL) maxdL = dLs[s];
+    if (maxdL <= 0) return false;
+    if (!ensure(&c.tA, &c.ctA, sizeof(cuDoubleComplex) * (size_t)maxdL * kmid)) return false;
+    if (!ensure(&c.tB, &c.ctB, sizeof(cuDoubleComplex) * (size_t)kmid * ncol)) return false;
+    if (!ensure(&c.tT, &c.ctT, sizeof(cuDoubleComplex) * (size_t)nrow * ncol)) return false;
+    auto* dA = reinterpret_cast<cuDoubleComplex*>(c.tA);
+    auto* dB = reinterpret_cast<cuDoubleComplex*>(c.tB);
+    auto* dT = reinterpret_cast<cuDoubleComplex*>(c.tT);
+
+    if (cudaMemcpy(dB, Ai1, sizeof(cuDoubleComplex)*(size_t)kmid*ncol, cudaMemcpyHostToDevice) != cudaSuccess) return false;
+    if (cudaMemset(dT, 0, sizeof(cuDoubleComplex)*(size_t)nrow*ncol) != cudaSuccess) return false;
+
+    const cuDoubleComplex one  = make_cuDoubleComplex(1.0, 0.0);
+    const cuDoubleComplex zero = make_cuDoubleComplex(0.0, 0.0);
+    int row_off = 0;
+    for (int s = 0; s < nsec; ++s) {
+        int dL = dLs[s];
+        if (dL > 0 && As[s]) {   // theta rows [row_off, row_off+dL): C = As[s] * Ai1
+            if (cudaMemcpy(dA, As[s], sizeof(cuDoubleComplex)*(size_t)dL*kmid, cudaMemcpyHostToDevice) != cudaSuccess) return false;
+            if (cublasZgemm(c.blas, CUBLAS_OP_N, CUBLAS_OP_N, dL, ncol, kmid,
+                            &one, dA, dL, dB, kmid, &zero, dT + row_off, nrow) != CUBLAS_STATUS_SUCCESS) return false;
+        }
+        row_off += dL;
+    }
+    if (cudaMemcpy(theta, dT, sizeof(cuDoubleComplex)*(size_t)nrow*ncol, cudaMemcpyDeviceToHost) != cudaSuccess) return false;
+    return true;
+}
+
 }  // namespace qx_gpu
