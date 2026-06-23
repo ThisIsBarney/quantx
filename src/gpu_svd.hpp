@@ -56,4 +56,12 @@ bool form_theta_block_z(const std::complex<double>* Aup, int dLup,
                         const std::complex<double>* Ai1, int kmid, int ncol,
                         std::complex<double>* theta);
 
+// Arbitrary local dimension d: nsec row groups (As[s] = (dLs[s] x kmid) column-major
+// sub-block, nullptr/dLs[s]=0 = absent). theta row group s starts at the cumulative
+// offset of the earlier dLs; one GEMM per present group, shared Ai1 upload. Used by
+// the d>2 path; the 2-sector form_theta_block_z above stays the spin-1/2 route.
+bool form_theta_block_z_multi(const std::complex<double>* const* As, const int* dLs,
+                              int nsec, const std::complex<double>* Ai1, int kmid,
+                              int ncol, int nrow, std::complex<double>* theta);
+
 }  // namespace qx_gpu
