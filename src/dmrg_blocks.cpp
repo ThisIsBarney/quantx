@@ -2498,18 +2498,6 @@ static BMPS purified_init(int n_phys, const std::vector<int>& qphys = SPIN_HALF_
     return s;
 }
 
-// One symmetric swap-and-carry cooling step: applies e^{-dtau*H} to the
-// interleaved purified chain (so beta advances by 2*dtau). The physical
-// neighbours (p_i, p_{i+1}) sit two sites apart; the L->R half-sweep puts a
-// SWAP on each even bond -- carrying p_i rightward past its ancilla -- and the
-// XXZ half-gate exp(-(dtau/2) h) on each odd bond, which by then joins p_i and
-// p_{i+1} adjacently. The R->L half-sweep mirrors the sequence (gate then
-// swap), restoring the p a p a ... layout. The full step is a palindrome, so
-// the Trotter error is O(dtau^3) per step (2nd order), and the bond order is
-// monotonic, so the canonical centre stays adjacent to the active bond and
-// ends back on site 0 (exactly as in tebd2_step_blocks).
-// SWAP is Sz-conserving and fits the homogeneous Gate format:
-//   pdiag = 1 (|uu>,|dd>), Sz=0 block [[0,1],[1,0]] (|ud> <-> |du>).
 // d^2 x d^2 SWAP permutation gate |s1,s2> -> |s2,s1> (Sz-conserving), for the d>2
 // swap-and-carry cooling. d=2 uses the hand-coded Gate {1; [[0,1],[1,0]]} instead.
 static Mat build_swap_gate(int d) {
@@ -2519,6 +2507,18 @@ static Mat build_swap_gate(int d) {
             G(s2 * d + s1, s1 * d + s2) = S(1);   // output (s2,s1) <- input (s1,s2)
     return G;
 }
+
+// One symmetric swap-and-carry cooling step: applies e^{-dtau*H} to the
+// interleaved purified chain (so beta advances by 2*dtau). The physical
+// neighbours (p_i, p_{i+1}) sit two sites apart; the L->R half-sweep puts a
+// SWAP on each even bond -- carrying p_i rightward past its ancilla -- and the
+// physical half-gate exp(-(dtau/2) h) on each odd bond, which by then joins p_i
+// and p_{i+1} adjacently. The R->L half-sweep mirrors the sequence (gate then
+// swap), restoring the p a p a ... layout. The full step is a palindrome, so
+// the Trotter error is O(dtau^3) per step (2nd order), and the bond order is
+// monotonic, so the canonical centre stays adjacent to the active bond and
+// ends back on site 0 (exactly as in tebd2_step_blocks). SWAP is Sz-conserving:
+// d=2 uses the Gate format {pdiag=1; Sz=0 block [[0,1],[1,0]]}, d>2 build_swap_gate.
 
 static void thermal_step_blocks(BMPS& s, double dtau, int chi_max, double cutoff,
                                 double J = 1.0, double delta = 1.0,
