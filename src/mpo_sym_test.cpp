@@ -199,6 +199,36 @@ int main() {
         fails += !ok;
     }
 
+    // Spin-1 (d=3) finite temperature via ancilla purification: cool the beta=0
+    // maximally-entangled state with the d>2 swap-and-carry gates, and the thermal
+    // energy <H>_beta must match the exact-diagonalization Gibbs average
+    // sum_i E_i e^{-beta E_i} / sum_i e^{-beta E_i}.
+    std::printf("== spin-1 (d=3) finite-T via purification vs ED Gibbs ==\n");
+    {
+        const int n = 4; const double beta = 1.0;
+        const double r2 = std::sqrt(2.0);
+        Eigen::MatrixXcd Sp = Eigen::MatrixXcd::Zero(3,3); Sp(0,1)=r2; Sp(1,2)=r2;
+        Eigen::MatrixXcd Sm = Eigen::MatrixXcd::Zero(3,3); Sm(1,0)=r2; Sm(2,1)=r2;
+        Eigen::MatrixXcd Sz = Eigen::MatrixXcd::Zero(3,3); Sz(0,0)=1; Sz(2,2)=-1;
+        Eigen::MatrixXcd H = Eigen::MatrixXcd::Zero(81, 81);
+        for (int i = 0; i < n-1; ++i)
+            H += 0.5*(site_opd(n,i,Sp,3)*site_opd(n,i+1,Sm,3)
+                    + site_opd(n,i,Sm,3)*site_opd(n,i+1,Sp,3))
+               + site_opd(n,i,Sz,3)*site_opd(n,i+1,Sz,3);
+        Eigen::VectorXd ev = Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd>(H).eigenvalues();
+        double num = 0, den = 0, e0 = ev(0);   // shift by e0 for numerical stability
+        for (int i = 0; i < ev.size(); ++i) { double w = std::exp(-beta*(ev(i)-e0)); num += ev(i)*w; den += w; }
+        double E_ed = num / den;
+        // purified block thermal: dbeta=0.05 -> 20 steps reach beta=1.0
+        auto th = run_thermal_blocks(n, 1.0, 1.0, 0.05, 20, 64, 1e-12, 1, false, /*d*/3);
+        double E_th = th.E.back();
+        double err = std::abs(E_th - E_ed);
+        bool ok = err < 5e-3;
+        std::printf("  N=%d beta=%.1f : <H>_ED=%.6f  purified=%.6f  err=%.1e  %s\n",
+                    n, beta, E_ed, E_th, err, ok ? "OK" : "FAIL");
+        fails += !ok;
+    }
+
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
     // agnostic) and -- the phase-1b payoff -- the FAST block-sparse path, which
     // now consumes the derived 8-wide charge array instead of the hard-coded

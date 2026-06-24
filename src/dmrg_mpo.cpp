@@ -231,6 +231,45 @@ std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J, double delta) 
     return mpo;
 }
 
+// Spin-1 (d=3) Heisenberg MPO on the interleaved purified chain (2*n_phys sites):
+// even sites carry the physical spin-1 couplings, odd (ancilla) sites are identity
+// (I3) pass-throughs on every bond state -- same structure as build_xxz_purified_mpo
+// but with d=3 / physical spin-1 operators, so the block engine runs the spin-1
+// purified chain unchanged. H = J sum_{i<n_phys-1} S_{2i}.S_{2i+2}.
+std::vector<MPOSite> build_spin1_purified_mpo(int n_phys, double J) {
+    const int chi = 5, d = 3, n = 2 * n_phys;
+    const double r2 = std::sqrt(2.0);
+    Mat Sp = Mat::Zero(3, 3); Sp(0, 1) = r2; Sp(1, 2) = r2;
+    Mat Sm = Mat::Zero(3, 3); Sm(1, 0) = r2; Sm(2, 1) = r2;
+    Mat Sz = Mat::Zero(3, 3); Sz(0, 0) = 1.0; Sz(2, 2) = -1.0;
+    Mat I3 = Mat::Identity(3, 3);
+    // Physical-site W (same bulk as build_spin1_heisenberg_mpo).
+    std::array<std::array<Mat, 5>, 5> Wp;
+    for (auto& row : Wp) for (auto& e : row) e = Mat::Zero(3, 3);
+    Wp[0][0] = I3; Wp[1][0] = Sm; Wp[2][0] = Sp; Wp[3][0] = Sz;
+    Wp[4][1] = (0.5 * J) * Sp; Wp[4][2] = (0.5 * J) * Sm; Wp[4][3] = J * Sz; Wp[4][4] = I3;
+    // Ancilla-site W: diagonal identity (pass every bond state through).
+    std::array<std::array<Mat, 5>, 5> Wa;
+    for (auto& row : Wa) for (auto& e : row) e = Mat::Zero(3, 3);
+    for (int b = 0; b < chi; ++b) Wa[b][b] = I3;
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W5 = (i % 2 == 0) ? Wp : Wa;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d; site.phys_charge = {+2, 0, -2};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 4 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W5[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // Total spin-current operator on the interleaved purified chain: even sites carry
 // the current W (sigma+/sigma- emission, no Z term -- the Z bond carries no
 // current), odd (ancilla) sites are identity pass-throughs. Same HB_DELTA bond
