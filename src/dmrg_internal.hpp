@@ -91,6 +91,9 @@ std::vector<MPOSite> build_current_mpo(int n, double J = 1.0);
 // kernel -- is unchanged. H acts on physical sites only: ancillas are spectators.
 std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J = 1.0,
                                             double delta = 1.0);
+// Spin-1 (d=3) Heisenberg on the interleaved purified chain (physical even, ancilla
+// identity pass-through) -- the d>2 analogue of build_xxz_purified_mpo.
+std::vector<MPOSite> build_spin1_purified_mpo(int n_phys, double J = 1.0);
 // Total spin-current operator on the interleaved purified chain (physical sites
 // even, ancilla identity pass-through), for finite-T transport. Same HB_DELTA
 // bond structure as build_xxz_purified_mpo, so apply_mpo_to_bmps applies it
@@ -266,7 +269,7 @@ struct ThermalResult {
 ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
                                  double dbeta, int n_steps, int chi_max,
                                  double cutoff, int measure_stride = 1,
-                                 bool with_chi = true);
+                                 bool with_chi = true, int d = 2);
 
 // Finite-temperature dynamical structure factor (F1): the purified-state
 // analogue of run_spectral_blocks. The state is cooled to |psi(beta)> =
