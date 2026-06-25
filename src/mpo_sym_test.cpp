@@ -240,6 +240,31 @@ int main() {
         fails += !ok2;
     }
 
+    // Spin-1 (d=3) Haldane string-order parameter: the den Nijs-Rommelse hidden order
+    // O = -<gs| Sz_i (prod e^{i pi Sz_k}) Sz_j |gs> -- nonzero in the Haldane phase.
+    // The block-DMRG value must match exact diagonalization on the GS.
+    std::printf("== spin-1 (d=3) Haldane string-order parameter vs ED ==\n");
+    {
+        const int n = 6, i0 = 1, j0 = 4;
+        auto mpo = build_spin1_heisenberg_mpo(n, 1.0);
+        Eigen::MatrixXcd Szop = Eigen::MatrixXcd::Zero(3,3); Szop(0,0)=1; Szop(2,2)=-1;
+        Eigen::MatrixXcd Phop = Eigen::MatrixXcd::Zero(3,3);          // e^{i pi Sz}
+        Phop(0,0)=-1; Phop(1,1)=1; Phop(2,2)=-1;
+        Eigen::MatrixXcd H = contract_mpo(mpo);                       // 3^6 x 3^6
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(H);
+        Eigen::VectorXcd gs = es.eigenvectors().col(0);
+        Eigen::MatrixXcd Op = site_opd(n, i0, Szop, 3);
+        for (int k = i0+1; k < j0; ++k) Op = Op * site_opd(n, k, Phop, 3);
+        Op = Op * site_opd(n, j0, Szop, 3);
+        double O_ed = -std::real((gs.adjoint() * Op * gs)(0,0));
+        double O_blk = string_order_blocks(mpo, n, i0, j0, 48, 1e-11, 80);
+        double err = std::abs(O_blk - O_ed);
+        bool ok = err < 1e-6;
+        std::printf("  N=%d (i=%d,j=%d): O_string(ED)=%.6f  block=%.6f  err=%.1e  %s\n",
+                    n, i0, j0, O_ed, O_blk, err, ok ? "OK" : "FAIL");
+        fails += !ok;
+    }
+
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
     // agnostic) and -- the phase-1b payoff -- the FAST block-sparse path, which
     // now consumes the derived 8-wide charge array instead of the hard-coded

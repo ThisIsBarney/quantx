@@ -2218,6 +2218,47 @@ static std::vector<S> measure_sz_all(const BMPS& bra, const BMPS& ket,
     return out;
 }
 
+// Apply a diagonal single-site operator in place: scale physical-state column group
+// sc by diag[sc]. Used to build string operators (Sz endpoints + the exp(i pi Sz)
+// phase string) for the Haldane string-order parameter.
+static void apply_site_diag(BMPS& s, int site, const std::vector<S>& diag,
+                            const std::vector<int>& qphys) {
+    for (auto& [q_L, blk] : s.A[site]) {
+        auto cols = phys_groups(s.bond[site+1], q_L, +1, qphys);
+        for (int sc = 0; sc < (int)diag.size(); ++sc)
+            if (cols[sc].width > 0) blk.middleCols(cols[sc].off, cols[sc].width) *= diag[sc];
+    }
+}
+
+// Den Nijs-Rommelse string order parameter of the ground state:
+//   O = - <gs| Sz_{i0} ( prod_{i0<k<j0} e^{i pi Sz_k} ) Sz_{j0} |gs> / <gs|gs>,
+// the hidden-order signature of the gapped Haldane phase (nonzero for spin-1, where
+// a trivial/Neel-ordered phase gives 0). Sz = qphys/2 (physical), and for integer Sz
+// the phase e^{i pi Sz} is real (+-1), so the whole correlator is real.
+static double string_order(const std::vector<MPOSite>& mpo, int n, int i0, int j0,
+                           int chi, double cutoff, int n_sweeps) {
+    const std::vector<int>& qphys = mpo[0].phys_charge;
+    const int d = (int)qphys.size();
+    BMPS gs;
+    run(mpo, n, chi, cutoff, n_sweeps, 1e-12, &gs);
+    const double PI = std::acos(-1.0);
+    std::vector<S> szdiag(d), phdiag(d);
+    for (int sc = 0; sc < d; ++sc) {
+        double sz = qphys[sc] / 2.0;                 // physical Sz of state sc
+        szdiag[sc] = S(sz);
+        phdiag[sc] = S(std::cos(PI * sz));           // e^{i pi Sz} (real for integer Sz)
+    }
+    BMPS phi = gs;
+    apply_site_diag(phi, i0, szdiag, qphys);
+    for (int k = i0 + 1; k < j0; ++k) apply_site_diag(phi, k, phdiag, qphys);
+    apply_site_diag(phi, j0, szdiag, qphys);
+    auto OLc = overlap_left_envs(gs, phi, qphys);
+    auto OLz = overlap_left_envs(gs, gs,  qphys);
+    double C = OLc[n].count(0) ? rp(OLc[n].at(0)(0, 0)) : 0.0;
+    double Z = OLz[n].count(0) ? rp(OLz[n].at(0)(0, 0)) : 1.0;
+    return -(C / Z);
+}
+
 struct SpectralOut {
     std::vector<double> times;             // length n_steps+1
     int l0 = 0, n = 0, max_bond = 0;
@@ -3317,6 +3358,15 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
     if (mpo_is_real(mpo))
         return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
     return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
+}
+
+// Entry point: Haldane string-order parameter of the ground state.
+double string_order_blocks(const std::vector<MPOSite>& mpo, int n, int i0, int j0,
+                           int max_bond, double cutoff, int n_sweeps) {
+    require_uniform_local_dim(mpo, "string_order_blocks");
+    if (mpo_is_real(mpo))
+        return BlockDMRG<double>::string_order(mpo, n, i0, j0, max_bond, cutoff, n_sweeps);
+    return BlockDMRG<Cx>::string_order(mpo, n, i0, j0, max_bond, cutoff, n_sweeps);
 }
 
 // Entry point: block-sparse TDVP2 time evolution (always complex).
