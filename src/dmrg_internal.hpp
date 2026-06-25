@@ -184,6 +184,10 @@ DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
                     int max_bond, double cutoff, int n_sweeps, double tol);
 
 // dmrg_blocks.cpp
+// Den Nijs-Rommelse string-order parameter of the ground state (the Haldane
+// hidden-order signature): O = -<gs| Sz_i0 (prod_{i0<k<j0} e^{i pi Sz_k}) Sz_j0 |gs>.
+double string_order_blocks(const std::vector<MPOSite>& mpo, int n, int i0, int j0,
+                           int max_bond, double cutoff, int n_sweeps);
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff, int n_sweeps, double tol);
 
