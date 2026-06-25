@@ -227,6 +227,17 @@ int main() {
         std::printf("  N=%d beta=%.1f : <H>_ED=%.6f  purified=%.6f  err=%.1e  %s\n",
                     n, beta, E_ed, E_th, err, ok ? "OK" : "FAIL");
         fails += !ok;
+        // beta=0 (infinite T): physical RDM = I/3, so <(2Sz)_c (2Sz)_j> = delta_{cj}
+        // <(2Sz)^2> = delta_{cj} (4+0+4)/3 = delta_{cj} 8/3 -- exercises the d>2
+        // overlap measurement (apply_sz_site + overlap envs + measure_sz_all).
+        const auto& zz0 = th.szsz.front();   // beta=0 correlator row, length n_phys
+        int cc = n / 2;                      // c_phys
+        double diag = zz0[cc], offmax = 0;
+        for (int p = 0; p < n; ++p) if (p != cc) offmax = std::max(offmax, std::abs(zz0[p]));
+        bool ok2 = std::abs(diag - 8.0/3.0) < 1e-6 && offmax < 1e-6;
+        std::printf("  spin-1 beta=0 <2Sz_c 2Sz_j>: diag=%.6f (=2.6667)  max|off|=%.1e  %s\n",
+                    diag, offmax, ok2 ? "OK" : "FAIL");
+        fails += !ok2;
     }
 
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
