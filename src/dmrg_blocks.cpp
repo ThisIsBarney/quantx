@@ -2094,15 +2094,21 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
 }
 
 // ===== Dynamical structure factor S(k,omega) ================================
-// Apply sigma^z on one site of a block-MPS in place (diagonal: up -> +1, dn -> -1).
-// sigma^z is its own inverse and unitary, so the right-canonical property and the
-// norm are preserved; only the MPO environments of the modified state go stale.
-static void apply_sz_site(BMPS& s, int site) {
+// Apply the Sz charge operator (2*Sz = diag over qphys[s]) on one site of a
+// block-MPS in place: scale each physical-state column group s by qphys[s]. For
+// spin-1/2 this is sigma^z = diag(+1,-1) (unitary; preserves norm/canonical form);
+// for spin-1 it is diag(+2,0,-2) (NOT unitary -- the |0> column is zeroed -- but
+// the overlap-env measurements below handle the resulting unnormalized state). The
+// qphys[s]==+1 group is a no-op (skipped), so d=2 is bit-identical. Only the MPO
+// environments of the modified state go stale.
+static void apply_sz_site(BMPS& s, int site,
+                          const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     for (auto& [q_L, blk] : s.A[site]) {
-        int dR_dn = s.bond[site+1].dim(q_L - 1);
-        int dR_up = s.bond[site+1].dim(q_L + 1);
-        if (dR_dn > 0) blk.rightCols(dR_dn) *= S(-1);   // dn columns -> -1
-        (void)dR_up;
+        auto cols = phys_groups(s.bond[site+1], q_L, +1, qphys);
+        for (int sc = 0; sc < (int)qphys.size(); ++sc) {
+            if (cols[sc].width == 0 || qphys[sc] == 1) continue;   // +1 group: no-op
+            blk.middleCols(cols[sc].off, cols[sc].width) *= S(qphys[sc]);
+        }
     }
 }
 
@@ -2124,7 +2130,8 @@ static void rebuild_mpo_envs(BMPS& s, const std::vector<MPOSite>& mpo) {
 // Two-MPS overlap left environments OL[i][q] = <bra[0..i-1] | ket[0..i-1]> as a
 // (d_bra_i(q) x d_ket_i(q)) block per shared Sz sector q. bra and ket share the
 // total Sz, so the overlap is block-diagonal in Sz.
-static std::vector<std::map<int,Mat>> overlap_left_envs(const BMPS& bra, const BMPS& ket) {
+static std::vector<std::map<int,Mat>> overlap_left_envs(const BMPS& bra, const BMPS& ket,
+        const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     int n = bra.n;
     std::vector<std::map<int,Mat>> OL(n + 1);
     OL[0][0] = Mat::Constant(1, 1, S(1));
@@ -2133,14 +2140,13 @@ static std::vector<std::map<int,Mat>> overlap_left_envs(const BMPS& bra, const B
             auto ib = bra.A[i].find(q_L); auto ik = ket.A[i].find(q_L);
             if (ib == bra.A[i].end() || ik == ket.A[i].end()) continue;
             const Mat& Ab = ib->second; const Mat& Ak = ik->second;
-            for (int s = 0; s < 2; ++s) {
-                int sz = (s == 0) ? +1 : -1, q_R = q_L + sz;
-                int ub = bra.bond[i+1].dim(q_L+1), db = bra.bond[i+1].dim(q_L-1);
-                int uk = ket.bond[i+1].dim(q_L+1), dk = ket.bond[i+1].dim(q_L-1);
-                int wb = (sz==+1)?ub:db, wk = (sz==+1)?uk:dk;
+            auto bcols = phys_groups(bra.bond[i+1], q_L, +1, qphys);
+            auto kcols = phys_groups(ket.bond[i+1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                int q_R = q_L + qphys[s], wb = bcols[s].width, wk = kcols[s].width;
                 if (wb == 0 || wk == 0) continue;
-                Eigen::Ref<const Mat> Abs = (sz==+1)? Ab.leftCols(ub) : Ab.rightCols(db);
-                Eigen::Ref<const Mat> Aks = (sz==+1)? Ak.leftCols(uk) : Ak.rightCols(dk);
+                Eigen::Ref<const Mat> Abs = Ab.middleCols(bcols[s].off, wb);
+                Eigen::Ref<const Mat> Aks = Ak.middleCols(kcols[s].off, wk);
                 Mat contrib = Abs.adjoint() * (Olk * Aks);   // (wb x wk)
                 auto& dst = OL[i+1][q_R];
                 if (dst.size()==0) dst = contrib; else dst += contrib;
@@ -2151,7 +2157,8 @@ static std::vector<std::map<int,Mat>> overlap_left_envs(const BMPS& bra, const B
 }
 
 // Two-MPS overlap right environments OR[i][q] = <bra[i..n-1] | ket[i..n-1]>.
-static std::vector<std::map<int,Mat>> overlap_right_envs(const BMPS& bra, const BMPS& ket) {
+static std::vector<std::map<int,Mat>> overlap_right_envs(const BMPS& bra, const BMPS& ket,
+        const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     int n = bra.n;
     std::vector<std::map<int,Mat>> OR(n + 1);
     for (int qi = 0; qi < bra.bond[n].n_sectors(); ++qi)
@@ -2161,16 +2168,15 @@ static std::vector<std::map<int,Mat>> overlap_right_envs(const BMPS& bra, const 
             auto ik = ket.A[i].find(q_L);
             if (ik == ket.A[i].end()) continue;
             const Mat& Ak = ik->second;
-            for (int s = 0; s < 2; ++s) {
-                int sz = (s == 0) ? +1 : -1, q_R = q_L + sz;
+            auto bcols = phys_groups(bra.bond[i+1], q_L, +1, qphys);
+            auto kcols = phys_groups(ket.bond[i+1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                int q_R = q_L + qphys[s], wb = bcols[s].width, wk = kcols[s].width;
+                if (wb == 0 || wk == 0) continue;
                 auto it = OR[i+1].find(q_R);
                 if (it == OR[i+1].end()) continue;
-                int ub = bra.bond[i+1].dim(q_L+1), db = bra.bond[i+1].dim(q_L-1);
-                int uk = ket.bond[i+1].dim(q_L+1), dk = ket.bond[i+1].dim(q_L-1);
-                int wb = (sz==+1)?ub:db, wk = (sz==+1)?uk:dk;
-                if (wb == 0 || wk == 0) continue;
-                Eigen::Ref<const Mat> Abs = (sz==+1)? Ab.leftCols(ub) : Ab.rightCols(db);
-                Eigen::Ref<const Mat> Aks = (sz==+1)? Ak.leftCols(uk) : Ak.rightCols(dk);
+                Eigen::Ref<const Mat> Abs = Ab.middleCols(bcols[s].off, wb);
+                Eigen::Ref<const Mat> Aks = Ak.middleCols(kcols[s].off, wk);
                 // conj on the bra (consistent with OL): OR = sum_s conj(Abs) OR' Aks^T
                 Mat contrib = Abs.conjugate() * (it->second * Aks.transpose());  // (d_bra_L x d_ket_L)
                 auto& dst = OR[i][q_L];
@@ -2181,10 +2187,11 @@ static std::vector<std::map<int,Mat>> overlap_right_envs(const BMPS& bra, const 
     return OR;
 }
 
-// <bra| sigma^z_j |ket> for every site j, given precomputed overlap envs.
+// <bra| (2 Sz_j) |ket> for every site j (2*Sz = charge qphys[s]), given the envs.
 static std::vector<S> measure_sz_all(const BMPS& bra, const BMPS& ket,
                                      const std::vector<std::map<int,Mat>>& OL,
-                                     const std::vector<std::map<int,Mat>>& OR) {
+                                     const std::vector<std::map<int,Mat>>& OR,
+                                     const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     int n = bra.n;
     std::vector<S> out(n, S(0));
     for (int j = 0; j < n; ++j) {
@@ -2193,18 +2200,17 @@ static std::vector<S> measure_sz_all(const BMPS& bra, const BMPS& ket,
             auto ib = bra.A[j].find(q_L); auto ik = ket.A[j].find(q_L);
             if (ib == bra.A[j].end() || ik == ket.A[j].end()) continue;
             const Mat& Ab = ib->second; const Mat& Ak = ik->second;
-            for (int s = 0; s < 2; ++s) {
-                int sz = (s == 0) ? +1 : -1, q_R = q_L + sz;
+            auto bcols = phys_groups(bra.bond[j+1], q_L, +1, qphys);
+            auto kcols = phys_groups(ket.bond[j+1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                int q_R = q_L + qphys[s], wb = bcols[s].width, wk = kcols[s].width;
+                if (wb == 0 || wk == 0) continue;
                 auto it = OR[j+1].find(q_R);
                 if (it == OR[j+1].end()) continue;
-                int ub = bra.bond[j+1].dim(q_L+1), db = bra.bond[j+1].dim(q_L-1);
-                int uk = ket.bond[j+1].dim(q_L+1), dk = ket.bond[j+1].dim(q_L-1);
-                int wb = (sz==+1)?ub:db, wk = (sz==+1)?uk:dk;
-                if (wb == 0 || wk == 0) continue;
-                Eigen::Ref<const Mat> Abs = (sz==+1)? Ab.leftCols(ub) : Ab.rightCols(db);
-                Eigen::Ref<const Mat> Aks = (sz==+1)? Ak.leftCols(uk) : Ak.rightCols(dk);
+                Eigen::Ref<const Mat> Abs = Ab.middleCols(bcols[s].off, wb);
+                Eigen::Ref<const Mat> Aks = Ak.middleCols(kcols[s].off, wk);
                 Mat left = Abs.adjoint() * (Olk * Aks);          // (wb x wk)
-                val += S(sz) * (left.array() * it->second.array()).sum();
+                val += S(qphys[s]) * (left.array() * it->second.array()).sum();
             }
         }
         out[j] = val;
@@ -2591,27 +2597,21 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
         rebuild_mpo_envs(s, mpo);                      // bt_energy needs MPO envs
         out.betas.push_back(beta);
         out.E.push_back(bt_energy(s, mpo));
-        if (d != 2) {   // d>2: energy only (the <Sz>/<SzSz> overlap path is still d=2)
-            out.chi_zz.push_back(0.0);
-            out.sz.emplace_back(n_phys, 0.0);
-            out.szsz.emplace_back(n_phys, 0.0);
-            return;
-        }
-        auto OL = overlap_left_envs(s, s);
-        auto OR = overlap_right_envs(s, s);
+        auto OL = overlap_left_envs(s, s, qphys);
+        auto OR = overlap_right_envs(s, s, qphys);
         double Z = OL[n].count(0) ? rp(OL[n].at(0)(0, 0)) : 1.0;
         if (std::abs(Z) < 1e-300) Z = 1.0;
-        auto zall = measure_sz_all(s, s, OL, OR);
+        auto zall = measure_sz_all(s, s, OL, OR, qphys);
         std::vector<double> zj(n_phys);
         for (int p = 0; p < n_phys; ++p) zj[p] = rp(zall[2*p]) / Z;
-        // <Z_j Z_src> for all j from one source: phi = Z_src|psi> (sigma^z is
-        // unitary and diagonal, so phi stays right-canonical) + overlap envs.
+        // <(2Sz)_j (2Sz)_src> for all j from one source: phi = (2Sz)_src|psi> + envs
+        // (the charge operator is diagonal, so phi keeps the same Sz block structure).
         auto zrow = [&](int p_src) {
             BMPS phi = s;
-            apply_sz_site(phi, 2 * p_src);
-            auto OL2 = overlap_left_envs(s, phi);
-            auto OR2 = overlap_right_envs(s, phi);
-            auto v = measure_sz_all(s, phi, OL2, OR2);
+            apply_sz_site(phi, 2 * p_src, qphys);
+            auto OL2 = overlap_left_envs(s, phi, qphys);
+            auto OR2 = overlap_right_envs(s, phi, qphys);
+            auto v = measure_sz_all(s, phi, OL2, OR2, qphys);
             std::vector<double> r(n_phys);
             for (int p = 0; p < n_phys; ++p) r[p] = rp(v[2*p]) / Z;
             return r;
