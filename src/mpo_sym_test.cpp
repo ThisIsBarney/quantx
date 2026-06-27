@@ -300,6 +300,47 @@ int main() {
         fails += !ok;
     }
 
+    // Spin-1 (d=3) finite-T transport (F2): the spin-conductivity correlator
+    // C(t;T) = <J(t)J(0)>_beta with J = sum_l i J (S+_l S-_{l+1} - S-_l S+_{l+1}) must
+    // match ED Tr(rho_beta e^{iHt} J e^{-iHt} J)/Z = sum_{a,b} (e^{-beta E_a}/Z)
+    // e^{i(E_a-E_b)t} <a|J|b><b|J|a>, on the physical spin-1 chain.
+    std::printf("== spin-1 (d=3) finite-T conductivity C(t)=<J(t)J(0)> vs ED ==\n");
+    {
+        const int np = 3; const double beta = 0.5, dt = 0.1; const int nst = 5;
+        auto mpo = build_spin1_heisenberg_mpo(np, 1.0);
+        Eigen::MatrixXcd H = contract_mpo(mpo);
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(H);
+        Eigen::VectorXd E = es.eigenvalues(); Eigen::MatrixXcd V = es.eigenvectors();
+        int dim = (int)E.size();
+        const double r2 = std::sqrt(2.0);
+        Eigen::MatrixXcd Sp = Eigen::MatrixXcd::Zero(3,3); Sp(0,1)=r2; Sp(1,2)=r2;
+        Eigen::MatrixXcd Sm = Eigen::MatrixXcd::Zero(3,3); Sm(1,0)=r2; Sm(2,1)=r2;
+        Eigen::MatrixXcd Jop = Eigen::MatrixXcd::Zero(dim, dim);    // physical current
+        for (int l = 0; l < np-1; ++l)
+            Jop += std::complex<double>(0,1.0) *
+                   (site_opd(np,l,Sp,3)*site_opd(np,l+1,Sm,3)
+                  - site_opd(np,l,Sm,3)*site_opd(np,l+1,Sp,3));
+        Eigen::MatrixXcd Jm = (V.adjoint() * Jop * V).eval();
+        double e0 = E(0), Zt = 0; for (int a=0;a<dim;++a) Zt += std::exp(-beta*(E(a)-e0));
+        auto C_ed = [&](double t){
+            std::complex<double> c = 0;
+            for (int a=0;a<dim;++a) for (int b=0;b<dim;++b)
+                c += std::exp(-beta*(E(a)-e0)) *
+                     std::exp(std::complex<double>(0,(E(a)-E(b))*t)) * Jm(a,b)*Jm(b,a);
+            return c / Zt;
+        };
+        auto r = run_conductivity_thermal_blocks(np, 1.0, 1.0, beta, 30, dt, nst, 96, 1e-10, true, /*d*/3);
+        double maxerr = 0;
+        for (int step=0; step<=nst; ++step) {
+            std::complex<double> ced = C_ed(step*dt), cbl(r.C_re[step], r.C_im[step]);
+            maxerr = std::max(maxerr, std::abs(ced - cbl));
+        }
+        bool ok = maxerr < 3e-2;
+        std::printf("  np=%d beta=%.1f : C(0)=%.4f (ED %.4f)  max|C_block-C_ED| (t<=%.1f) = %.2e  %s\n",
+                    np, beta, r.C_re[0], std::real(C_ed(0.0)), nst*dt, maxerr, ok ? "OK" : "FAIL");
+        fails += !ok;
+    }
+
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
     // agnostic) and -- the phase-1b payoff -- the FAST block-sparse path, which
     // now consumes the derived 8-wide charge array instead of the hard-coded

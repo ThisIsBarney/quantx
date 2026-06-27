@@ -307,6 +307,45 @@ std::vector<MPOSite> build_current_purified_mpo(int n_phys, double J) {
     return mpo;
 }
 
+// Spin-1 (d=3) total spin-current J = sum_l i J (S+_l S-_{l+1} - S-_l S+_{l+1}) on
+// the interleaved purified chain -- the d>2 analogue of build_current_purified_mpo
+// (same 5-wide structure, physical spin-1 S+- operators, ancilla I3 pass-through).
+std::vector<MPOSite> build_spin1_current_purified_mpo(int n_phys, double J) {
+    const int chi = 5, d = 3, n = 2 * n_phys;
+    const double r2 = std::sqrt(2.0);
+    Mat Sp = Mat::Zero(3, 3); Sp(0, 1) = r2; Sp(1, 2) = r2;
+    Mat Sm = Mat::Zero(3, 3); Sm(1, 0) = r2; Sm(2, 1) = r2;
+    Mat I3 = Mat::Identity(3, 3);
+    Cx iJ(0.0, J);
+    std::array<std::array<Mat, 5>, 5> Wp;
+    for (auto& row : Wp) for (auto& e : row) e = Mat::Zero(3, 3);
+    Wp[0][0] = I3;
+    Wp[1][0] = Sm;                 // complete  i J S+_l S-_{l+1}
+    Wp[2][0] = Sp;                 // complete -i J S-_l S+_{l+1}
+    Wp[4][1] = iJ * Sp;            // emit S+ (bond 1, DeltaSz +2)
+    Wp[4][2] = (-iJ) * Sm;         // emit S- (bond 2, DeltaSz -2)
+    Wp[4][4] = I3;
+    std::array<std::array<Mat, 5>, 5> Wa;
+    for (auto& row : Wa) for (auto& e : row) e = Mat::Zero(3, 3);
+    for (int b = 0; b < chi; ++b) Wa[b][b] = I3;
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W5 = (i % 2 == 0) ? Wp : Wa;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d; site.phys_charge = {+2, 0, -2};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 4 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W5[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // -- Pauli label parser -------------------------------------------------------
 
 // Convert indexed label ("X0X1") or plain label ("XXI") to per-site char array.

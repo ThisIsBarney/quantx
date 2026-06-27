@@ -2360,21 +2360,22 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
 
 // ===== Apply a block MPO to a block MPS (for operator-applied observables) ====
 // Compress a block MPS to chi_max by symmetric SVD sweeps (centre ends at 0).
-static void compress_bmps(BMPS& p, int chi_max, double cutoff) {
+static void compress_bmps(BMPS& p, int chi_max, double cutoff,
+                          const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     const int n = p.n; const std::map<int,RVec> no_sv;
     for (int i = 0; i < n - 1; ++i) {
-        auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true);
-        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff);
+        auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true, qphys);
+        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff, false, false, qphys);
         p.bond[i+1] = svd.new_mid_bs;
-        p.A[i]   = bt_A_from_U(svd, p.bond[i], p.bond[i+1]);
+        p.A[i]   = bt_A_from_U(svd, p.bond[i], p.bond[i+1], qphys);
         p.A[i+1] = bt_center_LR(svd);
     }
     for (int i = n - 2; i >= 0; --i) {
-        auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true);
-        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff);
+        auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true, qphys);
+        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff, false, false, qphys);
         p.bond[i+1] = svd.new_mid_bs;
         p.A[i+1] = svd.Vt;
-        p.A[i]   = bt_center_RL(svd, p.bond[i], p.bond[i+1]);
+        p.A[i]   = bt_center_RL(svd, p.bond[i], p.bond[i+1], qphys);
     }
 }
 
@@ -2386,6 +2387,7 @@ static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
                               int chi_max, double cutoff) {
     const int n = s.n;
     const std::vector<int> wdelta = derive_mpo_sym(W).delta;
+    const std::vector<int>& qphys = W[0].phys_charge;
     BMPS p; p.n = n; p.A.resize(n); p.bond.resize(n + 1);
     p.L.assign(n + 1, BlockEnv()); p.R.assign(n + 1, BlockEnv());
     auto mpodim = [&](int ib) { return (ib == 0) ? W[0].chi_l : W[ib-1].chi_r; };
@@ -2420,21 +2422,19 @@ static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
         int mdR = mpodim(i + 1);
         for (auto& [q_cL, compsL] : lay[i]) {
             int dLc = p.bond[i].dim(q_cL);
-            int dR_up = p.bond[i+1].dim(q_cL + 1), dR_dn = p.bond[i+1].dim(q_cL - 1);
-            Mat blk = Mat::Zero(dLc, dR_up + dR_dn);
+            auto ocols = phys_groups(p.bond[i+1], q_cL, +1, qphys);   // output column groups
+            Mat blk = Mat::Zero(dLc, phys_total(ocols));
             for (auto& cL : compsL) {
                 auto itA = s.A[i].find(cL.q_mps);
                 if (itA == s.A[i].end()) continue;
                 const Mat& A = itA->second;
-                int mps_up = s.bond[i+1].dim(cL.q_mps + 1), mps_dn = s.bond[i+1].dim(cL.q_mps - 1);
-                for (int sp = 0; sp < 2; ++sp) {            // mps physical (in)
-                    int spz = (sp == 0) ? +1 : -1, q_mps_R = cL.q_mps + spz;
-                    int dRs = (spz == +1) ? mps_up : mps_dn;
-                    if (dRs == 0) continue;
-                    Eigen::Ref<const Mat> Asp = (spz == +1) ? A.leftCols(mps_up) : A.rightCols(mps_dn);
-                    for (int so = 0; so < 2; ++so) {        // output physical
-                        int sz = (so == 0) ? +1 : -1, q_cR = q_cL + sz;
-                        int col_base = (sz == +1) ? 0 : dR_up;
+                auto icols = phys_groups(s.bond[i+1], cL.q_mps, +1, qphys);  // input groups
+                for (int sp = 0; sp < (int)qphys.size(); ++sp) {   // mps physical (in)
+                    if (icols[sp].width == 0) continue;
+                    int q_mps_R = cL.q_mps + qphys[sp];
+                    Eigen::Ref<const Mat> Asp = A.middleCols(icols[sp].off, icols[sp].width);
+                    for (int so = 0; so < (int)qphys.size(); ++so) {   // output physical
+                        int q_cR = q_cL + qphys[so], col_base = ocols[so].off;
                         for (int b_R = 0; b_R < mdR; ++b_R) {
                             if (q_cR != q_mps_R + hbd(i + 1, b_R)) continue;
                             S w = mscal(W[i].W(cL.b, b_R)(so, sp));
@@ -2449,7 +2449,7 @@ static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
             p.A[i][q_cL] = blk;
         }
     }
-    compress_bmps(p, chi_max, cutoff);
+    compress_bmps(p, chi_max, cutoff, qphys);
     return p;
 }
 
@@ -2864,35 +2864,43 @@ struct ConductivityThermalOut {
 static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, double delta,
                                                        double beta, int n_cool,
                                                        double dt, int n_steps, int chi_max,
-                                                       double cutoff, bool disentangle) {
+                                                       double cutoff, bool disentangle, int d = 2) {
     static_assert(std::is_same_v<S, Cx>, "thermal conductivity requires complex scalar");
     using clk = std::chrono::steady_clock;
     const int n = 2 * n_phys;
     ConductivityThermalOut out; out.n_phys = n_phys;
     out.beta = beta; out.disentangled = disentangle;
-    auto Hmpo = qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta);
-    auto Jmpo = qx_dmrg::build_current_purified_mpo(n_phys, J);
+    // d=2: spin-1/2 XXZ + spin current. d>2: spin-1 (d=3); cooling/real-time gates
+    // come from a small non-purified physical MPO.
+    std::vector<int> qphys = (d == 2) ? SPIN_HALF_CHARGES : std::vector<int>{+2, 0, -2};
+    auto Hmpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
+                         : qx_dmrg::build_spin1_purified_mpo(n_phys, J);
+    auto Jmpo = (d == 2) ? qx_dmrg::build_current_purified_mpo(n_phys, J)
+                         : qx_dmrg::build_spin1_current_purified_mpo(n_phys, J);
+    std::vector<MPOSite> phys_mpo;
+    if (d > 2) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
+    const std::vector<MPOSite>* pm = (d > 2) ? &phys_mpo : nullptr;
 
     auto bond_of = [](const BMPS& st) {
-        int mb = 0; for (auto& b : st.bond) { int t = 0; for (int d : b.dims) t += d;
+        int mb = 0; for (auto& b : st.bond) { int t = 0; for (int dd : b.dims) t += dd;
             mb = std::max(mb, t); }
         return mb;
     };
 
     // 1. cool to |psi(beta)> = e^{-beta H/2}|psi0>
-    BMPS psi = purified_init(n_phys);
+    BMPS psi = purified_init(n_phys, qphys);
     const double dtau = beta / (2.0 * std::max(1, n_cool));
     for (int k = 0; k < n_cool; ++k)
-        thermal_step_blocks(psi, dtau, chi_max, cutoff, J, delta);
+        thermal_step_blocks(psi, dtau, chi_max, cutoff, J, delta, qphys, pm);
     rebuild_mpo_envs(psi, Hmpo);
     out.E = bt_energy(psi, Hmpo);
 
     double Z;
-    { auto OL = overlap_left_envs(psi, psi);
+    { auto OL = overlap_left_envs(psi, psi, qphys);
       Z = OL[n].count(0) ? rp(OL[n].at(0)(0, 0)) : 1.0; }
     if (std::abs(Z) < 1e-300) Z = 1.0;
 
-    // 2. A = |psi>, B = J|psi>
+    // 2. A = |psi>, B = J|psi>  (apply_mpo_to_bmps derives qphys from Jmpo)
     BMPS A = psi;
     BMPS B = apply_mpo_to_bmps(psi, Jmpo, chi_max, cutoff);
 
@@ -2900,7 +2908,7 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
         BMPS JA = apply_mpo_to_bmps(A, Jmpo, chi_max, cutoff);
-        auto OL = overlap_left_envs(JA, B);
+        auto OL = overlap_left_envs(JA, B, qphys);
         S ov = OL[n].count(0) ? OL[n].at(0)(0, 0) : S(0);
         S c = ov / S(Z);
         out.times.push_back(step * dt);
@@ -2908,8 +2916,8 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
         out.bond_t.push_back(std::max(bond_of(A), bond_of(B)));
         out.max_bond = std::max(out.max_bond, out.bond_t.back());
         if (step < n_steps) {
-            purified_rt_step(A, dt, chi_max, cutoff, J, delta, disentangle);
-            purified_rt_step(B, dt, chi_max, cutoff, J, delta, disentangle);
+            purified_rt_step(A, dt, chi_max, cutoff, J, delta, disentangle, qphys, pm);
+            purified_rt_step(B, dt, chi_max, cutoff, J, delta, disentangle, qphys, pm);
         }
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
@@ -3490,10 +3498,10 @@ SpectralThermalResult run_spectral_thermal_blocks(
 // Entry point: finite-T spin conductivity current-current correlator (F2).
 ConductivityThermalResult run_conductivity_thermal_blocks(
         int n_phys, double J, double delta, double beta, int n_cool,
-        double dt, int n_steps, int chi_max, double cutoff, bool disentangle) {
+        double dt, int n_steps, int chi_max, double cutoff, bool disentangle, int d) {
     auto o = BlockDMRG<Cx>::run_conductivity_thermal(n_phys, J, delta, beta, n_cool,
                                                      dt, n_steps, chi_max, cutoff,
-                                                     disentangle);
+                                                     disentangle, d);
     ConductivityThermalResult r;
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im; r.bond_t = o.bond_t;
     r.n_phys = o.n_phys; r.max_bond = o.max_bond;
