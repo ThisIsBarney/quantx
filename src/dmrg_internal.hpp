@@ -94,6 +94,9 @@ std::vector<MPOSite> build_xxz_purified_mpo(int n_phys, double J = 1.0,
 // Spin-1 (d=3) Heisenberg on the interleaved purified chain (physical even, ancilla
 // identity pass-through) -- the d>2 analogue of build_xxz_purified_mpo.
 std::vector<MPOSite> build_spin1_purified_mpo(int n_phys, double J = 1.0);
+// Spin-1 (d=3) total spin current on the interleaved purified chain -- the d>2
+// analogue of build_current_purified_mpo.
+std::vector<MPOSite> build_spin1_current_purified_mpo(int n_phys, double J = 1.0);
 // Total spin-current operator on the interleaved purified chain (physical sites
 // even, ancilla identity pass-through), for finite-T transport. Same HB_DELTA
 // bond structure as build_xxz_purified_mpo, so apply_mpo_to_bmps applies it
@@ -325,6 +328,6 @@ struct ConductivityThermalResult {
 ConductivityThermalResult run_conductivity_thermal_blocks(
     int n_phys, double J, double delta, double beta, int n_cool,
     double dt, int n_steps, int chi_max, double cutoff,
-    bool disentangle = true);
+    bool disentangle = true, int d = 2);
 
 } // namespace qx_dmrg
