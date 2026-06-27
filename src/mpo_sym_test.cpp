@@ -265,6 +265,41 @@ int main() {
         fails += !ok;
     }
 
+    // Spin-1 (d=3) finite-T dynamics (F1): the purified real-time correlator
+    // C_{j,l0}(t;T) = Tr(rho_beta (2Sz_j)(t) (2Sz_l0)) must match exact diagonalization
+    // Tr(rho e^{iHt} 2Sz_j e^{-iHt} 2Sz_l0)/Z = sum_{a,b} (e^{-beta E_a}/Z)
+    // e^{i(E_a-E_b)t} <a|2Sz_j|b><b|2Sz_l0|a>, on the physical spin-1 chain.
+    std::printf("== spin-1 (d=3) finite-T S(k,w) correlator C_{j,l0}(t) vs ED ==\n");
+    {
+        const int np = 3, l0 = np / 2; const double beta = 0.5, dt = 0.1; const int nst = 5;
+        auto mpo = build_spin1_heisenberg_mpo(np, 1.0);
+        Eigen::MatrixXcd H = contract_mpo(mpo);                 // 3^np x 3^np
+        Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(H);
+        Eigen::VectorXd E = es.eigenvalues(); Eigen::MatrixXcd V = es.eigenvectors();
+        int dim = (int)E.size();
+        Eigen::MatrixXcd Sz2 = Eigen::MatrixXcd::Zero(3,3); Sz2(0,0)=2; Sz2(2,2)=-2;   // 2Sz
+        auto Mop = [&](int j){ return (V.adjoint() * site_opd(np,j,Sz2,3) * V).eval(); };
+        Eigen::MatrixXcd Ml0 = Mop(l0);
+        double e0 = E(0), Zt = 0; for (int a=0;a<dim;++a) Zt += std::exp(-beta*(E(a)-e0));
+        auto C_ed = [&](int j, double t){
+            Eigen::MatrixXcd Mj = Mop(j); std::complex<double> c = 0;
+            for (int a=0;a<dim;++a) for (int b=0;b<dim;++b)
+                c += std::exp(-beta*(E(a)-e0)) *
+                     std::exp(std::complex<double>(0,(E(a)-E(b))*t)) * Mj(a,b)*Ml0(b,a);
+            return c / Zt;
+        };
+        auto r = run_spectral_thermal_blocks(np, 1.0, 1.0, beta, 30, dt, nst, 64, 1e-10, true, /*d*/3);
+        double maxerr = 0;
+        for (int step=0; step<=nst; ++step) for (int j=0;j<np;++j) {
+            std::complex<double> ced = C_ed(j, step*dt), cbl(r.C_re[step][j], r.C_im[step][j]);
+            maxerr = std::max(maxerr, std::abs(ced - cbl));
+        }
+        bool ok = maxerr < 2e-2;
+        std::printf("  np=%d beta=%.1f : max|C_block - C_ED| over (j, t<=%.1f) = %.2e  %s\n",
+                    np, beta, nst*dt, maxerr, ok ? "OK" : "FAIL");
+        fails += !ok;
+    }
+
     // J1-J2 ground state: exact diagonalization vs both the dense DMRG (MPO-
     // agnostic) and -- the phase-1b payoff -- the FAST block-sparse path, which
     // now consumes the derived 8-wide charge array instead of the hard-coded
