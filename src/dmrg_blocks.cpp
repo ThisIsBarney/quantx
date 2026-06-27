@@ -2706,35 +2706,46 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
 // Schmidt rank is <=2, so it never actually truncates, but this keeps it clean
 // and matches F0's thermal_step_blocks range).
 static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
-                     int chi_max, double cutoff, double J, double delta) {
-    const int n = s.n;
-    const Gate gxxz = build_xxz_gate(J, delta, tau_half);
-    const Gate gswap{S(1), S(0), S(1), S(1), S(0)};
+                     int chi_max, double cutoff, double J, double delta,
+                     const std::vector<int>& qphys = SPIN_HALF_CHARGES,
+                     const std::vector<MPOSite>* phys_mpo = nullptr) {
+    const int n = s.n, d = (int)qphys.size();
     const std::map<int,RVec> no_sv;
     auto& A = s.A; auto& bond = s.bond;
-    auto pick = [&](int i) -> const Gate* {
-        if (i < lo || i > hi) return nullptr;                // identity transport
-        bool is_swap = ((i % 2 == 0) == swap_on_even);
-        return is_swap ? &gswap : &gxxz;
+    // d=2: analytic XXZ gate + Gate SWAP (bit-identical). d>2: MPO-derived physical
+    // gate (at tau_half) + general d^2 SWAP, applied via apply_gate_theta_general.
+    Gate gxxz2{}, gsw2{}; Mat gxG, gswG;
+    if (d == 2) { gxxz2 = build_xxz_gate(J, delta, tau_half);
+                  gsw2 = Gate{S(1), S(0), S(1), S(1), S(0)}; }
+    else        { gxG = build_gate_from_mpo(*phys_mpo, tau_half);
+                  gswG = build_swap_gate(d); }
+    enum Kind { NONE, GATE, SWAP };
+    auto kind = [&](int i) -> Kind {
+        if (i < lo || i > hi) return NONE;                   // identity transport
+        return ((i % 2 == 0) == swap_on_even) ? SWAP : GATE;
     };
-    auto theta_at = [&](int i, const Gate* g) {
-        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true);
-        bt_expand_theta(theta, bond[i], bond[i+2]);
-        if (g) apply_gate_theta(theta, bond[i], bond[i+2], *g);
+    auto theta_at = [&](int i, Kind k) {
+        auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
+        bt_expand_theta(theta, bond[i], bond[i+2], qphys);
+        if (k != NONE) {
+            if (d == 2) apply_gate_theta(theta, bond[i], bond[i+2], k==SWAP ? gsw2 : gxxz2);
+            else        apply_gate_theta_general(theta, bond[i], bond[i+2],
+                                                 k==SWAP ? gswG : gxG, d, qphys);
+        }
         return block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff,
-                                  /*allow_fp32=*/true);
+                                  /*allow_fp32=*/true, /*stable=*/false, qphys);
     };
     for (int i = 0; i <= n - 2; ++i) {                       // left -> right
-        auto svd = theta_at(i, pick(i));
+        auto svd = theta_at(i, kind(i));
         bond[i+1] = svd.new_mid_bs;
-        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1]);
+        A[i]   = bt_A_from_U(svd, bond[i], bond[i+1], qphys);
         A[i+1] = bt_center_LR(svd);
     }
     for (int i = n - 2; i >= 0; --i) {                       // right -> left
-        auto svd = theta_at(i, pick(i));
+        auto svd = theta_at(i, kind(i));
         bond[i+1] = svd.new_mid_bs;
         A[i+1] = svd.Vt;
-        A[i]   = bt_center_RL(svd, bond[i], bond[i+1]);
+        A[i]   = bt_center_RL(svd, bond[i], bond[i+1], qphys);
     }
 }
 
@@ -2745,13 +2756,15 @@ static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
 // nearest-neighbour sweep. Each gate-bond is hit twice (L->R + R->L) with
 // tau_half, so a physical pair sees e^{-i dt h} and an ancilla pair e^{+i dt h}.
 static void purified_rt_step(BMPS& s, double dt, int chi_max, double cutoff,
-                             double J, double delta, bool disentangle) {
+                             double J, double delta, bool disentangle,
+                             const std::vector<int>& qphys = SPIN_HALF_CHARGES,
+                             const std::vector<MPOSite>* phys_mpo = nullptr) {
     const int n = s.n;
     rt_sweep(s, /*swap_on_even=*/true,  /*lo=*/0, /*hi=*/n-3, Cx(0, -dt/2),
-             chi_max, cutoff, J, delta);                     // physical forward
+             chi_max, cutoff, J, delta, qphys, phys_mpo);    // physical forward
     if (disentangle)
         rt_sweep(s, /*swap_on_even=*/false, /*lo=*/1, /*hi=*/n-2, Cx(0, +dt/2),
-                 chi_max, cutoff, J, delta);                 // ancilla backward
+                 chi_max, cutoff, J, delta, qphys, phys_mpo);// ancilla backward
 }
 
 struct SpectralThermalOut {
@@ -2768,45 +2781,52 @@ struct SpectralThermalOut {
 static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delta,
                                                double beta, int n_cool,
                                                double dt, int n_steps, int chi_max,
-                                               double cutoff, bool disentangle) {
+                                               double cutoff, bool disentangle, int d = 2) {
     static_assert(std::is_same_v<S, Cx>, "thermal spectral requires complex scalar");
     using clk = std::chrono::steady_clock;
     const int n = 2 * n_phys, l0 = n_phys / 2;
     SpectralThermalOut out; out.n_phys = n_phys; out.l0 = l0;
     out.beta = beta; out.disentangled = disentangle;
-    auto mpo = qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta);
+    // d=2: spin-1/2 XXZ purified chain. d>2: spin-1 (d=3); cooling and real-time
+    // gates come from a small non-purified physical MPO.
+    std::vector<int> qphys = (d == 2) ? SPIN_HALF_CHARGES : std::vector<int>{+2, 0, -2};
+    auto mpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
+                        : qx_dmrg::build_spin1_purified_mpo(n_phys, J);
+    std::vector<MPOSite> phys_mpo;
+    if (d > 2) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
+    const std::vector<MPOSite>* pm = (d > 2) ? &phys_mpo : nullptr;
 
     auto bond_of = [](const BMPS& st) {
-        int mb = 0; for (auto& b : st.bond) { int t = 0; for (int d : b.dims) t += d;
+        int mb = 0; for (auto& b : st.bond) { int t = 0; for (int dd : b.dims) t += dd;
             mb = std::max(mb, t); }
         return mb;
     };
 
     // 1. cool to |psi(beta)> = e^{-beta H/2}|psi0>  (n_cool imag-time steps,
     //    each e^{-dtau H}; total e^{-(n_cool*dtau) H} = e^{-(beta/2) H}).
-    BMPS psi = purified_init(n_phys);
+    BMPS psi = purified_init(n_phys, qphys);
     const double dtau = beta / (2.0 * std::max(1, n_cool));   // per-step argument
     for (int k = 0; k < n_cool; ++k)
-        thermal_step_blocks(psi, dtau, chi_max, cutoff, J, delta);
+        thermal_step_blocks(psi, dtau, chi_max, cutoff, J, delta, qphys, pm);
     rebuild_mpo_envs(psi, mpo);
     out.E = bt_energy(psi, mpo);
 
     // normalisation Z = <psi|psi> (overlap convention; constant in t)
     double Z;
-    { auto OL = overlap_left_envs(psi, psi);
+    { auto OL = overlap_left_envs(psi, psi, qphys);
       Z = OL[n].count(0) ? rp(OL[n].at(0)(0,0)) : 1.0; }
     if (std::abs(Z) < 1e-300) Z = 1.0;
 
-    // 2. A = |psi(beta)>, B = sigma^z_{l0}|psi(beta)>  (physical site 2*l0)
+    // 2. A = |psi(beta)>, B = (2Sz)_{l0}|psi(beta)>  (physical site 2*l0)
     BMPS A = psi, B = psi;
-    apply_sz_site(B, 2 * l0);
+    apply_sz_site(B, 2 * l0, qphys);
 
-    // 3. real-time evolve both; measure C_{j,l0}(t) = <A(t)|sigma^z_{2j}|B(t)>/Z
+    // 3. real-time evolve both; measure C_{j,l0}(t) = <A(t)|(2Sz)_{2j}|B(t)>/Z
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
-        auto OL = overlap_left_envs(A, B);
-        auto OR = overlap_right_envs(A, B);
-        auto ov = measure_sz_all(A, B, OL, OR);
+        auto OL = overlap_left_envs(A, B, qphys);
+        auto OR = overlap_right_envs(A, B, qphys);
+        auto ov = measure_sz_all(A, B, OL, OR, qphys);
         std::vector<double> re(n_phys), im(n_phys);
         for (int p = 0; p < n_phys; ++p) {
             S c = ov[2*p] / S(Z); re[p] = c.real(); im[p] = c.imag();
@@ -2818,8 +2838,8 @@ static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delt
         out.bond_t.push_back(std::max(ba, bb));
         out.max_bond = std::max(out.max_bond, std::max(ba, bb));
         if (step < n_steps) {
-            purified_rt_step(A, dt, chi_max, cutoff, J, delta, disentangle);
-            purified_rt_step(B, dt, chi_max, cutoff, J, delta, disentangle);
+            purified_rt_step(A, dt, chi_max, cutoff, J, delta, disentangle, qphys, pm);
+            purified_rt_step(B, dt, chi_max, cutoff, J, delta, disentangle, qphys, pm);
         }
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
@@ -3454,10 +3474,10 @@ ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
 // Entry point: finite-T dynamical structure factor S(k,omega,T) data (F1).
 SpectralThermalResult run_spectral_thermal_blocks(
         int n_phys, double J, double delta, double beta, int n_cool,
-        double dt, int n_steps, int chi_max, double cutoff, bool disentangle) {
+        double dt, int n_steps, int chi_max, double cutoff, bool disentangle, int d) {
     auto o = BlockDMRG<Cx>::run_spectral_thermal(n_phys, J, delta, beta, n_cool,
                                                  dt, n_steps, chi_max, cutoff,
-                                                 disentangle);
+                                                 disentangle, d);
     SpectralThermalResult r;
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
     r.bond_t = o.bond_t; r.bond_a_t = o.bond_a_t; r.bond_b_t = o.bond_b_t;

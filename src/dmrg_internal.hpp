@@ -304,7 +304,7 @@ struct SpectralThermalResult {
 SpectralThermalResult run_spectral_thermal_blocks(
     int n_phys, double J, double delta, double beta, int n_cool,
     double dt, int n_steps, int chi_max, double cutoff,
-    bool disentangle = true);
+    bool disentangle = true, int d = 2);
 
 // Finite-temperature spin conductivity (F2): the current-current correlator
 //   C(t;T) = <J(t) J(0)>_beta = <psi(beta)| e^{iHt} J e^{-iHt} J |psi(beta)> / Z
