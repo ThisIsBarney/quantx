@@ -87,6 +87,49 @@ charge-shifted column groups (state `s` maps left bond `q_L → q_L + qphys[s]`)
 replacing the spin-1/2 up/dn split in every kernel — env / H_eff, `form_theta`, the
 SVD split, the TEBD/SWAP gates, the purified cooling, and the overlap measurement.
 
+### Finite-T spectroscopy: the gapped Haldane S(k,ω,T)
+
+![Spin-1 S(k,omega,T)](skw_spin1_b2.0.svg)
+
+The finite-temperature dynamical structure factor `S(k,ω,T)` (F1: purification +
+real-time block-TEBD + the KBM disentangler, FFT in space and time) shows the
+spin-1 chain's defining spectral feature — a **single-magnon branch with a gap at
+k=π** (the Haldane gap Δ≈0.41 J), where the critical spin-1/2 chain instead has a
+gapless two-spinon *continuum*. Demo at N=16, T=0.5; the dashed line is the
+single-magnon dispersion.
+
+![Spin-1 optical conductivity](conductivity_spin1_sigma.svg)
+
+The current-current correlator `⟨J(t)J(0)⟩_β` (F2) feeds the optical conductivity
+`σ(ω,T)` the same way (FFT of the emitted `C(t)`). Both correlators are ED-validated
+(8e-4 / 2e-3); the figures (`qx_thermal_skw_emit`/`qx_thermal_transport_bench` with
+`d=3`, `benchmarks/plot_skw.py`/`plot_conductivity.py`) are demos of the *fast-path*
+finite-T spectroscopy now available for spin-1.
+
+### Performance vs TeNPy (spin-1 real-time dynamics)
+
+`benchmarks/spin1_tebd_vs_tenpy.py` times the **same** physics (spin-1 Néel-quench
+TEBD2, `H = Σ S·S`, Sz-conserving) against [TeNPy](https://tenpy.readthedocs.io) on
+one 20-core box. The decisive structural difference: **QuantX parallelizes the
+block-sparse per-Sz-sector SVDs** (OpenMP), while TeNPy's TEBD does not — giving it
+all cores actually *slows it ~3×* (oversubscription on the many small SVDs), so its
+optimum is single-thread.
+
+| N=32, χ | TeNPy (best, 1 thread) | TeNPy (all 20 cores) | **QuantX-CPU** (native) | vs TeNPy-best | vs TeNPy-20c |
+|---|---|---|---|---|---|
+| 256 | 16.3 s | 47.8 s | **11.8 s** | **1.38×** | **4.1×** |
+| 512 | 77.9 s | 219 s  | **76.2 s** | 1.02× | **2.9×** |
+
+So on the same hardware QuantX is **2.9–4× faster than TeNPy run normally** (both
+using all cores), and still **1.0–1.4× faster than TeNPy hand-tuned to its
+single-thread optimum**. (min-of-2 trials, single-thread MKL for TeNPy's best.)
+
+The **GPU does not help spin-1 dynamics** (it is ~slower here): a spin-1 bond spreads
+χ across many Sz charge sectors, so the per-sector blocks stay below the on-device
+GEMM/SVD crossover — the GPU win is a critical-`d=2`-chain feature (where the central
+Sz=0 sector is large), not a spin-1 one. We report this honestly rather than force a
+GPU number that isn't there.
+
 ## Scope and limits
 
 - **Phase 1 (done):** any *uniform-bulk* Sz-conserving MPO at local dimension

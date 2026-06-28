@@ -15,6 +15,7 @@ import os
 import sys
 
 CSVP = sys.argv[1] if len(sys.argv) > 1 else "docs/skw_b1.0.csv"
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "spinhalf"   # "spinhalf" | "spin1"
 with open(CSVP, newline="") as f:
     rows = list(csv.reader(f))
 meta = {kv.split("=")[0]: kv.split("=")[1] for kv in rows[0][1:] if "=" in kv}
@@ -86,11 +87,21 @@ for wi in range(NW + 1):
         r, g, b = color(grid[wi][ki] / vmax)
         x = PX0 + ki * cw; y = PY1 - (wi + 1) * ch
         s.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{cw+0.6:.1f}" height="{ch+0.6:.1f}" fill="rgb({r},{g},{b})"/>')
-# des Cloizeaux-Pearson lower edge  w = (pi/2) sin k  and upper edge pi sin(k/2)
-low = " ".join(f"{xpx(k):.1f},{ypx((math.pi/2)*abs(math.sin(k))):.1f}" for k in ks)
-up = " ".join(f"{xpx(k):.1f},{ypx(math.pi*abs(math.sin(k/2))):.1f}" for k in ks)
-s.append(f'<polyline points="{low}" fill="none" stroke="#fff" stroke-width="1.3" stroke-dasharray="4,3" opacity="0.8"/>')
-s.append(f'<polyline points="{up}" fill="none" stroke="#fff" stroke-width="1.1" stroke-dasharray="2,3" opacity="0.6"/>')
+if MODEL == "spin1":
+    # Haldane single-magnon branch w(k) = sqrt(Delta^2 + B(1+cos k)): gapped minimum
+    # Delta ~ 0.41 J at k=pi (the Haldane gap), rising to ~2.7 J at k=0.
+    DELTA, B = 0.41, 3.56
+    mag = " ".join(f"{xpx(k):.1f},{ypx(math.sqrt(DELTA**2 + B*(1+math.cos(k)))):.1f}" for k in ks)
+    s.append(f'<polyline points="{mag}" fill="none" stroke="#fff" stroke-width="1.4" stroke-dasharray="4,3" opacity="0.85"/>')
+    kpi = xpx(math.pi)
+    s.append(f'<line x1="{kpi-18:.1f}" y1="{ypx(DELTA):.1f}" x2="{kpi:.1f}" y2="{ypx(DELTA):.1f}" stroke="#ff4444" stroke-width="1.6"/>')
+    s.append(f'<text x="{kpi-22:.1f}" y="{ypx(DELTA)+4:.1f}" text-anchor="end" font-size="10" fill="#ff6666">&#916;&#8776;0.41</text>')
+else:
+    # des Cloizeaux-Pearson lower edge  w = (pi/2) sin k  and upper edge pi sin(k/2)
+    low = " ".join(f"{xpx(k):.1f},{ypx((math.pi/2)*abs(math.sin(k))):.1f}" for k in ks)
+    up = " ".join(f"{xpx(k):.1f},{ypx(math.pi*abs(math.sin(k/2))):.1f}" for k in ks)
+    s.append(f'<polyline points="{low}" fill="none" stroke="#fff" stroke-width="1.3" stroke-dasharray="4,3" opacity="0.8"/>')
+    s.append(f'<polyline points="{up}" fill="none" stroke="#fff" stroke-width="1.1" stroke-dasharray="2,3" opacity="0.6"/>')
 # axes
 s.append(f'<line x1="{PX0}" y1="{PY0}" x2="{PX0}" y2="{PY1}" stroke="#444" stroke-width="1.2"/>')
 s.append(f'<line x1="{PX0}" y1="{PY1}" x2="{PX1}" y2="{PY1}" stroke="#444" stroke-width="1.2"/>')
@@ -104,8 +115,12 @@ s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-26}" text-anchor="middle" font-size
 s.append(f'<text x="20" y="{(PY0+PY1)/2:.0f}" text-anchor="middle" font-size="13" fill="#222" '
          f'transform="rotate(-90 20 {(PY0+PY1)/2:.0f})">frequency  &#969;  (J=1)</text>')
 T_lab = ("inf" if beta == 0 else f"{1.0/beta:.2f}")
-s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="24" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">S(k,&#969;,T) &#8212; Heisenberg chain, T = {T_lab} (&#946;={beta:.1f})</text>')
-s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="42" text-anchor="middle" font-size="11" fill="#666">purification + real-time block-TEBD, N={N} (demo); dashed = des Cloizeaux&#8211;Pearson two-spinon edges</text>')
+_chain = "spin-1 Haldane chain" if MODEL == "spin1" else "Heisenberg chain"
+_ref = ("dashed = single-magnon branch, gapped at k=&#960; (Haldane gap &#916;&#8776;0.41)"
+        if MODEL == "spin1" else "dashed = des Cloizeaux&#8211;Pearson two-spinon edges")
+s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="24" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">S(k,&#969;,T) &#8212; {_chain}, T = {T_lab} (&#946;={beta:.1f})</text>')
+_path = "d&gt;2 fast path" if MODEL == "spin1" else "block path"
+s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="42" text-anchor="middle" font-size="11" fill="#666">purification + real-time block-TEBD ({_path}), N={N} (demo); {_ref}</text>')
 # colorbar
 cbx = PX1 + 16
 for i in range(60):
