@@ -31,10 +31,11 @@ int main(int argc, char** argv) {
     std::vector<double> betas;
     for (int a = 7; a < argc; ++a) betas.push_back(std::atof(argv[a]));
     if (betas.empty()) betas = {0.5, 1.0, 2.0};
+    const int d = std::getenv("QX_BENCH_D") ? std::atoi(std::getenv("QX_BENCH_D")) : 2;
 
-    std::printf("Transport benchmark: Heisenberg N=%d (2N=%d purified sites), "
+    std::printf("Transport benchmark: %s N=%d (2N=%d purified sites), "
                 "dt=%.3f, %d steps (t->%.1f), chi<=%d, cutoff=%.0e, cool=%d\n",
-                N, 2*N, dt, nsteps, dt*nsteps, chi, cutoff, ncool);
+                d==3?"spin-1":"spin-1/2", N, 2*N, dt, nsteps, dt*nsteps, chi, cutoff, ncool);
 
     // disentangle OFF: the correlator is disentangler-invariant (~1e-13), so the
     // cheaper single-sweep path emits identical C(t;T) at ~2x the speed -- the
@@ -44,7 +45,7 @@ int main(int argc, char** argv) {
     for (double beta : betas)
         res.push_back(run_conductivity_thermal_blocks(N, 1.0, 1.0, beta, ncool, dt,
                                                       nsteps, chi, cutoff,
-                                                      /*disentangle*/false));
+                                                      /*disentangle*/false, d));
 
     // per-temperature summary: <J^2>, Drude proxy, peak bond, wall time
     std::printf("\n  %-6s %-12s %-12s %-9s %-9s\n",

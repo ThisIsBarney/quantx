@@ -23,6 +23,8 @@ import sys
 HERE = os.path.dirname(__file__)
 CSVP = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "docs",
                                                           "transport_correlator.csv")
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "spinhalf"   # "spinhalf" | "spin1"
+_CHAIN = "spin-1 Haldane chain" if MODEL == "spin1" else "Heisenberg chain"
 
 # --- read t, and Re/Im C(t) per beta ---------------------------------------
 with open(CSVP, newline="") as f:
@@ -86,7 +88,7 @@ s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-30}" text-anchor="middle" font-size
 s.append(f'<text x="20" y="{(PY0+PY1)/2:.0f}" text-anchor="middle" font-size="13" fill="#222" '
          f'transform="rotate(-90 20 {(PY0+PY1)/2:.0f})">&#963;(&#969;,T)  (arb.)</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Finite-T current spectral function  &#8733; &#963;(&#969;,T)</text>')
-s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="46" text-anchor="middle" font-size="12" fill="#555">Heisenberg chain, FFT of &#10216;J(t)J(0)&#10217;<tspan baseline-shift="sub" font-size="9">&#946;</tspan> (Gaussian window); raw, not Kubo-reweighted</text>')
+s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="46" text-anchor="middle" font-size="12" fill="#555">{_CHAIN}, FFT of &#10216;J(t)J(0)&#10217;<tspan baseline-shift="sub" font-size="9">&#946;</tspan> (Gaussian window); raw, not Kubo-reweighted</text>')
 
 colors = ["#d62728", "#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e"]
 lx, ly = PX1 + 16, PY0 + 16
@@ -102,7 +104,8 @@ s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-12}" text-anchor="middle" font-size
          'Response peaks near the exchange scale &#969;&#8776;J; total weight (f-sum &#8733; &#10216;J&#178;&#10217;<tspan baseline-shift="sub" font-size="8">T</tspan>) decreases on cooling. Absolute scale arbitrary.</text>')
 s.append('</svg>')
 
-out = os.path.join(HERE, "..", "docs", "conductivity_sigma_wT.svg")
+out = os.path.join(HERE, "..", "docs",
+                   "conductivity_spin1_sigma.svg" if MODEL == "spin1" else "conductivity_sigma_wT.svg")
 with open(out, "w", encoding="utf-8") as f:
     f.write("\n".join(s))
 print("wrote", os.path.normpath(out))
