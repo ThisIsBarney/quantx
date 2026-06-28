@@ -73,5 +73,28 @@ int main(int argc, char** argv) {
     std::printf("\n  -> the incremental energy converges to the known Haldane density\n"
                 "     -1.401484 J, and the energy saturates by chi~16: the gapped\n"
                 "     spin-1 ground state, on the same fast block path as spin-1/2.\n");
+
+    // Hidden order: the den Nijs-Rommelse string order parameter
+    //   O(r) = -<gs| Sz_i ( prod_{i<k<i+r} e^{i pi Sz_k} ) Sz_{i+r} |gs>
+    // is the fingerprint of the Haldane phase: it SATURATES to a nonzero value
+    // (~0.374 for the Heisenberg point) at large separation, where every local
+    // (two-point) correlation has decayed to zero. Measured on the GS via
+    // string_order_blocks; i fixed near the left, r = j-i grows.
+    {
+        const int N = 40, i0 = 6;
+        std::printf("\n  Haldane string order O(r) at N=%d (saturates ~0.374):\n", N);
+        std::printf("    %-6s %-14s\n", "r", "O(r)");
+        FILE* g = std::fopen("docs/spin1_string_order.csv", "w");
+        if (g) std::fprintf(g, "r,O\n");
+        auto mpo = build_spin1_heisenberg_mpo(N, J);
+        for (int r = 2; r <= 22; r += 2) {
+            double O = string_order_blocks(mpo, N, i0, i0 + r, 96, 1e-10, 80);
+            std::printf("    %-6d %-14.6f\n", r, O);
+            if (g) std::fprintf(g, "%d,%.8f\n", r, O);
+        }
+        if (g) { std::fclose(g); std::printf("    wrote docs/spin1_string_order.csv\n"); }
+        std::printf("  -> O(r) plateaus at a nonzero value: hidden long-range order in\n"
+                    "     the gapped Haldane phase, with NO local order parameter.\n");
+    }
     return 0;
 }

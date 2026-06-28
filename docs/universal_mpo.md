@@ -54,21 +54,59 @@ is gapped (area-law entanglement), the energy **saturates by χ≈16** — unlik
 critical spin-1/2 chain whose entanglement grows with N. Both signatures come
 from ground-state energies alone, on the same fast path as spin-1/2.
 
+### The full spin-1 stack (all on the fast block path, all ED-validated)
+
+The arbitrary-`d` generalization is not limited to ground states — the **entire**
+DMRG / dynamics / finite-temperature stack runs spin-1 (d=3) on the same fast
+block-sparse engine as spin-1/2, each piece checked against exact diagonalization
+(`qx_mpo_sym_test`) and bit-identical for d=2:
+
+| Capability | What | vs ED |
+|---|---|---|
+| Ground state | block + dense DMRG | 1.7e-14 |
+| **Haldane string order** | `O = −⟨Sz_i (Π e^{iπSz_k}) Sz_j⟩` (den Nijs–Rommelse hidden order) | 1.6e-12 |
+| TDVP2 | real-time (energy-conserving) + imaginary-time (→GS) | →GS, ⟨H⟩ exact |
+| TEBD | Trotter gate **extracted from the MPO** (universal-MPO, any d) | →GS, ~3e-6 |
+| GPU `form_theta` | on-device theta for d>2 | GPU == CPU |
+| Finite-T statics | `⟨H⟩_β` via ancilla purification | Gibbs 1e-5 |
+| Finite-T observables | `⟨Sz⟩` / `⟨Sz Sz⟩` (β=0 → 8/3 exact) | exact |
+| **F1: `S(k,ω,T)`** | purified real-time + KBM disentangler | 8e-4 |
+| **F2: conductivity** | `⟨J(t)J(0)⟩_β` | 2e-3 |
+
+![Spin-1 Haldane string order](spin1_string_order.svg)
+
+The string-order figure is the cleanest piece of physics here (`qx_spin1_showcase`,
+N=40): the den Nijs–Rommelse parameter `O(r)` stays **nonzero as the separation `r`
+grows** — *hidden* long-range order — whereas every local two-point correlation
+decays to zero. That nonzero plateau is the order parameter of the topological
+Haldane phase, computed on the GS on the same fast block path, and it agrees with
+exact diagonalization to ~1e-12.
+
+The key abstraction is `phys_groups`: a block tensor folds the local index into `d`
+charge-shifted column groups (state `s` maps left bond `q_L → q_L + qphys[s]`),
+replacing the spin-1/2 up/dn split in every kernel — env / H_eff, `form_theta`, the
+SVD split, the TEBD/SWAP gates, the purified cooling, and the overlap measurement.
+
 ## Scope and limits
 
 - **Phase 1 (done):** any *uniform-bulk* Sz-conserving MPO at local dimension
   d=2 — next-nearest / longer-range, fields, etc. Non-uniform MPOs
   (`build_pauli_sum_mpo`) stay on the dense path; `derive_mpo_sym` throws
   fail-loud if one reaches the block path.
-- **Phase 2 (done — ground state):** arbitrary local dimension d>2. The MPO
-  representation (`MPOSite.d`/`phys_charge`), the dense DMRG, and the **fast
-  block-sparse DMRG** all run any uniform d (spin-1 d=3 validated vs ED). The
-  block path folds the local index into d charge-shifted column groups
+- **Phase 2 (done — the full stack):** arbitrary local dimension d>2, *not just
+  the ground state*. The MPO representation (`MPOSite.d`/`phys_charge`), the dense
+  and **fast block-sparse DMRG**, the **block dynamics** (TDVP2 + TEBD), the **GPU**
+  `form_theta`, the **finite-temperature** purification (statics, `⟨Sz⟩`/`⟨SzSz⟩`,
+  F1 `S(k,ω,T)`, F2 conductivity), and the **string-order** measurement all run any
+  uniform d (spin-1 d=3 validated vs ED, see the table above; d=2 bit-identical).
+  The block path folds the local index into d charge-shifted column groups
   (`phys_groups`) in place of the old up/dn split.
 - **Known issue:** the single-site DMRG refinement phase loses variationality at
   an *exactly degenerate* ground state with truncation (e.g. the MG point itself
   at large N); the two-site path is unaffected (use `QX_DMRG_NO_SINGLESITE=1`).
   Tracked separately.
-- **Phase 2 (remaining):** the block-sparse *dynamics* (TEBD/TDVP) and the GPU
-  `form_theta` are still d=2 (the d>2 entry points throw fail-loud); generalizing
-  them brings spin-1 real-time/finite-T spectroscopy onto the fast path.
+- **Still d=2-only:** non-uniform / longer-range models on the *dynamics* path
+  (the TEBD `build_gate_from_mpo` assumes a pure nearest-neighbour bond with no
+  on-site term — fine for spin-1 Heisenberg). Fermionic models (Hubbard) need
+  Jordan-Wigner anticommutation signs, which the (bosonic, Sz-conserving) engine
+  does not yet carry — the next frontier.
