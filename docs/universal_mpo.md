@@ -110,25 +110,33 @@ finite-T spectroscopy now available for spin-1.
 
 `benchmarks/spin1_tebd_vs_tenpy.py` times the **same** physics (spin-1 Néel-quench
 TEBD2, `H = Σ S·S`, Sz-conserving) against [TeNPy](https://tenpy.readthedocs.io) on
-one 20-core box. The decisive structural difference: **QuantX parallelizes the
-block-sparse per-Sz-sector SVDs** (OpenMP), while TeNPy's TEBD does not — giving it
-all cores actually *slows it ~3×* (oversubscription on the many small SVDs), so its
-optimum is single-thread.
+one 20-core box, **each tool at its own optimum**: TeNPy single-thread (its TEBD does
+not parallelize — all cores *slow it ~3×*), QuantX native multi-thread (its
+block-sparse SVDs are OpenMP-parallel). min-of-2.
 
-| N=32, χ | TeNPy (best, 1 thread) | TeNPy (all 20 cores) | **QuantX-CPU** (native) | vs TeNPy-best | vs TeNPy-20c |
-|---|---|---|---|---|---|
-| 256 | 16.3 s | 47.8 s | **11.8 s** | **1.38×** | **4.1×** |
-| 512 | 77.9 s | 219 s  | **76.2 s** | 1.02× | **2.9×** |
+| N=32, χ | TeNPy (best = 1 thread) | QuantX (best = native MT) | QuantX 1 thread | **QuantX vs TeNPy (best-vs-best)** |
+|---|---|---|---|---|
+| 256 | 16.3 s | 11.8 s | 17.9 s | **1.38×** |
+| 512 | 77.9 s | 76.2 s | 131 s  | **1.02× (a tie)** |
 
-So on the same hardware QuantX is **2.9–4× faster than TeNPy run normally** (both
-using all cores), and still **1.0–1.4× faster than TeNPy hand-tuned to its
-single-thread optimum**. (min-of-2 trials, single-thread MKL for TeNPy's best.)
+**Honest read.** Best-vs-best, QuantX leads by 1.38× at χ=256 but the margin shrinks
+to a *tie* by χ=512. And **per single core QuantX is currently slower than TeNPy**
+(17.9 vs 16.3 at χ=256; 131 vs 78 at χ=512) — it only stays ahead/even via
+parallelism, which itself scales modestly (~1.6× from 20 cores). Comparing against
+TeNPy run on 20 cores would be meaningless (TeNPy is fastest on one core), so we do
+not.
 
-The **GPU does not help spin-1 dynamics** (it is ~slower here): a spin-1 bond spreads
-χ across many Sz charge sectors, so the per-sector blocks stay below the on-device
-GEMM/SVD crossover — the GPU win is a critical-`d=2`-chain feature (where the central
-Sz=0 sector is large), not a spin-1 one. We report this honestly rather than force a
-GPU number that isn't there.
+**Why, and the headroom (a profile, not hand-waving).** `QX_TEBD_PROFILE=1` on the
+χ=256 spin-1 step: **91 % of the time is the SVD**, spread over **~23 600 tiny
+per-Sz-sector SVDs** (largest block only 161), all on the Gram-eigensolve path. A
+spin-1 bond fragments χ across many Sz sectors, so the work is a *swarm of tiny
+SVDs* where per-call overhead (and OpenBLAS vs TeNPy's MKL) dominates — the same
+fragmentation that keeps the **GPU below its crossover** (its per-sector blocks are
+too small to amortize transfer; the GPU win is a critical-`d=2`-chain feature). This
+is an *implementation* gap, not a fundamental one: batching the small SVDs, a faster
+small-matrix SVD, and better parallel load-balancing are concrete, in-progress levers
+to turn the tie into a decisive lead. We state where we stand rather than cherry-pick
+a flattering core count.
 
 ## Scope and limits
 
