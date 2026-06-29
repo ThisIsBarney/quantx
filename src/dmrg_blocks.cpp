@@ -87,6 +87,9 @@ static long long g_block_matvecs = 0;
 // TEBD phase profiling (set env QX_TEBD_PROFILE=1). Seconds per phase.
 static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb = 0;
 static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0, g_tebd_ngpu = 0;
+// fine SVD split (QX_SVD_PROFILE=1, run single-thread): Gram-GEMM / eigensolve / back.
+static double g_svd_gemm = 0, g_svd_eig = 0, g_svd_back = 0;
+static bool g_svd_prof = false;
 
 #ifdef QX_USE_CUDA
 // Minimum min(rows,cols) for a block to be routed to the GPU SVD (Phase A). Below
@@ -1189,7 +1192,12 @@ struct BlockSVDResult {
 static void thin_svd_gram(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     const int m = (int)M.rows(), nc = (int)M.cols();
     if (m <= nc) {
-        Eigen::SelfAdjointEigenSolver<Mat> es(M * M.adjoint());   // m x m
+        using _clk = std::chrono::steady_clock; _clk::time_point _t;
+        if (g_svd_prof) _t = _clk::now();
+        Mat G = M * M.adjoint();                                  // m x m
+        if (g_svd_prof) { g_svd_gemm += std::chrono::duration<double>(_clk::now()-_t).count(); _t=_clk::now(); }
+        Eigen::SelfAdjointEigenSolver<Mat> es(G);
+        if (g_svd_prof) { g_svd_eig += std::chrono::duration<double>(_clk::now()-_t).count(); _t=_clk::now(); }
         const RVec& ev = es.eigenvalues();                        // ascending
         const Mat&  Q  = es.eigenvectors();
         U.resize(m, m); sv.resize(m);
@@ -1204,6 +1212,7 @@ static void thin_svd_gram(const Mat& M, Mat& U, Mat& V, RVec& sv) {
             if (sv(j) > 1e-14 * smax) V.col(j) = MhU.col(j) / sv(j);
             else V.col(j).setZero();
         }
+        if (g_svd_prof) g_svd_back += std::chrono::duration<double>(_clk::now()-_t).count();
     } else {
         Eigen::SelfAdjointEigenSolver<Mat> es(M.adjoint() * M);   // n x n
         const RVec& ev = es.eigenvalues();
@@ -1271,6 +1280,36 @@ static bool thin_svd_lapacke(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     }
     return true;
 }
+// Direct thin SVD via LAPACK xgesdd (divide-and-conquer). A SINGLE optimized call
+// (no Gram matrix, no separate eigensolve + back-transform), and numerically better
+// (no condition-number squaring). gesdd is a *different* routine from the xsyevd/
+// xheevd that returns wrong results on this box's OpenBLAS, so it is safe to use.
+// Returns M = U diag(sv) V^dag with U (m x k), V (n x k), k=min(m,n).
+static bool thin_svd_gesdd(const Mat& M, Mat& U, Mat& V, RVec& sv) {
+    const int m = (int)M.rows(), nc = (int)M.cols(), k = std::min(m, nc);
+    if (k == 0) { U.resize(m,0); V.resize(nc,0); sv.resize(0); return true; }
+    Mat A = M;                                   // xgesdd overwrites A (col-major)
+    U.resize(m, k); sv.resize(k);
+    Mat VT(k, nc);
+    lapack_int info;
+    if constexpr (std::is_same_v<S, Cx>)
+        info = LAPACKE_zgesdd(LAPACK_COL_MAJOR, 'S', (lapack_int)m, (lapack_int)nc,
+                  reinterpret_cast<lapack_complex_double*>(A.data()), (lapack_int)m, sv.data(),
+                  reinterpret_cast<lapack_complex_double*>(U.data()), (lapack_int)m,
+                  reinterpret_cast<lapack_complex_double*>(VT.data()), (lapack_int)k);
+    else
+        info = LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'S', (lapack_int)m, (lapack_int)nc,
+                  reinterpret_cast<double*>(A.data()), (lapack_int)m, sv.data(),
+                  reinterpret_cast<double*>(U.data()), (lapack_int)m,
+                  reinterpret_cast<double*>(VT.data()), (lapack_int)k);
+    if (info != 0) return false;
+    V = VT.adjoint();                            // V (nc x k); V.col(j) = conj(VT.row(j))
+    return true;
+}
+static bool gesdd_enabled() {
+    static bool v = (std::getenv("QX_TEBD_GESDD") != nullptr);
+    return v;
+}
 // Minimum block min-dim to route the Gram eigensolve to LAPACK xsyevd/xheevd.
 // DEFAULT: off. The conda-forge OpenBLAS on this box returns WRONG results from
 // LAPACKE_dsyevd/zheevd at some block sizes -- reproduced as a corrupted real DMRG
@@ -1331,7 +1370,24 @@ static BlockSVDResult block_svd_truncate(
     std::vector<int> svq;
     std::vector<const Mat*> svblk;
     for (auto& [q_mid, blk] : theta)
-        if (blk.size() != 0) { svq.push_back(q_mid); svblk.push_back(&blk); }
+        // Skip empty AND all-zero blocks: a zero Schmidt block carries no weight, so
+        // its SVD (sv=0, truncated away) is pure overhead. bt_expand_theta zero-fills
+        // many reachable-but-empty sectors each step; the gate fills only some, leaving
+        // a swarm of zero blocks. (They re-expand next step, so no state is lost.)
+        if (blk.size() != 0 && blk.squaredNorm() > 1e-24) { svq.push_back(q_mid); svblk.push_back(&blk); }
+    // Longest-processing-time-first: SVD the largest blocks first so the dynamic
+    // schedule does not strand the dominant central-Sz eigensolve at the very end
+    // while the other threads idle (the spin-1 swarm has one big block + many tiny).
+    if (svq.size() > 2) {
+        std::vector<int> ord(svq.size());
+        for (int i = 0; i < (int)ord.size(); ++i) ord[i] = i;
+        auto wk = [&](int a){ long long r = svblk[a]->rows(), c = svblk[a]->cols();
+                              return std::min(r,c) * std::min(r,c) * std::max(r,c); };  // ~ SVD flops
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){ return wk(a) > wk(b); });
+        std::vector<int> q2(svq.size()); std::vector<const Mat*> b2(svq.size());
+        for (int i = 0; i < (int)ord.size(); ++i) { q2[i] = svq[ord[i]]; b2[i] = svblk[ord[i]]; }
+        svq.swap(q2); svblk.swap(b2);
+    }
     g_tebd_nsvd += (long long)svq.size();
     for (auto* p : svblk) g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)std::min(p->rows(), p->cols()));
     std::vector<SVDBlk> sb(svq.size());
@@ -1365,8 +1421,13 @@ static BlockSVDResult block_svd_truncate(
             { g_tebd_ngpu++; continue; }
 #endif
 #ifdef QX_HAS_LAPACKE
-        // Large blocks: LAPACK xgesdd (OpenBLAS) beats the Eigen Gram eigensolve;
-        // small blocks keep the Gram path (lower overhead). Fall back on error.
+        // Direct LAPACK xgesdd: a single divide-and-conquer SVD call -- much faster
+        // than Eigen's per-block Gram eigensolve (the spin-1 swarm-of-small-SVDs
+        // bottleneck), and condition-stable. Opt-in (QX_TEBD_GESDD) while validated.
+        if (gesdd_enabled() && thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+            { g_tebd_nlapacke++; continue; }
+        // Gram eigensolve via LAPACK xsyevd/xheevd -- disabled by default (wrong
+        // results on this box's OpenBLAS); only for blocks >= lapacke_min.
         if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= lapacke_min() &&
             thin_svd_lapacke(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
             { g_tebd_nlapacke++; continue; }
@@ -2066,6 +2127,8 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     BMPS s = cps_init(mpo, n, neel, qphys);
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
     if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0; }
+    g_svd_prof = (std::getenv("QX_SVD_PROFILE") != nullptr);
+    if (g_svd_prof) { g_svd_gemm=g_svd_eig=g_svd_back=0; }
 
     TDVP2Out out;
     auto t0 = clk::now();
@@ -2085,6 +2148,11 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
             (int)g_tebd_maxblk, g_tebd_nsvd);
         std::fprintf(stderr, "   nsvd=%lld nlapacke=%lld ngpu=%lld (large blocks: LAPACK zheevd / GPU cuSOLVER)\n",
                      g_tebd_nsvd, g_tebd_nlapacke, g_tebd_ngpu);
+    }
+    if (g_svd_prof) {
+        double st = g_svd_gemm+g_svd_eig+g_svd_back;
+        std::fprintf(stderr, "   [SVD split] gram-gemm=%.3f(%.0f%%) eigensolve=%.3f(%.0f%%) back=%.3f(%.0f%%)  (of %.3fs gram-SVD)\n",
+            g_svd_gemm,100*g_svd_gemm/st, g_svd_eig,100*g_svd_eig/st, g_svd_back,100*g_svd_back/st, st);
     }
     rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
     out.energy = bt_energy(s, mpo);
