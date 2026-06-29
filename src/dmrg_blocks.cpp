@@ -1306,8 +1306,16 @@ static bool thin_svd_gesdd(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     V = VT.adjoint();                            // V (nc x k); V.col(j) = conj(VT.row(j))
     return true;
 }
-static bool gesdd_enabled() {
-    static bool v = (std::getenv("QX_TEBD_GESDD") != nullptr);
+// Per-block min-dim at/above which a block uses the direct LAPACK xgesdd instead of
+// the Gram-eigensolve. gesdd's optimized divide-and-conquer beats Eigen's per-block
+// eigensolve for LARGE blocks (measured ~1.2x at chi=512); for small/rectangular
+// blocks the Gram trick (eigensolve of the smaller dimension, lower fixed overhead)
+// still wins, so keep them on Gram. Tunable with QX_GESDD_MIN.
+static int gesdd_min() {
+    static int v = []() {
+        const char* e = std::getenv("QX_GESDD_MIN");
+        return (e && std::atoi(e) > 0) ? std::atoi(e) : 160;   // tuned crossover
+    }();
     return v;
 }
 // Minimum block min-dim to route the Gram eigensolve to LAPACK xsyevd/xheevd.
@@ -1421,10 +1429,12 @@ static BlockSVDResult block_svd_truncate(
             { g_tebd_ngpu++; continue; }
 #endif
 #ifdef QX_HAS_LAPACKE
-        // Direct LAPACK xgesdd: a single divide-and-conquer SVD call -- much faster
-        // than Eigen's per-block Gram eigensolve (the spin-1 swarm-of-small-SVDs
-        // bottleneck), and condition-stable. Opt-in (QX_TEBD_GESDD) while validated.
-        if (gesdd_enabled() && thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+        // Direct LAPACK xgesdd for LARGE blocks: its divide-and-conquer beats Eigen's
+        // per-block Gram eigensolve (the spin-1 large-chi bottleneck) and is condition-
+        // stable. Small/rectangular blocks stay on the Gram trick (it eigensolves the
+        // smaller dimension, with lower fixed overhead).
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gesdd_min() &&
+            thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
             { g_tebd_nlapacke++; continue; }
         // Gram eigensolve via LAPACK xsyevd/xheevd -- disabled by default (wrong
         // results on this box's OpenBLAS); only for blocks >= lapacke_min.
