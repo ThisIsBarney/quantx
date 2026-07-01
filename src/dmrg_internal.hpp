@@ -116,6 +116,12 @@ std::vector<MPOSite> build_j1j2_mpo(int n, double J1 = 1.0, double J2 = 0.0,
 // the arbitrary-local-dimension generalization of MPOSite / derive_mpo_sym.
 std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J = 1.0);
 
+// Fermionic Hubbard chain (d=4): H = -t sum_{i,s}(c^dag_{i s}c_{i+1 s}+h.c.) + U sum_i n_up n_dn.
+// The first FERMIONIC model -- Fermi statistics carried in the MPO via Jordan-Wigner
+// (parity F on every travelling operator), so the bosonic block engine runs it unchanged.
+// Conserved U(1) is particle number N (phys_charge = {0,1,1,2}).
+std::vector<MPOSite> build_hubbard_mpo(int n, double t = 1.0, double U = 0.0);
+
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
 struct MPOSym {
@@ -191,8 +197,14 @@ DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
 // hidden-order signature): O = -<gs| Sz_i0 (prod_{i0<k<j0} e^{i pi Sz_k}) Sz_j0 |gs>.
 double string_order_blocks(const std::vector<MPOSite>& mpo, int n, int i0, int j0,
                            int max_bond, double cutoff, int n_sweeps);
+// total_charge: the fixed total U(1) charge of the target sector (0 for the Sz spin
+// models; e.g. half-filling N=n for Hubbard). init_config (optional): a local-state
+// index per site for the initial product state, summing to total_charge (else the
+// default |0,d-1,0,...> alternation is used).
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
-                           int max_bond, double cutoff, int n_sweeps, double tol);
+                           int max_bond, double cutoff, int n_sweeps, double tol,
+                           int total_charge = 0,
+                           const std::vector<int>* init_config = nullptr);
 
 // Block-sparse (Sz-symmetric) TDVP2 time evolution from the Neel state.
 struct TDVPBlockResult {

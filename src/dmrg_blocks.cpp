@@ -254,7 +254,8 @@ static std::map<int,double> charge_dist(int k, const std::vector<int>& qphys) {
 // block at -q). For spin-1/2 ({+1,-1}) the path weights are exactly the binomials,
 // so this reproduces the original Heisenberg bond space bit-identically.
 static BondSpace make_bond_space(int bond_i, int n, int max_bond,
-                                 const std::vector<int>& qphys) {
+                                 const std::vector<int>& qphys,
+                                 int total_charge = 0) {
     int sites_L = bond_i + 1;
     int sites_R = n - sites_L;
 
@@ -263,7 +264,7 @@ static BondSpace make_bond_space(int bond_i, int n, int max_bond,
 
     std::vector<std::pair<int,double>> sectors;   // (bond charge q, weight)
     for (auto& [q, wL] : distL) {
-        auto it = distR.find(-q);                 // right block must carry -q (total Sz=0)
+        auto it = distR.find(total_charge - q);   // right block carries total_charge - q
         if (it == distR.end()) continue;
         double w = wL * it->second;
         if (w > 0) sectors.emplace_back(q, w);
@@ -3020,7 +3021,9 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
 static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                       int max_bond, double cutoff,
                       int n_sweeps, double tol,
-                      BMPS* out_state = nullptr) {
+                      BMPS* out_state = nullptr,
+                      int total_charge = 0,
+                      const std::vector<int>* init_config = nullptr) {
     auto t_start = std::chrono::steady_clock::now();
 
     // MPO bond Sz charges (Heisenberg's {0,+2,-2,0,0} or whatever the operator
@@ -3030,6 +3033,21 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
     const std::vector<int>& qphys = mpo[0].phys_charge;
     const int d = mpo[0].d;
+    // Validate a caller-supplied initial product config: correct length, in-range local
+    // state indices, and a total charge equal to total_charge -- otherwise the start
+    // would sit in the wrong sector (or index qphys out of bounds) and silently mislead.
+    if (init_config) {
+        if ((int)init_config->size() != n)
+            throw std::runtime_error("run_dmrg_blocks: init_config length must equal n");
+        int qsum = 0;
+        for (int s : *init_config) {
+            if (s < 0 || s >= d)
+                throw std::runtime_error("run_dmrg_blocks: init_config state index out of range [0,d)");
+            qsum += qphys[s];
+        }
+        if (qsum != total_charge)
+            throw std::runtime_error("run_dmrg_blocks: sum of init_config charges != total_charge");
+    }
     // Use the numerically-stable direct SVD for the ground-state truncation so a
     // DMRG that lands on an exactly degenerate ground state (e.g. a frustrated
     // chain at a level crossing) stays canonical/variational. Opt back into the
@@ -3037,24 +3055,28 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     // problems (and to exercise those backends).
     const bool dmrg_stable = (std::getenv("QX_DMRG_FAST_SVD") == nullptr);
 
-    // Build bond spaces
+    // Build bond spaces. The chain carries a fixed total U(1) charge: 0 for the
+    // Sz-conserving spin models (GS sits at Sz_total=0), or e.g. half-filling
+    // N=n for the Hubbard chain (total_charge != 0). The right boundary carries the
+    // whole accumulated charge; make_bond_space pairs left-q with right-(Q-q).
     std::vector<BondSpace> bond(n + 1);
-    bond[0] = BondSpace::from_pairs({{0, 1}});   // left boundary: qn=0, dim=1
-    bond[n] = BondSpace::from_pairs({{0, 1}});   // right boundary: qn=0, dim=1
+    bond[0] = BondSpace::from_pairs({{0, 1}});             // left boundary: qn=0, dim=1
+    bond[n] = BondSpace::from_pairs({{total_charge, 1}});  // right boundary carries the total
     for (int i = 0; i < n - 1; ++i)
-        bond[i + 1] = make_bond_space(i, n, max_bond, qphys);
+        bond[i + 1] = make_bond_space(i, n, max_bond, qphys, total_charge);
 
-    // Initialize block MPS to a Neel-like product state: alternate the highest-Sz
-    // local state (index 0) and lowest (index d-1) -- |up dn ...> for spin-1/2,
-    // |+1 -1 ...> for spin-1 -- so the start sits in the Sz_total=0 sector.
-    // Random initialization leads to self-consistent local minima; the Neel start
-    // gives physically motivated environments so the first L->R sweep finds the
-    // correct subspace.
+    // Initialize block MPS to a product ("Neel-like") state. Default: alternate the
+    // highest-Sz local state (index 0) and lowest (index d-1) -- |up dn ...> for
+    // spin-1/2, |+1 -1 ...> for spin-1 -- so the start sits in Sz_total=0. A caller
+    // may instead pass init_config (a local-state index per site) summing to
+    // total_charge -- e.g. Hubbard half-filling |up dn up dn ...> (indices 1,2,...).
+    // Random init leads to self-consistent local minima; the product start gives
+    // physically motivated environments so the first L->R sweep finds the subspace.
     std::vector<std::map<int,Mat>> block_A(n);
     std::vector<std::map<int,RVec>> block_sv(n - 1);
 
     {
-        int q_neel = 0;   // accumulated Sz before site i
+        int q_neel = 0;   // accumulated charge before site i
         for (int i = 0; i < n; ++i) {
             const BondSpace& bsL = bond[i], &bsR = bond[i + 1];
             // Zero-initialise all sectors at this site
@@ -3062,8 +3084,8 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                 int q_L = bsL.qns[qi], dL = bsL.dims[qi];
                 block_A[i][q_L] = Mat::Zero(dL, phys_total(phys_groups(bsR, q_L, +1, qphys)));
             }
-            // Place the Neel amplitude in the correct sector and physical-state column
-            int s_neel = (i % 2 == 0) ? 0 : d - 1;   // highest Sz at even, lowest at odd
+            // Place the product amplitude in the correct sector and physical-state column
+            int s_neel = init_config ? (*init_config)[i] : ((i % 2 == 0) ? 0 : d - 1);
             if (bsL.dim(q_neel) > 0) {
                 auto it = block_A[i].find(q_neel);
                 if (it != block_A[i].end() && it->second.rows() > 0) {
@@ -3089,9 +3111,12 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     {
         BlockEnv Rn;
         Rn.bs = bond[n];
-        // Right boundary: chi_r=1 at site n-1, so only MPO index b=0 is active.
-        // R[n].blocks[0][q=0] = 1 is the right vacuum (identity scalar environment).
-        Rn.blocks[0][0] = Mat::Constant(1, 1, S(1));
+        // Right boundary: chi_r=1 at site n-1, so only MPO index b=0 is active. The
+        // right-vacuum scalar sits in bond[n]'s single sector, whose charge is the
+        // chain's total U(1) charge (0 for Sz models, half-filling N=n for Hubbard) --
+        // NOT necessarily 0. Placing it at charge 0 when total_charge != 0 leaves every
+        // environment empty (no charge match) and the DMRG stuck at the product state.
+        Rn.blocks[0][total_charge] = Mat::Constant(1, 1, S(1));
         R[n] = Rn;
     }
     for (int i = n - 1; i >= 0; --i)
@@ -3472,11 +3497,15 @@ static bool mpo_is_real(const std::vector<MPOSite>& mpo) {
 // Entry point: dispatch to the real or complex block-sparse core.
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff,
-                           int n_sweeps, double tol) {
+                           int n_sweeps, double tol,
+                           int total_charge,
+                           const std::vector<int>* init_config) {
     require_uniform_local_dim(mpo, "run_dmrg_blocks");
     if (mpo_is_real(mpo))
-        return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
-    return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol);
+        return BlockDMRG<double>::run(mpo, n, max_bond, cutoff, n_sweeps, tol,
+                                      nullptr, total_charge, init_config);
+    return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol,
+                              nullptr, total_charge, init_config);
 }
 
 // Entry point: Haldane string-order parameter of the ground state.
