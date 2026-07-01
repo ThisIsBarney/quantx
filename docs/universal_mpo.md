@@ -148,6 +148,45 @@ multi-threaded LAPACK, so multi-threading *that* block is not an option — meas
 LAPACK `xgesdd` (divide-and-conquer) for blocks ≥160, the Gram-eigensolve trick below
 that — which is the 1.30× CPU-vs-CPU number above.
 
+## Showcase: the fermionic Hubbard chain (Fermi statistics in the MPO)
+
+Everything above is bosonic — a U(1)/Sz charge with no anticommutation. The **Hubbard
+chain** (`build_hubbard_mpo`, d=4, local basis `{|0>,|↑>,|↓>,|↑↓>}`)
+
+```
+H = −t Σ_{i,σ} (c†_{iσ} c_{i+1σ} + h.c.) + U Σ_i n_{i↑} n_{i↓}
+```
+
+is the engine's **first fermionic model**, and it needs *no* change to the block core: the
+Fermi statistics ride **entirely in the MPO** via Jordan–Wigner. With the on-site parity
+`F = (−1)^{n↑+n↓} = diag(1,−1,−1,1)` and the on-site annihilators carrying the intra-site
+↑-before-↓ sign (`C↓|↑↓> = −|↑>`), the hopping is the **uniform** matrix-tensor form
+`c†_{iσ}c_{i+1σ} = (C†_σ F)_i ⊗ (C_σ)_{i+1}` for both spins, so the ordinary (bosonic) MPO
+contraction reproduces the fermionic Hamiltonian exactly. The conserved U(1) is the
+particle number N (`phys_charge={0,1,1,2}`), and `derive_mpo_sym` reads it exactly as it
+reads Sz. The GS DMRG targets a fixed total charge — half-filling N=n — via a small
+generalization (`make_bond_space`/`run()` gained `total_charge` and an initial-config
+argument; the right-boundary environment now sits in `bond[n]`'s actual sector).
+
+**Validation is airtight** (`qx_hubbard_test`): the MPO reconstructs the explicit
+Jordan–Wigner Hamiltonian to `‖·‖ = 0` *exactly*, the dense DMRG matches exact
+diagonalization to ~1e-13, and the **fast block-sparse** DMRG matches the half-filling
+sector-ED to ~1e-14. (A subagent review independently re-derived the MPO with a second,
+orthogonal occupation-number ED and confirmed the match to machine zero.)
+
+![Hubbard fast path vs exact Lieb-Wu](hubbard_lieb_wu.svg)
+
+The showcase (`qx_hubbard_showcase`) runs the fast fermion path at half-filling to sizes
+brute-force ED cannot reach and compares the **incremental bulk energy** `e_bulk =
+(E_N − E_{N−ΔN})/ΔN` to the **exact Lieb–Wu (1968) Bethe-ansatz** ground-state energy
+density `e(U) = −4 ∫_0^∞ J_0(ω)J_1(ω)/(ω(1+e^{ωU/2})) dω`. In the Mott regime (U>0, a
+charge gap → area-law entanglement, so χ=128 is converged) the block-sparse energy lands
+on the exact curve at every interaction strength: **U=2/4/8 → e_bulk = −0.84429 /
+−0.57368 / −0.32750** vs Lieb–Wu **−0.84438 / −0.57373 / −0.32753** (error ~1e-5, shrinking
+with N). The free-fermion point `e(0) = −4/π` is reproduced by the same quadrature; the
+U=0 *metal* itself is critical (entanglement grows with N), a hard DMRG case unrelated to
+the fermion physics, so the convergence is shown in the gapped Mott regime.
+
 ## Scope and limits
 
 - **Phase 1 (done):** any *uniform-bulk* Sz-conserving MPO at local dimension
@@ -162,12 +201,18 @@ that — which is the 1.30× CPU-vs-CPU number above.
   uniform d (spin-1 d=3 validated vs ED, see the table above; d=2 bit-identical).
   The block path folds the local index into d charge-shifted column groups
   (`phys_groups`) in place of the old up/dn split.
-- **Known issue:** the single-site DMRG refinement phase loses variationality at
-  an *exactly degenerate* ground state with truncation (e.g. the MG point itself
-  at large N); the two-site path is unaffected (use `QX_DMRG_NO_SINGLESITE=1`).
-  Tracked separately.
-- **Still d=2-only:** non-uniform / longer-range models on the *dynamics* path
-  (the TEBD `build_gate_from_mpo` assumes a pure nearest-neighbour bond with no
-  on-site term — fine for spin-1 Heisenberg). Fermionic models (Hubbard) need
-  Jordan-Wigner anticommutation signs, which the (bosonic, Sz-conserving) engine
-  does not yet carry — the next frontier.
+- **Phase 3 (done — statics): the fermionic Hubbard chain** (d=4). Fermi statistics
+  carried in the Jordan–Wigner MPO; the dense and fast block-sparse DMRG run it at
+  half-filling, validated vs ED (`‖·‖=0`) and the exact Lieb–Wu energy (~1e-5). See the
+  Hubbard showcase above.
+- **Known issue:** the single-site DMRG refinement phase loses variationality at an
+  *exactly degenerate* ground state with truncation (e.g. the MG point at large N; opt
+  out with `QX_DMRG_NO_SINGLESITE=1`), and it *catastrophically* corrupts the state at
+  `total_charge≠0` (it carries a nonzero-charge boundary assumption) — so it is now
+  **auto-disabled whenever `total_charge≠0`** (Hubbard falls back to the correct
+  two-site path). Generalizing single-site to arbitrary total charge is tracked separately.
+- **Still to come for Hubbard:** *dynamics* (TDVP2/TEBD need the fermionic gate — the
+  Jordan–Wigner signs in the two-site Trotter gate), a two-U(1) (N and Sz) block
+  structure for finer/faster sectors, and finite-T. The **dynamics path is also still
+  d=2-only for non-uniform / longer-range** models (the TEBD `build_gate_from_mpo`
+  assumes a pure nearest-neighbour bond with no on-site term).
