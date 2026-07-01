@@ -186,6 +186,52 @@ int main() {
         }
     }
 
+    // (f) DYNAMICS on the fast block path: real-time TDVP2 from the charge-density-wave
+    // |0,up dn,0,up dn,...> (the default Neel of charges {0,2} for Hubbard = half-filling).
+    // The staggered charge s(t) = (1/n) sum_i (-1)^i <n_i> melts as the doublons spread;
+    // it must track ED e^{-iHt}. Real-time also conserves energy; imaginary time cools the
+    // CDW to the half-filling ground state. The Fermi statistics ride in the same MPO, so
+    // TDVP2 (which applies the MPO's H_eff) runs the fermionic dynamics unchanged.
+    std::printf("== Hubbard DYNAMICS: block TDVP2 (real-time vs ED + imag->GS) ==\n");
+    const int nof[4] = {0, 1, 1, 2};
+    for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,4.0},{1.0,8.0}}) {
+        const int n = 4;
+        auto mpo = build_hubbard_mpo(n, t, U);
+        const MatC& H = hubbard_ed_H(n, t, U);
+        int dim = (int)H.rows();
+        Eigen::SelfAdjointEigenSolver<MatC> es(H);
+        Eigen::VectorXd Eev = es.eigenvalues(); MatC V = es.eigenvectors();
+        // CDW basis index (site 0 = most significant base-4 digit) and each state's
+        // staggered particle number sum_i (-1)^i n_i.
+        int cdw = 0; for (int i = 0; i < n; ++i) cdw = cdw*4 + (i%2==0 ? 0 : 3);
+        std::vector<double> stagN(dim, 0.0);
+        for (int k = 0; k < dim; ++k) { int kk = k;
+            for (int i = n-1; i >= 0; --i) { stagN[k] += ((i%2==0)?1.0:-1.0) * nof[kk%4]; kk /= 4; } }
+        Eigen::VectorXcd amp = V.adjoint().col(cdw);   // <eigenstate | CDW>
+        auto stag_ed = [&](double tt) {
+            Eigen::VectorXcd psit = Eigen::VectorXcd::Zero(dim);
+            for (int b = 0; b < dim; ++b) psit += std::exp(Cxd(0,-Eev[b]*tt)) * amp[b] * V.col(b);
+            double s = 0; for (int k = 0; k < dim; ++k) s += std::norm(psit[k]) * stagN[k];
+            return s / n;
+        };
+        // real-time TDVP2 (dt small, chi=128 -> no truncation at n=4 -> Trotter-limited)
+        const double dt = 0.05; const int nst = 12;
+        auto rt = run_tdvp2_blocks(mpo, n, dt, nst, 128, 1e-12, /*imag*/false);
+        double smax = 0;
+        for (size_t k = 0; k < rt.stag.size(); ++k)
+            smax = std::max(smax, std::abs(rt.stag[k] - stag_ed(rt.times[k])));
+        double E_init = 2.0 * U;                 // <CDW|H|CDW> = U * (#doubly-occ) = 2U (n=4)
+        bool ok_rt = smax < 5e-3 && std::abs(rt.energy - E_init) < 1e-3;
+        // imaginary-time TDVP2 cools the CDW to the half-filling GS
+        double E_gs = hubbard_ed_halffill(n, t, U);
+        double E_it = run_tdvp2_blocks(mpo, n, 0.1, 400, 32, 1e-12, /*imag*/true).energy;
+        bool ok_it = std::abs(E_it - E_gs) < 1e-4;
+        std::printf("  t=%.1f U=%.1f N=%d : real-t max|s_block-s_ED|=%.1e  E_cons=%.4f(=%.1f) %s ;"
+                    " imag->GS=%.6f (ED %.6f) %s\n",
+                    t, U, n, smax, rt.energy, E_init, ok_rt?"OK":"FAIL", E_it, E_gs, ok_it?"OK":"FAIL");
+        fails += !(ok_rt && ok_it);
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }

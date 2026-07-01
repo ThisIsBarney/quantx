@@ -909,27 +909,24 @@ static std::map<int,Mat> apply_heff_1site(
                     int dR_bra = (int)Rblk.rows();
                     int q_R_bra = q_R_ket + delta[b_out];
 
-                    // s_bra fixed by q_R_bra = q_L_bra + qphys[s_bra]. qphys is
-                    // injective (one local state per Sz charge) for every model here
-                    // (spin-1/2, spin-1, Hubbard), so the first match is the only one.
-                    int s_bra = -1;
-                    for (int t = 0; t < (int)qphys.size(); ++t)
-                        if (q_L_bra + qphys[t] == q_R_bra) { s_bra = t; break; }
-                    if (s_bra < 0) continue;
-                    S w = mscal(W.W(b_in, b_out)(s_bra, s_ket));
-                    if (std::abs(w) < 1e-15) continue;
-                    int dR_s_bra = bra_cols[s_bra].width;
-                    if (dR_s_bra != dR_bra) continue;
-                    int col_b = bra_cols[s_bra].off;
-
+                    // ALL bra states s_bra with q_L_bra + qphys[s_bra] == q_R_bra
+                    // contribute. qphys is NOT injective for Hubbard (|up> and |dn> both
+                    // carry particle number +1), so several local states can share the
+                    // same charge -- taking only the first silently drops half the
+                    // single-site H_eff (which broke TDVP2 and single-site DMRG at d=4).
+                    // For the spin models (injective qphys) this loop matches exactly one
+                    // s_bra, so their behaviour is unchanged. T = L M R is s_bra-independent.
                     Mat T = LM * Rblk.transpose();   // (dL_bra, dR_bra)
-
                     auto it_out = out.find(q_L_bra);
-                    if (it_out == out.end()) {
-                        out[q_L_bra] = Mat::Zero(dL_bra, phys_total(bra_cols));
-                        it_out = out.find(q_L_bra);
+                    if (it_out == out.end())
+                        it_out = out.emplace(q_L_bra, Mat::Zero(dL_bra, phys_total(bra_cols))).first;
+                    for (int s_bra = 0; s_bra < (int)qphys.size(); ++s_bra) {
+                        if (q_L_bra + qphys[s_bra] != q_R_bra) continue;
+                        if (bra_cols[s_bra].width != dR_bra) continue;
+                        S w = mscal(W.W(b_in, b_out)(s_bra, s_ket));
+                        if (std::abs(w) < 1e-15) continue;
+                        it_out->second.block(0, bra_cols[s_bra].off, dL_bra, dR_bra).noalias() += w * T;
                     }
-                    it_out->second.block(0, col_b, dL_bra, dR_bra).noalias() += w * T;
                 }
             }
         }
@@ -3175,13 +3172,12 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     // Hybrid: two-site warm-up until the bond dimensions stabilise (the bond
     // distribution across QN sectors is what single-site can't adapt), then switch to
     // cheaper single-site refinement. Opt out with QX_DMRG_NO_SINGLESITE=1.
-    // The single-site phase is only validated for total_charge==0 (the Sz spin models);
-    // at total_charge!=0 (Hubbard half-filling) it CATASTROPHICALLY corrupts the state
-    // right after the two-site warm-up (energy jumps from the converged value back to
-    // the product state and never recovers -- the same nonzero-total-charge boundary
-    // assumption that broke the R[n] environment). Until it is generalized, fall back to
-    // the (correct) pure two-site path whenever total_charge!=0.
-    const bool use_ss = (std::getenv("QX_DMRG_NO_SINGLESITE") == nullptr) && total_charge == 0;
+    // Single-site runs for every model (opt out with QX_DMRG_NO_SINGLESITE=1). It used
+    // to corrupt the state at total_charge!=0 (Hubbard), but that was the non-injective-
+    // qphys bug in apply_heff_1site (|up> and |dn> share particle number, and only the
+    // first was summed) -- now fixed, so single-site converges the Hubbard GS to the same
+    // energy as the two-site path (checked vs the Lieb-Wu showcase).
+    const bool use_ss = (std::getenv("QX_DMRG_NO_SINGLESITE") == nullptr);
     int min_warmup = 2, max_warmup = n_sweeps;
     if (const char* w = std::getenv("QX_DMRG_WARMUP")) min_warmup = std::atoi(w);
     bool do_ss = false;
