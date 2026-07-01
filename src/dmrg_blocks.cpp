@@ -3172,13 +3172,16 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         if (prof) acc += std::chrono::duration<double>(clk::now() - t0).count();
     };
 
-    // Hybrid mode: a few two-site warm-up sweeps (to set the bond dimensions), then
-    // cheaper single-site refinement sweeps. Gated by QX_DMRG_SINGLESITE while it is
-    // being validated; the default remains pure two-site.
     // Hybrid: two-site warm-up until the bond dimensions stabilise (the bond
-    // distribution across QN sectors is what single-site can't adapt), then switch
-    // to cheaper single-site refinement. Gated by QX_DMRG_SINGLESITE while validating.
-    const bool use_ss = (std::getenv("QX_DMRG_NO_SINGLESITE") == nullptr);
+    // distribution across QN sectors is what single-site can't adapt), then switch to
+    // cheaper single-site refinement. Opt out with QX_DMRG_NO_SINGLESITE=1.
+    // The single-site phase is only validated for total_charge==0 (the Sz spin models);
+    // at total_charge!=0 (Hubbard half-filling) it CATASTROPHICALLY corrupts the state
+    // right after the two-site warm-up (energy jumps from the converged value back to
+    // the product state and never recovers -- the same nonzero-total-charge boundary
+    // assumption that broke the R[n] environment). Until it is generalized, fall back to
+    // the (correct) pure two-site path whenever total_charge!=0.
+    const bool use_ss = (std::getenv("QX_DMRG_NO_SINGLESITE") == nullptr) && total_charge == 0;
     int min_warmup = 2, max_warmup = n_sweeps;
     if (const char* w = std::getenv("QX_DMRG_WARMUP")) min_warmup = std::atoi(w);
     bool do_ss = false;
