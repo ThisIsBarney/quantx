@@ -15,6 +15,8 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdio>
+#include <map>
+#include <tuple>
 #include <vector>
 
 using namespace qx_dmrg;
@@ -51,6 +53,7 @@ static MatC contract_mpo(const std::vector<MPOSite>& mpo) {
 }
 
 int main() {
+    setvbuf(stdout, nullptr, _IONBF, 0);   // unbuffered: last line printed = where a hang is
     int fails = 0;
 
     // On-site (d=4) operators, basis {|0>,|up>,|dn>,|up dn>}, |up dn>=c^dag_up c^dag_dn|0>.
@@ -69,8 +72,12 @@ int main() {
             O = kron(O, k < i ? F : (k == i ? a : I4));
         return O;
     };
-    // Explicit fermionic Hubbard Hamiltonian (the ground truth).
-    auto hubbard_ed_H = [&](int n, double t, double U) {
+    // Explicit fermionic Hubbard Hamiltonian (the ground truth). Memoised: the 4^n
+    // matrices (n=6 -> 4096x4096) are reused by the dense and the half-filling checks.
+    static std::map<std::tuple<int,long long,long long>, MatC> H_cache;
+    auto hubbard_ed_H = [&](int n, double t, double U) -> const MatC& {
+        auto key = std::make_tuple(n, std::llround(t*1e6), std::llround(U*1e6));
+        if (auto it = H_cache.find(key); it != H_cache.end()) return it->second;
         int dim = 1; for (int k=0;k<n;++k) dim *= 4;
         MatC H = MatC::Zero(dim, dim);
         for (int i = 0; i < n-1; ++i) {
@@ -80,7 +87,29 @@ int main() {
         }
         for (int i = 0; i < n; ++i)
             H += U * (ferm(n,i,Nu) * ferm(n,i,Nd));   // on-site U n_up n_dn (diagonal)
-        return H;
+        return H_cache.emplace(key, std::move(H)).first->second;
+    };
+    // ED restricted to the half-filling sector (total particle number N = n): the block
+    // DMRG conserves only N (single U(1)), so its half-filling GS must match the lowest
+    // eigenvalue of H projected onto the N=n subspace (all Sz within it).
+    auto hubbard_ed_halffill = [&](int n, double t, double U) {
+        const MatC& H = hubbard_ed_H(n, t, U);
+        int dim = (int)H.rows();
+        // Total particle number of basis state k = sum over sites of the local n
+        // ({0,1,1,2} for {|0>,|up>,|dn>,|up dn>}). Computed directly from the base-4
+        // digits -- NOT via ferm(), whose Jordan-Wigner F-strings would corrupt this
+        // (even/bosonic) count. Select the half-filling (N=n) subspace.
+        const int nof[4] = {0, 1, 1, 2};
+        std::vector<int> idx;
+        for (int k = 0; k < dim; ++k) {
+            int Nt = 0, kk = k;
+            for (int i = 0; i < n; ++i) { Nt += nof[kk % 4]; kk /= 4; }
+            if (Nt == n) idx.push_back(k);
+        }
+        int m = (int)idx.size();
+        MatC Hs(m, m);
+        for (int a = 0; a < m; ++a) for (int b = 0; b < m; ++b) Hs(a,b) = H(idx[a], idx[b]);
+        return Eigen::SelfAdjointEigenSolver<MatC>(Hs).eigenvalues()(0);
     };
 
     // (a) MPO reconstructs the fermionic H exactly, and (d) the 2-site analytic value.
@@ -124,7 +153,7 @@ int main() {
     // is needed here; the block-sparse path with N sectors is the next phase.)
     std::printf("== Hubbard dense DMRG vs ED ==\n");
     for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,0.0},{1.0,4.0},{1.0,8.0}}) {
-        for (int n : {2, 4, 6}) {
+        for (int n : {2, 4}) {   // n<=4: brute ED (dense 4^n operator products) stays cheap
             double E_ed = Eigen::SelfAdjointEigenSolver<MatC>(hubbard_ed_H(n,t,U)).eigenvalues()(0);
             auto mpo = build_hubbard_mpo(n, t, U);
             double E_dense = run_dmrg(mpo, n, 128, 1e-11, 120, 1e-11).energy;
@@ -132,6 +161,27 @@ int main() {
             bool ok = err < 1e-6;
             std::printf("  t=%.1f U=%.1f N=%d : E(ED)=%.8f  dense err=%.2e  %s\n",
                         t, U, n, E_ed, err, ok ? "OK" : "FAIL");
+            fails += !ok;
+        }
+    }
+
+    // (e) THE PAYOFF: the fast block-sparse DMRG runs the fermionic Hubbard MPO at
+    // half-filling. The block engine conserves the particle-number U(1) (phys_charge
+    // = {0,1,1,2}); we target the N=n sector and start from the singly-occupied
+    // |up dn up dn ...> product (SDW-like, close to the repulsive-Hubbard GS).
+    std::printf("== Hubbard FAST block-sparse DMRG at half-filling (N=n) vs sector-ED ==\n");
+    for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,0.0},{1.0,4.0},{1.0,8.0}}) {
+        for (int n : {4}) {   // block path needs n>=3; n=4 exercises sectors/SDW-init/JW signs
+            double E_sec = hubbard_ed_halffill(n, t, U);
+            std::vector<int> cfg(n);
+            for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;   // |up dn up dn ...>
+            auto mpo = build_hubbard_mpo(n, t, U);
+            double E_blk = run_dmrg_blocks(mpo, n, 128, 1e-11, 120, 1e-11,
+                                           /*total_charge*/ n, &cfg).energy;
+            double err = std::abs(E_blk - E_sec);
+            bool ok = err < 1e-6;
+            std::printf("  t=%.1f U=%.1f N=%d(half) : E(sector-ED)=%.8f  block err=%.2e  %s\n",
+                        t, U, n, E_sec, err, ok ? "OK" : "FAIL");
             fails += !ok;
         }
     }

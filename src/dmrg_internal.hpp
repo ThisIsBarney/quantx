@@ -197,8 +197,14 @@ DMRGResult run_dmrg(const std::vector<MPOSite>& mpo, int n,
 // hidden-order signature): O = -<gs| Sz_i0 (prod_{i0<k<j0} e^{i pi Sz_k}) Sz_j0 |gs>.
 double string_order_blocks(const std::vector<MPOSite>& mpo, int n, int i0, int j0,
                            int max_bond, double cutoff, int n_sweeps);
+// total_charge: the fixed total U(1) charge of the target sector (0 for the Sz spin
+// models; e.g. half-filling N=n for Hubbard). init_config (optional): a local-state
+// index per site for the initial product state, summing to total_charge (else the
+// default |0,d-1,0,...> alternation is used).
 DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
-                           int max_bond, double cutoff, int n_sweeps, double tol);
+                           int max_bond, double cutoff, int n_sweeps, double tol,
+                           int total_charge = 0,
+                           const std::vector<int>* init_config = nullptr);
 
 // Block-sparse (Sz-symmetric) TDVP2 time evolution from the Neel state.
 struct TDVPBlockResult {
