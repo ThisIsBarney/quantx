@@ -116,6 +116,58 @@ std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J) {
     return mpo;
 }
 
+// Fermionic Hubbard chain (d=4, the first FERMIONIC model):
+//   H = -t sum_{i,sigma} (c^dag_{i sigma} c_{i+1 sigma} + h.c.) + U sum_i n_{i up} n_{i dn}
+// Local basis {|0>, |up>, |dn>, |up dn>} with |up dn> = c^dag_up c^dag_dn |0>. The
+// engine is bosonic (Sz/charge U(1) only, no anticommutation), so the Fermi statistics
+// are carried by the MPO itself via Jordan-Wigner: every operator that "travels" along
+// an MPO bond is dressed with the on-site parity F = (-1)^{n_up+n_dn} = diag(1,-1,-1,1),
+// and the on-site annihilators already carry the intra-site up-before-dn sign
+// (C_dn|up dn> = -|up>). One then gets the uniform matrix-tensor form
+//   c^dag_{i s} c_{i+1 s} = (C^dag_s F)_i (x) (C_s)_{i+1}    (both spins)
+// so the bosonic MPO contraction reproduces the fermionic H exactly (validated vs an
+// explicit Jordan-Wigner ED in qx_hubbard_test). The conserved U(1) is the particle
+// number N (phys_charge = {0,1,1,2}); derive_mpo_sym reads it exactly as it reads Sz.
+//
+// Bulk bond dim 6, lower-triangular: 0=done, {1,2,3,4}=the four travelling hop
+// half-terms (up-fwd, dn-fwd, up-bwd, dn-bwd), 5=start.
+std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U) {
+    const int chi = 6, d = 4;
+    Mat I4 = Mat::Identity(4, 4);
+    Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;  // (-1)^{n_up+n_dn}
+    Mat Nu = Mat::Zero(4, 4); Nu(1,1)=1; Nu(3,3)=1;                       // n_up
+    Mat Nd = Mat::Zero(4, 4); Nd(2,2)=1; Nd(3,3)=1;                       // n_dn
+    Mat Cup = Mat::Zero(4, 4); Cup(0,1)=1; Cup(2,3)=1;                    // annihilate up
+    Mat Cdn = Mat::Zero(4, 4); Cdn(0,2)=1; Cdn(1,3)=-1;                   // annihilate dn (on-site JW sign)
+    Mat Cupd = Cup.adjoint();  // create up: (1,0)=1,(3,2)=1
+    Mat Cdnd = Cdn.adjoint();  // create dn: (2,0)=1,(3,1)=-1
+
+    std::array<std::array<Mat, 6>, 6> W;
+    for (auto& row : W) for (auto& e : row) e = Mat::Zero(4, 4);
+    W[0][0] = I4;
+    W[5][5] = I4;
+    W[5][0] = U * (Nu * Nd);                 // on-site U n_up n_dn
+    W[5][1] = -t * (Cupd * F); W[1][0] = Cup;   // c^dag_{i up} c_{i+1 up}
+    W[5][2] = -t * (Cdnd * F); W[2][0] = Cdn;   // c^dag_{i dn} c_{i+1 dn}
+    W[5][3] = -t * (F * Cup ); W[3][0] = Cupd;  // h.c. (up): c^dag_{i+1 up} c_{i up}
+    W[5][4] = -t * (F * Cdn ); W[4][0] = Cdnd;  // h.c. (dn)
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d; site.phys_charge = {0, 1, 1, 2};   // particle number N
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 5 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
 // h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
 // 8-wide: each emitted operator completes at range 1, or passes one identity and
