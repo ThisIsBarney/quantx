@@ -26,8 +26,8 @@ int main(int argc, char** argv) {
     // real-time Néel quench (imag=false); endpoints only (stride=0); J=1, delta=1.
     auto r = run_tebd2_blocks(mpo, n, dt, steps, chi, 1e-12, /*imag*/false, /*stride*/0, 1.0, 1.0);
 
-    std::printf("d=%d n=%-3d chi_max=%-5d steps=%-4d dt=%.4f | max_bond=%-5d wall=%8.3f s | %.4f s/step | QX_GPU_MIN_BLK=%s QX_GPU_THETA_MINWORK=%s\n",
-                d, n, chi, steps, dt, r.max_bond, r.wall_time_s, r.wall_time_s/steps,
+    std::printf("d=%d n=%-3d chi_max=%-5d steps=%-4d dt=%.4f | max_bond=%-5d wall=%8.3f s | %.4f s/step | E=%.9f | QX_GPU_MIN_BLK=%s QX_GPU_THETA_MINWORK=%s\n",
+                d, n, chi, steps, dt, r.max_bond, r.wall_time_s, r.wall_time_s/steps, r.energy,
                 thr ? thr : "(unset->128)", thrT ? thrT : "(unset->2097152)");
     return 0;
 }

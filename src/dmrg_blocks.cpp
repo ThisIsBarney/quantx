@@ -98,14 +98,19 @@ static bool g_svd_prof = false;
 // (qx_gpu_svd_bench: d=64 0.28x, d=128 1.15x, d=256 5.6x, d=1024 45x); against an
 // OpenBLAS CPU baseline the crossover is a bit higher, so 128 is a safe default.
 // Override with env QX_GPU_MIN_BLK.
-static int gpu_min_blk() {
-    static int v = []() {
+static int gpu_min_blk(int d = 2) {
+    static int env = []() {
         const char* e = std::getenv("QX_GPU_MIN_BLK");
-        int d = 128;
-        if (e) { int x = std::atoi(e); if (x > 0) d = x; }
-        return d;
+        if (e) { int x = std::atoi(e); if (x > 0) return x; }
+        return 0;   // 0 = unset
     }();
-    return v;
+    if (env > 0) return env;   // explicit override applies to all local dims
+    // d>2 (spin-1, ...) fragments chi across more Sz sectors -> more, smaller per-sector
+    // blocks. A low crossover then floods the single GPU with many MEDIUM blocks that
+    // serialize on the one device (measured: slower than CPU). Routing only the FEW
+    // dominant blocks per bond to the GPU instead lets it overlap the CPU swarm -- the
+    // big win at large chi. d=2's larger blocks keep the tuned 128 crossover.
+    return d > 2 ? 256 : 128;
 }
 // Minimum GEMM work (n_row * n_keep_mid * n_col) for a theta block to be built on
 // the GPU (Phase B residency). Both spin-sector GEMMs of the block run on-device
@@ -1424,7 +1429,7 @@ static BlockSVDResult block_svd_truncate(
         // Large blocks -> GPU (cuSOLVER) Gram-eigensolve; the dominant central-Sz
         // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
         // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
-        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk() &&
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk((int)qphys.size()) &&
             thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s, allow_fp32))
             { g_tebd_ngpu++; continue; }
 #endif

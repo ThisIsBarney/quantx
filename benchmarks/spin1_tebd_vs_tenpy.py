@@ -79,7 +79,11 @@ def quantx(chi, steps, gpu):
     for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[_v] = _NCORE
     if gpu:
-        env["QX_GPU_MIN_BLK"] = "64"; env["QX_GPU_THETA_MINWORK"] = "131072"
+        # Route only the FEW dominant SVD blocks per bond to the GPU (the d-aware
+        # default crossover, 256 for d=3), so the 4090 overlaps the CPU swarm instead
+        # of serializing many medium blocks on one device. Theta stays on the CPU
+        # (its GPU crossover is higher for the fragmented spin-1 bond).
+        env.pop("QX_GPU_MIN_BLK", None); env["QX_GPU_THETA_MINWORK"] = "999999999999"
     else:
         env["QX_GPU_MIN_BLK"] = "999999"; env["QX_GPU_THETA_MINWORK"] = "999999999999"
     out = subprocess.run([QX_BENCH, str(N), str(chi), str(steps), str(DT), "3"],
