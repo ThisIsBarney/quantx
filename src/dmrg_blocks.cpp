@@ -87,6 +87,9 @@ static long long g_block_matvecs = 0;
 // TEBD phase profiling (set env QX_TEBD_PROFILE=1). Seconds per phase.
 static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb = 0;
 static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0, g_tebd_ngpu = 0;
+// fine SVD split (QX_SVD_PROFILE=1, run single-thread): Gram-GEMM / eigensolve / back.
+static double g_svd_gemm = 0, g_svd_eig = 0, g_svd_back = 0;
+static bool g_svd_prof = false;
 
 #ifdef QX_USE_CUDA
 // Minimum min(rows,cols) for a block to be routed to the GPU SVD (Phase A). Below
@@ -95,14 +98,19 @@ static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0, g_tebd
 // (qx_gpu_svd_bench: d=64 0.28x, d=128 1.15x, d=256 5.6x, d=1024 45x); against an
 // OpenBLAS CPU baseline the crossover is a bit higher, so 128 is a safe default.
 // Override with env QX_GPU_MIN_BLK.
-static int gpu_min_blk() {
-    static int v = []() {
+static int gpu_min_blk(int d = 2) {
+    static int env = []() {
         const char* e = std::getenv("QX_GPU_MIN_BLK");
-        int d = 128;
-        if (e) { int x = std::atoi(e); if (x > 0) d = x; }
-        return d;
+        if (e) { int x = std::atoi(e); if (x > 0) return x; }
+        return 0;   // 0 = unset
     }();
-    return v;
+    if (env > 0) return env;   // explicit override applies to all local dims
+    // d>2 (spin-1, ...) fragments chi across more Sz sectors -> more, smaller per-sector
+    // blocks. A low crossover then floods the single GPU with many MEDIUM blocks that
+    // serialize on the one device (measured: slower than CPU). Routing only the FEW
+    // dominant blocks per bond to the GPU instead lets it overlap the CPU swarm -- the
+    // big win at large chi. d=2's larger blocks keep the tuned 128 crossover.
+    return d > 2 ? 256 : 128;
 }
 // Minimum GEMM work (n_row * n_keep_mid * n_col) for a theta block to be built on
 // the GPU (Phase B residency). Both spin-sector GEMMs of the block run on-device
@@ -1189,7 +1197,12 @@ struct BlockSVDResult {
 static void thin_svd_gram(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     const int m = (int)M.rows(), nc = (int)M.cols();
     if (m <= nc) {
-        Eigen::SelfAdjointEigenSolver<Mat> es(M * M.adjoint());   // m x m
+        using _clk = std::chrono::steady_clock; _clk::time_point _t;
+        if (g_svd_prof) _t = _clk::now();
+        Mat G = M * M.adjoint();                                  // m x m
+        if (g_svd_prof) { g_svd_gemm += std::chrono::duration<double>(_clk::now()-_t).count(); _t=_clk::now(); }
+        Eigen::SelfAdjointEigenSolver<Mat> es(G);
+        if (g_svd_prof) { g_svd_eig += std::chrono::duration<double>(_clk::now()-_t).count(); _t=_clk::now(); }
         const RVec& ev = es.eigenvalues();                        // ascending
         const Mat&  Q  = es.eigenvectors();
         U.resize(m, m); sv.resize(m);
@@ -1204,6 +1217,7 @@ static void thin_svd_gram(const Mat& M, Mat& U, Mat& V, RVec& sv) {
             if (sv(j) > 1e-14 * smax) V.col(j) = MhU.col(j) / sv(j);
             else V.col(j).setZero();
         }
+        if (g_svd_prof) g_svd_back += std::chrono::duration<double>(_clk::now()-_t).count();
     } else {
         Eigen::SelfAdjointEigenSolver<Mat> es(M.adjoint() * M);   // n x n
         const RVec& ev = es.eigenvalues();
@@ -1271,6 +1285,44 @@ static bool thin_svd_lapacke(const Mat& M, Mat& U, Mat& V, RVec& sv) {
     }
     return true;
 }
+// Direct thin SVD via LAPACK xgesdd (divide-and-conquer). A SINGLE optimized call
+// (no Gram matrix, no separate eigensolve + back-transform), and numerically better
+// (no condition-number squaring). gesdd is a *different* routine from the xsyevd/
+// xheevd that returns wrong results on this box's OpenBLAS, so it is safe to use.
+// Returns M = U diag(sv) V^dag with U (m x k), V (n x k), k=min(m,n).
+static bool thin_svd_gesdd(const Mat& M, Mat& U, Mat& V, RVec& sv) {
+    const int m = (int)M.rows(), nc = (int)M.cols(), k = std::min(m, nc);
+    if (k == 0) { U.resize(m,0); V.resize(nc,0); sv.resize(0); return true; }
+    Mat A = M;                                   // xgesdd overwrites A (col-major)
+    U.resize(m, k); sv.resize(k);
+    Mat VT(k, nc);
+    lapack_int info;
+    if constexpr (std::is_same_v<S, Cx>)
+        info = LAPACKE_zgesdd(LAPACK_COL_MAJOR, 'S', (lapack_int)m, (lapack_int)nc,
+                  reinterpret_cast<lapack_complex_double*>(A.data()), (lapack_int)m, sv.data(),
+                  reinterpret_cast<lapack_complex_double*>(U.data()), (lapack_int)m,
+                  reinterpret_cast<lapack_complex_double*>(VT.data()), (lapack_int)k);
+    else
+        info = LAPACKE_dgesdd(LAPACK_COL_MAJOR, 'S', (lapack_int)m, (lapack_int)nc,
+                  reinterpret_cast<double*>(A.data()), (lapack_int)m, sv.data(),
+                  reinterpret_cast<double*>(U.data()), (lapack_int)m,
+                  reinterpret_cast<double*>(VT.data()), (lapack_int)k);
+    if (info != 0) return false;
+    V = VT.adjoint();                            // V (nc x k); V.col(j) = conj(VT.row(j))
+    return true;
+}
+// Per-block min-dim at/above which a block uses the direct LAPACK xgesdd instead of
+// the Gram-eigensolve. gesdd's optimized divide-and-conquer beats Eigen's per-block
+// eigensolve for LARGE blocks (measured ~1.2x at chi=512); for small/rectangular
+// blocks the Gram trick (eigensolve of the smaller dimension, lower fixed overhead)
+// still wins, so keep them on Gram. Tunable with QX_GESDD_MIN.
+static int gesdd_min() {
+    static int v = []() {
+        const char* e = std::getenv("QX_GESDD_MIN");
+        return (e && std::atoi(e) > 0) ? std::atoi(e) : 160;   // tuned crossover
+    }();
+    return v;
+}
 // Minimum block min-dim to route the Gram eigensolve to LAPACK xsyevd/xheevd.
 // DEFAULT: off. The conda-forge OpenBLAS on this box returns WRONG results from
 // LAPACKE_dsyevd/zheevd at some block sizes -- reproduced as a corrupted real DMRG
@@ -1331,7 +1383,24 @@ static BlockSVDResult block_svd_truncate(
     std::vector<int> svq;
     std::vector<const Mat*> svblk;
     for (auto& [q_mid, blk] : theta)
-        if (blk.size() != 0) { svq.push_back(q_mid); svblk.push_back(&blk); }
+        // Skip empty AND all-zero blocks: a zero Schmidt block carries no weight, so
+        // its SVD (sv=0, truncated away) is pure overhead. bt_expand_theta zero-fills
+        // many reachable-but-empty sectors each step; the gate fills only some, leaving
+        // a swarm of zero blocks. (They re-expand next step, so no state is lost.)
+        if (blk.size() != 0 && blk.squaredNorm() > 1e-24) { svq.push_back(q_mid); svblk.push_back(&blk); }
+    // Longest-processing-time-first: SVD the largest blocks first so the dynamic
+    // schedule does not strand the dominant central-Sz eigensolve at the very end
+    // while the other threads idle (the spin-1 swarm has one big block + many tiny).
+    if (svq.size() > 2) {
+        std::vector<int> ord(svq.size());
+        for (int i = 0; i < (int)ord.size(); ++i) ord[i] = i;
+        auto wk = [&](int a){ long long r = svblk[a]->rows(), c = svblk[a]->cols();
+                              return std::min(r,c) * std::min(r,c) * std::max(r,c); };  // ~ SVD flops
+        std::stable_sort(ord.begin(), ord.end(), [&](int a, int b){ return wk(a) > wk(b); });
+        std::vector<int> q2(svq.size()); std::vector<const Mat*> b2(svq.size());
+        for (int i = 0; i < (int)ord.size(); ++i) { q2[i] = svq[ord[i]]; b2[i] = svblk[ord[i]]; }
+        svq.swap(q2); svblk.swap(b2);
+    }
     g_tebd_nsvd += (long long)svq.size();
     for (auto* p : svblk) g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)std::min(p->rows(), p->cols()));
     std::vector<SVDBlk> sb(svq.size());
@@ -1349,7 +1418,10 @@ static BlockSVDResult block_svd_truncate(
     // condition-number stable and keeps the state canonical. Used by the DMRG
     // ground-state path; the real-time dynamics keep the fast Gram/GPU route (no
     // exact degeneracy there, and speed matters).
-    #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
+    // Run serial when QX_SVD_PROFILE is on: the fine gram-split accumulators
+    // (g_svd_gemm/eig/back, plain doubles in thin_svd_gram) are +='d in this loop, so
+    // parallel profiling would both race them and make the split meaningless.
+    #pragma omp parallel for schedule(dynamic) if(svq.size() > 1 && !g_svd_prof)
     for (int i = 0; i < (int)svq.size(); ++i) {
         if (stable) {
             Eigen::BDCSVD<Mat> bsvd(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -1360,16 +1432,23 @@ static BlockSVDResult block_svd_truncate(
         // Large blocks -> GPU (cuSOLVER) Gram-eigensolve; the dominant central-Sz
         // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
         // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
-        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk() &&
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk((int)qphys.size()) &&
             thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s, allow_fp32))
-            { g_tebd_ngpu++; continue; }
+            { _Pragma("omp atomic") g_tebd_ngpu++; continue; }
 #endif
 #ifdef QX_HAS_LAPACKE
-        // Large blocks: LAPACK xgesdd (OpenBLAS) beats the Eigen Gram eigensolve;
-        // small blocks keep the Gram path (lower overhead). Fall back on error.
+        // Direct LAPACK xgesdd for LARGE blocks: its divide-and-conquer beats Eigen's
+        // per-block Gram eigensolve (the spin-1 large-chi bottleneck) and is condition-
+        // stable. Small/rectangular blocks stay on the Gram trick (it eigensolves the
+        // smaller dimension, with lower fixed overhead).
+        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gesdd_min() &&
+            thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+            { _Pragma("omp atomic") g_tebd_nlapacke++; continue; }
+        // Gram eigensolve via LAPACK xsyevd/xheevd -- disabled by default (wrong
+        // results on this box's OpenBLAS); only for blocks >= lapacke_min.
         if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= lapacke_min() &&
             thin_svd_lapacke(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
-            { g_tebd_nlapacke++; continue; }
+            { _Pragma("omp atomic") g_tebd_nlapacke++; continue; }
 #endif
         thin_svd_gram(*svblk[i], sb[i].U, sb[i].V, sb[i].s);
     }
@@ -1396,6 +1475,11 @@ static BlockSVDResult block_svd_truncate(
         }
     }
     n_keep = std::max(1, std::min(n_keep, max_bond));
+    // Guard the degenerate all-zero theta: the zero-block skip above can leave all_sv
+    // empty (unreachable for a normalized MPS -- total norm ~1 guarantees a surviving
+    // block -- but the skip removed that invariant), and the max(1,...) would otherwise
+    // index all_sv[0] below. Clamp so the keep/trunc loops are no-ops on an empty spectrum.
+    n_keep = std::min(n_keep, (int)all_sv.size());
     // Per-value floor (matches e.g. tenpy's svd_min): drop Schmidt values below
     // cutoff*||theta||.  Without this, the cumulative criterion above keeps a long
     // tail of negligible states, inflating the bond dimension and doing wasted
@@ -2066,6 +2150,8 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     BMPS s = cps_init(mpo, n, neel, qphys);
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
     if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0; }
+    g_svd_prof = (std::getenv("QX_SVD_PROFILE") != nullptr);
+    if (g_svd_prof) { g_svd_gemm=g_svd_eig=g_svd_back=0; }
 
     TDVP2Out out;
     auto t0 = clk::now();
@@ -2085,6 +2171,11 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
             (int)g_tebd_maxblk, g_tebd_nsvd);
         std::fprintf(stderr, "   nsvd=%lld nlapacke=%lld ngpu=%lld (large blocks: LAPACK zheevd / GPU cuSOLVER)\n",
                      g_tebd_nsvd, g_tebd_nlapacke, g_tebd_ngpu);
+    }
+    if (g_svd_prof) {
+        double st = g_svd_gemm+g_svd_eig+g_svd_back;
+        std::fprintf(stderr, "   [SVD split] gram-gemm=%.3f(%.0f%%) eigensolve=%.3f(%.0f%%) back=%.3f(%.0f%%)  (of %.3fs gram-SVD)\n",
+            g_svd_gemm,100*g_svd_gemm/st, g_svd_eig,100*g_svd_eig/st, g_svd_back,100*g_svd_back/st, st);
     }
     rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
     out.energy = bt_energy(s, mpo);

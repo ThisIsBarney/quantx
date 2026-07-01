@@ -110,33 +110,43 @@ finite-T spectroscopy now available for spin-1.
 
 `benchmarks/spin1_tebd_vs_tenpy.py` times the **same** physics (spin-1 Néel-quench
 TEBD2, `H = Σ S·S`, Sz-conserving) against [TeNPy](https://tenpy.readthedocs.io) on
-one 20-core box, **each tool at its own optimum**: TeNPy single-thread (its TEBD does
-not parallelize — all cores *slow it ~3×*), QuantX native multi-thread (its
-block-sparse SVDs are OpenMP-parallel). min-of-2.
+one 20-core box + one RTX 4090, **each tool at its own optimum**: TeNPy single-thread
+(its TEBD does not parallelize — 20 cores *slow it ~3×*), QuantX native multi-thread,
+and QuantX with GPU acceleration (a capability TeNPy's TEBD does not have). min-of-N;
+the real-time conserved energy is **identical to 9 digits** across all three paths
+(`E = −30.998934…`), so this is one computation timed three ways, not three programs.
 
-| N=32, χ | TeNPy (best = 1 thread) | QuantX (best = native MT) | QuantX 1 thread | **QuantX vs TeNPy (best-vs-best)** |
-|---|---|---|---|---|
-| 256 | 16.3 s | 11.8 s | 17.9 s | **1.38×** |
-| 512 | 77.9 s | 76.2 s | 131 s  | **1.02× (a tie)** |
+| N=32, χ | TeNPy (1 thread) | QuantX CPU (MT) | QuantX +GPU | CPU vs TeNPy | **+GPU vs TeNPy** |
+|---|---|---|---|---|---|
+| 256 | 15.9 s | 10.9 s | 10.9 s\* | 1.46× | 1.46× |
+| 512 | 76.0 s | 58.6 s | ~37 s | 1.30× | **≈2.0×** |
 
-**Honest read.** Best-vs-best, QuantX leads by 1.38× at χ=256 but the margin shrinks
-to a *tie* by χ=512. And **per single core QuantX is currently slower than TeNPy**
-(17.9 vs 16.3 at χ=256; 131 vs 78 at χ=512) — it only stays ahead/even via
-parallelism, which itself scales modestly (~1.6× from 20 cores). Comparing against
-TeNPy run on 20 cores would be meaningless (TeNPy is fastest on one core), so we do
-not.
+<sub>\* at χ=256 the largest Sz block (161) is below the GPU crossover, so the GPU
+stays idle and QuantX runs pure-CPU — the GPU speed-up is a large-χ feature.</sub>
 
-**Why, and the headroom (a profile, not hand-waving).** `QX_TEBD_PROFILE=1` on the
-χ=256 spin-1 step: **91 % of the time is the SVD**, spread over **~23 600 tiny
-per-Sz-sector SVDs** (largest block only 161), all on the Gram-eigensolve path. A
-spin-1 bond fragments χ across many Sz sectors, so the work is a *swarm of tiny
-SVDs* where per-call overhead (and OpenBLAS vs TeNPy's MKL) dominates — the same
-fragmentation that keeps the **GPU below its crossover** (its per-sector blocks are
-too small to amortize transfer; the GPU win is a critical-`d=2`-chain feature). This
-is an *implementation* gap, not a fundamental one: batching the small SVDs, a faster
-small-matrix SVD, and better parallel load-balancing are concrete, in-progress levers
-to turn the tie into a decisive lead. We state where we stand rather than cherry-pick
-a flattering core count.
+**Two honest reads.** *Same silicon (CPU vs CPU):* QuantX leads TeNPy's best by
+**1.30–1.46×** — its per-Sz-sector block SVDs are OpenMP-parallel while TeNPy's TEBD is
+single-threaded (giving TeNPy all 20 cores *slows it*, so we don't). *Full capability
+(QuantX's GPU vs TeNPy's CPU-only TEBD):* parity at χ=256 (there the largest block is
+below the GPU crossover, so the GPU is idle) rising to **≈2.0× at χ=512** — the speed-up
+*turns on with χ*, because the GPU engages only once the dominant central-Sz SVD (the
+O(χ³) bottleneck) grows past the crossover, which is exactly the block the 4090
+accelerates. Larger χ should extend the trend.
+
+**How the GPU helps a *fragmented* spin-1 bond (the non-obvious part).** A spin-1 bond
+splits χ across many Sz sectors, so each bond's SVD is a *swarm of small blocks plus
+one big central block*. Handing the **whole** swarm to the GPU loses — the many medium
+blocks serialize on the single device, transfer-bound (this is what earlier read as
+"spin-1 stays below the GPU crossover"). The fix is to route **only the one or two
+dominant blocks per bond** to the GPU (a `d`-aware crossover, 256 for spin-1) so it
+**overlaps** the CPU, which clears the tail blocks in parallel. That lifts the SVD past
+its ~2× parallel ceiling: the sweep is sequential over bonds and each bond's lone big
+block otherwise runs single-threaded (this box's conda-forge OpenBLAS has broken
+multi-threaded LAPACK, so multi-threading *that* block is not an option — measured
+7–10× *slower*), so offloading it to the GPU is what turns the former χ=512 tie into a
+**2× end-to-end lead**. The pure-CPU path keeps a faster large-block route too — direct
+LAPACK `xgesdd` (divide-and-conquer) for blocks ≥160, the Gram-eigensolve trick below
+that — which is the 1.30× CPU-vs-CPU number above.
 
 ## Scope and limits
 
