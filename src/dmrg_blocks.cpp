@@ -3033,6 +3033,21 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
     const std::vector<int> delta = derive_mpo_sym(mpo).delta;
     const std::vector<int>& qphys = mpo[0].phys_charge;
     const int d = mpo[0].d;
+    // Validate a caller-supplied initial product config: correct length, in-range local
+    // state indices, and a total charge equal to total_charge -- otherwise the start
+    // would sit in the wrong sector (or index qphys out of bounds) and silently mislead.
+    if (init_config) {
+        if ((int)init_config->size() != n)
+            throw std::runtime_error("run_dmrg_blocks: init_config length must equal n");
+        int qsum = 0;
+        for (int s : *init_config) {
+            if (s < 0 || s >= d)
+                throw std::runtime_error("run_dmrg_blocks: init_config state index out of range [0,d)");
+            qsum += qphys[s];
+        }
+        if (qsum != total_charge)
+            throw std::runtime_error("run_dmrg_blocks: sum of init_config charges != total_charge");
+    }
     // Use the numerically-stable direct SVD for the ground-state truncation so a
     // DMRG that lands on an exactly degenerate ground state (e.g. a frustrated
     // chain at a level crossing) stays canonical/variational. Opt back into the
