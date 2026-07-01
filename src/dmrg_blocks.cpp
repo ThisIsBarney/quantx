@@ -1418,7 +1418,10 @@ static BlockSVDResult block_svd_truncate(
     // condition-number stable and keeps the state canonical. Used by the DMRG
     // ground-state path; the real-time dynamics keep the fast Gram/GPU route (no
     // exact degeneracy there, and speed matters).
-    #pragma omp parallel for schedule(dynamic) if(svq.size() > 1)
+    // Run serial when QX_SVD_PROFILE is on: the fine gram-split accumulators
+    // (g_svd_gemm/eig/back, plain doubles in thin_svd_gram) are +='d in this loop, so
+    // parallel profiling would both race them and make the split meaningless.
+    #pragma omp parallel for schedule(dynamic) if(svq.size() > 1 && !g_svd_prof)
     for (int i = 0; i < (int)svq.size(); ++i) {
         if (stable) {
             Eigen::BDCSVD<Mat> bsvd(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
@@ -1431,7 +1434,7 @@ static BlockSVDResult block_svd_truncate(
         // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
         if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk((int)qphys.size()) &&
             thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s, allow_fp32))
-            { g_tebd_ngpu++; continue; }
+            { _Pragma("omp atomic") g_tebd_ngpu++; continue; }
 #endif
 #ifdef QX_HAS_LAPACKE
         // Direct LAPACK xgesdd for LARGE blocks: its divide-and-conquer beats Eigen's
@@ -1440,12 +1443,12 @@ static BlockSVDResult block_svd_truncate(
         // smaller dimension, with lower fixed overhead).
         if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gesdd_min() &&
             thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
-            { g_tebd_nlapacke++; continue; }
+            { _Pragma("omp atomic") g_tebd_nlapacke++; continue; }
         // Gram eigensolve via LAPACK xsyevd/xheevd -- disabled by default (wrong
         // results on this box's OpenBLAS); only for blocks >= lapacke_min.
         if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= lapacke_min() &&
             thin_svd_lapacke(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
-            { g_tebd_nlapacke++; continue; }
+            { _Pragma("omp atomic") g_tebd_nlapacke++; continue; }
 #endif
         thin_svd_gram(*svblk[i], sb[i].U, sb[i].V, sb[i].s);
     }
@@ -1472,6 +1475,11 @@ static BlockSVDResult block_svd_truncate(
         }
     }
     n_keep = std::max(1, std::min(n_keep, max_bond));
+    // Guard the degenerate all-zero theta: the zero-block skip above can leave all_sv
+    // empty (unreachable for a normalized MPS -- total norm ~1 guarantees a surviving
+    // block -- but the skip removed that invariant), and the max(1,...) would otherwise
+    // index all_sv[0] below. Clamp so the keep/trunc loops are no-ops on an empty spectrum.
+    n_keep = std::min(n_keep, (int)all_sv.size());
     // Per-value floor (matches e.g. tenpy's svd_min): drop Schmidt values below
     // cutoff*||theta||.  Without this, the cumulative criterion above keeps a long
     // tail of negligible states, inflating the bond dimension and doing wasted

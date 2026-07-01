@@ -127,9 +127,11 @@ stays idle and QuantX runs pure-CPU — the GPU speed-up is a large-χ feature.<
 **Two honest reads.** *Same silicon (CPU vs CPU):* QuantX leads TeNPy's best by
 **1.30–1.46×** — its per-Sz-sector block SVDs are OpenMP-parallel while TeNPy's TEBD is
 single-threaded (giving TeNPy all 20 cores *slows it*, so we don't). *Full capability
-(QuantX's GPU vs TeNPy's CPU-only TEBD):* **≈2.0× at χ=512**, and the margin widens
-with χ — the dominant central-Sz SVD is the O(χ³) bottleneck, exactly what the 4090
-accelerates.
+(QuantX's GPU vs TeNPy's CPU-only TEBD):* parity at χ=256 (there the largest block is
+below the GPU crossover, so the GPU is idle) rising to **≈2.0× at χ=512** — the speed-up
+*turns on with χ*, because the GPU engages only once the dominant central-Sz SVD (the
+O(χ³) bottleneck) grows past the crossover, which is exactly the block the 4090
+accelerates. Larger χ should extend the trend.
 
 **How the GPU helps a *fragmented* spin-1 bond (the non-obvious part).** A spin-1 bond
 splits χ across many Sz sectors, so each bond's SVD is a *swarm of small blocks plus
