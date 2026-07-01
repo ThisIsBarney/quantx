@@ -10,13 +10,16 @@ Each tool is run AT ITS OWN OPTIMUM on the same box (the fair "best vs best"):
     TeNPy's TEBD does not parallelize (MKL multi-thread *hurts* it ~3x: oversubscription
     on the many small per-Sz-sector SVDs).
   * QuantX qx_tebd_bench (d=3): native MULTI-thread -- its OpenMP block-sparse SVD
-    parallelism is exactly what scales. QX-CPU (GPU off) is the headline; QX-GPU is kept
-    for honesty (the GPU stays BELOW its per-sector crossover for spin-1 -- the bond
-    spreads over many charge sectors -- so on-device does not help; the GPU win is a d=2
-    critical-chain feature).
+    parallelism is exactly what scales (QX-CPU). QX-GPU additionally routes the FEW
+    dominant SVD blocks per bond to the 4090 (a d-aware crossover, 256 for spin-1) so it
+    OVERLAPS the CPU swarm -- the big win at large chi. (An earlier version flooded the
+    device at min_blk=64 and lost; only the dominant-block routing wins for the
+    fragmented spin-1 bond.)
 
-Honest finding: QuantX leads TeNPy's best by ~1.1-1.35x for spin-1 dynamics on this box,
-and by ~3-4x if TeNPy is also given all cores (it degrades while QuantX scales).
+Honest finding (this box, N=32): CPU-vs-CPU QuantX leads TeNPy's best by 1.30-1.46x;
+with the GPU (a capability TeNPy's TEBD lacks) ~2.0x at chi=512, widening with chi. The
+conserved energy matches to 9 digits across all three, so it is one computation timed
+three ways. (Give TeNPy all 20 cores and it degrades ~3x -- meaningless, so we don't.)
 
 Run (qxbench env, for tenpy + MKL):
   conda activate qxbench
