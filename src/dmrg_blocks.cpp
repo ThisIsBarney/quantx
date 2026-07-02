@@ -1951,15 +1951,20 @@ static void apply_gate_theta(std::map<int,Mat>& theta, const BondSpace& bsL,
 // ---- General (any local dimension) two-site gate -----------------------------
 // The d=2 apply_gate_theta hand-codes the four spin-1/2 states. For d>2 we build the
 // gate from the MPO and apply it Sz-block-wise (below). The bond Hamiltonian of a
-// uniform lower-triangular nearest-neighbour MPO is h2 = sum_b W(start,b) (x) W(b,done),
-// with start = chi-1 (the emit row) and done = 0 (the complete column): the carry-
-// identity channels (b=done and b=start) contribute zero here, leaving exactly the
-// one-bond term. The gate is G = exp(tau * h2). NOTE: assumes a pure two-site
-// coupling with NO on-site term -- an on-site field/anisotropy sits at W(start,done)
-// and would be double-counted into both sites of every bond; the shipped d>2 model
-// (spin-1 Heisenberg) has W(start,done)=0. Add on-site handling before using a
-// field / single-ion (D Sz^2) model on the d>2 TEBD path.
-static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau) {
+// uniform lower-triangular nearest-neighbour MPO splits as
+//   h_bond = sum_{b != start,done} W(start,b) (x) W(b,done)   (the pure two-site term)
+//   h_site = W(start,done)                                    (the on-site term, if any)
+// with start = chi-1 (the emit row) and done = 0 (the complete column). The b=done
+// carry channel is h_site (x) I (the LEFT site's on-site term) and b=start is
+// I (x) h_site (the RIGHT site's): summing them blindly counts every interior site's
+// on-site term TWICE over the bond sweep (each interior site sits in two bonds). So
+// the gate takes boundary weights (cL, cR): h2 = h_bond + cL h_site(x)I + cR I(x)h_site,
+// 1/2 for interior sites, 1 at the chain ends. Models with no on-site term (spin
+// Heisenberg/XXZ: W(start,done)=0) are weight-independent -- bit-identical to the old
+// single-gate path. Hubbard's on-site U n_up n_dn is the first model that needs this.
+// The gate is G = exp(tau * h2).
+static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau,
+                               double cL = 0.5, double cR = 0.5) {
     int bulk = -1, w = 0;
     for (int i = 0; i < (int)mpo.size(); ++i)
         if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l >= w) { w = mpo[i].chi_l; bulk = i; }
@@ -1969,6 +1974,7 @@ static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau) {
     const int start = chi - 1, done = 0;
     Eigen::MatrixXcd h2 = Eigen::MatrixXcd::Zero(d2, d2);
     for (int b = 0; b < chi; ++b) {
+        if (b == start || b == done) continue;   // carry channels -> h_site, weighted below
         const Mat& Wl = W.W(start, b);   // d x d (left site)
         const Mat& Wr = W.W(b, done);    // d x d (right site)
         for (int s1 = 0; s1 < d; ++s1)
@@ -1977,6 +1983,13 @@ static Mat build_gate_from_mpo(const std::vector<MPOSite>& mpo, Cx tau) {
                     for (int s2p = 0; s2p < d; ++s2p)
                         h2(s1*d + s2, s1p*d + s2p) += Wl(s1, s1p) * Wr(s2, s2p);
     }
+    const Mat& hs = W.W(start, done);    // on-site term (zero for the spin models)
+    for (int s1 = 0; s1 < d; ++s1)
+        for (int s1p = 0; s1p < d; ++s1p)
+            for (int s2 = 0; s2 < d; ++s2) {
+                h2(s1*d + s2, s1p*d + s2) += cL * hs(s1, s1p);   // h_site (x) I
+                h2(s2*d + s1, s2*d + s1p) += cR * hs(s1, s1p);   // I (x) h_site
+            }
     h2 = 0.5 * (h2 + h2.adjoint().eval());   // symmetrize away FP non-Hermiticity
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> es(h2);
     Eigen::ArrayXcd ev = (tau * es.eigenvalues().array().cast<Cx>()).exp();
@@ -2048,10 +2061,20 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
     const int d = (mpo && !mpo->empty()) ? (*mpo)[0].d : 2;
     const std::vector<int>& qphys = (d > 2) ? (*mpo)[0].phys_charge : SPIN_HALF_CHARGES;
     const Gate g = (d == 2) ? build_xxz_gate(J, delta, tau) : Gate{};
-    Mat Ggen; if (d > 2) Ggen = build_gate_from_mpo(*mpo, tau);
-    auto apply_gate = [&](std::map<int,Mat>& th, const BondSpace& bL, const BondSpace& bR) {
-        if (d == 2) apply_gate_theta(th, bL, bR, g);
-        else        apply_gate_theta_general(th, bL, bR, Ggen, d, qphys);
+    // d>2: three gate variants weight the on-site term (h_site = W(start,done)) by the
+    // sites' bond membership -- 1/2 interior, 1 at a chain end (bond 0 owns site 0
+    // fully; bond n-2 owns site n-1 fully). Models without an on-site term (spin-1
+    // Heisenberg) make all three identical -- bit-identical to the old single gate.
+    Mat Gmid, Glft, Grgt;
+    if (d > 2) {
+        Gmid = build_gate_from_mpo(*mpo, tau, 0.5, 0.5);
+        Glft = build_gate_from_mpo(*mpo, tau, 1.0, (n == 2) ? 1.0 : 0.5);
+        Grgt = build_gate_from_mpo(*mpo, tau, 0.5, 1.0);
+    }
+    auto apply_gate = [&](std::map<int,Mat>& th, const BondSpace& bL, const BondSpace& bR, int i) {
+        if (d == 2) { apply_gate_theta(th, bL, bR, g); return; }
+        const Mat& G = (i == 0) ? Glft : (i == n - 2) ? Grgt : Gmid;
+        apply_gate_theta_general(th, bL, bR, G, d, qphys);
     };
     const std::map<int,RVec> no_sv;
     auto& A = s.A; auto& bond = s.bond;
@@ -2063,7 +2086,7 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
         auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
         bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         ptick(g_tebd_theta, tt); tt = pclk::now();
-        apply_gate(theta, bond[i], bond[i+2]);
+        apply_gate(theta, bond[i], bond[i+2], i);
         ptick(g_tebd_gate, tt); tt = pclk::now();
         auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32, false, qphys);
         ptick(g_tebd_svd, tt); tt = pclk::now();
@@ -2077,7 +2100,7 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
         auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
         bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         ptick(g_tebd_theta, tt); tt = pclk::now();
-        apply_gate(theta, bond[i], bond[i+2]);
+        apply_gate(theta, bond[i], bond[i+2], i);
         ptick(g_tebd_gate, tt); tt = pclk::now();
         auto svd = block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, allow_fp32, false, qphys);
         ptick(g_tebd_svd, tt); tt = pclk::now();
