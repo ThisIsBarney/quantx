@@ -15,11 +15,22 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <tuple>
 #include <vector>
 
 using namespace qx_dmrg;
+
+// Set/clear an environment variable (portable): run_dmrg_blocks reads
+// QX_DMRG_NO_SINGLESITE per call, so the test can toggle the hybrid path.
+static void set_env(const char* k, const char* v) {
+#ifdef _WIN32
+    _putenv_s(k, v ? v : "");   // empty value removes the variable on Windows
+#else
+    if (v) setenv(k, v, 1); else unsetenv(k);
+#endif
+}
 using Cxd = std::complex<double>;
 using MatC = Eigen::MatrixXcd;
 
@@ -184,6 +195,75 @@ int main() {
                         t, U, n, E_sec, err, ok ? "OK" : "FAIL");
             fails += !ok;
         }
+    }
+
+    // (f) DYNAMICS on the fast block path: real-time TDVP2 from the charge-density-wave
+    // |0,up dn,0,up dn,...> (the default Neel of charges {0,2} for Hubbard = half-filling).
+    // The staggered charge s(t) = (1/n) sum_i (-1)^i <n_i> melts as the doublons spread;
+    // it must track ED e^{-iHt}. Real-time also conserves energy; imaginary time cools the
+    // CDW to the half-filling ground state. The Fermi statistics ride in the same MPO, so
+    // TDVP2 (which applies the MPO's H_eff) runs the fermionic dynamics unchanged.
+    std::printf("== Hubbard DYNAMICS: block TDVP2 (real-time vs ED + imag->GS) ==\n");
+    const int nof[4] = {0, 1, 1, 2};
+    for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,4.0},{1.0,8.0}}) {
+        const int n = 4;
+        auto mpo = build_hubbard_mpo(n, t, U);
+        const MatC& H = hubbard_ed_H(n, t, U);
+        int dim = (int)H.rows();
+        Eigen::SelfAdjointEigenSolver<MatC> es(H);
+        Eigen::VectorXd Eev = es.eigenvalues(); MatC V = es.eigenvectors();
+        // CDW basis index (site 0 = most significant base-4 digit) and each state's
+        // staggered particle number sum_i (-1)^i n_i.
+        int cdw = 0; for (int i = 0; i < n; ++i) cdw = cdw*4 + (i%2==0 ? 0 : 3);
+        std::vector<double> stagN(dim, 0.0);
+        for (int k = 0; k < dim; ++k) { int kk = k;
+            for (int i = n-1; i >= 0; --i) { stagN[k] += ((i%2==0)?1.0:-1.0) * nof[kk%4]; kk /= 4; } }
+        Eigen::VectorXcd amp = V.adjoint().col(cdw);   // <eigenstate | CDW>
+        auto stag_ed = [&](double tt) {
+            Eigen::VectorXcd psit = Eigen::VectorXcd::Zero(dim);
+            for (int b = 0; b < dim; ++b) psit += std::exp(Cxd(0,-Eev[b]*tt)) * amp[b] * V.col(b);
+            double s = 0; for (int k = 0; k < dim; ++k) s += std::norm(psit[k]) * stagN[k];
+            return s / n;
+        };
+        // real-time TDVP2 (dt small, chi=128 -> no truncation at n=4 -> Trotter-limited)
+        const double dt = 0.05; const int nst = 12;
+        auto rt = run_tdvp2_blocks(mpo, n, dt, nst, 128, 1e-12, /*imag*/false);
+        double smax = 0;
+        for (size_t k = 0; k < rt.stag.size(); ++k)
+            smax = std::max(smax, std::abs(rt.stag[k] - stag_ed(rt.times[k])));
+        double E_init = 2.0 * U;                 // <CDW|H|CDW> = U * (#doubly-occ) = 2U (n=4)
+        bool ok_rt = smax < 5e-3 && std::abs(rt.energy - E_init) < 1e-3;
+        // imaginary-time TDVP2 cools the CDW to the half-filling GS
+        double E_gs = hubbard_ed_halffill(n, t, U);
+        double E_it = run_tdvp2_blocks(mpo, n, 0.1, 400, 32, 1e-12, /*imag*/true).energy;
+        bool ok_it = std::abs(E_it - E_gs) < 1e-4;
+        std::printf("  t=%.1f U=%.1f N=%d : real-t max|s_block-s_ED|=%.1e  E_cons=%.4f(=%.1f) %s ;"
+                    " imag->GS=%.6f (ED %.6f) %s\n",
+                    t, U, n, smax, rt.energy, E_init, ok_rt?"OK":"FAIL", E_it, E_gs, ok_it?"OK":"FAIL");
+        fails += !(ok_rt && ok_it);
+    }
+
+    // (g) single-site GS refinement at total_charge != 0 (the #171 regression, now
+    // root-caused to the non-injective-qphys bug in apply_heff_1site). At n=4 the
+    // two-site warm-up converges before single-site engages, so exercise it at N=12
+    // (truncation + single-site both active; the old bug corrupted this run to ~0).
+    // No ED at this size -- the check is hybrid (warm-up -> single-site) vs pure
+    // two-site: same variational optimum, and a sane (non-product-state) energy.
+    std::printf("== Hubbard single-site GS refinement at N=12 (hybrid vs two-site) ==\n");
+    {
+        const int n = 12; const double t = 1.0, U = 4.0;
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto mpo = build_hubbard_mpo(n, t, U);
+        double E_hybrid = run_dmrg_blocks(mpo, n, 64, 1e-11, 30, 1e-11, n, &cfg).energy;
+        set_env("QX_DMRG_NO_SINGLESITE", "1");
+        double E_twosite = run_dmrg_blocks(mpo, n, 64, 1e-11, 30, 1e-11, n, &cfg).energy;
+        set_env("QX_DMRG_NO_SINGLESITE", nullptr);
+        double diff = std::abs(E_hybrid - E_twosite);
+        bool ok = diff < 1e-7 && E_hybrid < -6.0;   // old bug: hybrid ended near 0
+        std::printf("  N=%d U=%.1f : hybrid=%.8f  two-site=%.8f  diff=%.1e  %s\n",
+                    n, U, E_hybrid, E_twosite, diff, ok ? "OK" : "FAIL");
+        fails += !ok;
     }
 
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
