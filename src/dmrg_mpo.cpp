@@ -131,7 +131,7 @@ std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J) {
 //
 // Bulk bond dim 6, lower-triangular: 0=done, {1,2,3,4}=the four travelling hop
 // half-terms (up-fwd, dn-fwd, up-bwd, dn-bwd), 5=start.
-std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U) {
+std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U, bool two_u1) {
     const int chi = 6, d = 4;
     Mat I4 = Mat::Identity(4, 4);
     Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;  // (-1)^{n_up+n_dn}
@@ -157,7 +157,12 @@ std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U) {
         int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
         auto& site = mpo[i];
         site.chi_l = cl; site.chi_r = cr;
-        site.d = d; site.phys_charge = {0, 1, 1, 2};   // particle number N
+        // Single U(1): particle number N. Packed two-U(1): (N, 2Sz) -- injective again
+        // (|up>/|dn> split), several times finer blocks. Same H either way.
+        site.d = d;
+        site.phys_charge = two_u1
+            ? std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)}
+            : std::vector<int>{0, 1, 1, 2};
         site.ops.assign(cl * cr, Mat::Zero(d, d));
         for (int a = 0; a < cl; ++a)
             for (int b = 0; b < cr; ++b) {

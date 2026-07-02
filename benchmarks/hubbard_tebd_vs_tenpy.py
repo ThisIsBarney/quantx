@@ -7,10 +7,11 @@ Same physics on both sides:
 
 Each tool runs AT ITS OWN OPTIMUM on the same box (the fair "best vs best"):
   * TeNPy FermiHubbardChain, SINGLE-thread (its TEBD does not parallelize; more threads
-    hurt it). TeNPy also gets its own best symmetry: it conserves BOTH U(1)s (N and Sz),
-    finer blocks than QuantX's single particle-number U(1) -- noted, not hidden.
-  * QuantX qx_tebd_bench (d=4): native MULTI-thread OpenMP block-sparse SVDs (QX-CPU);
-    QX-GPU additionally routes the few dominant SVD blocks per bond to the 4090.
+    hurt it), conserving BOTH U(1)s (N and Sz) -- its default best.
+  * QuantX qx_tebd_bench (d=4): native MULTI-thread OpenMP block-sparse SVDs, ALSO
+    conserving both U(1)s via the packed charge q = N*K + 2Sz (QX_HUB_2U1=0 falls back
+    to single-U(1) N -- the 5-6x-slower baseline that motivated the packing). QX-GPU
+    additionally routes the few dominant SVD blocks per bond to the 4090.
 
 The Jordan-Wigner statistics are handled inside each tool (QuantX: in the MPO;
 TeNPy: in its fermionic site/coupling machinery) -- the timed computation is the
@@ -93,7 +94,7 @@ def main():
         sys.exit(f"qx_tebd_bench not found at {QX_BENCH}")
     import tenpy
     print(f"Hubbard (d=4, U={U:g}) TEBD  N={N} dt={DT} cutoff={CUTOFF} reps={REPS}(min) | "
-          f"tenpy {tenpy.__version__} (single-thread, N+Sz sym) | QuantX (multi-thread, N sym)\n",
+          f"tenpy {tenpy.__version__} (single-thread, N+Sz) | QuantX (multi-thread, N+Sz packed)\n",
           flush=True)
     hdr = f"{'chi':>5} {'steps':>6} {'TeNPy(s)':>10} {'QX-CPU(s)':>10} {'QX-GPU(s)':>10} {'CPU<TeNPy':>10}"
     print(hdr, flush=True); print("-" * len(hdr), flush=True)

@@ -190,9 +190,17 @@ int main() {
             double E_blk = run_dmrg_blocks(mpo, n, 128, 1e-11, 120, 1e-11,
                                            /*total_charge*/ n, &cfg).energy;
             double err = std::abs(E_blk - E_sec);
-            bool ok = err < 1e-6;
-            std::printf("  t=%.1f U=%.1f N=%d(half) : E(sector-ED)=%.8f  block err=%.2e  %s\n",
-                        t, U, n, E_sec, err, ok ? "OK" : "FAIL");
+            // Packed two-U(1) (N and 2Sz conserved): same Hamiltonian, finer blocks.
+            // The half-filling GS is a singlet, so targeting pack(n, 0) must reproduce
+            // the same sector-ED energy through entirely different block structures.
+            auto mpo2 = build_hubbard_mpo(n, t, U, /*two_u1*/true);
+            double E_2u1 = run_dmrg_blocks(mpo2, n, 128, 1e-11, 120, 1e-11,
+                                           pack_q2(n, 0), &cfg).energy;
+            double err2 = std::abs(E_2u1 - E_sec);
+            bool ok = err < 1e-6 && err2 < 1e-6;
+            std::printf("  t=%.1f U=%.1f N=%d(half) : E(sector-ED)=%.8f  block err=%.2e  "
+                        "2U1 err=%.2e  %s\n",
+                        t, U, n, E_sec, err, err2, ok ? "OK" : "FAIL");
             fails += !ok;
         }
     }
@@ -258,6 +266,27 @@ int main() {
                     " imag->GS=%.6f (ED %.6f) %s\n",
                     tmax, te.energy, E_init, ok_te?"OK":"FAIL", E_tit, E_gs, ok_tit?"OK":"FAIL");
         fails += !(ok_te && ok_tit);
+
+        // Packed two-U(1) dynamics: identical physics through the finer (N,2Sz) block
+        // structure. The CDW start and the staggered <n_i> observable are symmetry-
+        // agnostic (obs_of_charge decodes the packed N), so both TDVP2 and TEBD must
+        // reproduce the same ED time series; imag-time TEBD must reach the same GS.
+        auto mpo2 = build_hubbard_mpo(n, t, U, /*two_u1*/true);
+        auto rt2 = run_tdvp2_blocks(mpo2, n, dt, nst, 128, 1e-12, /*imag*/false);
+        double smax2 = 0;
+        for (size_t k = 0; k < rt2.stag.size(); ++k)
+            smax2 = std::max(smax2, std::abs(rt2.stag[k] - stag_ed(rt2.times[k])));
+        auto te2 = run_tebd2_blocks(mpo2, n, dt, nst, 128, 1e-12, /*imag*/false, 1, 1.0, 1.0);
+        double tmax2 = 0;
+        for (size_t k = 0; k < te2.stag.size(); ++k)
+            tmax2 = std::max(tmax2, std::abs(te2.stag[k] - stag_ed(te2.times[k])));
+        double E_tit2 = run_tebd2_blocks(mpo2, n, 0.02, 1000, 24, 1e-12, /*imag*/true, 0, 1.0, 1.0).energy;
+        bool ok2 = smax2 < 5e-3 && tmax2 < 5e-3 && std::abs(rt2.energy - E_init) < 1e-3
+                   && std::abs(E_tit2 - E_gs) < 2e-3;
+        std::printf("            2U1  : TDVP2 max|s-s_ED|=%.1e  TEBD=%.1e  E=%.4f(=%.1f) ;"
+                    " TEBD imag->GS=%.6f  %s\n",
+                    smax2, tmax2, rt2.energy, E_init, E_tit2, ok2?"OK":"FAIL");
+        fails += !ok2;
     }
 
     // (g) single-site GS refinement at total_charge != 0 (the #171 regression, now

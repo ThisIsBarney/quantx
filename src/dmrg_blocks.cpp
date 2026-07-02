@@ -275,6 +275,19 @@ static BondSpace make_bond_space(int bond_i, int n, int max_bond,
         bs.total_dim = max_bond;
         return bs;
     }
+    // The at-least-1-per-sector allocation below would blow the bond past max_bond when
+    // there are MORE reachable sectors than max_bond -- routine for a packed two-U(1)
+    // charge, whose mid-chain sector count is O(n^2) (N x Sz). Keep only the max_bond
+    // highest-weight sectors (deterministic: weight desc, charge asc as tiebreak). The
+    // spin chains at the tested sizes have far fewer sectors than chi, so nothing
+    // changes there; and this is only the INITIAL bond-space guess -- the SVD-truncated
+    // spaces take over from the first two-site update.
+    if ((int)sectors.size() > max_bond) {
+        std::sort(sectors.begin(), sectors.end(),
+                  [](auto& a, auto& b){ return a.second != b.second ? a.second > b.second
+                                                                    : a.first < b.first; });
+        sectors.resize(max_bond);
+    }
     std::sort(sectors.begin(), sectors.end());
 
     double total_w = 0;
@@ -1683,6 +1696,9 @@ struct TDVP2Out {
 
 // <2 S^z_i> (the Sz charge, = <sigma^z> for spin-1/2) for a center tensor M: each
 // physical-state column group s carries charge qphys[s], weighted by its probability.
+// obs_of_charge decodes: plain charges pass through (2Sz, or N for single-U(1) Hubbard);
+// packed two-U(1) charges yield the particle number N -- so the Hubbard staggered
+// observable is the same <n_i> under either symmetry choice.
 static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR,
                         const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     double num = 0, z = 0;
@@ -1691,7 +1707,7 @@ static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR,
         for (int s = 0; s < (int)qphys.size(); ++s) {
             if (cols[s].width == 0) continue;
             double w = blk.middleCols(cols[s].off, cols[s].width).squaredNorm();
-            num += qphys[s] * w;   // qphys = 2*Sz
+            num += obs_of_charge(qphys[s]) * w;   // qphys = 2*Sz (or packed (N,2Sz) -> N)
             z += w;
         }
     }
@@ -3109,17 +3125,22 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                 int q_L = bsL.qns[qi], dL = bsL.dims[qi];
                 block_A[i][q_L] = Mat::Zero(dL, phys_total(phys_groups(bsR, q_L, +1, qphys)));
             }
-            // Place the product amplitude in the correct sector and physical-state column
+            // Place the product amplitude in the correct sector and physical-state column.
+            // FAIL LOUD if the state's charge path was pruned from the bond-space guess
+            // (make_bond_space keeps only the max_bond highest-weight sectors, so an
+            // atypical init_config at small chi could lose its sector) -- a silent skip
+            // here would start the DMRG from the ZERO state and converge to garbage.
+            // The default Neel/SDW configs sit at the path-count peak, never pruned.
             int s_neel = init_config ? (*init_config)[i] : ((i % 2 == 0) ? 0 : d - 1);
-            if (bsL.dim(q_neel) > 0) {
-                auto it = block_A[i].find(q_neel);
-                if (it != block_A[i].end() && it->second.rows() > 0) {
-                    auto cols = phys_groups(bsR, q_neel, +1, qphys);
-                    int col_off = cols[s_neel].off;
-                    if (col_off < it->second.cols())
-                        it->second(0, col_off) = S(1.0);
-                }
-            }
+            auto it = block_A[i].find(q_neel);
+            auto cols = phys_groups(bsR, q_neel, +1, qphys);
+            if (bsL.dim(q_neel) <= 0 || it == block_A[i].end() || it->second.rows() == 0 ||
+                cols[s_neel].width == 0)
+                throw std::runtime_error(
+                    "run_dmrg_blocks: the initial product state's charge sector at bond " +
+                    std::to_string(i) + " is missing from the bond-space guess (pruned at "
+                    "this max_bond); raise max_bond or choose a more typical init_config");
+            it->second(0, cols[s_neel].off) = S(1.0);
             q_neel += qphys[s_neel];
         }
     }

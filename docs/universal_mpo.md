@@ -216,29 +216,30 @@ Two engine generalizations were needed, both instructive:
 
 `benchmarks/hubbard_tebd_vs_tenpy.py` times the same fermionic quench (CDW, N=32, U=4,
 dt=0.05, 2nd-order Trotter) **best-vs-best** on one box: TeNPy single-thread (its TEBD
-optimum) *with its own best symmetry* — TeNPy conserves **both** U(1)s (N and Sz), finer
-blocks than QuantX's single particle-number U(1); QuantX native multi-thread (+ optional
-GPU dominant-block routing). min-of-2:
+optimum; one `run_evolution` call so it merges interior Trotter half-layers — an earlier
+version of this benchmark unfairly looped 1-step calls, caught in review), QuantX native
+multi-thread. **Both conserve both U(1)s** (N and Sz). min-of-2:
 
-| N=32, U=4, χ | TeNPy (1 thread, N+Sz) | QuantX-CPU (MT, N only) | QuantX-GPU | best-vs-best |
-|---|---|---|---|---|
-| 256 | **11.0 s** | 35.2 s | 36.6 s | TeNPy 3.2× |
-| 512 | **29.0 s** | 148.8 s | 101.7 s | TeNPy 5.1× |
+| N=32, U=4, χ | TeNPy (1 thread, N+Sz) | QuantX-CPU (MT, N+Sz) | **QuantX vs TeNPy** |
+|---|---|---|---|
+| 256 | 10.9 s | **6.1 s** | **1.81×** |
+| 512 | 28.9 s | **25.2 s** | **1.15×** |
 
-**Honest read: TeNPy currently wins at Hubbard, decisively.** The dominant reason is
-**symmetry granularity**: conserving N *and* Sz splits a χ=512 bond into several times
-more, much smaller blocks — the total O(χ³) SVD work is a fraction of ours, and the gap
-*grows* with χ (3.2× → 5.1×) exactly as a block-size effect should. TeNPy is also
-credited its Trotter-layer merging here (one `run_evolution` call merges interior
-half-layers across steps — an earlier version of this benchmark unfairly looped 1-step
-calls, overstating us ~1.5×; caught in review). On the spin chains, where both tools use
-the same single U(1), QuantX leads 1.3–1.5× CPU-vs-CPU and ~2× with the GPU — so the
-engine itself is competitive; the symmetry is not. The fix is identified and cheap in
-this architecture: the block engine's charge is a single additive integer everywhere, so
-a **packed two-U(1) charge** `q = N·K + 2Sz` (component-wise addition = integer addition,
-no aliasing for K > max|2Sz|) drops in without touching the kernels — giving Hubbard the
-same (N, Sz) granularity TeNPy exploits, on top of our multi-thread/GPU advantages. That
-is the next increment; this table is the honest baseline it must beat.
+**How this table was earned (the symmetry lesson).** With only the particle-number U(1)
+conserved, QuantX *lost* this benchmark 3.2×/5.1× — conserving N *and* Sz splits the
+bond into several times more, much smaller blocks, a fraction of the O(χ³) SVD work, and
+that deficit grew with χ exactly as a block-size effect should. The fix cost almost
+nothing *because* of the universal-MPO architecture: the engine's charge is a **single
+additive integer** everywhere (only ever added and compared), so the two U(1)s pack into
+one int, `q = N·K + 2Sz` (`pack_q2`, no aliasing for K > max|2Sz|), and the entire block
+machinery — bond spaces, environments, H_eff, SVD sectors, gates, GPU path — consumed it
+**unchanged**. Only the observable decode (`obs_of_charge`) and the initial bond-space
+sector pruning were touched. Single-U(1) → packed two-U(1): **37.7 → 6.2 s** at χ=256
+(6×), flipping a 3.2× loss into a **1.81× lead**. The lead narrows with χ (1.81× → 1.15×)
+for the same reason as spin-1: finer sectors make the SVD a swarm of tiny blocks, the
+per-core/swarm regime where TeNPy's LAPACK is strong — the same gesdd/GPU dominant-block
+levers apply if a larger-χ Hubbard push is ever needed. `QX_HUB_2U1=0` reproduces the
+single-U(1) baseline.
 
 ## Scope and limits
 
@@ -264,10 +265,13 @@ is the next increment; this table is the honest baseline it must beat.
 - **Known issue:** the single-site DMRG refinement phase loses variationality at an
   *exactly degenerate* ground state with truncation (e.g. the MG point at large N; opt
   out with `QX_DMRG_NO_SINGLESITE=1`). Tracked separately.
+- **Two-U(1) charges (done):** the packed charge `q = N·K + 2Sz` gives any model two
+  conserved U(1)s on the unchanged single-int block machinery (see the performance
+  section); Hubbard uses it by default on the benchmark path (`build_hubbard_mpo(...,
+  two_u1)`), ED-validated for GS + TDVP2 + TEBD.
 - **Still to come for Hubbard:** the spectroscopy layer (`S(k,ω)`, `σ(ω)`) and finite-T
   purification — the finite-T **SWAP gate must become fermionic** (a −1 for odd-parity ×
   odd-parity exchanges; the current `build_swap_gate` is the plain permutation), and the
-  purified on-site-U weighting needs the same care as the TEBD gate. A two-U(1) (N and
-  Sz) block structure would match TeNPy's symmetry granularity. The **dynamics path is
-  also still d=2-only for non-uniform / longer-range** models (the TEBD
+  purified on-site-U weighting needs the same care as the TEBD gate. The **dynamics path
+  is also still d=2-only for non-uniform / longer-range** models (the TEBD
   `build_gate_from_mpo` handles on-site terms now, but assumes nearest-neighbour bonds).

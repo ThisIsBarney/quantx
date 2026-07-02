@@ -116,11 +116,32 @@ std::vector<MPOSite> build_j1j2_mpo(int n, double J1 = 1.0, double J2 = 0.0,
 // the arbitrary-local-dimension generalization of MPOSite / derive_mpo_sym.
 std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J = 1.0);
 
+// -- Packed two-U(1) charges ---------------------------------------------------
+// The block engine's charge is ONE additive integer everywhere (it is only ever added
+// and compared), so a product of two U(1)s packs into it: q = N*QX_Q2K + 2Sz.
+// Component-wise addition IS integer addition, with no aliasing as long as the
+// accumulated |2Sz| stays below QX_Q2K/2 (|2Sz| <= N <= n sites; fine below ~2000
+// sites). Observables that read a CHARGE as a VALUE (center_sz / measure_stag) decode
+// the N component when |q| is in the packed range -- see obs_of_charge.
+constexpr int QX_Q2K = 4096;
+inline int pack_q2(int N, int twoSz) { return N * QX_Q2K + twoSz; }
+// Charge -> scalar observable: packed charges (|q| >= QX_Q2K/2) yield the particle
+// number N; plain spin charges (small) pass through as the 2*Sz value they are.
+inline double obs_of_charge(int q) {
+    if (std::abs(q) < QX_Q2K / 2) return (double)q;      // plain single-U(1) charge
+    return (double)((q + QX_Q2K / 2) / QX_Q2K);          // packed: N component (q >= 0 here)
+}
+
 // Fermionic Hubbard chain (d=4): H = -t sum_{i,s}(c^dag_{i s}c_{i+1 s}+h.c.) + U sum_i n_up n_dn.
 // The first FERMIONIC model -- Fermi statistics carried in the MPO via Jordan-Wigner
 // (parity F on every travelling operator), so the bosonic block engine runs it unchanged.
-// Conserved U(1) is particle number N (phys_charge = {0,1,1,2}).
-std::vector<MPOSite> build_hubbard_mpo(int n, double t = 1.0, double U = 0.0);
+// two_u1 = false: conserve particle number N only (phys_charge = {0,1,1,2}).
+// two_u1 = true:  conserve N AND 2Sz via the packed charge (phys_charge =
+//   {pack(0,0), pack(1,+1), pack(1,-1), pack(2,0)}) -- several times finer blocks
+//   (TeNPy-granularity), the Hubbard performance path. Target sector: total_charge =
+//   pack_q2(N_total, 2Sz_total), e.g. pack_q2(n, 0) for the half-filling singlet.
+std::vector<MPOSite> build_hubbard_mpo(int n, double t = 1.0, double U = 0.0,
+                                       bool two_u1 = false);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
