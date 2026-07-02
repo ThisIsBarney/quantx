@@ -23,7 +23,11 @@ int main(int argc, char** argv) {
 
     const char* thr  = std::getenv("QX_GPU_MIN_BLK");
     const char* thrT = std::getenv("QX_GPU_THETA_MINWORK");
-    auto mpo = (d == 4) ? build_hubbard_mpo(n, 1.0, 4.0)
+    // d=4 defaults to the packed two-U(1) (N,2Sz) charge -- the performance path
+    // (several times finer blocks); QX_HUB_2U1=0 opts back into single-U(1) N.
+    const char* h2 = std::getenv("QX_HUB_2U1");
+    const bool two_u1 = !(h2 && std::atoi(h2) == 0);
+    auto mpo = (d == 4) ? build_hubbard_mpo(n, 1.0, 4.0, two_u1)
              : (d == 3) ? build_spin1_heisenberg_mpo(n, 1.0)
                         : build_heisenberg_mpo(n, 1.0);
     // real-time Néel quench (imag=false); endpoints only (stride=0); J=1, delta=1.

@@ -275,6 +275,19 @@ static BondSpace make_bond_space(int bond_i, int n, int max_bond,
         bs.total_dim = max_bond;
         return bs;
     }
+    // The at-least-1-per-sector allocation below would blow the bond past max_bond when
+    // there are MORE reachable sectors than max_bond -- routine for a packed two-U(1)
+    // charge, whose mid-chain sector count is O(n^2) (N x Sz). Keep only the max_bond
+    // highest-weight sectors (deterministic: weight desc, charge asc as tiebreak). The
+    // spin chains at the tested sizes have far fewer sectors than chi, so nothing
+    // changes there; and this is only the INITIAL bond-space guess -- the SVD-truncated
+    // spaces take over from the first two-site update.
+    if ((int)sectors.size() > max_bond) {
+        std::sort(sectors.begin(), sectors.end(),
+                  [](auto& a, auto& b){ return a.second != b.second ? a.second > b.second
+                                                                    : a.first < b.first; });
+        sectors.resize(max_bond);
+    }
     std::sort(sectors.begin(), sectors.end());
 
     double total_w = 0;
@@ -1683,6 +1696,9 @@ struct TDVP2Out {
 
 // <2 S^z_i> (the Sz charge, = <sigma^z> for spin-1/2) for a center tensor M: each
 // physical-state column group s carries charge qphys[s], weighted by its probability.
+// obs_of_charge decodes: plain charges pass through (2Sz, or N for single-U(1) Hubbard);
+// packed two-U(1) charges yield the particle number N -- so the Hubbard staggered
+// observable is the same <n_i> under either symmetry choice.
 static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR,
                         const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     double num = 0, z = 0;
@@ -1691,7 +1707,7 @@ static double center_sz(const std::map<int,Mat>& M, const BondSpace& bsR,
         for (int s = 0; s < (int)qphys.size(); ++s) {
             if (cols[s].width == 0) continue;
             double w = blk.middleCols(cols[s].off, cols[s].width).squaredNorm();
-            num += qphys[s] * w;   // qphys = 2*Sz
+            num += obs_of_charge(qphys[s]) * w;   // qphys = 2*Sz (or packed (N,2Sz) -> N)
             z += w;
         }
     }
