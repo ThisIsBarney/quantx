@@ -187,6 +187,59 @@ with N). The free-fermion point `e(0) = −4/π` is reproduced by the same quadr
 U=0 *metal* itself is critical (entanglement grows with N), a hard DMRG case unrelated to
 the fermion physics, so the convergence is shown in the gapped Mott regime.
 
+### Fermion dynamics (TDVP2 + TEBD), and the bug they exposed
+
+Real-time and imaginary-time evolution run the fermionic chain on the same fast block
+path (`qx_hubbard_test`, all vs independent Jordan–Wigner ED):
+
+| Dynamics | Check | vs ED |
+|---|---|---|
+| TDVP2 real-time | CDW `\|0,↑↓,0,↑↓,…>` quench: staggered charge `(1/n)Σ(−1)^i⟨n_i⟩` vs `e^{−iHt}` | 1e-7, `⟨H⟩=2U` exact |
+| TDVP2 imag-time | cools the CDW to the half-filling GS | =sector-ED (6 digits) |
+| TEBD real-time | same quench, Trotter gate **built from the MPO** | 2e-4 (O(dt²)) |
+| TEBD imag-time | cools to the half-filling GS | =sector-ED (6 digits) |
+
+Two engine generalizations were needed, both instructive:
+
+- **The non-injective-qphys bug** (found by TDVP2, root cause of the earlier single-site
+  corruption): the single-site `H_eff` assumed *one local state per charge* and took the
+  first match — but Hubbard's `phys_charge={0,1,1,2}` has |↑⟩ and |↓⟩ **sharing** charge 1,
+  so half the single-site Hamiltonian was silently dropped. Fixed by summing all
+  same-charge bra states; spin models (injective) are bit-identical, and the GS
+  single-site refinement now works at any total charge.
+- **On-site terms in the TEBD gate**: Hubbard is the first d>2 model whose bond gate has
+  an on-site piece (`U n↑n↓ = W(start,done)`). Blindly summing the MPO carry channels
+  would double-count U on interior sites; the gate now takes boundary weights (½ interior,
+  1 at the chain ends). Models without on-site terms are weight-independent → unchanged.
+
+### Performance vs TeNPy (fermionic Hubbard real-time TEBD)
+
+`benchmarks/hubbard_tebd_vs_tenpy.py` times the same fermionic quench (CDW, N=32, U=4,
+dt=0.05, 2nd-order Trotter) **best-vs-best** on one box: TeNPy single-thread (its TEBD
+optimum) *with its own best symmetry* — TeNPy conserves **both** U(1)s (N and Sz), finer
+blocks than QuantX's single particle-number U(1); QuantX native multi-thread (+ optional
+GPU dominant-block routing). min-of-2:
+
+| N=32, U=4, χ | TeNPy (1 thread, N+Sz) | QuantX-CPU (MT, N only) | QuantX-GPU | best-vs-best |
+|---|---|---|---|---|
+| 256 | **11.0 s** | 35.2 s | 36.6 s | TeNPy 3.2× |
+| 512 | **29.0 s** | 148.8 s | 101.7 s | TeNPy 5.1× |
+
+**Honest read: TeNPy currently wins at Hubbard, decisively.** The dominant reason is
+**symmetry granularity**: conserving N *and* Sz splits a χ=512 bond into several times
+more, much smaller blocks — the total O(χ³) SVD work is a fraction of ours, and the gap
+*grows* with χ (3.2× → 5.1×) exactly as a block-size effect should. TeNPy is also
+credited its Trotter-layer merging here (one `run_evolution` call merges interior
+half-layers across steps — an earlier version of this benchmark unfairly looped 1-step
+calls, overstating us ~1.5×; caught in review). On the spin chains, where both tools use
+the same single U(1), QuantX leads 1.3–1.5× CPU-vs-CPU and ~2× with the GPU — so the
+engine itself is competitive; the symmetry is not. The fix is identified and cheap in
+this architecture: the block engine's charge is a single additive integer everywhere, so
+a **packed two-U(1) charge** `q = N·K + 2Sz` (component-wise addition = integer addition,
+no aliasing for K > max|2Sz|) drops in without touching the kernels — giving Hubbard the
+same (N, Sz) granularity TeNPy exploits, on top of our multi-thread/GPU advantages. That
+is the next increment; this table is the honest baseline it must beat.
+
 ## Scope and limits
 
 - **Phase 1 (done):** any *uniform-bulk* Sz-conserving MPO at local dimension
@@ -201,18 +254,20 @@ the fermion physics, so the convergence is shown in the gapped Mott regime.
   uniform d (spin-1 d=3 validated vs ED, see the table above; d=2 bit-identical).
   The block path folds the local index into d charge-shifted column groups
   (`phys_groups`) in place of the old up/dn split.
-- **Phase 3 (done — statics): the fermionic Hubbard chain** (d=4). Fermi statistics
-  carried in the Jordan–Wigner MPO; the dense and fast block-sparse DMRG run it at
-  half-filling, validated vs ED (`‖·‖=0`) and the exact Lieb–Wu energy (~1e-5). See the
-  Hubbard showcase above.
+- **Phase 3 (done — statics + dynamics): the fermionic Hubbard chain** (d=4). Fermi
+  statistics carried in the Jordan–Wigner MPO; the dense and fast block-sparse DMRG run
+  it at half-filling, validated vs ED (`‖·‖=0`) and the exact Lieb–Wu energy (~1e-5);
+  **TDVP2 and TEBD** run the real-time and imaginary-time fermion dynamics vs ED
+  (see the dynamics table above). The old single-site corruption at `total_charge≠0`
+  was root-caused (the non-injective-qphys bug) and *fixed*, so single-site refinement
+  runs for every model again.
 - **Known issue:** the single-site DMRG refinement phase loses variationality at an
   *exactly degenerate* ground state with truncation (e.g. the MG point at large N; opt
-  out with `QX_DMRG_NO_SINGLESITE=1`), and it *catastrophically* corrupts the state at
-  `total_charge≠0` (it carries a nonzero-charge boundary assumption) — so it is now
-  **auto-disabled whenever `total_charge≠0`** (Hubbard falls back to the correct
-  two-site path). Generalizing single-site to arbitrary total charge is tracked separately.
-- **Still to come for Hubbard:** *dynamics* (TDVP2/TEBD need the fermionic gate — the
-  Jordan–Wigner signs in the two-site Trotter gate), a two-U(1) (N and Sz) block
-  structure for finer/faster sectors, and finite-T. The **dynamics path is also still
-  d=2-only for non-uniform / longer-range** models (the TEBD `build_gate_from_mpo`
-  assumes a pure nearest-neighbour bond with no on-site term).
+  out with `QX_DMRG_NO_SINGLESITE=1`). Tracked separately.
+- **Still to come for Hubbard:** the spectroscopy layer (`S(k,ω)`, `σ(ω)`) and finite-T
+  purification — the finite-T **SWAP gate must become fermionic** (a −1 for odd-parity ×
+  odd-parity exchanges; the current `build_swap_gate` is the plain permutation), and the
+  purified on-site-U weighting needs the same care as the TEBD gate. A two-U(1) (N and
+  Sz) block structure would match TeNPy's symmetry granularity. The **dynamics path is
+  also still d=2-only for non-uniform / longer-range** models (the TEBD
+  `build_gate_from_mpo` handles on-site terms now, but assumes nearest-neighbour bonds).

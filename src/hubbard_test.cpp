@@ -241,6 +241,23 @@ int main() {
                     " imag->GS=%.6f (ED %.6f) %s\n",
                     t, U, n, smax, rt.energy, E_init, ok_rt?"OK":"FAIL", E_it, E_gs, ok_it?"OK":"FAIL");
         fails += !(ok_rt && ok_it);
+
+        // TEBD (Trotter gates from the MPO): the first model whose gate needs the
+        // on-site term (U n_up n_dn = W(start,done)) split with boundary weights --
+        // 1/2 on interior bonds, 1 at the chain ends (blind carry-channel summing
+        // would double-count U on interior sites). Real-time tracks ED to Trotter
+        // accuracy O(dt^2); imaginary-time cools the CDW to the half-filling GS.
+        auto te = run_tebd2_blocks(mpo, n, dt, nst, 128, 1e-12, /*imag*/false, 1, 1.0, 1.0);
+        double tmax = 0;
+        for (size_t k = 0; k < te.stag.size(); ++k)
+            tmax = std::max(tmax, std::abs(te.stag[k] - stag_ed(te.times[k])));
+        bool ok_te = tmax < 5e-3 && std::abs(te.energy - E_init) < 2e-2;
+        double E_tit = run_tebd2_blocks(mpo, n, 0.02, 1000, 24, 1e-12, /*imag*/true, 0, 1.0, 1.0).energy;
+        bool ok_tit = std::abs(E_tit - E_gs) < 2e-3;
+        std::printf("            TEBD : real-t max|s-s_ED|=%.1e  E=%.4f(=%.1f) %s ;"
+                    " imag->GS=%.6f (ED %.6f) %s\n",
+                    tmax, te.energy, E_init, ok_te?"OK":"FAIL", E_tit, E_gs, ok_tit?"OK":"FAIL");
+        fails += !(ok_te && ok_tit);
     }
 
     // (g) single-site GS refinement at total_charge != 0 (the #171 regression, now
