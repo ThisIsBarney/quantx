@@ -3125,17 +3125,22 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                 int q_L = bsL.qns[qi], dL = bsL.dims[qi];
                 block_A[i][q_L] = Mat::Zero(dL, phys_total(phys_groups(bsR, q_L, +1, qphys)));
             }
-            // Place the product amplitude in the correct sector and physical-state column
+            // Place the product amplitude in the correct sector and physical-state column.
+            // FAIL LOUD if the state's charge path was pruned from the bond-space guess
+            // (make_bond_space keeps only the max_bond highest-weight sectors, so an
+            // atypical init_config at small chi could lose its sector) -- a silent skip
+            // here would start the DMRG from the ZERO state and converge to garbage.
+            // The default Neel/SDW configs sit at the path-count peak, never pruned.
             int s_neel = init_config ? (*init_config)[i] : ((i % 2 == 0) ? 0 : d - 1);
-            if (bsL.dim(q_neel) > 0) {
-                auto it = block_A[i].find(q_neel);
-                if (it != block_A[i].end() && it->second.rows() > 0) {
-                    auto cols = phys_groups(bsR, q_neel, +1, qphys);
-                    int col_off = cols[s_neel].off;
-                    if (col_off < it->second.cols())
-                        it->second(0, col_off) = S(1.0);
-                }
-            }
+            auto it = block_A[i].find(q_neel);
+            auto cols = phys_groups(bsR, q_neel, +1, qphys);
+            if (bsL.dim(q_neel) <= 0 || it == block_A[i].end() || it->second.rows() == 0 ||
+                cols[s_neel].width == 0)
+                throw std::runtime_error(
+                    "run_dmrg_blocks: the initial product state's charge sector at bond " +
+                    std::to_string(i) + " is missing from the bond-space guess (pruned at "
+                    "this max_bond); raise max_bond or choose a more typical init_config");
+            it->second(0, cols[s_neel].off) = S(1.0);
             q_neel += qphys[s_neel];
         }
     }
