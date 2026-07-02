@@ -287,6 +287,85 @@ int main() {
                     " TEBD imag->GS=%.6f  %s\n",
                     smax2, tmax2, rt2.energy, E_init, E_tit2, ok2?"OK":"FAIL");
         fails += !ok2;
+
+        // T=0 dynamical structure factors on the packed path: the spin and charge
+        // correlators C^W_{j,l0}(t) = <gs| W_j e^{-i(H-E0)t} W_{l0} |gs> for diagonal
+        // W (spin 2Sz = {0,+1,-1,0}; charge fluctuation n-1 = {-1,0,0,+1}) -- the raw
+        // data of S_spin(k,w) / S_charge(k,w), i.e. spin-charge separation. ED
+        // reference restricted to the half-filling sector (diagonal W stays in it).
+        {
+            const int l0 = n / 2;
+            std::vector<int> idx;
+            for (int k = 0; k < dim; ++k) { int Nt=0, kk=k;
+                for (int i2=0;i2<n;++i2){ Nt += nof[kk%4]; kk/=4; } if (Nt==n) idx.push_back(k); }
+            int m = (int)idx.size();
+            MatC Hs(m, m);
+            for (int a=0;a<m;++a) for (int b=0;b<m;++b) Hs(a,b) = H(idx[a], idx[b]);
+            Eigen::SelfAdjointEigenSolver<MatC> ess(Hs);
+            Eigen::VectorXd Es = ess.eigenvalues(); MatC Vs = ess.eigenvectors();
+            // site-j digit of sector basis state a (site 0 = most significant digit)
+            auto digit = [&](int a, int j){ int kk = idx[a];
+                for (int p = n-1; p > j; --p) kk /= 4; return kk % 4; };
+            auto C_ed = [&](const std::vector<double>& w, int j, double tt) {
+                // <gs|W_j e^{-i(H-E0)t} W_l0|gs> via the sector eigenbasis
+                Cxd c = 0;
+                for (int b = 0; b < m; ++b) {
+                    Cxd amp_j = 0, amp_l = 0;
+                    for (int a = 0; a < m; ++a) {
+                        amp_j += std::conj(Vs(a,0)) * w[digit(a,j)]  * Vs(a,b);
+                        amp_l += std::conj(Vs(a,b)) * w[digit(a,l0)] * Vs(a,0);
+                    }
+                    c += amp_j * std::exp(Cxd(0,-(Es(b)-Es(0))*tt)) * amp_l;
+                }
+                return c;
+            };
+            const std::vector<double> w_spin  = {0.0, +1.0, -1.0, 0.0};   // 2Sz
+            const std::vector<double> w_chg   = {-1.0, 0.0, 0.0, +1.0};   // n - 1
+            std::vector<int> cfgS(n);
+            for (int i2 = 0; i2 < n; ++i2) cfgS[i2] = (i2 % 2 == 0) ? 1 : 2;
+            double werr = 0;
+            for (auto* w : {&w_spin, &w_chg}) {
+                auto sp = run_spectral_blocks(mpo2, n, dt, nst, 128, 1e-12, 60, 1.0, 1.0,
+                                              pack_q2(n, 0), &cfgS, w);
+                for (size_t k = 0; k < sp.times.size(); ++k)
+                    for (int j = 0; j < n; ++j) {
+                        Cxd ced = C_ed(*w, j, sp.times[k]);
+                        werr = std::max(werr, std::abs(ced - Cxd(sp.C_re[k][j], sp.C_im[k][j])));
+                    }
+                if (std::getenv("QX_SPEC_DIAG")) {   // where does it diverge: t=0 or later?
+                    for (int k : {0, 1}) for (int j : {l0, l0+1}) {
+                        Cxd ced = C_ed(*w, j, sp.times[k]);
+                        std::printf("      [diag w0=%g t=%.2f j=%d: block=(%.5f,%.5f) ED=(%.5f,%.5f)]\n",
+                                    (*w)[0], sp.times[k], j, sp.C_re[k][j], sp.C_im[k][j],
+                                    ced.real(), ced.imag());
+                    }
+                    // third opinion on the t=0 statics: diagonal expectation straight
+                    // from the sector-ED ground state (no time evolution, no engine)
+                    for (int j : {l0, l0+1}) {
+                        double c0 = 0;
+                        for (int a = 0; a < m; ++a)
+                            c0 += std::norm(Vs(a,0)) * (*w)[digit(a,j)] * (*w)[digit(a,l0)];
+                        std::printf("      [diag  diagexp t=0 j=%d: ED-diag=%.5f]\n", j, c0);
+                    }
+                    // sum rule: sum_j C(j,l0;0) = <(sum_j W_j) W_l0> = 0 exactly (conserved)
+                    double srB = 0, srE = 0;
+                    for (int j = 0; j < n; ++j) { srB += sp.C_re[0][j];
+                        srE += C_ed(*w, j, 0.0).real(); }
+                    // and the SINGLE-U(1) path on the same physics
+                    auto sp1 = run_spectral_blocks(mpo, n, dt, 1, 128, 1e-12, 60, 1.0, 1.0,
+                                                   n, &cfgS, w);
+                    std::printf("      [diag  sumrule block=%.2e ED=%.2e | 1U1 t=0 j=%d: %.5f]\n",
+                                srB, srE, l0, sp1.C_re[0][l0]);
+                    std::printf("      [diag  E0(spectral)=%.12f  E_gs(sector-ED)=%.12f  "
+                                "gaps Es1-Es0=%.3e Es2-Es0=%.3e]\n",
+                                sp.E0, Es(0), Es(1)-Es(0), Es(2)-Es(0));
+                }
+            }
+            bool okw = werr < 2e-3;
+            std::printf("            S(k,w): max|C_spin/chg - C_ED| (t<=%.1f) = %.1e  %s\n",
+                        nst*dt, werr, okw ? "OK" : "FAIL");
+            fails += !okw;
+        }
     }
 
     // (g) single-site GS refinement at total_charge != 0 (the #171 regression, now
