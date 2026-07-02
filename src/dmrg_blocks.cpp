@@ -1824,6 +1824,11 @@ static std::map<int,Mat> bt_center_RL(const BlockSVDResult& svd, const BondSpace
 
 // Build a block-MPS for an arbitrary Sz product state; sz[i] is the per-site Sz
 // charge (= qphys[state], e.g. +1/-1 for spin-1/2, +2/-2 for a spin-1 Neel state).
+// NOTE: the state is selected BY CHARGE (first qphys match), which is ambiguous for
+// a non-injective qphys -- Hubbard charge 1 means |up> or |dn> and this would pick
+// |up>. Fine for every current caller (the Hubbard CDW start uses only the unique
+// charges {0,2}); a per-site STATE-INDEX init (like run()'s init_config) is the API
+// to use if singly-occupied Hubbard product states are ever needed here.
 static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<int>& sz,
                      const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     BMPS s; s.n = n;

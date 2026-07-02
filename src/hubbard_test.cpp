@@ -15,11 +15,22 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <tuple>
 #include <vector>
 
 using namespace qx_dmrg;
+
+// Set/clear an environment variable (portable): run_dmrg_blocks reads
+// QX_DMRG_NO_SINGLESITE per call, so the test can toggle the hybrid path.
+static void set_env(const char* k, const char* v) {
+#ifdef _WIN32
+    _putenv_s(k, v ? v : "");   // empty value removes the variable on Windows
+#else
+    if (v) setenv(k, v, 1); else unsetenv(k);
+#endif
+}
 using Cxd = std::complex<double>;
 using MatC = Eigen::MatrixXcd;
 
@@ -230,6 +241,29 @@ int main() {
                     " imag->GS=%.6f (ED %.6f) %s\n",
                     t, U, n, smax, rt.energy, E_init, ok_rt?"OK":"FAIL", E_it, E_gs, ok_it?"OK":"FAIL");
         fails += !(ok_rt && ok_it);
+    }
+
+    // (g) single-site GS refinement at total_charge != 0 (the #171 regression, now
+    // root-caused to the non-injective-qphys bug in apply_heff_1site). At n=4 the
+    // two-site warm-up converges before single-site engages, so exercise it at N=12
+    // (truncation + single-site both active; the old bug corrupted this run to ~0).
+    // No ED at this size -- the check is hybrid (warm-up -> single-site) vs pure
+    // two-site: same variational optimum, and a sane (non-product-state) energy.
+    std::printf("== Hubbard single-site GS refinement at N=12 (hybrid vs two-site) ==\n");
+    {
+        const int n = 12; const double t = 1.0, U = 4.0;
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto mpo = build_hubbard_mpo(n, t, U);
+        double E_hybrid = run_dmrg_blocks(mpo, n, 64, 1e-11, 30, 1e-11, n, &cfg).energy;
+        set_env("QX_DMRG_NO_SINGLESITE", "1");
+        double E_twosite = run_dmrg_blocks(mpo, n, 64, 1e-11, 30, 1e-11, n, &cfg).energy;
+        set_env("QX_DMRG_NO_SINGLESITE", nullptr);
+        double diff = std::abs(E_hybrid - E_twosite);
+        bool ok = diff < 1e-7 && E_hybrid < -6.0;   // old bug: hybrid ended near 0
+        std::printf("  N=%d U=%.1f : hybrid=%.8f  two-site=%.8f  diff=%.1e  %s\n",
+                    n, U, E_hybrid, E_twosite, diff, ok ? "OK" : "FAIL");
+        fails += !ok;
     }
 
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
