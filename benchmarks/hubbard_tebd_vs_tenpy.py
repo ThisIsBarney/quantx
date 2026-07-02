@@ -63,9 +63,11 @@ def tenpy_hubbard(chi, steps):
                            "bc_MPS": "finite"})   # default conserves N AND Sz (its best)
     psi = MPS.from_lat_product_state(M.lat, [["empty"], ["full"]])   # CDW half-filling
     eng = tebd.TEBDEngine(psi, M, {"trunc_params": {"chi_max": chi, "svd_min": CUTOFF}, "order": 2})
+    # ONE run_evolution call: TeNPy merges the interior 2nd-order Trotter half-layers
+    # across steps (2N+1 layers instead of 3N) -- its legitimate optimum, ~1.5x faster
+    # than a loop of 1-step calls. Nothing is measured mid-run on either side.
     t0 = time.perf_counter()
-    for _ in range(steps):
-        eng.run_evolution(1, DT)
+    eng.run_evolution(steps, DT)
     return time.perf_counter() - t0
 
 
