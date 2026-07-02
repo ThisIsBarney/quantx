@@ -2321,10 +2321,15 @@ static std::vector<std::map<int,Mat>> overlap_right_envs(const BMPS& bra, const 
 }
 
 // <bra| (2 Sz_j) |ket> for every site j (2*Sz = charge qphys[s]), given the envs.
+// op_wts: per-local-state diagonal operator weights; default (nullptr) = qphys[s], the
+// 2*Sz charge itself (the historical sigma^z measurement). For a packed-charge model
+// the charge is NOT the observable, so callers pass explicit weights (e.g. Hubbard spin
+// {0,+1,-1,0} or charge fluctuation {-1,0,0,+1}).
 static std::vector<S> measure_sz_all(const BMPS& bra, const BMPS& ket,
                                      const std::vector<std::map<int,Mat>>& OL,
                                      const std::vector<std::map<int,Mat>>& OR,
-                                     const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
+                                     const std::vector<int>& qphys = SPIN_HALF_CHARGES,
+                                     const std::vector<double>* op_wts = nullptr) {
     int n = bra.n;
     std::vector<S> out(n, S(0));
     for (int j = 0; j < n; ++j) {
@@ -2340,10 +2345,12 @@ static std::vector<S> measure_sz_all(const BMPS& bra, const BMPS& ket,
                 if (wb == 0 || wk == 0) continue;
                 auto it = OR[j+1].find(q_R);
                 if (it == OR[j+1].end()) continue;
+                double w = op_wts ? (*op_wts)[s] : (double)qphys[s];
+                if (w == 0.0) continue;
                 Eigen::Ref<const Mat> Abs = Ab.middleCols(bcols[s].off, wb);
                 Eigen::Ref<const Mat> Aks = Ak.middleCols(kcols[s].off, wk);
                 Mat left = Abs.adjoint() * (Olk * Aks);          // (wb x wk)
-                val += S(qphys[s]) * (left.array() * it->second.array()).sum();
+                val += S(w) * (left.array() * it->second.array()).sum();
             }
         }
         out[j] = val;
@@ -2400,45 +2407,63 @@ struct SpectralOut {
     std::vector<std::vector<double>> C_re, C_im;
 };
 
-// Dynamical spin structure factor data: C_{j,l0}(t) for a central source l0.
+// Dynamical structure factor data: C_{j,l0}(t) = <psi0| W_j e^{-i(H-E0)t} W_{l0} |psi0>
+// for a central source l0 and a DIAGONAL single-site operator W. Default W = the charge
+// itself (sigma^z for spin-1/2). op_wts overrides with per-state weights -- required for
+// packed-charge models, where the charge is not the observable (Hubbard spin
+// {0,+1,-1,0} = 2Sz, charge fluctuation {-1,0,0,+1} = n-1 at half filling). The GS is
+// found in the total_charge sector from init_config (both default to the spin choices).
 static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
                                 double dt, int n_steps, int chi_max, double cutoff,
-                                int n_sweeps, double J = 1.0, double delta = 1.0) {
+                                int n_sweeps, double J = 1.0, double delta = 1.0,
+                                int total_charge = 0,
+                                const std::vector<int>* init_config = nullptr,
+                                const std::vector<double>* op_wts = nullptr) {
     static_assert(std::is_same_v<S, Cx>, "spectral requires complex scalar");
     using clk = std::chrono::steady_clock;
     SpectralOut out; out.n = n; out.l0 = n / 2;
+    const std::vector<int>& qphys = mpo[0].phys_charge;
+    const int d = mpo[0].d;
 
     // 1. ground state (complex BMPS, centre on site 0)
     BMPS psi0;
-    DMRGResult gs = run(mpo, n, chi_max, cutoff, n_sweeps, 1e-12, &psi0);
+    DMRGResult gs = run(mpo, n, chi_max, cutoff, n_sweeps, 1e-12, &psi0,
+                        total_charge, init_config);
     out.E0 = gs.energy;
 
     // Normalisation Z = <psi0|psi0> in the overlap convention (the same machinery
-    // measures the correlations, so C is normalised exactly by this ratio).
+    // measures the correlations, so C is normalised exactly by this ratio). The
+    // top overlap env sits in the chain's TOTAL charge sector (0 for spin models).
     double Z;
-    { auto OLn = overlap_left_envs(psi0, psi0);
-      Z = OLn[n].count(0) ? std::real(OLn[n].at(0)(0,0)) : 1.0; }
+    { auto OLn = overlap_left_envs(psi0, psi0, qphys);
+      Z = OLn[n].count(total_charge) ? std::real(OLn[n].at(total_charge)(0,0)) : 1.0; }
     if (std::abs(Z) < 1e-300) Z = 1.0;
 
-    // 2. phi = sigma^z_{l0} |psi0>  (still right-canonical; TEBD needs no MPO envs)
+    // 2. phi = W_{l0} |psi0>  (still right-canonical; TEBD needs no MPO envs)
     BMPS phi = psi0;
-    apply_sz_site(phi, out.l0);
+    if (op_wts) {
+        std::vector<S> dg(op_wts->size());
+        for (size_t s = 0; s < op_wts->size(); ++s) dg[s] = S((*op_wts)[s]);
+        apply_site_diag(phi, out.l0, dg, qphys);
+    } else {
+        apply_sz_site(phi, out.l0, qphys);
+    }
 
     // 3. real-time evolve, measuring C_{j,l0}(t) at each step
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
         double t = step * dt;
-        auto OL = overlap_left_envs(psi0, phi);
-        auto OR = overlap_right_envs(psi0, phi);
-        auto ov = measure_sz_all(psi0, phi, OL, OR);   // <psi0| sz_j |phi(t)>
+        auto OL = overlap_left_envs(psi0, phi, qphys);
+        auto OR = overlap_right_envs(psi0, phi, qphys);
+        auto ov = measure_sz_all(psi0, phi, OL, OR, qphys, op_wts);   // <psi0| W_j |phi(t)>
         S phase = std::exp(Cx(0.0, out.E0 * t));
         std::vector<double> re(n), im(n);
         for (int j = 0; j < n; ++j) { S c = phase * ov[j] / S(Z); re[j] = c.real(); im[j] = c.imag(); }
         out.C_re.push_back(re); out.C_im.push_back(im); out.times.push_back(t);
-        for (auto& b : phi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
+        for (auto& b : phi.bond) { int s=0; for (int d2 : b.dims) s+=d2; out.max_bond = std::max(out.max_bond, s); }
         if (step < n_steps)
             tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta,
-                              /*allow_fp32=*/true);  // fast NN route
+                              /*allow_fp32=*/true, d > 2 ? &mpo : nullptr);  // fast NN route
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
@@ -3505,6 +3530,24 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         out_state->n = n;
         out_state->A = block_A;
         out_state->bond = bond;
+        // Absorb the bond-1 singular values into A[0]. After the two-site loop's
+        // R->L half-sweep, block_A[0] holds only the left-canonical U factors -- the
+        // Schmidt weights live separately in block_sv[0] (form_theta re-inserts them
+        // during sweeps). Exporting the bare A-chain SILENTLY DROPPED them: the
+        // stripped state is still charge-conserving (sum rules hold) and the reported
+        // Lanczos E0 is right, but every correlator measured on it is wrong at the
+        // Schmidt-spread level (~1e-2; caught by the Hubbard T=0 spectral vs ED, with
+        // TeNPy as referee -- latent for d=2 under the 1.5e-2 Trotter tolerance).
+        // After the single-site phase block_sv[0] is Ones, so this is a no-op there.
+        for (auto& [q_L, blk] : out_state->A[0]) {
+            auto cols = phys_groups(bond[1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                if (cols[s].width == 0 || !block_sv[0].count(cols[s].q)) continue;
+                const RVec& sv = block_sv[0].at(cols[s].q);
+                for (int c = 0; c < cols[s].width && c < sv.size(); ++c)
+                    blk.col(cols[s].off + c) *= sv[c];
+            }
+        }
         out_state->L.assign(n + 1, BlockEnv());
         out_state->R.assign(n + 1, BlockEnv());
         { BlockEnv L0; L0.bs = bond[0]; L0.blocks[0][0] = Mat::Constant(1,1,S(1)); out_state->L[0] = L0; }
@@ -3593,9 +3636,13 @@ TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
 // Entry point: dynamical structure factor S(k,omega) data (always complex).
 SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double dt, int n_steps, int chi_max,
-                                   double cutoff, int n_sweeps, double J, double delta) {
-    require_local_dim2(mpo, "run_spectral_blocks");   // TEBD-gate evolution is spin-1/2-only
-    auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta);
+                                   double cutoff, int n_sweeps, double J, double delta,
+                                   int total_charge,
+                                   const std::vector<int>* init_config,
+                                   const std::vector<double>* op_wts) {
+    require_uniform_local_dim(mpo, "run_spectral_blocks");   // d>2 evolves via the MPO gate
+    auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps,
+                                         J, delta, total_charge, init_config, op_wts);
     SpectralResult r;
     r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
     r.E0 = o.E0; r.wall_time_s = o.wall_s; r.C_re = o.C_re; r.C_im = o.C_im;

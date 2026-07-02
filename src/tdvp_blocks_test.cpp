@@ -94,8 +94,11 @@ int main() {
                 Cx cb(sp.C_re[ti][j], sp.C_im[ti][j]);
                 maxerr = std::max(maxerr, std::abs(ce - cb));
             }
-        // evolution is TEBD (O(dt^2) Trotter); dt=0.05 over 20 steps -> ~1e-2 accuracy
-        check("C_{j,l0}(t) vs exact (all j,t, TEBD Trotter)", maxerr, 1.5e-2);
+        // evolution is TEBD (O(dt^2) Trotter); dt=0.05 over 20 steps at chi=32 -> ~6e-3.
+        // Tightened from 1.5e-2 after fixing the out_state export (the bond-1 Schmidt
+        // values were silently dropped, adding a ~1e-2 STATIC bias this loose tolerance
+        // was hiding -- caught by the Hubbard T=0 spectral vs ED with TeNPy as referee).
+        check("C_{j,l0}(t) vs exact (all j,t, TEBD Trotter)", maxerr, 8e-3);
         printf("  E0=%.6f exact=%.6f  l0=%d  max_bond=%d  %.3fs\n",
                sp.E0, E0, sp.l0, sp.max_bond, sp.wall_time_s);
     }

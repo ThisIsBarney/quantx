@@ -257,10 +257,17 @@ struct SpectralResult {
     double E0 = 0, wall_time_s = 0;
     std::vector<std::vector<double>> C_re, C_im; // C_re[t][j], C_im[t][j]
 };
+// total_charge / init_config: the GS sector (see run_dmrg_blocks). op_wts: per-local-
+// state weights of the DIAGONAL correlator operator W (default = the charge itself,
+// i.e. sigma^z for spin-1/2); packed-charge models must pass explicit weights, e.g.
+// Hubbard spin {0,+1,-1,0} (=2Sz) or charge fluctuation {-1,0,0,+1} (=n-1, half filling).
 SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double dt, int n_steps, int chi_max,
                                    double cutoff, int n_sweeps,
-                                   double J = 1.0, double delta = 1.0);
+                                   double J = 1.0, double delta = 1.0,
+                                   int total_charge = 0,
+                                   const std::vector<int>* init_config = nullptr,
+                                   const std::vector<double>* op_wts = nullptr);
 
 // Loschmidt echo of a quench: ground state of mpo_i evolved under XXZ(Jf, deltaf).
 // L(t) = |<psi0|psi(t)>|^2 (return probability); rate(t) = -ln L(t) / n (its
