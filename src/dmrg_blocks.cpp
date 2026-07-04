@@ -105,12 +105,15 @@ static int gpu_min_blk(int d = 2) {
         return 0;   // 0 = unset
     }();
     if (env > 0) return env;   // explicit override applies to all local dims
-    // d>2 (spin-1, ...) fragments chi across more Sz sectors -> more, smaller per-sector
-    // blocks. A low crossover then floods the single GPU with many MEDIUM blocks that
-    // serialize on the one device (measured: slower than CPU). Routing only the FEW
-    // dominant blocks per bond to the GPU instead lets it overlap the CPU swarm -- the
-    // big win at large chi. d=2's larger blocks keep the tuned 128 crossover.
-    return d > 2 ? 256 : 128;
+    // d>2 fragments chi across more charge sectors -> more, smaller per-sector blocks.
+    // A low crossover then floods the single GPU with many MEDIUM blocks that serialize
+    // on the one device (measured: slower than CPU). Routing only the FEW dominant
+    // blocks per bond to the GPU instead lets it overlap the CPU swarm. Per-model
+    // measured crossovers: d=2 (spin-1/2, big blocks) 128; d=3 (spin-1, maxblk ~315 at
+    // chi=512) 256; d>=4 (Hubbard packed two-U(1), even finer -- maxblk ~207 at chi=512)
+    // 192, a reproducible 1.16x over CPU-only (interleaved min-of-3; 128 floods, 208
+    // routes nothing).
+    return d >= 4 ? 192 : d == 3 ? 256 : 128;
 }
 // Minimum GEMM work (n_row * n_keep_mid * n_col) for a theta block to be built on
 // the GPU (Phase B residency). Both spin-sector GEMMs of the block run on-device
@@ -1435,6 +1438,18 @@ static BlockSVDResult block_svd_truncate(
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1 && !g_svd_prof)
     for (int i = 0; i < (int)svq.size(); ++i) {
         if (stable) {
+            // The stability requirement is a DIRECT SVD (no Gram condition-squaring).
+            // LAPACK xgesdd is exactly that -- same guarantee as Eigen's BDCSVD, but
+            // several times faster on the mid/large blocks that dominate the GS sweep
+            // (BDCSVD's constant factor was why the Hubbard chi=256 GS lost to TeNPy).
+            // Fall back to BDCSVD for small blocks (lower fixed overhead) and on any
+            // gesdd failure. The Majumdar-Ghosh degeneracy regression (deterministic,
+            // variational) guards this path.
+#ifdef QX_HAS_LAPACKE
+            if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gesdd_min() &&
+                thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
+                { g_tebd_nlapacke++; continue; }
+#endif
             Eigen::BDCSVD<Mat> bsvd(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
             sb[i].U = bsvd.matrixU(); sb[i].V = bsvd.matrixV(); sb[i].s = bsvd.singularValues();
             continue;

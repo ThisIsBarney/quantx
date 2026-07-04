@@ -255,9 +255,43 @@ machinery — bond spaces, environments, H_eff, SVD sectors, gates, GPU path —
 sector pruning were touched. Single-U(1) → packed two-U(1): **37.7 → 6.2 s** at χ=256
 (6×), flipping a 3.2× loss into a **1.81× lead**. The lead narrows with χ (1.81× → 1.15×)
 for the same reason as spin-1: finer sectors make the SVD a swarm of tiny blocks, the
-per-core/swarm regime where TeNPy's LAPACK is strong — the same gesdd/GPU dominant-block
-levers apply if a larger-χ Hubbard push is ever needed. `QX_HUB_2U1=0` reproduces the
+per-core/swarm regime where TeNPy's LAPACK is strong. `QX_HUB_2U1=0` reproduces the
 single-U(1) baseline.
+
+**The χ=512 polish (the spin-1 playbook, re-tuned for d=4).** The packed bond's blocks
+top out at ~207 (χ=512), so the spin-1 GPU crossover (256) never fired and `gesdd_min`
+(160) caught only a sliver. Re-measured per-model: `gesdd_min=160` is already optimal
+for d=4, but routing blocks ≥192 to the GPU (the new d≥4 default in `gpu_min_blk`) is a
+**reproducible 1.16× over CPU-only** at χ=512 (interleaved min-of-3 A/B on one thermal
+window: 31.5 vs 36.5 s; a 128 crossover floods the device, 208 routes nothing). The
+vs-TeNPy table above keeps the conservative cool-box CPU numbers; the GPU lever
+compounds on top at large χ. (Same-window hot-box runs show larger ratios — throttling
+hurts TeNPy's single-thread boost clock more than our all-core clocks — which is exactly
+why we do not quote them.)
+
+### Performance vs TeNPy (fermionic Hubbard ground-state DMRG)
+
+`benchmarks/hubbard_dmrg_vs_tenpy.py` — the most common workload, N=64, U=4, half
+filling, both at N+Sz symmetry, both converging to `dE < 1e-10` per sweep at fixed χ,
+final energies agreeing to ~1e-8 (one computation timed twice). TeNPy is timed at BOTH
+1 thread and all cores and the faster is taken (unlike its TEBD, DMRG can profit from
+BLAS threads — we measure rather than guess its optimum). min-of-2:
+
+| N=64, U=4, χ | TeNPy (best thr) | QuantX | **QuantX vs TeNPy** | \|ΔE\| |
+|---|---|---|---|---|
+| 128 | 119.7 s (1 thr) | **55.1 s** | **2.17×** | 2.8e-8 |
+| 256 | 106.0 s (1 thr) | **77.5 s** | **1.37×** | 7.7e-9 |
+
+(Both tools timed in the same thermal window; TeNPy's single thread beat its 20-thread
+run at both χ.) The χ=256 row was initially a 0.81× *loss*; two fixes flipped it. First,
+the benchmark's convergence criteria were unequal (our `tol=1e-11` vs TeNPy's
+`max_E_err=1e-10` — ours 10× stricter); equalized at 1e-10. Second — a genuine engine
+improvement — the GS path's `stable` SVD used Eigen's BDCSVD on every block for
+condition-number safety (the Majumdar–Ghosh lesson), but LAPACK `xgesdd` is *equally* a
+direct, condition-stable SVD with a several-fold smaller constant: large blocks
+(≥`gesdd_min`) now route to gesdd on the stable path too (BDCSVD stays for small blocks
+and as the fallback), 127→77 s at χ=256. The MG-degeneracy regression (deterministic,
+variational) still guards the path.
 
 ## Scope and limits
 

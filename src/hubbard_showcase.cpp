@@ -50,6 +50,28 @@ int main(int argc, char** argv) {
     int chi = argc > 1 ? std::atoi(argv[1]) : 128;   // Mott is area-law: chi=128 is converged
     const double t = 1.0;
 
+    // Single-run GS bench mode (for benchmarks/hubbard_dmrg_vs_tenpy.py):
+    // QX_HUB_BENCH="N chi" [QX_HUB_U, QX_HUB_2U1=1] -> one half-filling GS DMRG,
+    // prints "E= ... wall= ... s" and exits. Packed two-U(1) by default (our best).
+    if (const char* b = std::getenv("QX_HUB_BENCH")) {
+        int N = 32, bchi = 128;
+        std::sscanf(b, "%d %d", &N, &bchi);
+        double U = std::getenv("QX_HUB_U") ? std::atof(std::getenv("QX_HUB_U")) : 4.0;
+        const char* h2 = std::getenv("QX_HUB_2U1");
+        const bool two_u1 = !(h2 && std::atoi(h2) == 0);
+        auto mpo = build_hubbard_mpo(N, t, U, two_u1);
+        std::vector<int> cfg(N);
+        for (int i = 0; i < N; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto t0 = std::chrono::steady_clock::now();
+        // tol 1e-10 matches the TeNPy side's max_E_err=1e-10 (fair convergence criterion)
+        double E = run_dmrg_blocks(mpo, N, bchi, 1e-11, 80, 1e-10,
+                                   two_u1 ? pack_q2(N, 0) : N, &cfg).energy;
+        double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("HUB_BENCH N=%d chi=%d U=%.2f 2U1=%d : E=%.10f wall=%8.3f s\n",
+                    N, bchi, U, (int)two_u1, E, wall);
+        return 0;
+    }
+
     std::printf("Fermionic Hubbard chain on the FAST block-sparse path (chi=%d).\n"
                 "Half-filling bulk energy density e_bulk=(E_N-E_{N-dN})/dN vs the EXACT\n"
                 "Lieb-Wu Bethe-ansatz e(U) (brute ED is impossible at these sizes).\n\n", chi);

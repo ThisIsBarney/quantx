@@ -35,6 +35,6 @@ int main(int argc, char** argv) {
 
     std::printf("d=%d n=%-3d chi_max=%-5d steps=%-4d dt=%.4f | max_bond=%-5d wall=%8.3f s | %.4f s/step | E=%.9f | QX_GPU_MIN_BLK=%s QX_GPU_THETA_MINWORK=%s\n",
                 d, n, chi, steps, dt, r.max_bond, r.wall_time_s, r.wall_time_s/steps, r.energy,
-                thr ? thr : "(unset->128)", thrT ? thrT : "(unset->2097152)");
+                thr ? thr : "(unset->d-aware 128/256/192)", thrT ? thrT : "(unset->2097152)");
     return 0;
 }
