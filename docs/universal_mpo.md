@@ -212,6 +212,24 @@ Two engine generalizations were needed, both instructive:
   would double-count U on interior sites; the gate now takes boundary weights (½ interior,
   1 at the chain ends). Models without on-site terms are weight-independent → unchanged.
 
+### Showcase: spin-charge separation (T=0 spectroscopy)
+
+![Hubbard spin-charge separation](hubbard_spin_charge_skw.svg)
+
+The defining phenomenon of 1D interacting fermions, computed on the fast packed
+two-U(1) path (`qx_hubbard_spectra`, N=64, U=4t, half filling): the **same ground
+state** probed with the spin operator (`2Sz`) and the charge-fluctuation operator
+(`n−1`) produces two completely different spectra. `S_spin(k,ω)` is **gapless at
+k=π** — the spinon continuum, whose bandwidth tracks the superexchange `J_eff=4t²/U`
+— while `S_charge(k,ω)` is pushed above the **Mott gap** (`Δ_c≈1.29t` at U=4 from the
+Bethe ansatz): the electron's spin and charge propagate as separate collective
+excitations with different energy scales. Both underlying correlators
+`C_{j,l0}(t) = ⟨gs|W_j e^{−i(H−E0)t} W_{l0}|gs⟩` are ED-validated to ~3e-4
+(`qx_hubbard_test`); the figure is a space+time FFT (`benchmarks/plot_hubbard_skw.py`).
+Chasing this physics through ED validation also uncovered — and fixed — a latent
+`out_state` export bug that had silently biased every T=0 spectral correlator at the
+~1e-2 level (the bond-1 Schmidt values were dropped; see #175).
+
 ### Performance vs TeNPy (fermionic Hubbard real-time TEBD)
 
 `benchmarks/hubbard_tebd_vs_tenpy.py` times the same fermionic quench (CDW, N=32, U=4,
