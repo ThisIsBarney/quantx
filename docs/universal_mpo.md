@@ -230,6 +230,37 @@ Chasing this physics through ED validation also uncovered — and fixed — a la
 `out_state` export bug that had silently biased every T=0 spectral correlator at the
 ~1e-2 level (the bond-1 Schmidt values were dropped; see #175).
 
+### Finite temperature: the fermionic purification stack
+
+The full finite-T machinery — cooling, statics, `S(k,ω,T)`, `σ(ω,T)` — runs the
+fermionic chain. The design point that makes it work with **no new mechanism**: the
+Jordan–Wigner string threads the *physical* modes only; the ancillas are bosonic
+spectators outside the string. The swap-and-carry network only ever exchanges a
+physical mode with an ancilla (never two physical modes), so the **plain SWAP is
+exact** — no fermionic SWAP needed — and the purified MPOs pass over ancillas with the
+plain identity. Everything is ED-validated (grand canonical, all 4^n states):
+
+| Finite-T check (np=3, U=4) | vs ED |
+|---|---|
+| β=0 statics: `E=U·np/4`, `⟨n_c n_j⟩` diag 1.5 / off-diag 1 | exact / machine zero |
+| cooled `⟨H⟩` at β=1 vs Gibbs | 7.8e-7 |
+| F1 spin correlator `C_{j,l0}(t;T)` (β=0.5) | 3.4e-4 |
+| F2 current-current `⟨J(t)J(0)⟩_β` (fermionic charge current) | 6.1e-4 |
+
+![Hubbard S(k,w,T)](skw_hubbard_b2.0.svg)
+![Hubbard optical conductivity](conductivity_hubbard_sigma.svg)
+
+The demo figures run at the **particle-hole symmetric point** `μ = U/2`, which pins
+`⟨n⟩ = 1` at *every* temperature — the honest half-filled Mott ensemble. (The first
+attempt at μ=0 produced a physically *correct but different* object: the grand-canonical
+filling drifts below 1 on cooling and the low-ω response is a doped-carrier Drude peak —
+caught because the σ(ω) spectral weight sat below the Mott gap, contradicting the
+intended caption.) At μ=U/2 the physics is textbook: `S_spin(k,ω,T)` stays gapless at
+k=π (spinons at the superexchange scale, `C(0)=0.8045` at T=0.5 vs 0.806 at T=0 —
+half filling pinned to 3 digits), while `σ(ω,T)` puts its weight **above the Mott gap**
+(peak at ω≈3.2 ~ the upper Hubbard band; the below-gap fraction drops 26% → 15% → **8%**
+as T cools 2 → 1 → 0.5 — thermal in-gap carriers freezing out).
+
 ### Performance vs TeNPy (fermionic Hubbard real-time TEBD)
 
 `benchmarks/hubbard_tebd_vs_tenpy.py` times the same fermionic quench (CDW, N=32, U=4,
@@ -321,9 +352,12 @@ variational) still guards the path.
   conserved U(1)s on the unchanged single-int block machinery (see the performance
   section); Hubbard uses it by default on the benchmark path (`build_hubbard_mpo(...,
   two_u1)`), ED-validated for GS + TDVP2 + TEBD.
-- **Still to come for Hubbard:** the spectroscopy layer (`S(k,ω)`, `σ(ω)`) and finite-T
-  purification — the finite-T **SWAP gate must become fermionic** (a −1 for odd-parity ×
-  odd-parity exchanges; the current `build_swap_gate` is the plain permutation), and the
-  purified on-site-U weighting needs the same care as the TEBD gate. The **dynamics path
-  is also still d=2-only for non-uniform / longer-range** models (the TEBD
-  `build_gate_from_mpo` handles on-site terms now, but assumes nearest-neighbour bonds).
+- **Finite-T Hubbard (done):** statics + F1 + F2 on the purified chain, ED-validated
+  (see the finite-temperature section). The feared "fermionic SWAP" turned out
+  unnecessary — the swap network never exchanges two physical modes, so the plain
+  permutation is exact under the physical-modes-only Jordan–Wigner convention. The
+  purified on-site-U carries boundary weights in both the cooling and the real-time
+  sweeps; `μ=U/2` pins the half-filled ensemble for the demos.
+- **Still open:** the **dynamics path is d=2-only for non-uniform / longer-range**
+  models (the TEBD `build_gate_from_mpo` handles on-site terms now, but assumes
+  nearest-neighbour bonds).

@@ -32,10 +32,15 @@ int main(int argc, char** argv) {
     for (int a = 7; a < argc; ++a) betas.push_back(std::atof(argv[a]));
     if (betas.empty()) betas = {0.5, 1.0, 2.0};
     const int d = std::getenv("QX_BENCH_D") ? std::atoi(std::getenv("QX_BENCH_D")) : 2;
+    // QX_BENCH_DELTA: XXZ anisotropy for d=2/3; the on-site U for d=4 ((J,delta)->(t,U)).
+    const double bdelta = std::getenv("QX_BENCH_DELTA") ? std::atof(std::getenv("QX_BENCH_DELTA")) : 1.0;
+    // QX_BENCH_MU (d=4): chemical potential; U/2 pins half filling at every T.
+    const double bmu = std::getenv("QX_BENCH_MU") ? std::atof(std::getenv("QX_BENCH_MU")) : 0.0;
 
     std::printf("Transport benchmark: %s N=%d (2N=%d purified sites), "
-                "dt=%.3f, %d steps (t->%.1f), chi<=%d, cutoff=%.0e, cool=%d\n",
-                d==3?"spin-1":"spin-1/2", N, 2*N, dt, nsteps, dt*nsteps, chi, cutoff, ncool);
+                "dt=%.3f, %d steps (t->%.1f), chi<=%d, cutoff=%.0e, cool=%d%s\n",
+                d==4?"Hubbard":d==3?"spin-1":"spin-1/2", N, 2*N, dt, nsteps, dt*nsteps,
+                chi, cutoff, ncool, d==4?" (delta=U)":"");
 
     // disentangle OFF: the correlator is disentangler-invariant (~1e-13), so the
     // cheaper single-sweep path emits identical C(t;T) at ~2x the speed -- the
@@ -43,9 +48,9 @@ int main(int argc, char** argv) {
     // benchmark (F1, qx_thermal_spectral_bench), not re-litigated here.
     std::vector<ConductivityThermalResult> res;
     for (double beta : betas)
-        res.push_back(run_conductivity_thermal_blocks(N, 1.0, 1.0, beta, ncool, dt,
+        res.push_back(run_conductivity_thermal_blocks(N, 1.0, bdelta, beta, ncool, dt,
                                                       nsteps, chi, cutoff,
-                                                      /*disentangle*/false, d));
+                                                      /*disentangle*/false, d, bmu));
 
     // per-temperature summary: <J^2>, Drude proxy, peak bond, wall time
     std::printf("\n  %-6s %-12s %-12s %-9s %-9s\n",
@@ -68,7 +73,11 @@ int main(int argc, char** argv) {
         std::printf("\n");
     }
 
-    if (FILE* f = std::fopen("docs/transport_correlator.csv", "w")) {
+    // QX_BENCH_OUT overrides the output path (so d=3/d=4 runs don't clobber the
+    // d=2 artifact -- the trap the spin-1 run hit once).
+    const char* outp = std::getenv("QX_BENCH_OUT");
+    if (!outp) outp = "docs/transport_correlator.csv";
+    if (FILE* f = std::fopen(outp, "w")) {
         std::fprintf(f, "t");
         for (double beta : betas) std::fprintf(f, ",ReC_b%.2f,ImC_b%.2f", beta, beta);
         std::fprintf(f, "\n");
@@ -78,7 +87,7 @@ int main(int argc, char** argv) {
             std::fprintf(f, "\n");
         }
         std::fclose(f);
-        std::printf("\n  wrote docs/transport_correlator.csv\n");
+        std::printf("\n  wrote %s\n", outp);
     }
     return 0;
 }
