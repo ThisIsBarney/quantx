@@ -2680,36 +2680,58 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
 // before any bt_energy (thermal_step_blocks itself needs no environments).
 static BMPS purified_init(int n_phys, const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     const int n = 2 * n_phys, d = (int)qphys.size();
+    // Each pair |s>_p |sbar>_a carries the fixed total P = qphys.front()+qphys.back():
+    // 0 for the spin models (up pairs with dn, +2 with -2, ...), pack(2,0) for the
+    // packed Hubbard charges (|0> pairs with |updn>, |up> with |dn> -- every pair holds
+    // exactly 2 particles at Sz 0). The pairing s -> P - qphys[s] must be a BIJECTION
+    // (each state a unique partner) or the beta=0 physical RDM is not maximally mixed:
+    // that requires an injective qphys -- true for the spins and the packed two-U(1)
+    // Hubbard, NOT for single-U(1) Hubbard ({0,1,1,2}); fail loud rather than cool a
+    // wrong Gibbs state.
+    const int P = qphys.front() + qphys.back();
+    for (int a = 0; a < d; ++a) {
+        int partner = -1;
+        for (int b = 0; b < d; ++b) if (qphys[b] == P - qphys[a]) {
+            if (partner >= 0) throw std::runtime_error(
+                "purified_init: qphys is not injective (two local states share a charge); "
+                "the beta=0 pairing is ambiguous -- use the packed two-U(1) charges");
+            partner = b;
+        }
+        if (partner < 0) throw std::runtime_error(
+            "purified_init: local state has no conjugate partner (qphys[t] == P - qphys[s])");
+    }
     BMPS s; s.n = n;
     s.bond.resize(n + 1);
-    // Odd bonds (inside a pair) carry the d physical-state charges, one dim-1 sector
-    // each; even bonds (between pairs) return to total Sz 0.
-    std::vector<std::pair<int,int>> odd;
-    for (int qc : qphys) odd.push_back({qc, 1});
-    std::sort(odd.begin(), odd.end());
-    for (int i = 0; i <= n; ++i)
-        s.bond[i] = (i % 2 == 0) ? BondSpace::from_pairs({{0, 1}})
-                                 : BondSpace::from_pairs(odd);
+    // Odd bonds (inside pair p) carry p*P + the d physical-state charges; even bonds
+    // (between pairs) sit at the accumulated pair total p*P (0 for the spin models).
+    s.bond[0] = BondSpace::from_pairs({{0, 1}});
+    for (int p = 0; p < n_phys; ++p) {
+        std::vector<std::pair<int,int>> odd;
+        for (int qc : qphys) odd.push_back({p * P + qc, 1});
+        std::sort(odd.begin(), odd.end());
+        s.bond[2*p+1] = BondSpace::from_pairs(odd);
+        s.bond[2*p+2] = BondSpace::from_pairs({{(p + 1) * P, 1}});
+    }
     s.A.resize(n);
     const double amp = 1.0 / std::sqrt((double)d);   // |Phi> = (1/sqrt d) sum_s |s>_p |s_bar>_a
     for (int p = 0; p < n_phys; ++p) {
-        // physical site 2p (q_L=0): amplitude 1/sqrt(d) in each physical-state column.
-        auto pcols = phys_groups(s.bond[2*p+1], 0, +1, qphys);
+        // physical site 2p (q_L = p*P): amplitude 1/sqrt(d) in each physical-state column.
+        auto pcols = phys_groups(s.bond[2*p+1], p * P, +1, qphys);
         Mat phys = Mat::Zero(1, phys_total(pcols));
         for (int sc = 0; sc < d; ++sc) {
             if (pcols[sc].width == 0) continue;
             double sign = (d == 2 && sc == 1) ? -1.0 : +1.0;   // keep the spin-1/2 singlet sign
             phys(0, pcols[sc].off) = S(sign * amp);
         }
-        s.A[2*p][0] = phys;
-        // ancilla site 2p+1: per bond sector q_L=qphys[sc], the ancilla state with
-        // charge -q_L returns the bond to 0.
+        s.A[2*p][p * P] = phys;
+        // ancilla site 2p+1: per bond sector q_L = p*P + qphys[sc], the ancilla state
+        // with charge P - qphys[sc] returns the bond to (p+1)*P.
         for (int sc = 0; sc < d; ++sc) {
-            int qL = qphys[sc];
+            int qL = p * P + qphys[sc];
             auto acols = phys_groups(s.bond[2*p+2], qL, +1, qphys);
             Mat anc = Mat::Zero(1, phys_total(acols));
             for (int t = 0; t < d; ++t)
-                if (qphys[t] == -qL && acols[t].width > 0) { anc(0, acols[t].off) = S(1); break; }
+                if (qphys[t] == P - qphys[sc] && acols[t].width > 0) { anc(0, acols[t].off) = S(1); break; }
             s.A[2*p+1][qL] = anc;
         }
     }
@@ -2749,16 +2771,29 @@ static void thermal_step_blocks(BMPS& s, double dtau, int chi_max, double cutoff
     auto& A = s.A; auto& bond = s.bond;
     // d=2: the analytic XXZ gate + the Gate-format SWAP (bit-identical). d>2: the
     // physical bond gate from the (non-purified) MPO + the general d^2 SWAP.
-    Gate gx2{}, gsw2{}; Mat gxG, gswG;
+    Gate gx2{}, gsw2{}; Mat gxMid, gxLft, gxRgt, gswG;
     if (d == 2) { gx2 = build_xxz_gate(J, delta, Cx(-dtau/2, 0));
                   gsw2 = Gate{S(1), S(0), S(1), S(1), S(0)}; }
-    else        { gxG = build_gate_from_mpo(*phys_mpo, Cx(-dtau/2, 0));
-                  gswG = build_swap_gate(d); }
+    else {
+        // On-site terms (Hubbard U) get boundary weights exactly as in tebd2_step_blocks:
+        // the gated (odd) interleaved bond i joins the physical pair ((i-1)/2, (i-1)/2+1);
+        // the FIRST physical bond (i==1) owns physical site 0 fully, the LAST (i==n-3)
+        // owns site n_phys-1 fully, interior sites get 1/2 from each side. Models with
+        // no on-site term (spin-1) make the three variants identical -- bit-identical.
+        gxMid = build_gate_from_mpo(*phys_mpo, Cx(-dtau/2, 0), 0.5, 0.5);
+        gxLft = build_gate_from_mpo(*phys_mpo, Cx(-dtau/2, 0), 1.0, (n == 4) ? 1.0 : 0.5);
+        gxRgt = build_gate_from_mpo(*phys_mpo, Cx(-dtau/2, 0), 0.5, 1.0);
+        gswG = build_swap_gate(d);
+    }
     auto do_bond = [&](int i, bool swap) {
         auto theta = form_theta(A[i], A[i+1], no_sv, bond[i], bond[i+1], bond[i+2], true, qphys);
         bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         if (d == 2) apply_gate_theta(theta, bond[i], bond[i+2], swap ? gsw2 : gx2);
-        else        apply_gate_theta_general(theta, bond[i], bond[i+2], swap ? gswG : gxG, d, qphys);
+        else {
+            const Mat& G = swap ? gswG
+                         : (i == 1) ? gxLft : (i == n - 3) ? gxRgt : gxMid;
+            apply_gate_theta_general(theta, bond[i], bond[i+2], G, d, qphys);
+        }
         return block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff, false, false, qphys);
     };
     for (int i = 0; i <= n - 3; ++i) {                 // left -> right
@@ -2798,13 +2833,29 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
     using clk = std::chrono::steady_clock;
     const int n = 2 * n_phys, c_phys = n_phys / 2;
     ThermalOut out; out.n_phys = n_phys; out.c = c_phys;
-    // d=2: spin-1/2 XXZ purified chain (the analytic gate path). d>2: spin-1 (d=3)
-    // purified chain; the cooling gate comes from a small non-purified physical MPO.
-    std::vector<int> qphys = (d == 2) ? SPIN_HALF_CHARGES : std::vector<int>{+2, 0, -2};
+    // d=2: spin-1/2 XXZ purified chain (the analytic gate path). d=3: spin-1 purified
+    // chain. d=4: fermionic Hubbard purified chain with the packed two-U(1) charge --
+    // by the (J, delta) -> (t, U) convention: J = hopping t, delta = on-site U. The
+    // cooling gate comes from a small non-purified physical MPO in every d>2 case.
+    std::vector<int> qphys =
+        (d == 2) ? SPIN_HALF_CHARGES :
+        (d == 3) ? std::vector<int>{+2, 0, -2}
+                 : std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
     auto mpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
-                        : qx_dmrg::build_spin1_purified_mpo(n_phys, J);
+             : (d == 3) ? qx_dmrg::build_spin1_purified_mpo(n_phys, J)
+                        : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta);
     std::vector<MPOSite> phys_mpo;
-    if (d > 2) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);   // bond gate source
+    if (d == 3) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);   // bond gate source
+    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true);
+    // The purified chain's total charge: n_phys * (pair total P). 0 for the spin
+    // models; pack(2,0) per pair for Hubbard. The top overlap env sits there.
+    const int qtot = n_phys * (qphys.front() + qphys.back());
+    // Observable weights: the charge VALUE for spins (2Sz); packed charges decode to
+    // the particle number n_j via obs_of_charge -- so "Z_j" below means n_j for d=4.
+    std::vector<double> wts(qphys.size());
+    for (size_t k = 0; k < qphys.size(); ++k) wts[k] = obs_of_charge(qphys[k]);
+    std::vector<S> wdiag(wts.size());
+    for (size_t k = 0; k < wts.size(); ++k) wdiag[k] = S(wts[k]);
     BMPS s = purified_init(n_phys, qphys);
 
     auto measure = [&](double beta) {
@@ -2813,19 +2864,19 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
         out.E.push_back(bt_energy(s, mpo));
         auto OL = overlap_left_envs(s, s, qphys);
         auto OR = overlap_right_envs(s, s, qphys);
-        double Z = OL[n].count(0) ? rp(OL[n].at(0)(0, 0)) : 1.0;
+        double Z = OL[n].count(qtot) ? rp(OL[n].at(qtot)(0, 0)) : 1.0;
         if (std::abs(Z) < 1e-300) Z = 1.0;
-        auto zall = measure_sz_all(s, s, OL, OR, qphys);
+        auto zall = measure_sz_all(s, s, OL, OR, qphys, &wts);
         std::vector<double> zj(n_phys);
         for (int p = 0; p < n_phys; ++p) zj[p] = rp(zall[2*p]) / Z;
-        // <(2Sz)_j (2Sz)_src> for all j from one source: phi = (2Sz)_src|psi> + envs
-        // (the charge operator is diagonal, so phi keeps the same Sz block structure).
+        // <W_j W_src> for all j from one source: phi = W_src|psi> + envs (W is
+        // diagonal, so phi keeps the same charge block structure).
         auto zrow = [&](int p_src) {
             BMPS phi = s;
-            apply_sz_site(phi, 2 * p_src, qphys);
+            apply_site_diag(phi, 2 * p_src, wdiag, qphys);
             auto OL2 = overlap_left_envs(s, phi, qphys);
             auto OR2 = overlap_right_envs(s, phi, qphys);
-            auto v = measure_sz_all(s, phi, OL2, OR2, qphys);
+            auto v = measure_sz_all(s, phi, OL2, OR2, qphys, &wts);
             std::vector<double> r(n_phys);
             for (int p = 0; p < n_phys; ++p) r[p] = rp(v[2*p]) / Z;
             return r;

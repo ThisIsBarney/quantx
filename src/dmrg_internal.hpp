@@ -142,6 +142,10 @@ inline double obs_of_charge(int q) {
 //   pack_q2(N_total, 2Sz_total), e.g. pack_q2(n, 0) for the half-filling singlet.
 std::vector<MPOSite> build_hubbard_mpo(int n, double t = 1.0, double U = 0.0,
                                        bool two_u1 = false);
+// Hubbard on the interleaved purified chain (physical even, ancilla identity odd) --
+// finite-T. JW string threads the physical modes only (ancillas bosonic, plain
+// identity carries + plain SWAP in the cooling). Packed two-U(1) charges.
+std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t = 1.0, double U = 0.0);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
