@@ -427,6 +427,77 @@ int main() {
         fails += !(ok0 && ok1 && ok2);
     }
 
+    // (i) FINITE-T DYNAMICS, F1 + F2: the purified real-time correlators vs ED.
+    // F1: C_{j,l0}(t;T) = Tr(rho_beta (2Sz_j)(t) (2Sz_l0)) -- the finite-T spin
+    // structure factor's raw data. F2: C(t;T) = <J(t)J(0)>_beta with the fermionic
+    // CHARGE current J = it sum_s (c^dag_{i s} c_{i+1 s} - h.c.) (JW form, so a
+    // misplaced parity factor in the current MPO could not match ED).
+    std::printf("== Hubbard finite-T F1 S(k,w) + F2 <J(t)J(0)> vs ED (grand canonical) ==\n");
+    {
+        const int np = 3, l0v = np / 2; const double t = 1.0, U = 4.0, beta = 0.5, dt = 0.1;
+        const int nst = 5;
+        const MatC& H = hubbard_ed_H(np, t, U);
+        int dim = (int)H.rows();
+        Eigen::SelfAdjointEigenSolver<MatC> es(H);
+        Eigen::VectorXd E = es.eigenvalues(); MatC V = es.eigenvectors();
+        double e0 = E(0), Zt = 0;
+        for (int a = 0; a < dim; ++a) Zt += std::exp(-beta * (E(a) - e0));
+        // plain (no JW string -- diagonal/even operators) site embedding
+        MatC I4e = MatC::Identity(4,4);
+        auto emb = [&](int site, const MatC& o) {
+            MatC O = MatC::Identity(1,1);
+            for (int k = 0; k < np; ++k) O = kron(O, k == site ? o : I4e);
+            return O;
+        };
+        // F1 reference: M_j = V^dag (2Sz_j) V; C(j,t) = sum_ab w_a e^{i(Ea-Eb)t} Mj(a,b) Ml0(b,a)
+        MatC Sz2 = MatC::Zero(4,4); Sz2(1,1) = 1; Sz2(2,2) = -1;
+        auto Mop = [&](int j){ return MatC(V.adjoint() * emb(j, Sz2) * V); };
+        MatC Ml0 = Mop(l0v);
+        auto C1_ed = [&](int j, double tt) {
+            MatC Mj = Mop(j); Cxd c = 0;
+            for (int a = 0; a < dim; ++a) for (int b = 0; b < dim; ++b)
+                c += std::exp(-beta*(E(a)-e0)) *
+                     std::exp(Cxd(0,(E(a)-E(b))*tt)) * Mj(a,b) * Ml0(b,a);
+            return c / Zt;
+        };
+        auto r1 = run_spectral_thermal_blocks(np, t, U, beta, 30, dt, nst, 64, 1e-10,
+                                              /*disentangle*/true, /*d*/4);
+        double e1max = 0;
+        for (int s = 0; s <= nst; ++s) for (int j = 0; j < np; ++j) {
+            Cxd ced = C1_ed(j, s*dt), cbl(r1.C_re[s][j], r1.C_im[s][j]);
+            e1max = std::max(e1max, std::abs(ced - cbl));
+        }
+        bool okf1 = e1max < 2e-2;
+        // F2 reference: the fermionic charge current via explicit JW operators
+        MatC Jop = MatC::Zero(dim, dim);
+        for (int l = 0; l < np - 1; ++l) {
+            MatC hop = ferm(np,l,Cup.adjoint())*ferm(np,l+1,Cup)
+                     + ferm(np,l,Cdn.adjoint())*ferm(np,l+1,Cdn);
+            Jop += Cxd(0, t) * (hop - MatC(hop.adjoint()));
+        }
+        MatC Jm = MatC(V.adjoint() * Jop * V);
+        auto C2_ed = [&](double tt) {
+            Cxd c = 0;
+            for (int a = 0; a < dim; ++a) for (int b = 0; b < dim; ++b)
+                c += std::exp(-beta*(E(a)-e0)) *
+                     std::exp(Cxd(0,(E(a)-E(b))*tt)) * Jm(a,b) * Jm(b,a);
+            return c / Zt;
+        };
+        auto r2 = run_conductivity_thermal_blocks(np, t, U, beta, 30, dt, nst, 96, 1e-10,
+                                                  /*disentangle*/true, /*d*/4);
+        double e2max = 0;
+        for (int s = 0; s <= nst; ++s) {
+            Cxd ced = C2_ed(s*dt), cbl(r2.C_re[s], r2.C_im[s]);
+            e2max = std::max(e2max, std::abs(ced - cbl));
+        }
+        bool okf2 = e2max < 3e-2;
+        std::printf("  np=%d U=%.1f beta=%.1f : F1 max|C-C_ED|=%.2e %s ; "
+                    "F2 C(0)=%.4f (ED %.4f) max|C-C_ED|=%.2e %s\n",
+                    np, U, beta, e1max, okf1?"OK":"FAIL",
+                    r2.C_re[0], std::real(C2_ed(0.0)), e2max, okf2?"OK":"FAIL");
+        fails += !(okf1 && okf2);
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }
