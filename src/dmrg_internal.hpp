@@ -146,6 +146,9 @@ std::vector<MPOSite> build_hubbard_mpo(int n, double t = 1.0, double U = 0.0,
 // finite-T. JW string threads the physical modes only (ancillas bosonic, plain
 // identity carries + plain SWAP in the cooling). Packed two-U(1) charges.
 std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t = 1.0, double U = 0.0);
+// Total charge current of the Hubbard chain on the purified chain (JW form, identity
+// ancillas): J = it sum_{i,s}(c^dag_{i s}c_{i+1 s} - h.c.). For finite-T transport.
+std::vector<MPOSite> build_hubbard_current_purified_mpo(int n_phys, double t = 1.0);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.

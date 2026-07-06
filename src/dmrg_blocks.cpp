@@ -2938,11 +2938,22 @@ static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
     auto& A = s.A; auto& bond = s.bond;
     // d=2: analytic XXZ gate + Gate SWAP (bit-identical). d>2: MPO-derived physical
     // gate (at tau_half) + general d^2 SWAP, applied via apply_gate_theta_general.
-    Gate gxxz2{}, gsw2{}; Mat gxG, gswG;
+    // On-site terms (Hubbard U) take boundary weights: the sweep's FIRST gated bond
+    // owns its left site's on-site term fully, the LAST its right site's (interior
+    // sites get 1/2 from each neighbouring gate). Models with no on-site term
+    // (spins; also every current MPO) make the three variants identical.
+    Gate gxxz2{}, gsw2{}; Mat gxMid, gxLft, gxRgt, gswG;
+    int firstGate = -1, lastGate = -1;
+    for (int i = lo; i <= hi; ++i)
+        if ((i % 2 == 0) != swap_on_even) { if (firstGate < 0) firstGate = i; lastGate = i; }
     if (d == 2) { gxxz2 = build_xxz_gate(J, delta, tau_half);
                   gsw2 = Gate{S(1), S(0), S(1), S(1), S(0)}; }
-    else        { gxG = build_gate_from_mpo(*phys_mpo, tau_half);
-                  gswG = build_swap_gate(d); }
+    else {
+        gxMid = build_gate_from_mpo(*phys_mpo, tau_half, 0.5, 0.5);
+        gxLft = build_gate_from_mpo(*phys_mpo, tau_half, 1.0, (firstGate == lastGate) ? 1.0 : 0.5);
+        gxRgt = build_gate_from_mpo(*phys_mpo, tau_half, 0.5, 1.0);
+        gswG = build_swap_gate(d);
+    }
     enum Kind { NONE, GATE, SWAP };
     auto kind = [&](int i) -> Kind {
         if (i < lo || i > hi) return NONE;                   // identity transport
@@ -2953,8 +2964,11 @@ static void rt_sweep(BMPS& s, bool swap_on_even, int lo, int hi, Cx tau_half,
         bt_expand_theta(theta, bond[i], bond[i+2], qphys);
         if (k != NONE) {
             if (d == 2) apply_gate_theta(theta, bond[i], bond[i+2], k==SWAP ? gsw2 : gxxz2);
-            else        apply_gate_theta_general(theta, bond[i], bond[i+2],
-                                                 k==SWAP ? gswG : gxG, d, qphys);
+            else {
+                const Mat& G = (k == SWAP) ? gswG
+                             : (i == firstGate) ? gxLft : (i == lastGate) ? gxRgt : gxMid;
+                apply_gate_theta_general(theta, bond[i], bond[i+2], G, d, qphys);
+            }
         }
         return block_svd_truncate(theta, bond[i], bond[i+2], chi_max, cutoff,
                                   /*allow_fp32=*/true, /*stable=*/false, qphys);
@@ -3011,14 +3025,26 @@ static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delt
     const int n = 2 * n_phys, l0 = n_phys / 2;
     SpectralThermalOut out; out.n_phys = n_phys; out.l0 = l0;
     out.beta = beta; out.disentangled = disentangle;
-    // d=2: spin-1/2 XXZ purified chain. d>2: spin-1 (d=3); cooling and real-time
-    // gates come from a small non-purified physical MPO.
-    std::vector<int> qphys = (d == 2) ? SPIN_HALF_CHARGES : std::vector<int>{+2, 0, -2};
+    // d=2: spin-1/2 XXZ purified chain. d=3: spin-1. d=4: fermionic Hubbard by the
+    // (J, delta) -> (t, U) convention, packed two-U(1), spin source (2Sz) so this is
+    // the finite-T SPIN structure factor of the Mott chain. Cooling and real-time
+    // gates come from a small non-purified physical MPO for every d>2.
+    std::vector<int> qphys =
+        (d == 2) ? SPIN_HALF_CHARGES :
+        (d == 3) ? std::vector<int>{+2, 0, -2}
+                 : std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
     auto mpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
-                        : qx_dmrg::build_spin1_purified_mpo(n_phys, J);
+             : (d == 3) ? qx_dmrg::build_spin1_purified_mpo(n_phys, J)
+                        : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta);
     std::vector<MPOSite> phys_mpo;
-    if (d > 2) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
+    if (d == 3) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
+    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true);
     const std::vector<MPOSite>* pm = (d > 2) ? &phys_mpo : nullptr;
+    // Correlator operator: the charge itself for the spins (2Sz); for the packed
+    // Hubbard charges pass the explicit 2Sz weights (the charge is not the observable).
+    const std::vector<double> w_hub_spin = {0.0, +1.0, -1.0, 0.0};
+    const std::vector<double>* wts = (d == 4) ? &w_hub_spin : nullptr;
+    const int qtot = n_phys * (qphys.front() + qphys.back());
 
     auto bond_of = [](const BMPS& st) {
         int mb = 0; for (auto& b : st.bond) { int t = 0; for (int dd : b.dims) t += dd;
@@ -3035,22 +3061,29 @@ static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delt
     rebuild_mpo_envs(psi, mpo);
     out.E = bt_energy(psi, mpo);
 
-    // normalisation Z = <psi|psi> (overlap convention; constant in t)
+    // normalisation Z = <psi|psi> (overlap convention; constant in t). The top
+    // overlap env sits at the chain's total charge (0 for spins, n_phys*P for Hubbard).
     double Z;
     { auto OL = overlap_left_envs(psi, psi, qphys);
-      Z = OL[n].count(0) ? rp(OL[n].at(0)(0,0)) : 1.0; }
+      Z = OL[n].count(qtot) ? rp(OL[n].at(qtot)(0,0)) : 1.0; }
     if (std::abs(Z) < 1e-300) Z = 1.0;
 
-    // 2. A = |psi(beta)>, B = (2Sz)_{l0}|psi(beta)>  (physical site 2*l0)
+    // 2. A = |psi(beta)>, B = W_{l0}|psi(beta)>  (physical site 2*l0; W = 2Sz)
     BMPS A = psi, B = psi;
-    apply_sz_site(B, 2 * l0, qphys);
+    if (wts) {
+        std::vector<S> dg(wts->size());
+        for (size_t k = 0; k < wts->size(); ++k) dg[k] = S((*wts)[k]);
+        apply_site_diag(B, 2 * l0, dg, qphys);
+    } else {
+        apply_sz_site(B, 2 * l0, qphys);
+    }
 
-    // 3. real-time evolve both; measure C_{j,l0}(t) = <A(t)|(2Sz)_{2j}|B(t)>/Z
+    // 3. real-time evolve both; measure C_{j,l0}(t) = <A(t)|W_{2j}|B(t)>/Z
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
         auto OL = overlap_left_envs(A, B, qphys);
         auto OR = overlap_right_envs(A, B, qphys);
-        auto ov = measure_sz_all(A, B, OL, OR, qphys);
+        auto ov = measure_sz_all(A, B, OL, OR, qphys, wts);
         std::vector<double> re(n_phys), im(n_phys);
         for (int p = 0; p < n_phys; ++p) {
             S c = ov[2*p] / S(Z); re[p] = c.real(); im[p] = c.imag();
@@ -3094,16 +3127,24 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
     const int n = 2 * n_phys;
     ConductivityThermalOut out; out.n_phys = n_phys;
     out.beta = beta; out.disentangled = disentangle;
-    // d=2: spin-1/2 XXZ + spin current. d>2: spin-1 (d=3); cooling/real-time gates
-    // come from a small non-purified physical MPO.
-    std::vector<int> qphys = (d == 2) ? SPIN_HALF_CHARGES : std::vector<int>{+2, 0, -2};
+    // d=2: spin-1/2 XXZ + spin current. d=3: spin-1. d=4: fermionic Hubbard by the
+    // (J, delta) -> (t, U) convention -- J becomes the CHARGE current. Cooling and
+    // real-time gates come from a small non-purified physical MPO for every d>2.
+    std::vector<int> qphys =
+        (d == 2) ? SPIN_HALF_CHARGES :
+        (d == 3) ? std::vector<int>{+2, 0, -2}
+                 : std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
     auto Hmpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
-                         : qx_dmrg::build_spin1_purified_mpo(n_phys, J);
+              : (d == 3) ? qx_dmrg::build_spin1_purified_mpo(n_phys, J)
+                         : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta);
     auto Jmpo = (d == 2) ? qx_dmrg::build_current_purified_mpo(n_phys, J)
-                         : qx_dmrg::build_spin1_current_purified_mpo(n_phys, J);
+              : (d == 3) ? qx_dmrg::build_spin1_current_purified_mpo(n_phys, J)
+                         : qx_dmrg::build_hubbard_current_purified_mpo(n_phys, J);
     std::vector<MPOSite> phys_mpo;
-    if (d > 2) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
+    if (d == 3) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
+    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true);
     const std::vector<MPOSite>* pm = (d > 2) ? &phys_mpo : nullptr;
+    const int qtot = n_phys * (qphys.front() + qphys.back());
 
     auto bond_of = [](const BMPS& st) {
         int mb = 0; for (auto& b : st.bond) { int t = 0; for (int dd : b.dims) t += dd;
@@ -3121,7 +3162,7 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
 
     double Z;
     { auto OL = overlap_left_envs(psi, psi, qphys);
-      Z = OL[n].count(0) ? rp(OL[n].at(0)(0, 0)) : 1.0; }
+      Z = OL[n].count(qtot) ? rp(OL[n].at(qtot)(0, 0)) : 1.0; }
     if (std::abs(Z) < 1e-300) Z = 1.0;
 
     // 2. A = |psi>, B = J|psi>  (apply_mpo_to_bmps derives qphys from Jmpo)
@@ -3133,7 +3174,7 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
     for (int step = 0; step <= n_steps; ++step) {
         BMPS JA = apply_mpo_to_bmps(A, Jmpo, chi_max, cutoff);
         auto OL = overlap_left_envs(JA, B, qphys);
-        S ov = OL[n].count(0) ? OL[n].at(0)(0, 0) : S(0);
+        S ov = OL[n].count(qtot) ? OL[n].at(qtot)(0, 0) : S(0);
         S c = ov / S(Z);
         out.times.push_back(step * dt);
         out.C_re.push_back(c.real()); out.C_im.push_back(c.imag());

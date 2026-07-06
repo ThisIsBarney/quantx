@@ -222,6 +222,52 @@ std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t, double U) 
     return mpo;
 }
 
+// Total CHARGE-current operator of the Hubbard chain on the interleaved purified
+// chain -- the d=4 analogue of build_current_purified_mpo, for finite-T transport.
+// From the continuity equation for H = -t sum(c^dag c + h.c.):
+//   J = i t sum_{i,sigma} (c^dag_{i sigma} c_{i+1 sigma} - c^dag_{i+1 sigma} c_{i sigma})
+// which in the Jordan-Wigner matrix-tensor form (F parity in the emit operators,
+// exactly as in build_hubbard_mpo) is
+//   J = i t sum_sigma [ (C^dag_sigma F)_i (x) (C_sigma)_{i+1} - (F C_sigma)_i (x) (C^dag_sigma)_{i+1} ].
+// Hermitian; no on-site term (W(start,done)=0). Ancillas are identity pass-throughs.
+std::vector<MPOSite> build_hubbard_current_purified_mpo(int n_phys, double t) {
+    const int chi = 6, d = 4, n = 2 * n_phys;
+    Mat I4 = Mat::Identity(4, 4);
+    Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
+    Mat Cup = Mat::Zero(4, 4); Cup(0,1)=1; Cup(2,3)=1;
+    Mat Cdn = Mat::Zero(4, 4); Cdn(0,2)=1; Cdn(1,3)=-1;
+    Mat Cupd = Cup.adjoint(), Cdnd = Cdn.adjoint();
+    const Cx it(0.0, t);
+
+    std::array<std::array<Mat, 6>, 6> Wp;
+    for (auto& row : Wp) for (auto& e : row) e = Mat::Zero(4, 4);
+    Wp[0][0] = I4; Wp[5][5] = I4;
+    Wp[5][1] = it * (Cupd * F);    Wp[1][0] = Cup;    // +it c^dag_up c_up (forward)
+    Wp[5][2] = it * (Cdnd * F);    Wp[2][0] = Cdn;    // +it c^dag_dn c_dn
+    Wp[5][3] = (-it) * (F * Cup);  Wp[3][0] = Cupd;   // -it c^dag_{i+1 up} c_{i up}
+    Wp[5][4] = (-it) * (F * Cdn);  Wp[4][0] = Cdnd;
+    std::array<std::array<Mat, 6>, 6> Wa;
+    for (auto& row : Wa) for (auto& e : row) e = Mat::Zero(4, 4);
+    for (int b = 0; b < chi; ++b) Wa[b][b] = I4;
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W6 = (i % 2 == 0) ? Wp : Wa;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d;
+        site.phys_charge = {pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 5 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W6[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
 // h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
 // 8-wide: each emitted operator completes at range 1, or passes one identity and
