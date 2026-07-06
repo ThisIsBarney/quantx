@@ -140,12 +140,16 @@ inline double obs_of_charge(int q) {
 //   {pack(0,0), pack(1,+1), pack(1,-1), pack(2,0)}) -- several times finer blocks
 //   (TeNPy-granularity), the Hubbard performance path. Target sector: total_charge =
 //   pack_q2(N_total, 2Sz_total), e.g. pack_q2(n, 0) for the half-filling singlet.
+// mu: chemical potential (H gains -mu sum n_i); mu = U/2 is the particle-hole
+// symmetric point that pins <n> = 1 at EVERY temperature (the half-filled Mott
+// ensemble for the finite-T paths). Default 0 (all T=0 sector-targeted work).
 std::vector<MPOSite> build_hubbard_mpo(int n, double t = 1.0, double U = 0.0,
-                                       bool two_u1 = false);
+                                       bool two_u1 = false, double mu = 0.0);
 // Hubbard on the interleaved purified chain (physical even, ancilla identity odd) --
 // finite-T. JW string threads the physical modes only (ancillas bosonic, plain
 // identity carries + plain SWAP in the cooling). Packed two-U(1) charges.
-std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t = 1.0, double U = 0.0);
+std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t = 1.0, double U = 0.0,
+                                                double mu = 0.0);
 // Total charge current of the Hubbard chain on the purified chain (JW form, identity
 // ancillas): J = it sum_{i,s}(c^dag_{i s}c_{i+1 s} - h.c.). For finite-T transport.
 std::vector<MPOSite> build_hubbard_current_purified_mpo(int n_phys, double t = 1.0);
@@ -323,7 +327,7 @@ struct ThermalResult {
 ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
                                  double dbeta, int n_steps, int chi_max,
                                  double cutoff, int measure_stride = 1,
-                                 bool with_chi = true, int d = 2);
+                                 bool with_chi = true, int d = 2, double mu = 0.0);
 
 // Finite-temperature dynamical structure factor (F1): the purified-state
 // analogue of run_spectral_blocks. The state is cooled to |psi(beta)> =
@@ -354,7 +358,7 @@ struct SpectralThermalResult {
 SpectralThermalResult run_spectral_thermal_blocks(
     int n_phys, double J, double delta, double beta, int n_cool,
     double dt, int n_steps, int chi_max, double cutoff,
-    bool disentangle = true, int d = 2);
+    bool disentangle = true, int d = 2, double mu = 0.0);
 
 // Finite-temperature spin conductivity (F2): the current-current correlator
 //   C(t;T) = <J(t) J(0)>_beta = <psi(beta)| e^{iHt} J e^{-iHt} J |psi(beta)> / Z
@@ -375,6 +379,6 @@ struct ConductivityThermalResult {
 ConductivityThermalResult run_conductivity_thermal_blocks(
     int n_phys, double J, double delta, double beta, int n_cool,
     double dt, int n_steps, int chi_max, double cutoff,
-    bool disentangle = true, int d = 2);
+    bool disentangle = true, int d = 2, double mu = 0.0);
 
 } // namespace qx_dmrg

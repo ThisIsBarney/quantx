@@ -15,7 +15,7 @@ import os
 import sys
 
 CSVP = sys.argv[1] if len(sys.argv) > 1 else "docs/skw_b1.0.csv"
-MODEL = sys.argv[2] if len(sys.argv) > 2 else "spinhalf"   # "spinhalf" | "spin1"
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "spinhalf"   # "spinhalf" | "spin1" | "hubbard"
 with open(CSVP, newline="") as f:
     rows = list(csv.reader(f))
 meta = {kv.split("=")[0]: kv.split("=")[1] for kv in rows[0][1:] if "=" in kv}
@@ -87,7 +87,13 @@ for wi in range(NW + 1):
         r, g, b = color(grid[wi][ki] / vmax)
         x = PX0 + ki * cw; y = PY1 - (wi + 1) * ch
         s.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{cw+0.6:.1f}" height="{ch+0.6:.1f}" fill="rgb({r},{g},{b})"/>')
-if MODEL == "spin1":
+if MODEL == "hubbard":
+    # Mott-insulator SPIN response: gapless spinons at the superexchange scale.
+    # Strong-coupling lower edge (pi/2) J_eff |sin k|, J_eff = 4 t^2 / U (U=4t -> 1).
+    Jeff = 1.0
+    low = " ".join(f"{xpx(k):.1f},{ypx((math.pi/2)*Jeff*abs(math.sin(k))):.1f}" for k in ks)
+    s.append(f'<polyline points="{low}" fill="none" stroke="#fff" stroke-width="1.3" stroke-dasharray="4,3" opacity="0.85"/>')
+elif MODEL == "spin1":
     # Haldane single-magnon branch w(k) = sqrt(Delta^2 + B(1+cos k)): gapped minimum
     # Delta ~ 0.41 J at k=pi (the Haldane gap), rising to ~2.7 J at k=0.
     DELTA, B = 0.41, 3.56
@@ -115,8 +121,11 @@ s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-26}" text-anchor="middle" font-size
 s.append(f'<text x="20" y="{(PY0+PY1)/2:.0f}" text-anchor="middle" font-size="13" fill="#222" '
          f'transform="rotate(-90 20 {(PY0+PY1)/2:.0f})">frequency  &#969;  (J=1)</text>')
 T_lab = ("inf" if beta == 0 else f"{1.0/beta:.2f}")
-_chain = "spin-1 Haldane chain" if MODEL == "spin1" else "Heisenberg chain"
-_ref = ("dashed = single-magnon branch, gapped at k=&#960; (Haldane gap &#916;&#8776;0.41)"
+_chain = ("Hubbard chain (U=4t, half filling) &#8212; spin response" if MODEL == "hubbard"
+          else "spin-1 Haldane chain" if MODEL == "spin1" else "Heisenberg chain")
+_ref = ("dashed = spinon edge (&#960;/2)J_eff|sin k|, J_eff=4t&#178;/U: the Mott spin sector is GAPLESS"
+        if MODEL == "hubbard" else
+        "dashed = single-magnon branch, gapped at k=&#960; (Haldane gap &#916;&#8776;0.41)"
         if MODEL == "spin1" else "dashed = des Cloizeaux&#8211;Pearson two-spinon edges")
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="24" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">S(k,&#969;,T) &#8212; {_chain}, T = {T_lab} (&#946;={beta:.1f})</text>')
 _path = "d&gt;2 fast path" if MODEL == "spin1" else "block path"

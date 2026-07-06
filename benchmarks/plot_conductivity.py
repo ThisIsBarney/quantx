@@ -23,8 +23,9 @@ import sys
 HERE = os.path.dirname(__file__)
 CSVP = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "docs",
                                                           "transport_correlator.csv")
-MODEL = sys.argv[2] if len(sys.argv) > 2 else "spinhalf"   # "spinhalf" | "spin1"
-_CHAIN = "spin-1 Haldane chain" if MODEL == "spin1" else "Heisenberg chain"
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "spinhalf"   # "spinhalf" | "spin1" | "hubbard"
+_CHAIN = ("Hubbard chain (U=4t, half filling) &#8212; charge current" if MODEL == "hubbard"
+          else "spin-1 Haldane chain" if MODEL == "spin1" else "Heisenberg chain")
 
 # --- read t, and Re/Im C(t) per beta ---------------------------------------
 with open(CSVP, newline="") as f:
@@ -101,11 +102,14 @@ for bi, b in enumerate(sorted(betas)):
     s.append(f'<line x1="{lx}" y1="{yy}" x2="{lx+22}" y2="{yy}" stroke="{col}" stroke-width="2.4"/>')
     s.append(f'<text x="{lx+28}" y="{yy+4}" font-size="11" fill="#333">T = {1.0/b:.2f}  (&#946;={b:.1f})</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-12}" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">'
-         'Response peaks near the exchange scale &#969;&#8776;J; total weight (f-sum &#8733; &#10216;J&#178;&#10217;<tspan baseline-shift="sub" font-size="8">T</tspan>) decreases on cooling. Absolute scale arbitrary.</text>')
+         + ('Optical weight sits ABOVE the Mott gap (&#969; &#8776; U scale); cooling sharpens the gap edge. Absolute scale arbitrary.'
+          if MODEL == "hubbard" else
+          'Response peaks near the exchange scale &#969;&#8776;J; total weight (f-sum &#8733; &#10216;J&#178;&#10217;<tspan baseline-shift="sub" font-size="8">T</tspan>) decreases on cooling. Absolute scale arbitrary.') + '</text>')
 s.append('</svg>')
 
 out = os.path.join(HERE, "..", "docs",
-                   "conductivity_spin1_sigma.svg" if MODEL == "spin1" else "conductivity_sigma_wT.svg")
+                   "conductivity_hubbard_sigma.svg" if MODEL == "hubbard"
+                   else "conductivity_spin1_sigma.svg" if MODEL == "spin1" else "conductivity_sigma_wT.svg")
 with open(out, "w", encoding="utf-8") as f:
     f.write("\n".join(s))
 print("wrote", os.path.normpath(out))

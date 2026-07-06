@@ -131,7 +131,7 @@ std::vector<MPOSite> build_spin1_heisenberg_mpo(int n, double J) {
 //
 // Bulk bond dim 6, lower-triangular: 0=done, {1,2,3,4}=the four travelling hop
 // half-terms (up-fwd, dn-fwd, up-bwd, dn-bwd), 5=start.
-std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U, bool two_u1) {
+std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U, bool two_u1, double mu) {
     const int chi = 6, d = 4;
     Mat I4 = Mat::Identity(4, 4);
     Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;  // (-1)^{n_up+n_dn}
@@ -146,7 +146,7 @@ std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U, bool two_u1) {
     for (auto& row : W) for (auto& e : row) e = Mat::Zero(4, 4);
     W[0][0] = I4;
     W[5][5] = I4;
-    W[5][0] = U * (Nu * Nd);                 // on-site U n_up n_dn
+    W[5][0] = U * (Nu * Nd) - mu * (Nu + Nd);   // on-site U n_up n_dn - mu n  (mu=U/2 pins half filling)
     W[5][1] = -t * (Cupd * F); W[1][0] = Cup;   // c^dag_{i up} c_{i+1 up}
     W[5][2] = -t * (Cdnd * F); W[2][0] = Cdn;   // c^dag_{i dn} c_{i+1 dn}
     W[5][3] = -t * (F * Cup ); W[3][0] = Cupd;  // h.c. (up): c^dag_{i+1 up} c_{i up}
@@ -182,7 +182,7 @@ std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U, bool two_u1) {
 // the PLAIN identity (not F). This is consistent with the swap-and-carry cooling,
 // which only ever exchanges a physical mode with an ancilla (never two physical
 // modes), so the plain SWAP permutation is exact. Always the packed two-U(1) charge.
-std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t, double U) {
+std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t, double U, double mu) {
     const int chi = 6, d = 4, n = 2 * n_phys;
     Mat I4 = Mat::Identity(4, 4);
     Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
@@ -195,7 +195,7 @@ std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t, double U) 
     std::array<std::array<Mat, 6>, 6> Wp;   // physical site (same bulk as build_hubbard_mpo)
     for (auto& row : Wp) for (auto& e : row) e = Mat::Zero(4, 4);
     Wp[0][0] = I4; Wp[5][5] = I4;
-    Wp[5][0] = U * (Nu * Nd);
+    Wp[5][0] = U * (Nu * Nd) - mu * (Nu + Nd);
     Wp[5][1] = -t * (Cupd * F); Wp[1][0] = Cup;
     Wp[5][2] = -t * (Cdnd * F); Wp[2][0] = Cdn;
     Wp[5][3] = -t * (F * Cup ); Wp[3][0] = Cupd;

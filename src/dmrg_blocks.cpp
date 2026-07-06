@@ -2828,7 +2828,7 @@ struct ThermalOut {
 static ThermalOut run_thermal(int n_phys, double J, double delta,
                               double dbeta, int n_steps, int chi_max,
                               double cutoff, int measure_stride, bool with_chi,
-                              int d = 2) {
+                              int d = 2, double mu = 0.0) {
     static_assert(std::is_same_v<S, Cx>, "thermal requires complex scalar");
     using clk = std::chrono::steady_clock;
     const int n = 2 * n_phys, c_phys = n_phys / 2;
@@ -2843,10 +2843,10 @@ static ThermalOut run_thermal(int n_phys, double J, double delta,
                  : std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
     auto mpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
              : (d == 3) ? qx_dmrg::build_spin1_purified_mpo(n_phys, J)
-                        : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta);
+                        : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta, mu);
     std::vector<MPOSite> phys_mpo;
     if (d == 3) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);   // bond gate source
-    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true);
+    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true, mu);
     // The purified chain's total charge: n_phys * (pair total P). 0 for the spin
     // models; pack(2,0) per pair for Hubbard. The top overlap env sits there.
     const int qtot = n_phys * (qphys.front() + qphys.back());
@@ -3019,7 +3019,8 @@ struct SpectralThermalOut {
 static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delta,
                                                double beta, int n_cool,
                                                double dt, int n_steps, int chi_max,
-                                               double cutoff, bool disentangle, int d = 2) {
+                                               double cutoff, bool disentangle, int d = 2,
+                                               double mu = 0.0) {
     static_assert(std::is_same_v<S, Cx>, "thermal spectral requires complex scalar");
     using clk = std::chrono::steady_clock;
     const int n = 2 * n_phys, l0 = n_phys / 2;
@@ -3035,10 +3036,10 @@ static SpectralThermalOut run_spectral_thermal(int n_phys, double J, double delt
                  : std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
     auto mpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
              : (d == 3) ? qx_dmrg::build_spin1_purified_mpo(n_phys, J)
-                        : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta);
+                        : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta, mu);
     std::vector<MPOSite> phys_mpo;
     if (d == 3) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
-    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true);
+    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true, mu);
     const std::vector<MPOSite>* pm = (d > 2) ? &phys_mpo : nullptr;
     // Correlator operator: the charge itself for the spins (2Sz); for the packed
     // Hubbard charges pass the explicit 2Sz weights (the charge is not the observable).
@@ -3121,7 +3122,8 @@ struct ConductivityThermalOut {
 static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, double delta,
                                                        double beta, int n_cool,
                                                        double dt, int n_steps, int chi_max,
-                                                       double cutoff, bool disentangle, int d = 2) {
+                                                       double cutoff, bool disentangle, int d = 2,
+                                                       double mu = 0.0) {
     static_assert(std::is_same_v<S, Cx>, "thermal conductivity requires complex scalar");
     using clk = std::chrono::steady_clock;
     const int n = 2 * n_phys;
@@ -3136,13 +3138,13 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
                  : std::vector<int>{pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
     auto Hmpo = (d == 2) ? qx_dmrg::build_xxz_purified_mpo(n_phys, J, delta)
               : (d == 3) ? qx_dmrg::build_spin1_purified_mpo(n_phys, J)
-                         : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta);
+                         : qx_dmrg::build_hubbard_purified_mpo(n_phys, J, delta, mu);
     auto Jmpo = (d == 2) ? qx_dmrg::build_current_purified_mpo(n_phys, J)
               : (d == 3) ? qx_dmrg::build_spin1_current_purified_mpo(n_phys, J)
                          : qx_dmrg::build_hubbard_current_purified_mpo(n_phys, J);
     std::vector<MPOSite> phys_mpo;
     if (d == 3) phys_mpo = qx_dmrg::build_spin1_heisenberg_mpo(3, J);
-    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true);
+    if (d == 4) phys_mpo = qx_dmrg::build_hubbard_mpo(3, J, delta, /*two_u1*/true, mu);
     const std::vector<MPOSite>* pm = (d > 2) ? &phys_mpo : nullptr;
     const int qtot = n_phys * (qphys.front() + qphys.back());
 
@@ -3790,9 +3792,9 @@ ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, in
 ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
                                  double dbeta, int n_steps, int chi_max,
                                  double cutoff, int measure_stride, bool with_chi,
-                                 int d) {
+                                 int d, double mu) {
     auto o = BlockDMRG<Cx>::run_thermal(n_phys, J, delta, dbeta, n_steps,
-                                        chi_max, cutoff, measure_stride, with_chi, d);
+                                        chi_max, cutoff, measure_stride, with_chi, d, mu);
     ThermalResult r;
     r.betas = o.betas; r.E = o.E; r.chi_zz = o.chi_zz;
     r.sz = o.sz; r.szsz = o.szsz;
@@ -3804,10 +3806,11 @@ ThermalResult run_thermal_blocks(int n_phys, double J, double delta,
 // Entry point: finite-T dynamical structure factor S(k,omega,T) data (F1).
 SpectralThermalResult run_spectral_thermal_blocks(
         int n_phys, double J, double delta, double beta, int n_cool,
-        double dt, int n_steps, int chi_max, double cutoff, bool disentangle, int d) {
+        double dt, int n_steps, int chi_max, double cutoff, bool disentangle, int d,
+        double mu) {
     auto o = BlockDMRG<Cx>::run_spectral_thermal(n_phys, J, delta, beta, n_cool,
                                                  dt, n_steps, chi_max, cutoff,
-                                                 disentangle, d);
+                                                 disentangle, d, mu);
     SpectralThermalResult r;
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
     r.bond_t = o.bond_t; r.bond_a_t = o.bond_a_t; r.bond_b_t = o.bond_b_t;
@@ -3820,10 +3823,11 @@ SpectralThermalResult run_spectral_thermal_blocks(
 // Entry point: finite-T spin conductivity current-current correlator (F2).
 ConductivityThermalResult run_conductivity_thermal_blocks(
         int n_phys, double J, double delta, double beta, int n_cool,
-        double dt, int n_steps, int chi_max, double cutoff, bool disentangle, int d) {
+        double dt, int n_steps, int chi_max, double cutoff, bool disentangle, int d,
+        double mu) {
     auto o = BlockDMRG<Cx>::run_conductivity_thermal(n_phys, J, delta, beta, n_cool,
                                                      dt, n_steps, chi_max, cutoff,
-                                                     disentangle, d);
+                                                     disentangle, d, mu);
     ConductivityThermalResult r;
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im; r.bond_t = o.bond_t;
     r.n_phys = o.n_phys; r.max_bond = o.max_bond;
