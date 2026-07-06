@@ -391,6 +391,42 @@ int main() {
         fails += !ok;
     }
 
+    // (h) FINITE TEMPERATURE via ancilla purification: cool the beta=0 thermofield
+    // double with the fermionic (JW-in-the-MPO) swap-and-carry gates. The JW string
+    // threads the physical modes only (ancillas are bosonic spectators: identity MPO
+    // carries + plain SWAP -- the cooling never exchanges two physical modes), so if
+    // any fermion sign were misplaced, <H>_beta would miss the exact grand-canonical
+    // Gibbs average sum_i E_i e^{-beta E_i} / Z over ALL 4^n states (mu = 0).
+    std::printf("== Hubbard finite-T via purification vs ED Gibbs (grand canonical) ==\n");
+    {
+        const int np = 3; const double t = 1.0, U = 4.0, beta = 1.0;
+        const MatC& H = hubbard_ed_H(np, t, U);
+        Eigen::VectorXd ev = Eigen::SelfAdjointEigenSolver<MatC>(H).eigenvalues();
+        double e0 = ev(0), num = 0, den = 0;
+        for (int i = 0; i < ev.size(); ++i) {
+            double w = std::exp(-beta * (ev(i) - e0)); num += ev(i) * w; den += w; }
+        double E_ed = num / den;
+        // (J, delta) -> (t, U) convention for d=4; dbeta=0.05 -> 20 steps reach beta=1
+        auto th = run_thermal_blocks(np, t, U, 0.05, 20, 64, 1e-12, 1, false, /*d*/4);
+        double E_th = th.E.back();
+        double err = std::abs(E_th - E_ed);
+        // beta=0 exact checks: E(0) = Tr(H)/4^n = U*np/4 (hopping traceless);
+        // physical RDM = I/4 per site -> <n_c n_j> = 1.5 (diag), <n>^2 = 1 (off-diag).
+        double E0_exact = U * np / 4.0;
+        bool ok0 = std::abs(th.E.front() - E0_exact) < 1e-8;
+        const auto& nn0 = th.szsz.front();
+        int cc = np / 2;
+        double offmax = 0;
+        for (int p = 0; p < np; ++p) if (p != cc) offmax = std::max(offmax, std::abs(nn0[p] - 1.0));
+        bool ok1 = std::abs(nn0[cc] - 1.5) < 1e-6 && offmax < 1e-6;
+        bool ok2 = err < 5e-3;
+        std::printf("  np=%d U=%.1f : E(0)=%.6f (=%.2f) %s ; beta=0 <n_c n_j> diag=%.4f(=1.5) "
+                    "off|max-1|=%.1e %s ; <H>_b1=%.6f ED=%.6f err=%.1e %s\n",
+                    np, U, th.E.front(), E0_exact, ok0?"OK":"FAIL",
+                    nn0[cc], offmax, ok1?"OK":"FAIL", E_th, E_ed, err, ok2?"OK":"FAIL");
+        fails += !(ok0 && ok1 && ok2);
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }

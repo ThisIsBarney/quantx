@@ -173,6 +173,55 @@ std::vector<MPOSite> build_hubbard_mpo(int n, double t, double U, bool two_u1) {
     return mpo;
 }
 
+// Fermionic Hubbard on the interleaved PURIFIED chain (physical even, ancilla odd) --
+// the d>2 analogue of build_spin1_purified_mpo, for finite temperature. Convention:
+// the Jordan-Wigner string threads the PHYSICAL modes only; the ancillas are bosonic
+// spectators outside the string. The physical hopping's F parity factors therefore
+// live entirely in the physical emit/complete operators (exactly as in
+// build_hubbard_mpo), and the ancilla sites pass every MPO bond channel through with
+// the PLAIN identity (not F). This is consistent with the swap-and-carry cooling,
+// which only ever exchanges a physical mode with an ancilla (never two physical
+// modes), so the plain SWAP permutation is exact. Always the packed two-U(1) charge.
+std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t, double U) {
+    const int chi = 6, d = 4, n = 2 * n_phys;
+    Mat I4 = Mat::Identity(4, 4);
+    Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
+    Mat Nu = Mat::Zero(4, 4); Nu(1,1)=1; Nu(3,3)=1;
+    Mat Nd = Mat::Zero(4, 4); Nd(2,2)=1; Nd(3,3)=1;
+    Mat Cup = Mat::Zero(4, 4); Cup(0,1)=1; Cup(2,3)=1;
+    Mat Cdn = Mat::Zero(4, 4); Cdn(0,2)=1; Cdn(1,3)=-1;
+    Mat Cupd = Cup.adjoint(), Cdnd = Cdn.adjoint();
+
+    std::array<std::array<Mat, 6>, 6> Wp;   // physical site (same bulk as build_hubbard_mpo)
+    for (auto& row : Wp) for (auto& e : row) e = Mat::Zero(4, 4);
+    Wp[0][0] = I4; Wp[5][5] = I4;
+    Wp[5][0] = U * (Nu * Nd);
+    Wp[5][1] = -t * (Cupd * F); Wp[1][0] = Cup;
+    Wp[5][2] = -t * (Cdnd * F); Wp[2][0] = Cdn;
+    Wp[5][3] = -t * (F * Cup ); Wp[3][0] = Cupd;
+    Wp[5][4] = -t * (F * Cdn ); Wp[4][0] = Cdnd;
+    std::array<std::array<Mat, 6>, 6> Wa;   // ancilla: identity pass-through, all channels
+    for (auto& row : Wa) for (auto& e : row) e = Mat::Zero(4, 4);
+    for (int b = 0; b < chi; ++b) Wa[b][b] = I4;
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W6 = (i % 2 == 0) ? Wp : Wa;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d;
+        site.phys_charge = {pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 5 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W6[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
 // h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
 // 8-wide: each emitted operator completes at range 1, or passes one identity and
