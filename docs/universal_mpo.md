@@ -324,6 +324,30 @@ direct, condition-stable SVD with a several-fold smaller constant: large blocks
 and as the fallback), 127→77 s at χ=256. The MG-degeneracy regression (deterministic,
 variational) still guards the path.
 
+### Performance vs ITensor (Julia) — the same GS problem, third engine
+
+`benchmarks/hubbard_dmrg_vs_itensor.py` + `itensor_hubbard_dmrg.jl` run the identical
+problem on **ITensor** (ITensorMPS.jl 0.4 / ITensors.jl 0.9, Julia 1.12): "Electron"
+sites with `conserve_qns=true` (N+Sz), fixed `maxdim=χ`, `cutoff=1e-12`,
+`DMRGObserver(energy_tol=1e-10)`. Fairness: **JIT is excluded** via an in-process
+warm-up run (the Julia analogue of excluding Python import time); BLAS threads are
+measured at both 1 and 20 and the faster taken (1 wins); the idiomatic ramped
+`maxdim` schedule was also timed and is statistically identical to fixed (303 vs
+306 s at χ=256), so the stop criterion dominates. min-of-2, same box/thermal window:
+
+| N=64, U=4, χ | ITensor (best thr) | QuantX | **QuantX vs ITensor** | \|ΔE\| |
+|---|---|---|---|---|
+| 128 | 84.6 s (1 thr) | **51.7 s** | **1.64×** | 6.0e-7 |
+| 256 | 305.8 s (1 thr) | **93.8 s** | **3.26×** | 3.9e-9 |
+
+Correctness cross-check: at n=4 ITensor reproduces our sector-ED energy −1.9531453087
+to every digit; at χ=256 the two engines' converged energies agree to 3.9e-9. (The
+larger 6e-7 gap at χ=128 is the truncation-limited regime — each engine's fixed-χ
+variational optimum differs slightly; at the converged χ=256 they coincide.) Honest
+note: on this problem ITensor measures *slower than TeNPy* (305.8 vs 106.0 s at
+χ=256, same box and criteria) — TeNPy remains the stronger competitor here, and the
+QuantX-vs-TeNPy table above stays the headline comparison.
+
 ## Scope and limits
 
 - **Phase 1 (done):** any *uniform-bulk* Sz-conserving MPO at local dimension
