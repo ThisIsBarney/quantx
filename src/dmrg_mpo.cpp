@@ -368,6 +368,64 @@ std::vector<MPOSite> build_hubbard_ladder_mpo(int Lx, double t, double tperp,
     return mpo;
 }
 
+// Two-leg Hubbard ladder, SITE-SPLIT formulation: the same Hamiltonian as
+// build_hubbard_ladder_mpo, but on 2*Lx Electron sites (d=4) in the JW order
+// A0,B0,A1,B1,... -- a PERIOD-2 uniform-chi MPO (the A sublattice emits the rung and
+// leg-a channels, the B sublattice the leg-b ones; derive_mpo_sym reads the union of
+// both sublattices' constraints). Rung hops are nearest-neighbour; leg hops are
+// range-2 with an F (parity) carry on the intervening site:
+//   c^dag_{A_x s} c_{A_{x+1} s} = (C^dag_s F)_{A_x} (x) F_{B_x} (x) (C_s)_{A_{x+1}}.
+// This formulation does LESS local work per sweep than the rung-fused d=16 chain
+// (d=4, twice the bonds) -- the performance mapping; both are the same physics.
+// 14-wide: 0=done, 1..4 rung (A->B), 5..8 leg-a (A..A, diagonal F carry at B),
+// 9..12 leg-b (B..B, diagonal F carry at A), 13=start.
+std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t, double tperp,
+                                                    double U, double mu) {
+    const int chi = 14, d = 4, n = 2 * Lx;
+    Mat I4 = Mat::Identity(4, 4);
+    Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
+    Mat Nu = Mat::Zero(4, 4); Nu(1,1)=1; Nu(3,3)=1;
+    Mat Nd = Mat::Zero(4, 4); Nd(2,2)=1; Nd(3,3)=1;
+    Mat Cup = Mat::Zero(4, 4); Cup(0,1)=1; Cup(2,3)=1;
+    Mat Cdn = Mat::Zero(4, 4); Cdn(0,2)=1; Cdn(1,3)=-1;
+    Mat Cupd = Cup.adjoint(), Cdnd = Cdn.adjoint();
+    Mat hs = U * (Nu * Nd) - mu * (Nu + Nd);     // on-site, both sublattices
+    // the four hop "half"-operators, one per channel slot within a group:
+    // emit {C^dag_up F, C^dag_dn F, F C_up, F C_dn}, complete {C_up, C_dn, C^dag_up, C^dag_dn}
+    const Mat em[4] = { Mat(Cupd * F), Mat(Cdnd * F), Mat(F * Cup), Mat(F * Cdn) };
+    const Mat co[4] = { Cup, Cdn, Cupd, Cdnd };
+
+    std::array<std::array<Mat, 14>, 14> WA, WB;
+    for (auto& row : WA) for (auto& e : row) e = Mat::Zero(4, 4);
+    for (auto& row : WB) for (auto& e : row) e = Mat::Zero(4, 4);
+    WA[0][0] = WA[13][13] = I4;  WB[0][0] = WB[13][13] = I4;
+    WA[13][0] = hs;              WB[13][0] = hs;
+    for (int k = 0; k < 4; ++k) {
+        WA[13][1 + k] = -tperp * em[k];  WB[1 + k][0] = co[k];       // rung: A emits, B completes
+        WA[13][5 + k] = -t * em[k];      WB[5 + k][5 + k] = F;       // leg a: A emits, B carries F,
+        WA[5 + k][0]  = co[k];                                       //        next A completes
+        WB[13][9 + k] = -t * em[k];      WA[9 + k][9 + k] = F;       // leg b: B emits, A carries F,
+        WB[9 + k][0]  = co[k];                                       //        next B completes
+    }
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        const auto& W14 = (i % 2 == 0) ? WA : WB;
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d;
+        site.phys_charge = {pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 13 : a, br = (i == n - 1) ? 0 : b;
+                site.W(a, b) = W14[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
 // h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
 // 8-wide: each emitted operator completes at range 1, or passes one identity and

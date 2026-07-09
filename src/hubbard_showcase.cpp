@@ -54,23 +54,28 @@ int main(int argc, char** argv) {
     // sector on the rung-fused (d=16) chain; prints both energies, the spin gap and
     // wall times. Used by the ladder showcase sweep and the vs-TeNPy ladder bench.
     if (const char* lz = std::getenv("QX_LADDER")) {
-        int Lx = 8, lchi = 256; double U = 8.0, tp = 1.0;
-        std::sscanf(lz, "%d %d %lf %lf", &Lx, &lchi, &U, &tp);
-        auto mpo = build_hubbard_ladder_mpo(Lx, 1.0, tp, U);
+        int Lx = 8, lchi = 256; double U = 8.0, tp = 1.0; int split = 0;
+        std::sscanf(lz, "%d %d %lf %lf %d", &Lx, &lchi, &U, &tp, &split);
         const int nm = 2 * Lx;
-        std::vector<int> cfg0(Lx), cfg1(Lx);
-        for (int x = 0; x < Lx; ++x) cfg0[x] = (x % 2 == 0) ? (4*1 + 2) : (4*2 + 1);
-        cfg1 = cfg0; cfg1[0] = 4*1 + 1;                  // one (up,up) rung -> Sz=1
+        const int nsites = split ? nm : Lx;
+        auto mpo = split ? build_hubbard_ladder_split_mpo(Lx, 1.0, tp, U)
+                         : build_hubbard_ladder_mpo(Lx, 1.0, tp, U);
+        std::vector<int> cfg0(nsites), cfg1;
+        if (split) { for (int i = 0; i < nm; ++i) cfg0[i] = (i % 2 == 0) ? 1 : 2;
+                     cfg1 = cfg0; cfg1[1] = 1; }
+        else       { for (int x = 0; x < Lx; ++x) cfg0[x] = (x % 2 == 0) ? (4*1+2) : (4*2+1);
+                     cfg1 = cfg0; cfg1[0] = 4*1 + 1; }
         auto t0 = std::chrono::steady_clock::now();
-        double E0 = run_dmrg_blocks(mpo, Lx, lchi, 1e-11, 60, 1e-10,
+        double E0 = run_dmrg_blocks(mpo, nsites, lchi, 1e-11, 60, 1e-10,
                                     pack_q2(nm, 0), &cfg0).energy;
         double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         t0 = std::chrono::steady_clock::now();
-        double E1 = run_dmrg_blocks(mpo, Lx, lchi, 1e-11, 60, 1e-10,
+        double E1 = run_dmrg_blocks(mpo, nsites, lchi, 1e-11, 60, 1e-10,
                                     pack_q2(nm, 2), &cfg1).energy;
         double w1 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        std::printf("LADDER Lx=%d chi=%d U=%.2f tp=%.2f : E0=%.10f (%.1fs)  "
-                    "E1=%.10f (%.1fs)  gap=%.6f\n", Lx, lchi, U, tp, E0, w0, E1, w1, E1 - E0);
+        std::printf("LADDER%s Lx=%d chi=%d U=%.2f tp=%.2f : E0=%.10f (%.1fs)  "
+                    "E1=%.10f (%.1fs)  gap=%.6f\n", split ? "-SPLIT" : "",
+                    Lx, lchi, U, tp, E0, w0, E1, w1, E1 - E0);
         return 0;
     }
 

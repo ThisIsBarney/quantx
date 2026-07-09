@@ -252,18 +252,27 @@ ground state a plain DMRG run) falls as 1/Lx on the open ladder and extrapolates
 **Δ_s ≈ 0.11t at U=8** — consistent with the classic DMRG literature values. χ=256 is
 converged (χ=384 moves the gap by 1e-6).
 
-**Honest performance note** (`benchmarks/hubbard_ladder_vs_tenpy.py`, Lx=16, U=8,
-χ=256, min-of-2): TeNPy solves the same ladder in **91.0 s vs our 140.8 s (1.55×
-faster wall-clock)** — while QuantX reaches a **1.8e-5 *lower* (better) energy**. Both
-facts have one cause: the *formulation*. TeNPy site-splits the ladder (d=4, 2Lx sites,
-its MPO handles the range-2 leg couplings), which does less local work per sweep; our
-rung fusion (d=16, Lx sites) does more work per bond but, at a matched rung-cut χ, its
-variational manifold *contains* the site-split one — hence the deeper energy. The
-engine-side fix is known: supporting **period-2 non-uniform MPOs** in `derive_mpo_sym`
-would let QuantX run the cheap site-split formulation too (the same
-honest-baseline-then-optimize arc as the single-U(1) → packed two-U(1) story). Until
-then the ladder capability is correctness-complete and physics-validated, with the
-formulation-level perf gap stated rather than hidden.
+**Performance — earned the same way as the chain** (`hubbard_ladder_vs_tenpy.py`,
+Lx=16, U=8, χ=256, min-of-2). The first, rung-fused benchmark *lost* on wall-clock:
+TeNPy 91.0 s vs our 140.8 s (though at a 1.8e-5 *lower* energy — at matched rung-cut χ
+the fused manifold contains the site-split one). The cause was the *formulation*, not
+the engine: site-splitting (d=4, twice the bonds) does less local work per sweep. So
+`derive_mpo_sym` was generalized to read **period-2 (position-dependent) uniform-χ
+MPOs** — it now merges the charge constraints of *all* bulk sites instead of one
+(uniform MPOs contribute identical edges from every site: bit-identical) — and
+`build_hubbard_ladder_split_mpo` provides the site-split formulation (14-wide, leg hops
+range-2 with diagonal F carries), ED-validated to `‖H_MPO−H_JW‖ = 0` exactly and
+~1e-13 vs sector-ED in both sectors. Result:
+
+| Lx=16, U=8, χ=256 | TeNPy (Ladder lattice) | QuantX rung-fused d=16 | QuantX **site-split d=4** |
+|---|---|---|---|
+| wall | 91.5 s | 140.8 s | **67.3 s** |
+| verdict | — | 0.65× | **QuantX 1.36×** (\|ΔE\|=7.3e-7) |
+
+Both formulations remain available (`QX_LADDER="Lx chi U tp [split]"`); the fused one
+keeps the deeper-manifold property and the NN-chain form that TEBD/TDVP2 need, the
+split one is the ground-state performance mapping — and the period-2 machinery is the
+gateway to wider ladders and cylinders, where fusion (d=4^W) is impractical.
 
 ### Finite temperature: the fermionic purification stack
 

@@ -552,6 +552,27 @@ int main() {
                     Lx, tp, U, herr, okh?"OK":"FAIL", E0_ed, e0, ok0?"OK":"FAIL",
                     E1_ed, e1, ok1?"OK":"FAIL", E1_ed - E0_ed);
         fails += !(okh && ok0 && ok1);
+
+        // SITE-SPLIT formulation of the same ladder: d=4 on 2*Lx sites, PERIOD-2 MPO
+        // (leg hops range-2 with F carries; derive_mpo_sym reads both sublattices).
+        // Same basis/ordering as the mode-chain ED -> direct comparison; the block
+        // DMRG must reproduce the same sector energies through this second route.
+        auto mpo2 = build_hubbard_ladder_split_mpo(Lx, t, tp, U);
+        MatC H_mpo2 = contract_mpo(mpo2);
+        double herr2 = (H - H_mpo2).cwiseAbs().maxCoeff();
+        bool okh2 = herr2 < 1e-12;
+        std::vector<int> scfg0(nm), scfg1(nm);
+        for (int i = 0; i < nm; ++i) scfg0[i] = (i % 2 == 0) ? 1 : 2;   // |up dn up dn ...>
+        scfg1 = scfg0; scfg1[1] = 1;                                    // two ups -> Sz=1
+        double E0s = run_dmrg_blocks(mpo2, nm, 256, 1e-11, 120, 1e-11,
+                                     pack_q2(nm, 0), &scfg0).energy;
+        double E1s = run_dmrg_blocks(mpo2, nm, 256, 1e-11, 120, 1e-11,
+                                     pack_q2(nm, 2), &scfg1).energy;
+        double es0 = std::abs(E0s - E0_ed), es1 = std::abs(E1s - E1_ed);
+        bool oks = es0 < 1e-6 && es1 < 1e-6;
+        std::printf("  SPLIT (period-2 d=4): ||H_MPO-H_JW||=%.1e %s ; blk errs %.1e / %.1e %s\n",
+                    herr2, okh2?"OK":"FAIL", es0, es1, oks?"OK":"FAIL");
+        fails += !(okh2 && oks);
     }
 
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
