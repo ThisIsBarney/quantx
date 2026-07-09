@@ -75,7 +75,10 @@ def quantx(chi):
     env["PATH"] = QX_DLL_DIR + os.pathsep + env.get("PATH", "")
     for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[_v] = _NCORE
-    env["QX_LADDER"] = f"{LX} {chi} {U} 1.0"
+    # site-split (period-2 d=4) formulation by default -- the performance mapping
+    # (same manifold as TeNPy's site chain); QX_FUSED=1 falls back to rung fusion.
+    split = "0" if os.environ.get("QX_FUSED") == "1" else "1"
+    env["QX_LADDER"] = f"{LX} {chi} {U} 1.0 {split}"
     out = subprocess.run([QX_BENCH], capture_output=True, text=True, env=env).stdout
     m = re.search(r"E0=([\d.eE+-]+) \(([\d.]+)s\)", out)
     if not m:
@@ -90,7 +93,7 @@ def main():
     import tenpy
     print(f"2-leg Hubbard LADDER GS DMRG  Lx={LX} (2x{LX} sites) U={U:g} half filling "
           f"reps={REPS}(min) | tenpy {tenpy.__version__} (Ladder lattice, best of "
-          f"1/{_NCORE} thr, N+Sz) | QuantX (rung-fused d=16, MT, N+Sz packed)\n", flush=True)
+          f"1/{_NCORE} thr, N+Sz) | QuantX (site-split period-2 d=4, MT, N+Sz packed)\n", flush=True)
     hdr = f"{'chi':>5} {'TeNPy(s)':>10} {'thr':>4} {'QX(s)':>9} {'QX<TeNPy':>9}  {'|dE|':>8}"
     print(hdr, flush=True); print("-" * len(hdr), flush=True)
     results = {"Lx": LX, "U": U, "reps": REPS, "runs": []}

@@ -159,6 +159,11 @@ std::vector<MPOSite> build_hubbard_current_purified_mpo(int n_phys, double t = 1
 // quasi-2D model; packed two-U(1) charges. Half filling target: pack_q2(2*Lx, 0).
 std::vector<MPOSite> build_hubbard_ladder_mpo(int Lx, double t = 1.0, double tperp = 1.0,
                                               double U = 0.0, double mu = 0.0);
+// The same ladder SITE-SPLIT: 2*Lx Electron sites (d=4), period-2 uniform-chi MPO
+// (leg hops range-2 with F carries). Less local work per sweep than the d=16 fusion;
+// the performance formulation. Half filling target: pack_q2(2*Lx, 0).
+std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t = 1.0, double tperp = 1.0,
+                                                    double U = 0.0, double mu = 0.0);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
@@ -180,30 +185,45 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
         if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l >= w) { w = mpo[i].chi_l; bulk = i; }
     if (bulk < 0)   // n<=2: only boundary sites (chi_l!=chi_r) -> no bulk to read
         throw std::runtime_error("derive_mpo_sym: no square bulk MPO site (chain too short, need n>=3)");
-    const MPOSite& W = mpo[bulk];
-    const int chi = W.chi_r;
-    const int ld = W.d;                          // local Hilbert-space dimension
-    const std::vector<int>& qphys = W.phys_charge;   // Sz charge of each local state
-    if ((int)qphys.size() != ld || W.W(0, 0).rows() != ld)
+    const int chi = mpo[bulk].chi_r;
+    const int ld = mpo[bulk].d;                  // local Hilbert-space dimension
+    const std::vector<int>& qphys = mpo[bulk].phys_charge;
+    if ((int)qphys.size() != ld || mpo[bulk].W(0, 0).rows() != ld)
         throw std::runtime_error("derive_mpo_sym: MPOSite invariant violated "
                                  "(d, phys_charge size, and op rows must all agree)");
 
+    // Collect charge-constraint edges from EVERY full-width bulk site, not just one:
+    // a period-2 (or generally position-dependent) uniform-chi MPO -- e.g. the
+    // site-split Hubbard ladder, whose A-sublattice W emits the rung/leg-a channels
+    // and whose B-sublattice W emits the leg-b ones -- determines some bond charges
+    // only through one sublattice. All sites share ONE bond space, so one delta array
+    // must satisfy the union of constraints (conflicts still throw). For a uniform
+    // MPO every site contributes identical edges: behaviour unchanged.
+    int first = -1;
+    for (int i = 0; i < (int)mpo.size(); ++i)
+        if (mpo[i].chi_l == chi && mpo[i].chi_r == chi) { first = i; break; }
     std::vector<std::array<int,3>> edges;       // (a,b,c): bond a->b carries charge c
-    for (int a = 0; a < chi; ++a)
-        for (int b = 0; b < chi; ++b) {
-            const Mat& m = W.W(a, b);
-            int c = 0; bool any = false;
-            for (int s = 0; s < ld; ++s)
-                for (int sp = 0; sp < ld; ++sp)
-                    if (std::abs(m(s, sp)) > 1e-13) {
-                        int cc = qphys[s] - qphys[sp];   // bra charge - ket charge
-                        if (!any) { c = cc; any = true; }
-                        else if (cc != c)
-                            throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
-                                                     "(bond carries mixed charge)");
-                    }
-            if (any) edges.push_back({a, b, c});
-        }
+    int taken = 0;
+    for (int i = first; i < (int)mpo.size() && taken < 4; ++i) {
+        const MPOSite& W = mpo[i];
+        if (W.chi_l != chi || W.chi_r != chi) continue;    // boundary sites
+        ++taken;                                 // 4 consecutive bulk sites cover period <= 4
+        for (int a = 0; a < chi; ++a)
+            for (int b = 0; b < chi; ++b) {
+                const Mat& m = W.W(a, b);
+                int c = 0; bool any = false;
+                for (int s = 0; s < ld; ++s)
+                    for (int sp = 0; sp < ld; ++sp)
+                        if (std::abs(m(s, sp)) > 1e-13) {
+                            int cc = qphys[s] - qphys[sp];   // bra charge - ket charge
+                            if (!any) { c = cc; any = true; }
+                            else if (cc != c)
+                                throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
+                                                         "(bond carries mixed charge)");
+                        }
+                if (any) edges.push_back({a, b, c});
+            }
+    }
 
     MPOSym sym; sym.chi = chi; sym.delta.assign(chi, 0);
     std::vector<char> known(chi, 0); known[0] = 1;     // anchor delta[0]=0
