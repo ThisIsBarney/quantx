@@ -268,6 +268,106 @@ std::vector<MPOSite> build_hubbard_current_purified_mpo(int n_phys, double t) {
     return mpo;
 }
 
+// Two-leg fermionic Hubbard LADDER via RUNG FUSION -- the first quasi-2D model.
+//   H = -t sum_{x,leg,s} (c^dag c + h.c.)_leg  - t_perp sum_{x,s} (c^dag_a c_b + h.c.)_rung
+//       + U sum n_up n_dn - mu sum n
+// Each rung (two Electron sites, legs a/b) is fused into ONE d=16 MPS site, so the
+// ladder becomes a UNIFORM NEAREST-NEIGHBOUR chain of rungs: derive_mpo_sym, the block
+// DMRG, the packed two-U(1) charges and the TEBD/TDVP2 gates all apply with no engine
+// changes (the alternative -- a snake ordering with range-2 couplings -- would need
+// period-2 non-uniform MPO support).
+//
+// Jordan-Wigner mode order: (x,a),(x,b),(x+1,a),(x+1,b),...  Rung basis |s_a, s_b>
+// with index s = 4*s_a + s_b (a = most significant, matching the ED kron convention).
+// Rung-local operators (strings within the rung):
+//   c_{a s} = C_s (x) I,   c_{b s} = F (x) C_s          (string passes mode a)
+// Inter-rung hopping (string covers the modes between the two legs' positions):
+//   c^dag_{x,a s} c_{x+1,a s} = [c^dag_{a s} F2]_x (x) [c_{a s}]_{x+1},  F2 = F(x)F
+//   c^dag_{x,b s} c_{x+1,b s} = [c^dag_{b s} (I(x)F)]_x (x) [c_{b s}]_{x+1}
+// (the emit operator carries the parity of every mode from its own position to the
+// rung end; verified against the explicit-JW ED to machine zero in qx_hubbard_test).
+// 10-wide MPO: 0=done, 1..8 = the eight travelling leg-hop channels, 9=start.
+// Charges: packed two-U(1) per rung, qphys[s] = pack(N_a+N_b, 2Sz_a+2Sz_b).
+std::vector<MPOSite> build_hubbard_ladder_mpo(int Lx, double t, double tperp,
+                                              double U, double mu) {
+    const int chi = 10, d = 16;
+    Mat I4 = Mat::Identity(4, 4);
+    Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
+    Mat Nu = Mat::Zero(4, 4); Nu(1,1)=1; Nu(3,3)=1;
+    Mat Nd = Mat::Zero(4, 4); Nd(2,2)=1; Nd(3,3)=1;
+    Mat Cup = Mat::Zero(4, 4); Cup(0,1)=1; Cup(2,3)=1;
+    Mat Cdn = Mat::Zero(4, 4); Cdn(0,2)=1; Cdn(1,3)=-1;
+    auto kron16 = [](const Mat& A, const Mat& B) {          // A on leg a (major), B on b
+        Mat K(16, 16);
+        for (int i = 0; i < 4; ++i) for (int j = 0; j < 4; ++j)
+            K.block(4*i, 4*j, 4, 4) = A(i, j) * B;
+        return K;
+    };
+    const Mat I16 = Mat::Identity(16, 16);
+    const Mat F2  = kron16(F, F);                            // rung parity
+    const Mat IF  = kron16(I4, F);                           // parity of mode b only
+    // rung-local fermion operators (JW within the rung)
+    auto ca = [&](const Mat& C){ return kron16(C, I4); };    // leg a
+    auto cb = [&](const Mat& C){ return kron16(F, C); };     // leg b (string over a)
+    const Mat CaU = ca(Cup), CaD = ca(Cdn), CbU = cb(Cup), CbD = cb(Cdn);
+    const Mat Na  = kron16(Nu + Nd, I4), Nb = kron16(I4, Nu + Nd);
+    // rung-local Hamiltonian: rung hopping + U + mu
+    Mat Hr = Mat::Zero(16, 16);
+    Mat rung_hop = CaU.adjoint() * CbU + CaD.adjoint() * CbD;
+    Hr += -tperp * (rung_hop + rung_hop.adjoint());
+    Hr += U * (kron16(Nu * Nd, I4) + kron16(I4, Nu * Nd));
+    Hr += -mu * (Na + Nb);
+
+    // travelling channels: emit on rung x, complete on rung x+1
+    struct Ch { Mat emit, comp; };
+    std::vector<Ch> ch;
+    for (const Mat* C : {&CaU, &CaD}) {          // leg a, both spins: fwd + bwd
+        Mat cd = C->adjoint();
+        ch.push_back({ -t * (cd * F2), *C });                    // c^dag_x c_{x+1}
+        ch.push_back({ -t * (F2 * (*C)), cd });                  // h.c.
+    }
+    for (const Mat* C : {&Cup, &Cdn}) {          // leg b
+        // Mode-level derivation: c^dag_{x,b s} c_{x+1,b s} = [I (x) (C^dag_s F)]_x
+        // (string = b's own remaining modes) (x) [F (x) C_s]_{x+1} (string over the
+        // intervening a modes on the NEXT rung). The emit uses the BARE b operator
+        // (no a-string -- that string belongs to the completing rung), the complete
+        // uses the a-strung one. Getting this split wrong is a 2t-sized error the
+        // explicit-JW ED check catches immediately.
+        Mat bare = kron16(I4, *C);               // b annihilator WITHOUT the a-string
+        Mat strung = cb(*C);                     // b annihilator WITH the a-string
+        ch.push_back({ -t * (bare.adjoint() * IF), strung });            // fwd
+        ch.push_back({ -t * (IF * bare), Mat(strung.adjoint()) });       // bwd (h.c.)
+    }
+
+    std::array<std::array<Mat, 10>, 10> W;
+    for (auto& row : W) for (auto& e : row) e = Mat::Zero(16, 16);
+    W[0][0] = I16; W[9][9] = I16;
+    W[9][0] = Hr;
+    for (int k = 0; k < 8; ++k) { W[9][1 + k] = ch[k].emit; W[1 + k][0] = ch[k].comp; }
+
+    // packed (N, 2Sz) rung charges: per-4-state N = {0,1,1,2}, 2Sz = {0,+1,-1,0}
+    const int n4[4] = {0, 1, 1, 2}, z4[4] = {0, +1, -1, 0};
+    std::vector<int> qphys(16);
+    for (int sa = 0; sa < 4; ++sa)
+        for (int sb = 0; sb < 4; ++sb)
+            qphys[4*sa + sb] = pack_q2(n4[sa] + n4[sb], z4[sa] + z4[sb]);
+
+    std::vector<MPOSite> mpo(Lx);
+    for (int i = 0; i < Lx; ++i) {
+        int cl = (i == 0) ? 1 : chi, cr = (i == Lx - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d; site.phys_charge = qphys;
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? 9 : a, br = (i == Lx - 1) ? 0 : b;
+                site.W(a, b) = W[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
 // h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
 // 8-wide: each emitted operator completes at range 1, or passes one identity and

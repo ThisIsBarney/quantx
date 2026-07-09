@@ -154,6 +154,12 @@ std::vector<MPOSite> build_hubbard_purified_mpo(int n_phys, double t = 1.0, doub
 // ancillas): J = it sum_{i,s}(c^dag_{i s}c_{i+1 s} - h.c.). For finite-T transport.
 std::vector<MPOSite> build_hubbard_current_purified_mpo(int n_phys, double t = 1.0);
 
+// Two-leg Hubbard LADDER via rung fusion (one d=16 site per rung -> a uniform
+// nearest-neighbour chain; JW strings inside the 16x16 operators). The first
+// quasi-2D model; packed two-U(1) charges. Half filling target: pack_q2(2*Lx, 0).
+std::vector<MPOSite> build_hubbard_ladder_mpo(int Lx, double t = 1.0, double tperp = 1.0,
+                                              double U = 0.0, double mu = 0.0);
+
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
 struct MPOSym {

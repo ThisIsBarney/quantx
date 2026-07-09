@@ -498,6 +498,62 @@ int main() {
         fails += !(okf1 && okf2);
     }
 
+    // (j) TWO-LEG LADDER via rung fusion (d=16) -- the first quasi-2D model. The
+    // fused-rung MPO must reproduce the explicit Jordan-Wigner ladder Hamiltonian
+    // (JW order (x,a),(x,b),(x+1,a),...; leg hops have a string over the intervening
+    // mode), and the fast block DMRG must hit the half-filling sector-ED energy AND
+    // the Sz=1 sector (the spin gap) through the d=16 packed charges.
+    std::printf("== Hubbard 2-leg LADDER (rung-fused d=16) vs explicit-JW ED ==\n");
+    {
+        const int Lx = 3, nm = 2 * Lx;   // 6 fermion modes -> 4^6 = 4096 ED
+        const double t = 1.0, tp = 0.9, U = 4.0;
+        // explicit-JW ladder H on the mode chain (a,b interleaved): bonds =
+        // rungs (2x, 2x+1) with tp and legs (i, i+2) with t.
+        int dim = 1; for (int k = 0; k < nm; ++k) dim *= 4;
+        MatC H = MatC::Zero(dim, dim);
+        auto hop = [&](int i, int j, double amp) {   // -amp (c^dag_i c_j + h.c.), i<j
+            MatC h = ferm(nm,i,Cup.adjoint())*ferm(nm,j,Cup)
+                   + ferm(nm,i,Cdn.adjoint())*ferm(nm,j,Cdn);
+            H += -amp * (h + MatC(h.adjoint()));
+        };
+        for (int x = 0; x < Lx; ++x) hop(2*x, 2*x + 1, tp);          // rungs
+        for (int x = 0; x < Lx - 1; ++x) { hop(2*x, 2*x + 2, t);     // leg a
+                                           hop(2*x + 1, 2*x + 3, t); }  // leg b
+        for (int i = 0; i < nm; ++i) H += U * (ferm(nm,i,Nu) * ferm(nm,i,Nd));
+        auto mpo = build_hubbard_ladder_mpo(Lx, t, tp, U);
+        MatC H_mpo = contract_mpo(mpo);   // 16^3 = 4096, same basis/order as the mode chain
+        double herr = (H - H_mpo).cwiseAbs().maxCoeff();
+        bool okh = herr < 1e-12;
+        // sector-ED: lowest energy at (N = nm, 2Sz = 0) and (N = nm, 2Sz = 2)
+        auto sector_e0 = [&](int Nt_want, int Sz_want) {
+            const int z4l[4] = {0, 1, -1, 0};
+            std::vector<int> idx;
+            for (int k = 0; k < dim; ++k) { int Nt=0, Zt=0, kk=k;
+                for (int i = 0; i < nm; ++i) { Nt += nof[kk%4]; Zt += z4l[kk%4]; kk /= 4; }
+                if (Nt == Nt_want && Zt == Sz_want) idx.push_back(k); }
+            int m = (int)idx.size();
+            MatC Hs(m, m);
+            for (int a2=0;a2<m;++a2) for (int b2=0;b2<m;++b2) Hs(a2,b2) = H(idx[a2], idx[b2]);
+            return Eigen::SelfAdjointEigenSolver<MatC>(Hs).eigenvalues()(0);
+        };
+        double E0_ed = sector_e0(nm, 0), E1_ed = sector_e0(nm, 2);
+        // fast block DMRG on the fused chain: half filling (N=nm, Sz=0) and Sz=1
+        std::vector<int> cfg0(Lx), cfg1(Lx);
+        for (int x = 0; x < Lx; ++x) cfg0[x] = (x % 2 == 0) ? (4*1 + 2) : (4*2 + 1);  // (up,dn)/(dn,up)
+        cfg1 = cfg0; cfg1[0] = 4*1 + 1;                                   // one rung (up,up): Sz=1
+        double E0_blk = run_dmrg_blocks(mpo, Lx, 256, 1e-11, 120, 1e-11,
+                                        pack_q2(nm, 0), &cfg0).energy;
+        double E1_blk = run_dmrg_blocks(mpo, Lx, 256, 1e-11, 120, 1e-11,
+                                        pack_q2(nm, 2), &cfg1).energy;
+        double e0 = std::abs(E0_blk - E0_ed), e1 = std::abs(E1_blk - E1_ed);
+        bool ok0 = e0 < 1e-6, ok1 = e1 < 1e-6;
+        std::printf("  Lx=%d tp=%.1f U=%.1f : ||H_MPO-H_JW||=%.1e %s ; E0(half,Sz=0)=%.8f "
+                    "blk err=%.1e %s ; E(Sz=1)=%.8f blk err=%.1e %s ; gap=%.4f\n",
+                    Lx, tp, U, herr, okh?"OK":"FAIL", E0_ed, e0, ok0?"OK":"FAIL",
+                    E1_ed, e1, ok1?"OK":"FAIL", E1_ed - E0_ed);
+        fails += !(okh && ok0 && ok1);
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }
