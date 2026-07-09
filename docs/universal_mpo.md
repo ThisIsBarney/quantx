@@ -230,6 +230,41 @@ Chasing this physics through ED validation also uncovered — and fixed — a la
 `out_state` export bug that had silently biased every T=0 spectral correlator at the
 ~1e-2 level (the bond-1 Schmidt values were dropped; see #175).
 
+### Showcase: the two-leg Hubbard ladder (quasi-2D via rung fusion, d=16)
+
+![Hubbard ladder spin gap](hubbard_ladder_gap.svg)
+
+The first step off the chain: the **2-leg Hubbard ladder**, mapped to a *uniform
+nearest-neighbour chain* by fusing each rung into one **d=16** site
+(`build_hubbard_ladder_mpo`). Every piece of the engine — `derive_mpo_sym`, the block
+DMRG, the packed two-U(1) charges, sector targeting — consumed the fused chain with
+**zero engine changes**: the real stress test of the arbitrary-local-dimension design.
+All Jordan–Wigner strings live inside the 16×16 operators; the subtle string *split*
+for inter-rung leg-b hops (emit carries its own rung's remaining parity, the completing
+rung carries the string over its preceding modes) was caught by the ED referee
+(`‖H_MPO−H_JW‖ = 2.0` on the first build) and fixed to **exactly zero** (Lx=3,
+4096-dim element-by-element). Block DMRG matches sector-ED to ~1e-13 in *both* the
+half-filling (Sz=0) and the Sz=1 sectors.
+
+The physics: the half-filled ladder is a **spin liquid of rung singlets** with a spin
+gap. `Δ_s(Lx) = E(Sz=1) − E(Sz=0)` (packed-charge sector targeting makes the Sz=1
+ground state a plain DMRG run) falls as 1/Lx on the open ladder and extrapolates to
+**Δ_s ≈ 0.11t at U=8** — consistent with the classic DMRG literature values. χ=256 is
+converged (χ=384 moves the gap by 1e-6).
+
+**Honest performance note** (`benchmarks/hubbard_ladder_vs_tenpy.py`, Lx=16, U=8,
+χ=256, min-of-2): TeNPy solves the same ladder in **91.0 s vs our 140.8 s (1.55×
+faster wall-clock)** — while QuantX reaches a **1.8e-5 *lower* (better) energy**. Both
+facts have one cause: the *formulation*. TeNPy site-splits the ladder (d=4, 2Lx sites,
+its MPO handles the range-2 leg couplings), which does less local work per sweep; our
+rung fusion (d=16, Lx sites) does more work per bond but, at a matched rung-cut χ, its
+variational manifold *contains* the site-split one — hence the deeper energy. The
+engine-side fix is known: supporting **period-2 non-uniform MPOs** in `derive_mpo_sym`
+would let QuantX run the cheap site-split formulation too (the same
+honest-baseline-then-optimize arc as the single-U(1) → packed two-U(1) story). Until
+then the ladder capability is correctness-complete and physics-validated, with the
+formulation-level perf gap stated rather than hidden.
+
 ### Finite temperature: the fermionic purification stack
 
 The full finite-T machinery — cooling, statics, `S(k,ω,T)`, `σ(ω,T)` — runs the

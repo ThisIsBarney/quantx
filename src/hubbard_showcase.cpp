@@ -50,6 +50,30 @@ int main(int argc, char** argv) {
     int chi = argc > 1 ? std::atoi(argv[1]) : 128;   // Mott is area-law: chi=128 is converged
     const double t = 1.0;
 
+    // Two-leg LADDER mode: QX_LADDER="Lx chi [U tp]" -> half-filling GS + the Sz=1
+    // sector on the rung-fused (d=16) chain; prints both energies, the spin gap and
+    // wall times. Used by the ladder showcase sweep and the vs-TeNPy ladder bench.
+    if (const char* lz = std::getenv("QX_LADDER")) {
+        int Lx = 8, lchi = 256; double U = 8.0, tp = 1.0;
+        std::sscanf(lz, "%d %d %lf %lf", &Lx, &lchi, &U, &tp);
+        auto mpo = build_hubbard_ladder_mpo(Lx, 1.0, tp, U);
+        const int nm = 2 * Lx;
+        std::vector<int> cfg0(Lx), cfg1(Lx);
+        for (int x = 0; x < Lx; ++x) cfg0[x] = (x % 2 == 0) ? (4*1 + 2) : (4*2 + 1);
+        cfg1 = cfg0; cfg1[0] = 4*1 + 1;                  // one (up,up) rung -> Sz=1
+        auto t0 = std::chrono::steady_clock::now();
+        double E0 = run_dmrg_blocks(mpo, Lx, lchi, 1e-11, 60, 1e-10,
+                                    pack_q2(nm, 0), &cfg0).energy;
+        double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        t0 = std::chrono::steady_clock::now();
+        double E1 = run_dmrg_blocks(mpo, Lx, lchi, 1e-11, 60, 1e-10,
+                                    pack_q2(nm, 2), &cfg1).energy;
+        double w1 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("LADDER Lx=%d chi=%d U=%.2f tp=%.2f : E0=%.10f (%.1fs)  "
+                    "E1=%.10f (%.1fs)  gap=%.6f\n", Lx, lchi, U, tp, E0, w0, E1, w1, E1 - E0);
+        return 0;
+    }
+
     // Single-run GS bench mode (for benchmarks/hubbard_dmrg_vs_tenpy.py):
     // QX_HUB_BENCH="N chi" [QX_HUB_U, QX_HUB_2U1=1] -> one half-filling GS DMRG,
     // prints "E= ... wall= ... s" and exits. Packed two-U(1) by default (our best).

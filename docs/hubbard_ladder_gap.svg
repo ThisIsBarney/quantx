@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="480" viewBox="0 0 720 480" font-family="Segoe UI, Arial, sans-serif">
+<rect width="720" height="480" fill="white"/>
+<line x1="84" y1="416.0" x2="680" y2="416.0" stroke="#eee"/>
+<text x="76" y="420.0" text-anchor="end" font-size="11" fill="#444">0.00</text>
+<line x1="84" y1="355.2" x2="680" y2="355.2" stroke="#eee"/>
+<text x="76" y="359.2" text-anchor="end" font-size="11" fill="#444">0.05</text>
+<line x1="84" y1="294.4" x2="680" y2="294.4" stroke="#eee"/>
+<text x="76" y="298.4" text-anchor="end" font-size="11" fill="#444">0.10</text>
+<line x1="84" y1="233.6" x2="680" y2="233.6" stroke="#eee"/>
+<text x="76" y="237.6" text-anchor="end" font-size="11" fill="#444">0.15</text>
+<line x1="84" y1="172.8" x2="680" y2="172.8" stroke="#eee"/>
+<text x="76" y="176.8" text-anchor="end" font-size="11" fill="#444">0.20</text>
+<line x1="84" y1="112.0" x2="680" y2="112.0" stroke="#eee"/>
+<text x="76" y="116.0" text-anchor="end" font-size="11" fill="#444">0.25</text>
+<line x1="616.1" y1="416" x2="616.1" y2="421" stroke="#444"/>
+<text x="616.1" y="435" text-anchor="middle" font-size="10.5" fill="#444">1/4</text>
+<line x1="438.8" y1="416" x2="438.8" y2="421" stroke="#444"/>
+<text x="438.8" y="435" text-anchor="middle" font-size="10.5" fill="#444">1/6</text>
+<line x1="350.1" y1="416" x2="350.1" y2="421" stroke="#444"/>
+<text x="350.1" y="435" text-anchor="middle" font-size="10.5" fill="#444">1/8</text>
+<line x1="261.4" y1="416" x2="261.4" y2="421" stroke="#444"/>
+<text x="261.4" y="435" text-anchor="middle" font-size="10.5" fill="#444">1/12</text>
+<line x1="217.0" y1="416" x2="217.0" y2="421" stroke="#444"/>
+<text x="217.0" y="435" text-anchor="middle" font-size="10.5" fill="#444">1/16</text>
+<line x1="84" y1="64" x2="84" y2="416" stroke="#444" stroke-width="1.2"/>
+<line x1="84" y1="416" x2="680" y2="416" stroke="#444" stroke-width="1.2"/>
+<line x1="84.0" y1="278.7" x2="366.0" y2="180.7" stroke="#999" stroke-width="1.3" stroke-dasharray="5,4"/>
+<polyline points="616.1,109.9 438.8,157.9 350.1,186.3 261.4,216.8 217.0,232.6" fill="none" stroke="#d62728" stroke-width="2.2"/>
+<circle cx="616.1" cy="109.9" r="4" fill="#d62728"/>
+<circle cx="438.8" cy="157.9" r="4" fill="#d62728"/>
+<circle cx="350.1" cy="186.3" r="4" fill="#d62728"/>
+<circle cx="261.4" cy="216.8" r="4" fill="#d62728"/>
+<circle cx="217.0" cy="232.6" r="4" fill="#d62728"/>
+<circle cx="84.0" cy="278.7" r="4.5" fill="none" stroke="#1f77b4" stroke-width="2"/>
+<text x="94.0" y="270.7" font-size="11.5" font-weight="bold" fill="#1f77b4">&#916;<tspan baseline-shift="sub" font-size="9">s</tspan>(&#8734;) &#8776; 0.113 t</text>
+<text x="382" y="456" text-anchor="middle" font-size="13" fill="#222">inverse ladder length  1/Lx</text>
+<text x="24" y="240" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 24 240)">spin gap  &#916;<tspan baseline-shift="sub" font-size="10">s</tspan> = E(Sz=1) &#8722; E(Sz=0)  (t=1)</text>
+<text x="382" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Two-leg Hubbard ladder spin gap &#8212; U=8t, half filling</text>
+<text x="382" y="45" text-anchor="middle" font-size="11.5" fill="#555">rung-fused d=16 fast block path, packed (N, 2Sz) sector targeting; open 2&#215;Lx, &#967;=256 (&#967;-converged to 1e-6)</text>
+<text x="382" y="472" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">The gapped spin sector of the half-filled ladder (spin liquid of rung singlets); dashes = linear 1/Lx fit through the three largest sizes.</text>
+</svg>
