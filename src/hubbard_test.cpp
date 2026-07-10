@@ -573,6 +573,67 @@ int main() {
         std::printf("  SPLIT (period-2 d=4): ||H_MPO-H_JW||=%.1e %s ; blk errs %.1e / %.1e %s\n",
                     herr2, okh2?"OK":"FAIL", es0, es1, oks?"OK":"FAIL");
         fails += !(okh2 && oks);
+
+        // (k) The GENERAL width-W builder. W=2 open must equal the ladder Hamiltonian
+        // exactly (self-check against the ED-validated ladder H at tp=t). W=3 strip
+        // and CYLINDER vs fresh 4096-dim explicit-JW ED (column-major bond lists);
+        // the cylinder wrap is the first range-(W-1) F-carry chain.
+        {
+            auto gen2 = build_hubbard_lattice_split_mpo(Lx, 2, t, U);   // isotropic: tp = t
+            // reference: the ladder JW-ED rebuilt at tp = t
+            MatC Ht = MatC::Zero(dim, dim);
+            auto hop2 = [&](int i, int j, double amp) {
+                MatC h = ferm(nm,i,Cup.adjoint())*ferm(nm,j,Cup)
+                       + ferm(nm,i,Cdn.adjoint())*ferm(nm,j,Cdn);
+                Ht += -amp * (h + MatC(h.adjoint()));
+            };
+            for (int x = 0; x < Lx; ++x) hop2(2*x, 2*x + 1, t);
+            for (int x = 0; x < Lx - 1; ++x) { hop2(2*x, 2*x + 2, t); hop2(2*x + 1, 2*x + 3, t); }
+            for (int i = 0; i < nm; ++i) Ht += U * (ferm(nm,i,Nu) * ferm(nm,i,Nd));
+            double eg2 = (Ht - contract_mpo(gen2)).cwiseAbs().maxCoeff();
+            // W=3, Lx=2 (6 modes): strip + cylinder
+            const int W3 = 3, L3 = 2, n3 = 6;
+            auto bonds_H = [&](bool cyl) {
+                MatC Hh = MatC::Zero(dim, dim);
+                auto hp = [&](int i, int j) {
+                    MatC h = ferm(n3,i,Cup.adjoint())*ferm(n3,j,Cup)
+                           + ferm(n3,i,Cdn.adjoint())*ferm(n3,j,Cdn);
+                    Hh += -t * (h + MatC(h.adjoint()));
+                };
+                for (int x = 0; x < L3; ++x) {
+                    for (int y = 0; y < W3 - 1; ++y) hp(W3*x + y, W3*x + y + 1);
+                    if (cyl) hp(W3*x, W3*x + W3 - 1);
+                }
+                for (int x = 0; x < L3 - 1; ++x)
+                    for (int y = 0; y < W3; ++y) hp(W3*x + y, W3*(x+1) + y);
+                for (int i = 0; i < n3; ++i) Hh += U * (ferm(n3,i,Nu) * ferm(n3,i,Nd));
+                return Hh;
+            };
+            double eg3o = (bonds_H(false) -
+                           contract_mpo(build_hubbard_lattice_split_mpo(L3, W3, t, U))).cwiseAbs().maxCoeff();
+            MatC H3c = bonds_H(true);
+            auto cyl3 = build_hubbard_lattice_split_mpo(L3, W3, t, U, 0.0, /*y_periodic*/true);
+            double eg3c = (H3c - contract_mpo(cyl3)).cwiseAbs().maxCoeff();
+            // block DMRG on the W=3 cylinder, half filling
+            const int z4l[4] = {0, 1, -1, 0};
+            std::vector<int> idx;
+            for (int k = 0; k < dim; ++k) { int Nt=0, Zt=0, kk=k;
+                for (int i = 0; i < n3; ++i) { Nt += nof[kk%4]; Zt += z4l[kk%4]; kk /= 4; }
+                if (Nt == n3 && Zt == 0) idx.push_back(k); }
+            int m3 = (int)idx.size();
+            MatC Hs3(m3, m3);
+            for (int a2=0;a2<m3;++a2) for (int b2=0;b2<m3;++b2) Hs3(a2,b2) = H3c(idx[a2], idx[b2]);
+            double E3_ed = Eigen::SelfAdjointEigenSolver<MatC>(Hs3).eigenvalues()(0);
+            std::vector<int> c3(n3);
+            for (int i = 0; i < n3; ++i) c3[i] = (i % 2 == 0) ? 1 : 2;
+            double E3_blk = run_dmrg_blocks(cyl3, n3, 256, 1e-11, 120, 1e-11,
+                                            pack_q2(n3, 0), &c3).energy;
+            double e3 = std::abs(E3_blk - E3_ed);
+            bool okg = eg2 < 1e-12 && eg3o < 1e-12 && eg3c < 1e-12 && e3 < 1e-6;
+            std::printf("  WIDTH-W: ||W=2gen-ladder||=%.1e ; W=3 strip=%.1e cyl=%.1e ; "
+                        "cyl blk err=%.1e  %s\n", eg2, eg3o, eg3c, e3, okg?"OK":"FAIL");
+            fails += !okg;
+        }
     }
 
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");

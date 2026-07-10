@@ -50,6 +50,28 @@ int main(int argc, char** argv) {
     int chi = argc > 1 ? std::atoi(argv[1]) : 128;   // Mott is area-law: chi=128 is converged
     const double t = 1.0;
 
+    // Width-W CYLINDER/strip mode: QX_CYL="Lx W chi [U yper]" -> half-filling GS on
+    // the general period-W builder; prints E0 and wall. The quasi-2D benchmark entry.
+    if (const char* cz = std::getenv("QX_CYL")) {
+        int Lx = 8, Wd = 4, cchi = 512; double U = 8.0; int yper = 1, nsw = 60;
+        std::sscanf(cz, "%d %d %d %lf %d %d", &Lx, &Wd, &cchi, &U, &yper, &nsw);
+        // Width-4 cylinders at practical chi are TRUNCATION-limited: dE per sweep
+        // plateaus far above any tol, so a tol-stop burns the whole sweep budget.
+        // The benchmark protocol is therefore a FIXED sweep budget (nsw, same on
+        // both tools), reporting the energy reached and the wall time.
+        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, yper != 0);
+        const int n = Wd * Lx;
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto t0 = std::chrono::steady_clock::now();
+        double E0 = run_dmrg_blocks(mpo, n, cchi, 1e-11, nsw, 1e-12,
+                                    pack_q2(n, 0), &cfg).energy;
+        double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("CYL Lx=%d W=%d chi=%d U=%.2f yper=%d nsw=%d : E0=%.10f (%.1fs)  E0/site=%.6f\n",
+                    Lx, Wd, cchi, U, yper, nsw, E0, w0, E0 / n);
+        return 0;
+    }
+
     // Two-leg LADDER mode: QX_LADDER="Lx chi [U tp]" -> half-filling GS + the Sz=1
     // sector on the rung-fused (d=16) chain; prints both energies, the spin gap and
     // wall times. Used by the ladder showcase sweep and the vs-TeNPy ladder bench.

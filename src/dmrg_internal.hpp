@@ -164,6 +164,12 @@ std::vector<MPOSite> build_hubbard_ladder_mpo(int Lx, double t = 1.0, double tpe
 // the performance formulation. Half filling target: pack_q2(2*Lx, 0).
 std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t = 1.0, double tperp = 1.0,
                                                     double U = 0.0, double mu = 0.0);
+// Width-W Hubbard strip / CYLINDER (y_periodic), site-split d=4, period-W MPO
+// (column-major, x-hops range-W with F-carry chains). W <= 8. Isotropic t.
+// Half filling target: pack_q2(W*Lx, 0).
+std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t = 1.0,
+                                                     double U = 0.0, double mu = 0.0,
+                                                     bool y_periodic = false);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
@@ -204,10 +210,11 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
         if (mpo[i].chi_l == chi && mpo[i].chi_r == chi) { first = i; break; }
     std::vector<std::array<int,3>> edges;       // (a,b,c): bond a->b carries charge c
     int taken = 0;
-    for (int i = first; i < (int)mpo.size() && taken < 4; ++i) {
+    for (int i = first; i < (int)mpo.size() && taken < 8; ++i) {
         const MPOSite& W = mpo[i];
         if (W.chi_l != chi || W.chi_r != chi) continue;    // boundary sites
-        ++taken;                                 // 4 consecutive bulk sites cover period <= 4
+        ++taken;                                 // 8 consecutive bulk sites cover period <= 8
+                                                 // (width-W cylinders are period-W MPOs)
         for (int a = 0; a < chi; ++a)
             for (int b = 0; b < chi; ++b) {
                 const Mat& m = W.W(a, b);
