@@ -429,3 +429,22 @@ QuantX-vs-TeNPy table above stays the headline comparison.
 - **Still open:** the **dynamics path is d=2-only for non-uniform / longer-range**
   models (the TEBD `build_gate_from_mpo` handles on-site terms now, but assumes
   nearest-neighbour bonds).
+
+### Width-W cylinders: capability landed, performance frontier opened
+
+The general builder (`build_hubbard_lattice_split_mpo`) extends the site-split ladder
+to **width-W strips and cylinders** (period-W MPO, range-W F-carry chains for the leg
+hops, range-(W−1) for the cylinder wrap). ED-exact where ED exists: W=2 open equals
+the ladder Hamiltonian to 0.0; W=3 strip *and* W=3 cylinder equal a fresh explicit-JW
+ED to 0.0; the W=3 cylinder block DMRG hits sector-ED to 9.5e-14.
+
+**Honest W=4 cylinder baseline** (`hubbard_cylinder_vs_tenpy.py`, 8×4, U=8, χ=256,
+**fixed 12-sweep budget** — practical-χ cylinders are truncation-limited, so tol-stops
+never fire and a fixed budget is the fair protocol; TeNPy needs `max_trunc_err: 1.0`
+to run in this regime): **TeNPy 124.4 s (its 20-thread config wins here) vs QuantX
+712.9 s — TeNPy 5.7× faster, and 3.8e-4 lower in energy at equal budget.** This is a
+genuinely new performance regime (huge sector fragmentation, width-34 MPO, big-block
+BLAS threading) and the next optimization target; the pattern is by now familiar —
+honest baseline first, profile, then flip the table. Cross-engine energies agree at
+the fixed-χ level (−16.0005 vs −16.0001), which together with the W≤3 ED exactness
+validates the W=4 construction.
