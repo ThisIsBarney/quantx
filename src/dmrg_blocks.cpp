@@ -602,9 +602,22 @@ static WComb build_wcomb(const MPOSite& Wi, const MPOSite& Wj) {
     wc.d2 = wc.d * wc.d;
     const int d = wc.d;
     wc.w.assign((size_t)Wi.chi_l * Wj.chi_r * wc.d2 * wc.d2, S(0));
+    // Skip zero W-blocks BEFORE the d^4 inner loops: a lower-triangular MPO of width
+    // chi has O(chi) nonzero blocks out of chi^2, so enumerating all (bL,bm,bR)
+    // triples blind costs O(chi^3 d^4) -- 34.8s/4-sweeps on the width-34 cylinder MPO
+    // (the real content of the "theta" profile bucket, which form_theta itself was
+    // acquitted of). Precompute each site's nonzero (row, col) lists and iterate only
+    // the sparse product structure: O(nnz_i * nnz_j / chi) triples.
+    std::vector<std::vector<int>> nz_i(Wi.chi_r), nz_j(Wi.chi_r);
     for (int bL = 0; bL < Wi.chi_l; ++bL)
         for (int bm = 0; bm < Wi.chi_r; ++bm)
-            for (int bR = 0; bR < Wj.chi_r; ++bR) {
+            if (Wi.W(bL, bm).squaredNorm() > 0) nz_i[bm].push_back(bL);
+    for (int bm = 0; bm < Wj.chi_l; ++bm)
+        for (int bR = 0; bR < Wj.chi_r; ++bR)
+            if (Wj.W(bm, bR).squaredNorm() > 0) nz_j[bm].push_back(bR);
+    for (int bm = 0; bm < Wi.chi_r; ++bm)
+        for (int bL : nz_i[bm])
+            for (int bR : nz_j[bm]) {
                 const auto& wi = Wi.W(bL, bm);
                 const auto& wj = Wj.W(bm, bR);
                 for (int s1b = 0; s1b < d; ++s1b)
@@ -673,6 +686,26 @@ static HeffPlan build_heff_plan(
     const std::vector<int>& qphys = Wi.phys_charge;
     const int d = Wi.d;
 
+    // Memoise the bra-side phys_groups: they depend ONLY on q_mid_bra, but the loop
+    // below reaches the same q_mid_bra from many (bL, bR, s1b) combinations, and each
+    // phys_groups call heap-allocates a vector -- on a wide MPO (34 channels, W=4
+    // cylinder) that was millions of allocations per bond update, the dominant cost
+    // of the plan build.
+    struct BraGroups { std::vector<PhysGroup> rows, cols; int n_row = 0, n_col = 0; };
+    std::map<int, BraGroups> bra_memo;
+    auto bra_of = [&](int q_mid_bra) -> const BraGroups& {
+        auto it = bra_memo.find(q_mid_bra);
+        if (it == bra_memo.end()) {
+            BraGroups bg;
+            bg.rows = phys_groups(bs_L,  q_mid_bra, -1, qphys);
+            bg.cols = phys_groups(bs_R2, q_mid_bra, +1, qphys);
+            bg.n_row = phys_total(bg.rows);
+            bg.n_col = phys_total(bg.cols);
+            it = bra_memo.emplace(q_mid_bra, std::move(bg)).first;
+        }
+        return it->second;
+    };
+
     for (int q_mid_ket : ket_keys) {
         int ket_idx = (int)plan.ket_sectors.size();
         plan.ket_sectors.push_back(q_mid_ket);
@@ -723,25 +756,22 @@ static HeffPlan build_heff_plan(
 
                         for (int s1b = 0; s1b < d; ++s1b) {
                             int q_mid_bra = q_L_bra + qphys[s1b];
-                            auto bra_rows = phys_groups(bs_L,  q_mid_bra, -1, qphys);
-                            auto bra_cols = phys_groups(bs_R2, q_mid_bra, +1, qphys);
-                            int n_row = phys_total(bra_rows);
-                            int n_col = phys_total(bra_cols);
-                            if (n_row == 0 || n_col == 0) continue;
-                            int dL_b = bra_rows[s1b].width;
+                            const BraGroups& bg = bra_of(q_mid_bra);
+                            if (bg.n_row == 0 || bg.n_col == 0) continue;
+                            int dL_b = bg.rows[s1b].width;
                             if (dL_b != dL_bra) continue;
-                            int row_b = bra_rows[s1b].off;
+                            int row_b = bg.rows[s1b].off;
 
                             for (int s2b = 0; s2b < d; ++s2b) {
                                 S w = Wc.at(bL, bR, s1b*d+s2b, s1k*d+s2k);
                                 if (std::abs(w) < 1e-15) continue;
-                                int dR_b = bra_cols[s2b].width;
+                                int dR_b = bg.cols[s2b].width;
                                 if (dR_b == 0) continue;
                                 if (q_mid_bra + qphys[s2b] != q_R_bra) continue;
                                 if (dR_bra != dR_b) continue;
-                                int col_b = bra_cols[s2b].off;
+                                int col_b = bg.cols[s2b].off;
 
-                                int idx = get_out_idx(q_mid_bra, n_row, n_col);
+                                int idx = get_out_idx(q_mid_bra, bg.n_row, bg.n_col);
                                 lg.writes.push_back({w, idx, row_b, col_b, dL_b, dR_b});
                             }
                         }
@@ -953,6 +983,128 @@ static std::map<int,Mat> apply_heff_1site(
     return out;
 }
 
+// Precomputed one-site H_eff plan -- the single-site analogue of HeffPlan. The
+// environments, MPO and bond spaces are fixed across a Lanczos solve, but
+// apply_heff_1site redoes ALL the QN bookkeeping (map lookups, phys_groups heap
+// allocations, dimension checks) on every matvec; on the width-4 cylinder's
+// fragmented sectors that bookkeeping dominated the single-site refinement phase
+// (the hybrid's 12-sweep run spent 170s of 225s there). Build once per site,
+// replay per matvec. The GEMM/write order matches apply_heff_1site exactly, so
+// results are bit-identical; apply_heff_1site itself stays for the one-shot
+// callers (TDVP2's bt_evolve_site).
+struct Heff1Plan {
+    std::vector<int> out_q, ket_q;
+    std::vector<std::pair<int,int>> out_shape;      // (dL_bra, total bra cols)
+    struct Write  { S w; int out_idx, col_b, dR_b; };
+    struct RGroup { const Mat* Rblk; std::vector<Write> writes; };
+    struct LGroup {
+        int ket_idx, col_k, dR_k;                   // M_sub = ket.block(0, col_k, dL_ket, dR_k)
+        const Mat* Lblk;
+        std::vector<RGroup> rgroups;
+    };
+    std::vector<LGroup> groups;
+};
+
+static Heff1Plan build_heff1_plan(
+    const BlockEnv& L, const MPOSite& W, const BlockEnv& R,
+    const std::vector<int>& ket_keys,
+    const BondSpace& bs_L, const BondSpace& bs_R, const std::vector<int>& delta)
+{
+    Heff1Plan plan;
+    const std::vector<int>& qphys = W.phys_charge;
+    std::map<int,int> out_index;
+    std::map<int, std::vector<PhysGroup>> cols_memo;   // q_L -> phys_groups(bs_R, q_L, +1)
+    auto cols_of = [&](int qL) -> const std::vector<PhysGroup>& {
+        auto it = cols_memo.find(qL);
+        if (it == cols_memo.end())
+            it = cols_memo.emplace(qL, phys_groups(bs_R, qL, +1, qphys)).first;
+        return it->second;
+    };
+    auto get_out = [&](int q_L_bra, int dL_bra) {
+        auto it = out_index.find(q_L_bra);
+        if (it != out_index.end()) return it->second;
+        int idx = (int)plan.out_q.size();
+        out_index[q_L_bra] = idx;
+        plan.out_q.push_back(q_L_bra);
+        plan.out_shape.push_back({dL_bra, phys_total(cols_of(q_L_bra))});
+        return idx;
+    };
+    for (int ki = 0; ki < (int)ket_keys.size(); ++ki) {
+        int q_L_ket = ket_keys[ki];
+        plan.ket_q.push_back(q_L_ket);
+        int dL_ket = bs_L.dim(q_L_ket);
+        if (dL_ket == 0) continue;
+        const auto& ket_cols = cols_of(q_L_ket);
+        for (int s_ket = 0; s_ket < (int)qphys.size(); ++s_ket) {
+            if (ket_cols[s_ket].width == 0) continue;
+            int dR_s_ket = ket_cols[s_ket].width;
+            int col_k = ket_cols[s_ket].off;
+            int q_R_ket = ket_cols[s_ket].q;
+            for (int b_in = 0; b_in < W.chi_l; ++b_in) {
+                int q_L_bra = q_L_ket + delta[b_in];
+                int dL_bra  = bs_L.dim(q_L_bra);
+                if (dL_bra == 0) continue;
+                auto it_L = L.blocks[b_in].find(q_L_ket);
+                if (it_L == L.blocks[b_in].end()) continue;
+                const Mat& Lblk = it_L->second;
+                if (Lblk.rows() != dL_bra || Lblk.cols() != dL_ket) continue;
+
+                typename Heff1Plan::LGroup lg;
+                lg.ket_idx = ki; lg.col_k = col_k; lg.dR_k = dR_s_ket; lg.Lblk = &Lblk;
+                const auto& bra_cols = cols_of(q_L_bra);
+                for (int b_out = 0; b_out < W.chi_r; ++b_out) {
+                    auto it_R = R.blocks[b_out].find(q_R_ket);
+                    if (it_R == R.blocks[b_out].end()) continue;
+                    const Mat& Rblk = it_R->second;
+                    if (Rblk.cols() != dR_s_ket) continue;
+                    int dR_bra = (int)Rblk.rows();
+                    int q_R_bra = q_R_ket + delta[b_out];
+                    typename Heff1Plan::RGroup rg; rg.Rblk = &Rblk;
+                    for (int s_bra = 0; s_bra < (int)qphys.size(); ++s_bra) {
+                        if (q_L_bra + qphys[s_bra] != q_R_bra) continue;
+                        if (bra_cols[s_bra].width != dR_bra) continue;
+                        S w = mscal(W.W(b_in, b_out)(s_bra, s_ket));
+                        if (std::abs(w) < 1e-15) continue;
+                        rg.writes.push_back({w, get_out(q_L_bra, dL_bra),
+                                             bra_cols[s_bra].off, dR_bra});
+                    }
+                    if (!rg.writes.empty()) lg.rgroups.push_back(std::move(rg));
+                }
+                if (!lg.rgroups.empty()) plan.groups.push_back(std::move(lg));
+            }
+        }
+    }
+    return plan;
+}
+
+static std::map<int,Mat> apply_heff1_plan(const Heff1Plan& plan, const std::map<int,Mat>& M) {
+    ++g_block_matvecs;
+    std::vector<const Mat*> kets(plan.ket_q.size(), nullptr);
+    for (int i = 0; i < (int)plan.ket_q.size(); ++i) {
+        auto it = M.find(plan.ket_q[i]);
+        if (it != M.end()) kets[i] = &it->second;
+    }
+    std::vector<Mat> out(plan.out_q.size());
+    for (int i = 0; i < (int)plan.out_q.size(); ++i)
+        out[i] = Mat::Zero(plan.out_shape[i].first, plan.out_shape[i].second);
+    for (const auto& lg : plan.groups) {
+        const Mat* ket = kets[lg.ket_idx];
+        if (!ket) continue;
+        Mat LM = (*lg.Lblk) * ket->block(0, lg.col_k, lg.Lblk->cols(), lg.dR_k);
+        for (const auto& rg : lg.rgroups) {
+            Mat T = LM * rg.Rblk->transpose();
+            for (const auto& wr : rg.writes)
+                out[wr.out_idx].block(0, wr.col_b, T.rows(), wr.dR_b).noalias() += wr.w * T;
+        }
+    }
+    std::map<int,Mat> res;
+    for (int i = 0; i < (int)plan.out_q.size(); ++i)
+        res[plan.out_q[i]] = std::move(out[i]);
+    for (auto& [q, blk] : M)
+        if (!res.count(q)) res[q] = Mat::Zero(blk.rows(), blk.cols());
+    return res;
+}
+
 // -- Single-site canonicalisation (center move) -------------------------------
 //
 // L->R: split the one-site centre tensor M (block_A[i] layout over bs_L x bs_mid)
@@ -1078,11 +1230,24 @@ static void vec_to_theta(const Vec& v, const std::map<int,Mat>& ref,
     }
 }
 
+// Default Lanczos iteration cap. The local two-site eigensolve does not need high
+// accuracy inside a DMRG sweep -- the sweeps recover it -- and in the TRUNCATION-
+// limited regime (width-4 cylinders) the tol-based stop burns ~44 matvecs per bond
+// on accuracy the following SVD immediately throws away. 25 matches common practice
+// (TeNPy's N_max=20); the chain/ED tests converge in far fewer anyway. QX_LANCZOS_MAX.
+static int lanczos_max_iter() {
+    static int v = []() {
+        const char* e = std::getenv("QX_LANCZOS_MAX");
+        return (e && std::atoi(e) > 0) ? std::atoi(e) : 25;
+    }();
+    return v;
+}
 static std::pair<double, std::map<int,Mat>> block_lanczos(
     const std::function<std::map<int,Mat>(const std::map<int,Mat>&)>& matvec,
     const std::map<int,Mat>& init,
-    int max_iter = 100, double tol = 1e-10)
+    int max_iter = -1, double tol = 1e-10)
 {
+    if (max_iter < 0) max_iter = lanczos_max_iter();
     int dim = theta_total_dim(init);
     if (dim == 0) return {0.0, init};
 
@@ -1564,97 +1729,23 @@ static std::map<int,Mat> form_theta(
     for (auto& [q_L, _] : block_Ai)
         for (int qs : qphys) { int q = q_L + qs; if (bs_mid.dim(q) > 0) q_mids.insert(q); }
 
-    for (int q_mid : q_mids) {
+    // The per-q_mid assemblies are independent, and on fragmented bonds (width-W
+    // cylinders: hundreds of small sectors) this loop was 55% of the DMRG sweep and
+    // essentially serial (many small GEMMs, no BLAS threading). Two passes: the GPU-
+    // eligible blocks first (serial -- one device), then the CPU swarm OMP-parallel,
+    // each thread building its own block (within-block arithmetic order unchanged ->
+    // bit-identical results). CPU pure-assembly lambda used by both passes:
+    auto build_cpu = [&](int q_mid) -> Mat {
         // theta[q_mid] rows grouped by left-site state, cols by right-site state.
         auto rows = phys_groups(bs_L,  q_mid, -1, qphys);
         auto cols = phys_groups(bs_R2, q_mid, +1, qphys);
         int n_row = phys_total(rows);
         int n_col = phys_total(cols);
-        if (n_row == 0 || n_col == 0) continue;
+        if (n_row == 0 || n_col == 0) return Mat();
 
         // Get A[i+1][q_mid] with optional sv absorption
         auto it1 = block_Ai1.find(q_mid);
-        if (it1 == block_Ai1.end()) continue;
-
-#ifdef QX_USE_CUDA
-        // Phase B residency: build large theta blocks on the GPU (no sv-absorption
-        // case = TEBD; pure GEMMs). The on-device kernel handles the two spin-1/2
-        // sectors; for d>2 it falls through to the CPU path below.
-        if constexpr (std::is_same_v<S, Cx>) {
-          if (d2) {
-            int dL_up = rows[0].width, dL_dn = rows[1].width;
-            const int n_keep_mid = bs_mid.dim(q_mid);
-            const Mat& Ai1r = it1->second;
-            if (sv_mid.empty() && n_keep_mid > 0 &&
-                (int)Ai1r.rows() == n_keep_mid && (int)Ai1r.cols() == n_col &&
-                (long long)n_row * n_keep_mid * n_col >= gpu_theta_minwork()) {
-                const Cx* Aup = nullptr; const Cx* Adn = nullptr;
-                bool gpu_ok = true;
-                if (dL_up > 0) {                              // s1=up: q_L = q_mid-1, col_off 0
-                    auto it0 = block_Ai.find(q_mid - 1);
-                    if (it0 != block_Ai.end() && n_keep_mid <= (int)it0->second.cols()) {
-                        // this side contributes (matches CPU); GPU needs it dense (rows==dL)
-                        if ((int)it0->second.rows() == dL_up)
-                            Aup = reinterpret_cast<const Cx*>(it0->second.data());
-                        else gpu_ok = false;
-                    }
-                }
-                if (gpu_ok && dL_dn > 0) {                    // s1=dn: q_L = q_mid+1, col_off dR_up_mid
-                    auto it0 = block_Ai.find(q_mid + 1);
-                    int dR_up_mid = bs_mid.dim(q_mid + 2);
-                    if (it0 != block_Ai.end() && dR_up_mid + n_keep_mid <= (int)it0->second.cols()) {
-                        if ((int)it0->second.rows() == dL_dn)
-                            Adn = reinterpret_cast<const Cx*>(it0->second.data())
-                                  + (size_t)dR_up_mid * dL_dn;
-                        else gpu_ok = false;
-                    }
-                }
-                if (gpu_ok && (Aup || Adn)) {
-                    Mat th(n_row, n_col);
-                    if (qx_gpu::form_theta_block_z(Aup, dL_up, Adn, dL_dn,
-                            reinterpret_cast<const Cx*>(Ai1r.data()), n_keep_mid, n_col,
-                            reinterpret_cast<Cx*>(th.data()))) {
-                        if (th.norm() > 1e-14) theta[q_mid] = std::move(th);
-                        continue;
-                    }
-                }
-            }
-          } else {   // d>2: one GEMM per physical-state row group on-device
-            const int n_keep_mid = bs_mid.dim(q_mid);
-            const Mat& Ai1r = it1->second;
-            if (sv_mid.empty() && n_keep_mid > 0 &&
-                (int)Ai1r.rows() == n_keep_mid && (int)Ai1r.cols() == n_col &&
-                (long long)n_row * n_keep_mid * n_col >= gpu_theta_minwork()) {
-                std::vector<const Cx*> As(qphys.size(), nullptr);
-                std::vector<int> dLs(qphys.size(), 0);
-                bool gpu_ok = true;
-                for (int s1 = 0; s1 < (int)qphys.size(); ++s1) {
-                    int q_L = rows[s1].q, dL = rows[s1].width;
-                    dLs[s1] = dL;
-                    if (dL == 0) continue;          // absent group -> zero rows
-                    auto it0 = block_Ai.find(q_L);
-                    if (it0 == block_Ai.end()) continue;
-                    auto mcols = phys_groups(bs_mid, q_L, +1, qphys);
-                    int coff = mcols[s1].off;       // column group mapping q_L -> q_mid
-                    if (coff + n_keep_mid > (int)it0->second.cols()
-                        || (int)it0->second.rows() != dL) { gpu_ok = false; break; }
-                    As[s1] = reinterpret_cast<const Cx*>(it0->second.data())
-                             + (size_t)coff * dL;
-                }
-                if (gpu_ok) {
-                    Mat th(n_row, n_col);
-                    if (qx_gpu::form_theta_block_z_multi(As.data(), dLs.data(),
-                            (int)qphys.size(),
-                            reinterpret_cast<const Cx*>(Ai1r.data()), n_keep_mid, n_col,
-                            n_row, reinterpret_cast<Cx*>(th.data()))) {
-                        if (th.norm() > 1e-14) theta[q_mid] = std::move(th);
-                        continue;
-                    }
-                }
-            }
-          }
-        }
-#endif
+        if (it1 == block_Ai1.end()) return Mat();
 
         Mat th = Mat::Zero(n_row, n_col);
         Mat Ai1 = it1->second;  // (n_keep_mid, n_col)
@@ -1693,8 +1784,106 @@ static std::map<int,Mat> form_theta(
             if (row_off + dL > n_row) continue;
             th.block(row_off, 0, dL, n_col).noalias() += Ai_s1 * Ai1;
         }
-        if (th.norm() > 1e-14) theta[q_mid] = th;
+        return th;
+    };
+
+    // Pass 1 (serial): GPU-eligible blocks -- large, sv-free (the TEBD/dynamics path;
+    // one device, so no parallelism here). Everything else goes to the CPU swarm.
+    std::vector<int> pending; pending.reserve(q_mids.size());
+    for (int q_mid : q_mids) {
+        bool done = false;
+#ifdef QX_USE_CUDA
+        if constexpr (std::is_same_v<S, Cx>) {
+            auto rows = phys_groups(bs_L,  q_mid, -1, qphys);
+            auto cols = phys_groups(bs_R2, q_mid, +1, qphys);
+            int n_row = phys_total(rows), n_col = phys_total(cols);
+            auto it1 = block_Ai1.find(q_mid);
+            const int n_keep_mid = bs_mid.dim(q_mid);
+            if (n_row > 0 && n_col > 0 && it1 != block_Ai1.end() &&
+                sv_mid.empty() && n_keep_mid > 0 &&
+                (int)it1->second.rows() == n_keep_mid && (int)it1->second.cols() == n_col &&
+                (long long)n_row * n_keep_mid * n_col >= gpu_theta_minwork()) {
+                const Mat& Ai1r = it1->second;
+                if (d2) {
+                    int dL_up = rows[0].width, dL_dn = rows[1].width;
+                    const Cx* Aup = nullptr; const Cx* Adn = nullptr;
+                    bool gpu_ok = true;
+                    if (dL_up > 0) {                          // s1=up: q_L = q_mid-1, col_off 0
+                        auto it0 = block_Ai.find(q_mid - 1);
+                        if (it0 != block_Ai.end() && n_keep_mid <= (int)it0->second.cols()) {
+                            if ((int)it0->second.rows() == dL_up)
+                                Aup = reinterpret_cast<const Cx*>(it0->second.data());
+                            else gpu_ok = false;
+                        }
+                    }
+                    if (gpu_ok && dL_dn > 0) {                // s1=dn: q_L = q_mid+1
+                        auto it0 = block_Ai.find(q_mid + 1);
+                        int dR_up_mid = bs_mid.dim(q_mid + 2);
+                        if (it0 != block_Ai.end() && dR_up_mid + n_keep_mid <= (int)it0->second.cols()) {
+                            if ((int)it0->second.rows() == dL_dn)
+                                Adn = reinterpret_cast<const Cx*>(it0->second.data())
+                                      + (size_t)dR_up_mid * dL_dn;
+                            else gpu_ok = false;
+                        }
+                    }
+                    if (gpu_ok && (Aup || Adn)) {
+                        Mat th(n_row, n_col);
+                        if (qx_gpu::form_theta_block_z(Aup, dL_up, Adn, dL_dn,
+                                reinterpret_cast<const Cx*>(Ai1r.data()), n_keep_mid, n_col,
+                                reinterpret_cast<Cx*>(th.data()))) {
+                            if (th.norm() > 1e-14) theta[q_mid] = std::move(th);
+                            done = true;
+                        }
+                    }
+                } else {   // d>2: one GEMM per physical-state row group on-device
+                    std::vector<const Cx*> As(qphys.size(), nullptr);
+                    std::vector<int> dLs(qphys.size(), 0);
+                    bool gpu_ok = true;
+                    for (int s1 = 0; s1 < (int)qphys.size(); ++s1) {
+                        int q_L = rows[s1].q, dL = rows[s1].width;
+                        dLs[s1] = dL;
+                        if (dL == 0) continue;
+                        auto it0 = block_Ai.find(q_L);
+                        if (it0 == block_Ai.end()) continue;
+                        auto mcols = phys_groups(bs_mid, q_L, +1, qphys);
+                        int coff = mcols[s1].off;
+                        if (coff + n_keep_mid > (int)it0->second.cols()
+                            || (int)it0->second.rows() != dL) { gpu_ok = false; break; }
+                        As[s1] = reinterpret_cast<const Cx*>(it0->second.data())
+                                 + (size_t)coff * dL;
+                    }
+                    if (gpu_ok) {
+                        Mat th(n_row, n_col);
+                        if (qx_gpu::form_theta_block_z_multi(As.data(), dLs.data(),
+                                (int)qphys.size(),
+                                reinterpret_cast<const Cx*>(Ai1r.data()), n_keep_mid, n_col,
+                                n_row, reinterpret_cast<Cx*>(th.data()))) {
+                            if (th.norm() > 1e-14) theta[q_mid] = std::move(th);
+                            done = true;
+                        }
+                    }
+                }
+            }
+        }
+#endif
+        if (!done) pending.push_back(q_mid);
     }
+
+    // Pass 2 (parallel): the CPU swarm. Each thread assembles its own independent
+    // block (per-block arithmetic order unchanged -> bit-identical). OpenBLAS is
+    // pinned to 1 thread across the region (nested BLAS threads crash).
+    std::vector<Mat> built(pending.size());
+    {
+#ifdef QX_HAS_LAPACKE
+        OpenBlasSingleThreadGuard _blas_guard;
+#endif
+        #pragma omp parallel for schedule(dynamic) if(pending.size() > 1)
+        for (int i = 0; i < (int)pending.size(); ++i)
+            built[i] = build_cpu(pending[i]);
+    }
+    for (int i = 0; i < (int)pending.size(); ++i)
+        if (built[i].size() != 0 && built[i].norm() > 1e-14)
+            theta[pending[i]] = std::move(built[i]);
     return theta;
 }
 
@@ -3492,10 +3681,17 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
 
         for (int sweep = ss_start; sweep < n_sweeps; ++sweep) {
             double E0 = 0;
-            // L->R: optimise each site, move the centre rightward.
+            // L->R: optimise each site, move the centre rightward. The one-site H_eff
+            // plan hoists all QN bookkeeping out of the Lanczos matvecs (bit-identical
+            // to apply_heff_1site; the cylinder's fragmented sectors made the per-
+            // matvec bookkeeping the dominant cost of this whole phase).
             for (int i = 0; i < n; ++i) {
+                std::vector<int> mk; mk.reserve(M.size());
+                for (auto& [q, _] : M) mk.push_back(q);
+                Heff1Plan p1 = build_heff1_plan(L[i], mpo[i], R[i+1], mk,
+                                                bond[i], bond[i+1], delta);
                 auto mv = [&](const std::map<int,Mat>& v) {
-                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1], delta);
+                    return apply_heff1_plan(p1, v);
                 };
                 auto tt = clk::now();
                 auto [E, Mopt] = block_lanczos(mv, M);
@@ -3520,10 +3716,14 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                     M = std::move(Mopt);
                 }
             }
-            // R->L: optimise each site, move the centre leftward.
+            // R->L: optimise each site, move the centre leftward (same plan hoisting).
             for (int i = n - 1; i >= 0; --i) {
+                std::vector<int> mk; mk.reserve(M.size());
+                for (auto& [q, _] : M) mk.push_back(q);
+                Heff1Plan p1 = build_heff1_plan(L[i], mpo[i], R[i+1], mk,
+                                                bond[i], bond[i+1], delta);
                 auto mv = [&](const std::map<int,Mat>& v) {
-                    return apply_heff_1site(L[i], mpo[i], R[i+1], v, bond[i], bond[i+1], delta);
+                    return apply_heff1_plan(p1, v);
                 };
                 auto tt = clk::now();
                 auto [E, Mopt] = block_lanczos(mv, M);

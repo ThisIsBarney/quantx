@@ -448,3 +448,30 @@ BLAS threading) and the next optimization target; the pattern is by now familiar
 honest baseline first, profile, then flip the table. Cross-engine energies agree at
 the fixed-χ level (−16.0005 vs −16.0001), which together with the W≤3 ED exactness
 validates the W=4 construction.
+
+### The cylinder optimization round: 0.53× → 2.06× (bookkeeping, not physics)
+
+Profiling the 8×4 sweep exposed that the loss was almost entirely **QN bookkeeping**,
+attacked in four cuts (all bit-identical to the old results; every ED assertion
+unchanged):
+
+1. **Lanczos iteration cap** (`QX_LANCZOS_MAX`, default 25): the tol-based stop burned
+   ~44 matvecs/bond on accuracy the truncation immediately discards (matvecs halved).
+2. **`build_wcomb` sparsity**: the W⊗W combination enumerated all O(χ_mpo³) channel
+   triples blind — the width-34 cylinder MPO has O(χ_mpo) nonzero blocks; iterating
+   the sparse product structure only.
+3. **`build_heff_plan` bra-side memo**: the plan builder called `phys_groups` (a heap
+   allocation) per (bL, bR, s1b) combination — millions per bond update; memoised per
+   `q_mid_bra`. (A false lead first: parallelizing `form_theta` changed nothing, which
+   *acquitted* it and convicted the other occupants of the same profile bucket.)
+4. **`Heff1Plan`**: the single-site refinement phase re-did all bookkeeping *inside
+   every Lanczos matvec* (`apply_heff_1site`); the plan analogue hoists it per site —
+   the hybrid's 12-sweep run dropped 225 → 30 s.
+
+**Honest scoreboard after the round** (8×4, U=8, χ=256, 12-sweep budget, min-of-2):
+QuantX **29.1 s vs TeNPy 59.8 s — 2.06× faster**. Energy at equal budget: TeNPy is
+still 4.6e-4 lower (−16.00048 vs −16.00002), and extending QuantX to 24 sweeps (53 s,
+still under TeNPy's wall) reaches −16.00035 but not parity: TeNPy's *per-sweep
+convergence* is stronger (its density-matrix mixer helps it out of local structure we
+crawl past). Per-sweep *speed* is ours by ~4×. The next lever is a subspace-expansion /
+mixer for the truncation-limited regime; until then the doc states both numbers.
