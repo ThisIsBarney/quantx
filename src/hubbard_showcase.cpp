@@ -50,6 +50,53 @@ int main(int argc, char** argv) {
     int chi = argc > 1 ? std::atoi(argv[1]) : 128;   // Mott is area-law: chi=128 is converged
     const double t = 1.0;
 
+    // STRIPES showcase: QX_STRIPES="Lx W chi [U holes hpin nsw]" -> hole-doped
+    // width-W cylinder GS with staggered edge pinning (x=0 column); emits per-site
+    // charge/spin profiles ("PROF i x y n 2sz" lines) for the stripe-order figure.
+    // holes must be even (removed as up/dn pairs so the target sector is 2Sz=0).
+    if (const char* sz = std::getenv("QX_STRIPES")) {
+        int Lx = 16, Wd = 4, cchi = 1024; double U = 8.0;
+        int holes = 8; double hp = 0.5; int nsw = 16;
+        std::sscanf(sz, "%d %d %d %lf %d %lf %d", &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw);
+        const int n = Wd * Lx, Ne = n - holes;
+        if (holes < 0 || holes > n || holes % 2 != 0 || n % 2 != 0) {
+            std::fprintf(stderr, "QX_STRIPES: need even n and even holes in [0, n] "
+                         "(got n=%d holes=%d)\n", n, holes);
+            return 1;
+        }
+#ifdef _WIN32
+        _putenv_s("QX_PROFILES", "1");
+#else
+        setenv("QX_PROFILES", "1", 1);
+#endif
+        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp);
+        // init: half-filling Neel, then dig the holes at evenly spread sites,
+        // alternating up/dn removals so the seed lands exactly in (Ne, 2Sz=0).
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        for (int k = 0; k < holes; ++k) {
+            int want = (k % 2 == 0) ? 1 : 2;              // remove up, then dn, ...
+            int i0 = (int)(((double)k + 0.5) * n / holes);
+            for (int off = 0; off < n; ++off) {
+                int i = (i0 + off) % n;
+                if (cfg[i] == want) { cfg[i] = 0; break; }
+            }
+        }
+        auto t0 = std::chrono::steady_clock::now();
+        DMRGResult r = run_dmrg_blocks(mpo, n, cchi, 1e-11, nsw, 1e-12,
+                                       pack_q2(Ne, 0), &cfg);
+        double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        double nsum = 0;
+        for (double v : r.site_n) nsum += v;
+        std::printf("STRIPES Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d : "
+                    "E0=%.10f (%.1fs)  sum<n>=%.6f (target %d)\n",
+                    Lx, Wd, cchi, U, holes, hp, nsw, r.energy, w0, nsum, Ne);
+        for (int i = 0; i < n; ++i)
+            std::printf("PROF %d %d %d %.8f %.8f\n", i, i / Wd, i % Wd,
+                        r.site_n[i], r.site_2sz[i]);
+        return 0;
+    }
+
     // Width-W CYLINDER/strip mode: QX_CYL="Lx W chi [U yper]" -> half-filling GS on
     // the general period-W builder; prints E0 and wall. The quasi-2D benchmark entry.
     if (const char* cz = std::getenv("QX_CYL")) {

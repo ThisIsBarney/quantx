@@ -638,6 +638,79 @@ int main() {
             std::printf("  WIDTH-W: ||W=2gen-ladder||=%.1e ; W=3 strip=%.1e cyl=%.1e ; "
                         "cyl blk err=%.1e  %s\n", eg2, eg3o, eg3c, e3, okg?"OK":"FAIL");
             fails += !okg;
+
+            // (l) STRIPE MACHINERY: edge pinning + hole doping + per-site profiles,
+            // the full chain vs ED on the W=3 Lx=2 cylinder. hpin adds
+            // -hpin (-1)^y Sz_{0,y} on the x=0 column (Sz-diagonal: both charges
+            // conserved); doped sector N=4, 2Sz=0 (2 holes); QX_PROFILES=1 makes
+            // run_dmrg_blocks emit per-site (<n_i>, <2Sz_i>), compared against the
+            // ED ground-vector expectation values site by site.
+            {
+                const double hpin = 0.4, U6 = 6.0;
+                auto cylp = build_hubbard_lattice_split_mpo(L3, W3, t, U6, 0.0, true, hpin);
+                // ED reference: rebuild the U=6 cylinder H + the pinning term
+                MatC Hp = MatC::Zero(dim, dim);
+                {
+                    auto hp = [&](int i, int j) {
+                        MatC h = ferm(n3,i,Cup.adjoint())*ferm(n3,j,Cup)
+                               + ferm(n3,i,Cdn.adjoint())*ferm(n3,j,Cdn);
+                        Hp += -t * (h + MatC(h.adjoint()));
+                    };
+                    for (int x = 0; x < L3; ++x) {
+                        for (int y = 0; y < W3 - 1; ++y) hp(W3*x + y, W3*x + y + 1);
+                        hp(W3*x, W3*x + W3 - 1);
+                    }
+                    for (int x = 0; x < L3 - 1; ++x)
+                        for (int y = 0; y < W3; ++y) hp(W3*x + y, W3*(x+1) + y);
+                    for (int i = 0; i < n3; ++i) Hp += U6 * (ferm(n3,i,Nu) * ferm(n3,i,Nd));
+                    // NO ferm() here: Sz is parity-even, a bare local embedding
+                    // (ferm's JW string would be uncancelled for a lone operator)
+                    MatC Szl = 0.5 * (Nu - Nd);
+                    auto locop = [&](int i) {
+                        MatC O = MatC::Identity(1,1);
+                        for (int k = 0; k < n3; ++k) O = kron(O, k == i ? Szl : I4);
+                        return O;
+                    };
+                    for (int y = 0; y < W3; ++y)
+                        Hp += (-hpin * ((y % 2 == 0) ? 1.0 : -1.0)) * locop(y);
+                }
+                double herrp = (Hp - contract_mpo(cylp)).cwiseAbs().maxCoeff();
+                // doped sector N=4, 2Sz=0: ED energy, gap, and per-site profiles
+                std::vector<int> idp;
+                for (int k = 0; k < dim; ++k) { int Nt=0, Zt=0, kk=k;
+                    for (int i = 0; i < n3; ++i) { Nt += nof[kk%4]; Zt += z4l[kk%4]; kk /= 4; }
+                    if (Nt == 4 && Zt == 0) idp.push_back(k); }
+                int mp = (int)idp.size();
+                MatC Hsp(mp, mp);
+                for (int a2=0;a2<mp;++a2) for (int b2=0;b2<mp;++b2) Hsp(a2,b2) = Hp(idp[a2], idp[b2]);
+                Eigen::SelfAdjointEigenSolver<MatC> esp(Hsp);
+                double Ep_ed = esp.eigenvalues()(0);
+                double gap_ed = esp.eigenvalues()(1) - Ep_ed;   // pinning must lift degeneracy
+                std::vector<double> n_ed(n3, 0.0), z_ed(n3, 0.0);
+                for (int a2 = 0; a2 < mp; ++a2) {
+                    double w = std::norm(esp.eigenvectors()(a2, 0));
+                    int kk = idp[a2];
+                    // kron builds site 0 leftmost = MOST significant digit, so the
+                    // %4 decode walks sites n3-1 down to 0 (total sums in (k) are
+                    // order-blind; per-site profiles are not)
+                    for (int i = n3 - 1; i >= 0; --i) {
+                        n_ed[i] += w * nof[kk%4]; z_ed[i] += w * z4l[kk%4]; kk /= 4; }
+                }
+                set_env("QX_PROFILES", "1");
+                std::vector<int> cp = {1, 2, 0, 1, 2, 0};      // N=4, 2Sz=0 seed
+                DMRGResult rp = run_dmrg_blocks(cylp, n3, 256, 1e-11, 120, 1e-11,
+                                                pack_q2(4, 0), &cp);
+                set_env("QX_PROFILES", nullptr);
+                double ep = std::abs(rp.energy - Ep_ed), eprof = 0;
+                for (int i = 0; i < n3; ++i) {
+                    eprof = std::max(eprof, std::abs(rp.site_n[i] - n_ed[i]));
+                    eprof = std::max(eprof, std::abs(rp.site_2sz[i] - z_ed[i]));
+                }
+                bool okp = herrp < 1e-12 && gap_ed > 1e-8 && ep < 1e-8 && eprof < 1e-6;
+                std::printf("  STRIPE-MACH: ||H_pin||=%.1e ; gap=%.2e ; doped blk E err=%.1e ; "
+                            "profile err=%.1e  %s\n", herrp, gap_ed, ep, eprof, okp?"OK":"FAIL");
+                fails += !okp;
+            }
         }
     }
 

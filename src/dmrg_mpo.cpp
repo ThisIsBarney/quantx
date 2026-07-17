@@ -440,7 +440,7 @@ std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t, double tpe
 // W=2 open reproduces build_hubbard_ladder_split_mpo's Hamiltonian (self-check).
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
                                                      double U, double mu,
-                                                     bool y_periodic) {
+                                                     bool y_periodic, double hpin) {
     const int d = 4, n = W * Lx;
     const int nx = 4 * W;                        // x-hop carry slots
     const int nw = y_periodic ? 4 * (W - 1) : 0; // y-wrap carry slots
@@ -507,6 +507,17 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
                 int ar = (i == 0) ? start : a, br = (i == n - 1) ? done : b;
                 site.W(a, b) = Wm[ar][br];
             }
+    }
+    // Edge pinning: H -= hpin (-1)^y Sz_{0,y} on the x=0 column only (sites 0..W-1).
+    // Sz = diag(0, +1/2, -1/2, 0) is diagonal in both charges, so the bond charge
+    // structure (and derive_mpo_sym) is untouched; only the on-site start->done
+    // block of the first W site matrices changes.
+    if (hpin != 0.0) {
+        Mat Sz = Mat::Zero(4, 4); Sz(1,1) = 0.5; Sz(2,2) = -0.5;
+        for (int y = 0; y < W && y < n; ++y) {
+            double h = -hpin * ((y % 2 == 0) ? 1.0 : -1.0);
+            mpo[y].W((y == 0) ? 0 : start, 0) += h * Sz;   // site 0: cl=1, row 0 IS start
+        }
     }
     return mpo;
 }
