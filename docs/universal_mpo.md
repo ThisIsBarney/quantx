@@ -475,3 +475,26 @@ still under TeNPy's wall) reaches −16.00035 but not parity: TeNPy's *per-sweep
 convergence* is stronger (its density-matrix mixer helps it out of local structure we
 crawl past). Per-sweep *speed* is ours by ~4×. The next lever is a subspace-expansion /
 mixer for the truncation-limited regime; until then the doc states both numbers.
+
+### The mixer: DMRG3S subspace expansion — the double win
+
+The last honest footnote (TeNPy's per-sweep convergence beating ours at equal budget)
+is closed. The single-site refinement now enriches each L→R split with the DMRG3S
+mixing block `P = L·W·M` (Hubig/McCulloch/Schollwöck): P's composite columns carry
+MPO-shifted charges, so the truncating split can keep directions — and whole charge
+sectors — the current bond does not have, which plain single-site can never do. The
+enrichment weight decays per sweep (`QX_MIX0=0.1`, `×0.7`/sweep, off below 1e-6), so
+the final sweeps are strictly variational and every ED assertion is unchanged.
+
+**8×4 cylinder, U=8, χ=256, 12-sweep budget, min-of-2:**
+
+| | TeNPy | QuantX (no mixer) | QuantX (mixer) |
+|---|---|---|---|
+| wall | 59.9 s | 29.1 s | 41.3 s |
+| E reached | −16.000483 | −16.000021 | **−16.000525** |
+| verdict | — | 2.06× wall, energy behind | **1.45× wall AND 4.2e-5 lower energy** |
+
+The mixer costs ~12 s of enrichment work and buys the energy lead — the first
+configuration in this doc that beats TeNPy on *both* axes of the truncation-limited
+2D protocol. `QX_MIX0=0` restores the pure-speed mode. Tuning matrix: α₀=0.1/decay 0.7
+optimal; 0.2 overdrives (worse than no mixer), 0.05 undershoots.
