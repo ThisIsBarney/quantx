@@ -1118,9 +1118,119 @@ struct SiteMove {
     BondSpace          new_mid;
 };
 
+// DMRG3S-style subspace expansion (Hubig/McCulloch/Schollwoeck): enrich the one-site
+// centre M with the mixing block P = L * W * M before the truncating split,
+//   P^{s}_{a,(b',beta)} = sum_{b,a',s'} L^b_{a,a'} W^{b b'}(s,s') M^{s'}_{a',beta},
+// whose composite columns (b', beta) carry charge q_R_ket + delta[b'] -- so the SVD
+// gets to KEEP directions (and whole charge sectors) the current bond does not have.
+// This is the standard cure for the truncation-limited crawl the width-4 cylinder
+// exposed (TeNPy's mixer analogue): plain single-site can never grow bond content.
+// Returns the widened centre M_ext and its column bond space bs_ext (original bs_mid
+// columns first, then the alpha-scaled P columns per (b', q_R_ket) pair). alpha sets
+// the enrichment weight relative to ||M|| (P is Frobenius-normalised first).
+static std::pair<std::map<int,Mat>, BondSpace> expand_M_LR(
+    const std::map<int,Mat>& M, const BlockEnv& L, const MPOSite& W,
+    const BondSpace& bs_L, const BondSpace& bs_mid,
+    const std::vector<int>& delta, const std::vector<int>& qphys, double alpha)
+{
+    const int d = (int)qphys.size();
+    // 1) enumerate the expansion column groups: (b', q_R_ket) -> charge q_ext, width
+    //    dR(q_R_ket); assign each pair a column offset within its q_ext extension.
+    struct Ext { int bprime, q_R_ket, off, width; };
+    std::map<int, std::vector<Ext>> ext_groups;          // q_ext -> pairs
+    std::map<int, int> ext_width;                        // q_ext -> total extension width
+    for (int qi = 0; qi < bs_mid.n_sectors(); ++qi) {
+        int q_R = bs_mid.qns[qi], dR = bs_mid.dims[qi];
+        if (dR == 0) continue;
+        for (int bp = 0; bp < W.chi_r; ++bp) {
+            int q_ext = q_R + delta[bp];
+            int& wsum = ext_width[q_ext];
+            ext_groups[q_ext].push_back({bp, q_R, wsum, dR});
+            wsum += dR;
+        }
+    }
+    // 2) the widened bond space: original sectors first, extensions appended.
+    std::vector<std::pair<int,int>> secs;
+    std::set<int> all_q;
+    for (int qi = 0; qi < bs_mid.n_sectors(); ++qi) all_q.insert(bs_mid.qns[qi]);
+    for (auto& [q, wsum] : ext_width) all_q.insert(q);
+    for (int q : all_q) {
+        int wtot = bs_mid.dim(q) + (ext_width.count(q) ? ext_width[q] : 0);
+        if (wtot > 0) secs.push_back({q, wtot});
+    }
+    BondSpace bs_ext = BondSpace::from_pairs(secs);
+    // 3) build P into the extension columns. Loop the nonzero structure only.
+    std::map<int,Mat> P;                                 // q_L_bra -> (dL_bra, ext cols layout)
+    double Mnorm2 = 0; for (auto& [q, blk] : M) Mnorm2 += blk.squaredNorm();
+    for (auto& [q_L_ket, Mblk] : M) {
+        auto mcols = phys_groups(bs_mid, q_L_ket, +1, qphys);
+        for (int b = 0; b < W.chi_l; ++b) {
+            auto it_L = L.blocks[b].find(q_L_ket);
+            if (it_L == L.blocks[b].end()) continue;
+            const Mat& Lblk = it_L->second;              // (dL_bra, dL_ket)
+            int q_L_bra = q_L_ket + delta[b];
+            if (bs_L.dim(q_L_bra) != Lblk.rows() || Lblk.cols() != Mblk.rows()) continue;
+            for (int sp = 0; sp < d; ++sp) {
+                if (mcols[sp].width == 0) continue;
+                int q_R_ket = mcols[sp].q;
+                Mat LM = Lblk * Mblk.middleCols(mcols[sp].off, mcols[sp].width);
+                for (int bp = 0; bp < W.chi_r; ++bp) {
+                    for (int s = 0; s < d; ++s) {
+                        S w = mscal(W.W(b, bp)(s, sp));
+                        if (std::abs(w) < 1e-15) continue;
+                        // destination: P[q_L_bra], row group s, extension column group
+                        // (bp, q_R_ket) inside charge q_ext = q_R_ket + delta[bp].
+                        int q_ext = q_R_ket + delta[bp];
+                        auto pgrows = phys_groups(bs_ext, q_L_bra, +1, qphys);
+                        if (pgrows[s].q != q_ext) continue;   // charge bookkeeping guard
+                        auto& Pblk = P[q_L_bra];
+                        if (Pblk.size() == 0)
+                            Pblk = Mat::Zero(Lblk.rows(), phys_total(pgrows));
+                        // find this (bp, q_R_ket) pair's offset within the extension
+                        int pair_off = -1;
+                        for (auto& e : ext_groups[q_ext])
+                            if (e.bprime == bp && e.q_R_ket == q_R_ket) { pair_off = e.off; break; }
+                        if (pair_off < 0) continue;
+                        int col0 = pgrows[s].off + bs_mid.dim(q_ext) + pair_off;
+                        Pblk.block(0, col0, Lblk.rows(), mcols[sp].width).noalias() += w * LM;
+                    }
+                }
+            }
+        }
+    }
+    // 4) Frobenius-normalise P to alpha * ||M||, then assemble M_ext = [M | alpha P].
+    double Pnorm2 = 0; for (auto& [q, blk] : P) Pnorm2 += blk.squaredNorm();
+    double scale = (Pnorm2 > 1e-300) ? alpha * std::sqrt(Mnorm2 / Pnorm2) : 0.0;
+    std::map<int,Mat> Mext;
+    std::set<int> qLs;
+    for (auto& [q, _] : M) qLs.insert(q);
+    for (auto& [q, _] : P) qLs.insert(q);
+    for (int q_L : qLs) {
+        int dL = bs_L.dim(q_L);
+        if (dL == 0) continue;
+        auto cols_ext = phys_groups(bs_ext, q_L, +1, qphys);
+        Mat blk = Mat::Zero(dL, phys_total(cols_ext));
+        auto itM = M.find(q_L);
+        if (itM != M.end()) {
+            auto cols_old = phys_groups(bs_mid, q_L, +1, qphys);
+            for (int s = 0; s < d; ++s) {
+                if (cols_old[s].width == 0) continue;
+                blk.block(0, cols_ext[s].off, dL, cols_old[s].width) =
+                    itM->second.middleCols(cols_old[s].off, cols_old[s].width);
+            }
+        }
+        auto itP = P.find(q_L);
+        if (itP != P.end() && scale > 0 && itP->second.rows() == dL)
+            blk += scale * itP->second;   // P already laid out on the bs_ext columns
+        Mext[q_L] = blk;
+    }
+    return {std::move(Mext), std::move(bs_ext)};
+}
+
 static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
                                     const BondSpace& bs_L, const BondSpace& bs_mid,
-                                    const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
+                                    const std::vector<int>& qphys = SPIN_HALF_CHARGES,
+                                    int max_bond = -1, double cutoff = 0.0) {
     SiteMove mv;
     std::map<int,Mat> Umap;     // q_R -> U (rows x keep)
     std::vector<std::pair<int,int>> new_sectors;
@@ -1130,6 +1240,9 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
     for (auto& [q_L, _] : M)
         for (int qs : qphys) qRs.insert(q_L + qs);
 
+    // Phase 1: per-sector SVDs (kept whole; truncation decided globally below).
+    struct SecSVD { int q_R; Mat U, Vt; RVec sv; };
+    std::vector<SecSVD> svds;
     for (int q_R : qRs) {
         int dRmid = bs_mid.dim(q_R);
         if (dRmid == 0) continue;
@@ -1149,12 +1262,46 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
                 it->second.middleCols(mcols[s].off, dRmid);
         }
         Eigen::BDCSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        int keep = (int)svd.singularValues().size();
-        Umap[q_R] = svd.matrixU().leftCols(keep);
-        Mat Vt = svd.matrixV().adjoint().topRows(keep);                 // keep x dRmid
-        for (int k = 0; k < keep; ++k) Vt.row(k) *= svd.singularValues()[k];
-        mv.C[q_R] = Vt;                                                 // S V^dag
-        new_sectors.emplace_back(q_R, keep);
+        svds.push_back({q_R, svd.matrixU(), Mat(svd.matrixV().adjoint()),
+                        RVec(svd.singularValues())});
+    }
+    // Phase 2: keep counts. Default (max_bond <= 0): keep everything -- the historical
+    // lossless split. With a cap (the subspace-expansion path widens the columns far
+    // past chi): global top-max_bond across sectors + relative cutoff, exactly the
+    // block_svd_truncate policy.
+    std::map<int,int> keep_q;
+    if (max_bond > 0) {
+        struct SVE { double sv; int si; };
+        std::vector<SVE> all;
+        double tot2 = 0;
+        for (int si = 0; si < (int)svds.size(); ++si)
+            for (int k = 0; k < svds[si].sv.size(); ++k) {
+                all.push_back({svds[si].sv[k], si});
+                tot2 += svds[si].sv[k] * svds[si].sv[k];
+            }
+        std::sort(all.begin(), all.end(), [](auto& a, auto& b){ return a.sv > b.sv; });
+        int n_keep = (int)all.size();
+        if (tot2 > 0 && cutoff > 0) {
+            double disc = 0;
+            while (n_keep > 1) {
+                double svl = all[n_keep-1].sv;
+                if ((disc + svl*svl) / tot2 > cutoff) break;
+                disc += svl*svl; --n_keep;
+            }
+        }
+        n_keep = std::min(n_keep, max_bond);
+        for (int k = 0; k < n_keep; ++k) keep_q[svds[all[k].si].q_R]++;
+    } else {
+        for (auto& s : svds) keep_q[s.q_R] = (int)s.sv.size();
+    }
+    for (auto& sec : svds) {
+        int keep = keep_q.count(sec.q_R) ? keep_q[sec.q_R] : 0;
+        if (keep == 0) continue;
+        Umap[sec.q_R] = sec.U.leftCols(keep);
+        Mat Vt = sec.Vt.topRows(keep);                                  // keep x dRmid
+        for (int k = 0; k < keep; ++k) Vt.row(k) *= sec.sv[k];
+        mv.C[sec.q_R] = Vt;                                             // S V^dag
+        new_sectors.emplace_back(sec.q_R, keep);
     }
     std::sort(new_sectors.begin(), new_sectors.end());
     mv.new_mid = BondSpace::from_pairs(new_sectors);
@@ -3679,6 +3826,18 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             }
         }
 
+        // DMRG3S subspace-expansion (mixer) schedule: enrich the L->R splits with the
+        // L*W*M mixing block at weight mix_alpha (relative to ||M||), decaying per
+        // sweep and switching off entirely below 1e-6 -- the final sweeps are then
+        // strictly variational, so converged fixed points (and every ED assertion)
+        // are unchanged; the mixer only changes the PATH there. This is the standard
+        // cure for the truncation-limited crawl (plain single-site can never grow
+        // bond content) that made TeNPy's per-sweep convergence beat ours on the
+        // width-4 cylinder. QX_MIX0 / QX_MIX_DECAY tune it; QX_MIX0=0 disables.
+        double mix_alpha = [](){ const char* e = std::getenv("QX_MIX0");
+                                 return e ? std::atof(e) : 0.1; }();
+        const double mix_decay = [](){ const char* e = std::getenv("QX_MIX_DECAY");
+                                       return e ? std::atof(e) : 0.7; }();
         for (int sweep = ss_start; sweep < n_sweeps; ++sweep) {
             double E0 = 0;
             // L->R: optimise each site, move the centre rightward. The one-site H_eff
@@ -3699,14 +3858,44 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                 E0 = E;
                 if (i < n - 1) {
                     tt = clk::now();
-                    SiteMove sp = singlesite_split_LR(Mopt, bond[i], bond[i+1], qphys);
+                    SiteMove sp;
+                    BondSpace old_mid = bond[i+1];
+                    if (mix_alpha > 0) {
+                        auto [Mext, bs_ext] = expand_M_LR(Mopt, L[i], mpo[i], bond[i],
+                                                          bond[i+1], delta, qphys, mix_alpha);
+                        sp = singlesite_split_LR(Mext, bond[i], bs_ext, qphys,
+                                                 max_bond, cutoff);
+                    } else {
+                        sp = singlesite_split_LR(Mopt, bond[i], bond[i+1], qphys);
+                    }
                     tick(t_svd, tt);
                     block_A[i] = sp.A;
                     bond[i+1] = sp.new_mid;
                     std::map<int,Mat> Mn;   // absorb centre into the next site
-                    for (auto& [q_R, Cb] : sp.C) {
-                        auto it = block_A[i+1].find(q_R);
-                        if (it != block_A[i+1].end()) Mn[q_R] = Cb * it->second;
+                    if (mix_alpha > 0) {
+                        // The centre's columns live on the WIDENED bond; the old right
+                        // tensor has rows only for the original columns -- the extension
+                        // part multiplies implicit zero rows and drops. Sectors NEW to
+                        // the bond get explicit zero blocks so the next site's Lanczos
+                        // (Galerkin-projected onto its init sectors) can rotate weight
+                        // into the enriched directions.
+                        for (auto& [q_R, Cb] : sp.C) {
+                            int rows = (int)Cb.rows();
+                            int ncols = phys_total(phys_groups(bond[i+2], q_R, +1, qphys));
+                            if (ncols == 0) continue;
+                            Mat blk = Mat::Zero(rows, ncols);
+                            auto it = block_A[i+1].find(q_R);
+                            int d_old = old_mid.dim(q_R);
+                            if (it != block_A[i+1].end() && d_old > 0 &&
+                                it->second.cols() == ncols && Cb.cols() >= d_old)
+                                blk = Cb.leftCols(d_old) * it->second;
+                            Mn[q_R] = std::move(blk);
+                        }
+                    } else {
+                        for (auto& [q_R, Cb] : sp.C) {
+                            auto it = block_A[i+1].find(q_R);
+                            if (it != block_A[i+1].end()) Mn[q_R] = Cb * it->second;
+                        }
                     }
                     M = std::move(Mn);
                     tt = clk::now();
@@ -3761,6 +3950,9 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             // Leave the centre on site 0 so the state is consistent.
             block_A[0] = M;
             for (auto& [q, blk] : block_sv[0]) blk = RVec::Ones(blk.size());
+            // Mixer decay: strictly variational once alpha hits zero.
+            mix_alpha *= mix_decay;
+            if (mix_alpha < 1e-6) mix_alpha = 0.0;
 
             result.sweep_energies.push_back(E0);
             if (std::abs(E0 - prev_energy) < tol) {
