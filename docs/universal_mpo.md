@@ -498,3 +498,38 @@ The mixer costs ~12 s of enrichment work and buys the energy lead — the first
 configuration in this doc that beats TeNPy on *both* axes of the truncation-limited
 2D protocol. `QX_MIX0=0` restores the pure-speed mode. Tuning matrix: α₀=0.1/decay 0.7
 optimal; 0.2 overdrives (worse than no mixer), 0.05 undershoots.
+
+## Showcase: stripe order in the doped Hubbard cylinder
+
+![Hubbard stripes](hubbard_stripes.svg)
+
+The payoff of the whole 2D + mixer stack: the **16×4 Hubbard cylinder at 1/8 hole
+doping** (U=8t, 56 electrons on 64 sites, χ=1024, 20 mixer sweeps, 51 min) shows
+**antiphase stripe order** — the signature correlated-electron physics of the doped
+2D Hubbard model:
+
+- **charge stripes**: the rung-averaged hole density 1−n(x) oscillates with
+  **period 4** — four "half-filled" stripes of 2 holes each, holes bunched into
+  rivers at x ≈ 2, 6, 10, 13;
+- **π phase shifts**: the staggered spin (−1)^{x+y}⟨Sz⟩ forms uniform
+  antiferromagnetic domains that **flip sign at every charge stripe** — the
+  antiphase domain-wall structure of a stripe state (the lattice map's red↔blue
+  flips sit exactly under the hole maxima).
+
+Machinery (each piece ED-validated in `qx_hubbard_test`, section STRIPE-MACH):
+target the doped sector directly with the packed charge `pack_q2(N−holes, 0)`;
+break the spin degeneracy with a **staggered Zeeman pinning** on the x=0 edge
+column (`hpin`, Sz-diagonal so both U(1) charges stay exactly conserved — pinned
+MPO == explicit-JW ED to 3.6e-15, and the pinning opens a 0.64t gap in the small
+doped test sector); measure **per-site ⟨n_i⟩ AND ⟨2Sz_i⟩ in one pass** by decoding
+both components of the packed two-U(1) charge (`QX_PROFILES=1`; profile == ED
+ground-vector expectations to 5.8e-8, and Σ⟨n_i⟩ = 56 exactly by charge
+conservation). The DMRG3S mixer is what makes the doped run trustworthy: hole-rich
+states need charge sectors the product seed does not touch.
+
+*Honest scope note:* at U=8, δ=1/8 the true W=4-cylinder ground state has
+**filled λ=8 stripes**, with the λ=4 pattern found here a close metastable
+competitor — separating them takes χ well past 10⁴ plus extrapolation (Zheng et
+al., Science 355, 1155 (2017)). This figure demonstrates the stripe *machinery*
+(doped sectors + pinning + profiles + mixer convergence on 64 sites at χ=1024 in
+51 min), not a resolution of the λ=4/λ=8 energetics.

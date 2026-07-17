@@ -68,6 +68,11 @@ struct DMRGResult {
     std::vector<double> sweep_energies;
     int n_sweeps_done = 0;
     double wall_time_s = 0;
+    // Per-site charge profiles of the converged state, filled only when
+    // QX_PROFILES=1 (one extra non-destructive centre sweep). On the packed
+    // two-U(1) path site_n = <N_i> and site_2sz = <2Sz_i>; on a plain single-U(1)
+    // path site_n carries the plain charge (2Sz or N) and site_2sz stays 0.
+    std::vector<double> site_n, site_2sz;
 };
 
 // -- Function declarations (definitions in respective .cpp files) -------------
@@ -131,6 +136,13 @@ inline double obs_of_charge(int q) {
     if (std::abs(q) < QX_Q2K / 2) return (double)q;      // plain single-U(1) charge
     return (double)((q + QX_Q2K / 2) / QX_Q2K);          // packed: N component (q >= 0 here)
 }
+// Both components: packed charges decode to (N, 2Sz); plain charges pass through
+// as (q, 0) -- the two-component profile is meaningful on the packed path.
+inline void obs2_of_charge(int q, double& Nv, double& twoSzv) {
+    if (std::abs(q) < QX_Q2K / 2) { Nv = (double)q; twoSzv = 0.0; return; }
+    int N = (q + QX_Q2K / 2) / QX_Q2K;
+    Nv = (double)N; twoSzv = (double)(q - N * QX_Q2K);
+}
 
 // Fermionic Hubbard chain (d=4): H = -t sum_{i,s}(c^dag_{i s}c_{i+1 s}+h.c.) + U sum_i n_up n_dn.
 // The first FERMIONIC model -- Fermi statistics carried in the MPO via Jordan-Wigner
@@ -167,9 +179,13 @@ std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t = 1.0, doub
 // Width-W Hubbard strip / CYLINDER (y_periodic), site-split d=4, period-W MPO
 // (column-major, x-hops range-W with F-carry chains). W <= 8. Isotropic t.
 // Half filling target: pack_q2(W*Lx, 0).
+// hpin: staggered Zeeman pinning on the x=0 edge column, H -= hpin sum_y (-1)^y
+// Sz_{0,y} (even legs pinned up). Sz-diagonal, so both U(1) charges stay conserved;
+// standard practice for exposing stripe/AF order in a symmetric DMRG ground state.
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t = 1.0,
                                                      double U = 0.0, double mu = 0.0,
-                                                     bool y_periodic = false);
+                                                     bool y_periodic = false,
+                                                     double hpin = 0.0);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.

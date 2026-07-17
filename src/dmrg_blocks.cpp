@@ -2087,6 +2087,40 @@ static double measure_stag(std::vector<std::map<int,Mat>> A,
     return m / n;
 }
 
+// Two-component per-site profiles (<N_i>, <2Sz_i>) on a COPY -- the same centre
+// walk as measure_stag, decoding BOTH components of the packed two-U(1) charge
+// (obs2_of_charge). The stripe-order observable pair for doped Hubbard lattices.
+static void measure_profiles(std::vector<std::map<int,Mat>> A,
+                             std::vector<BondSpace> bond, int n,
+                             const std::vector<int>& qphys,
+                             std::vector<double>& site_n,
+                             std::vector<double>& site_2sz) {
+    site_n.assign(n, 0.0); site_2sz.assign(n, 0.0);
+    for (int i = 0; i < n; ++i) {
+        double num_n = 0, num_s = 0, z = 0;
+        for (auto& [q_L, blk] : A[i]) {
+            auto cols = phys_groups(bond[i+1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                if (cols[s].width == 0) continue;
+                double w = blk.middleCols(cols[s].off, cols[s].width).squaredNorm();
+                double Nv, Sv; obs2_of_charge(qphys[s], Nv, Sv);
+                num_n += Nv * w; num_s += Sv * w; z += w;
+            }
+        }
+        if (z > 0) { site_n[i] = num_n / z; site_2sz[i] = num_s / z; }
+        if (i < n - 1) {
+            SiteMove mv = singlesite_split_LR(A[i], bond[i], bond[i+1], qphys);
+            A[i] = mv.A; bond[i+1] = mv.new_mid;
+            std::map<int,Mat> next;
+            for (auto& [q_R, Cblk] : mv.C) {
+                auto it = A[i+1].find(q_R);
+                if (it != A[i+1].end()) next[q_R] = Cblk * it->second;
+            }
+            A[i+1] = next;
+        }
+    }
+}
+
 // ----- reusable block-TDVP2 helpers (shared by run_tdvp2 and METTS) ----------
 // Full block-MPS state: site tensors, bond spaces, and L/R environments.
 struct BMPS {
@@ -4058,6 +4092,23 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
           out_state->R[n] = Rn; }
         for (int i = n - 1; i >= 0; --i)
             out_state->R[i] = block_update_right(out_state->R[i+1], block_A[i], bond[i], bond[i+1], mpo[i], delta);
+    }
+
+    // QX_PROFILES=1: per-site charge profiles of the converged state (one extra
+    // non-destructive centre walk). Same bond-1 Schmidt-weight absorption as the
+    // out_state export above (no-op after the single-site phase, sv[0] == Ones).
+    if (const char* pe = std::getenv("QX_PROFILES"); pe && std::atoi(pe) != 0) {
+        auto Aprof = block_A;
+        for (auto& [q_L, blk] : Aprof[0]) {
+            auto cols = phys_groups(bond[1], q_L, +1, qphys);
+            for (int s = 0; s < (int)qphys.size(); ++s) {
+                if (cols[s].width == 0 || !block_sv[0].count(cols[s].q)) continue;
+                const RVec& sv = block_sv[0].at(cols[s].q);
+                for (int c = 0; c < cols[s].width && c < sv.size(); ++c)
+                    blk.col(cols[s].off + c) *= sv[c];
+            }
+        }
+        measure_profiles(Aprof, bond, n, qphys, result.site_n, result.site_2sz);
     }
 
     auto t_end = std::chrono::steady_clock::now();
