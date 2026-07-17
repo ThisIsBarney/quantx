@@ -696,19 +696,11 @@ int main() {
                     for (int i = n3 - 1; i >= 0; --i) {
                         n_ed[i] += w * nof[kk%4]; z_ed[i] += w * z4l[kk%4]; kk /= 4; }
                 }
-#ifdef _WIN32
-                _putenv_s("QX_PROFILES", "1");
-#else
-                setenv("QX_PROFILES", "1", 1);
-#endif
+                set_env("QX_PROFILES", "1");
                 std::vector<int> cp = {1, 2, 0, 1, 2, 0};      // N=4, 2Sz=0 seed
                 DMRGResult rp = run_dmrg_blocks(cylp, n3, 256, 1e-11, 120, 1e-11,
                                                 pack_q2(4, 0), &cp);
-#ifdef _WIN32
-                _putenv_s("QX_PROFILES", "");
-#else
-                unsetenv("QX_PROFILES");
-#endif
+                set_env("QX_PROFILES", nullptr);
                 double ep = std::abs(rp.energy - Ep_ed), eprof = 0;
                 for (int i = 0; i < n3; ++i) {
                     eprof = std::max(eprof, std::abs(rp.site_n[i] - n_ed[i]));

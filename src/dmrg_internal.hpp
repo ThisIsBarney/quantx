@@ -138,6 +138,7 @@ inline double obs_of_charge(int q) {
 }
 // Both components: packed charges decode to (N, 2Sz); plain charges pass through
 // as (q, 0) -- the two-component profile is meaningful on the packed path.
+// Like obs_of_charge, assumes packed q >= 0 (N >= |2Sz| always holds for states).
 inline void obs2_of_charge(int q, double& Nv, double& twoSzv) {
     if (std::abs(q) < QX_Q2K / 2) { Nv = (double)q; twoSzv = 0.0; return; }
     int N = (q + QX_Q2K / 2) / QX_Q2K;

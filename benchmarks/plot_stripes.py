@@ -38,6 +38,7 @@ with open(os.path.join(HERE, "..", "docs", "hubbard_stripes.csv"), "w", newline=
         x, y, nv, sv = sites[i]
         f.write(f"{i},{x},{y},{nv:.8f},{sv:.8f}\n")
 
+assert head["holes"] > 0, "stripe figure needs a doped run (holes > 0)"
 holex = [0.0] * Lx                                  # rung-averaged hole density
 stag = {}                                           # (x,y) -> (-1)^(x+y) <Sz>
 holes_site = {}
@@ -120,6 +121,5 @@ s.append('</svg>')
 
 out = os.path.join(HERE, "..", "docs", "hubbard_stripes.svg")
 open(out, "w", encoding="utf-8").write("\n".join(s))
-lam = "?"
 print("wrote", os.path.normpath(out),
       f"| E0={head['E0']:.6f}  wall={head['wall']:.0f}s  max hole(x)={max(holex):.3f}")

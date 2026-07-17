@@ -59,7 +59,11 @@ int main(int argc, char** argv) {
         int holes = 8; double hp = 0.5; int nsw = 16;
         std::sscanf(sz, "%d %d %d %lf %d %lf %d", &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw);
         const int n = Wd * Lx, Ne = n - holes;
-        if (holes % 2 != 0) { std::fprintf(stderr, "QX_STRIPES: holes must be even\n"); return 1; }
+        if (holes < 0 || holes > n || holes % 2 != 0 || n % 2 != 0) {
+            std::fprintf(stderr, "QX_STRIPES: need even n and even holes in [0, n] "
+                         "(got n=%d holes=%d)\n", n, holes);
+            return 1;
+        }
 #ifdef _WIN32
         _putenv_s("QX_PROFILES", "1");
 #else
