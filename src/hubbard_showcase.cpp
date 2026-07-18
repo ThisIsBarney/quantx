@@ -18,6 +18,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 using namespace qx_dmrg;
@@ -94,6 +95,70 @@ int main(int argc, char** argv) {
         for (int i = 0; i < n; ++i)
             std::printf("PROF %d %d %d %.8f %.8f\n", i, i / Wd, i % Wd,
                         r.site_n[i], r.site_2sz[i]);
+        return 0;
+    }
+
+    // PAIR-FIELD showcase: QX_PAIRS="Lx W chi [U holes hpin nsw x0 rmax]" -> the
+    // doped pinned cylinder GS (the stripe state), then singlet pair-field
+    // correlators Phi(r) = <Delta^dag_{b(x0)} Delta_{b(x0+r)}> via one GS run +
+    // per-obs environment rebuilds: yy (rung-oriented, y-averaged), xx (leg,
+    // starts at r=2 -- r=1 legs share a site), yx (mixed orientation -- the d-wave
+    // sign test: Phi_yx < 0 while Phi_yy > 0). Emits "PAIRF kind r phi" lines.
+    if (const char* pz = std::getenv("QX_PAIRS")) {
+        int Lx = 16, Wd = 4, cchi = 1024; double U = 8.0;
+        int holes = 8; double hp = 0.5; int nsw = 20, x0 = 2, rmax = 11;
+        std::sscanf(pz, "%d %d %d %lf %d %lf %d %d %d",
+                    &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw, &x0, &rmax);
+        const int n = Wd * Lx, Ne = n - holes;
+        if (holes < 0 || holes > n || holes % 2 != 0 || n % 2 != 0 || x0 < 0 || x0 >= Lx) {
+            std::fprintf(stderr, "QX_PAIRS: bad geometry (n=%d holes=%d x0=%d)\n", n, holes, x0);
+            return 1;
+        }
+        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp);
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        for (int k = 0; k < holes; ++k) {
+            int want = (k % 2 == 0) ? 1 : 2;
+            int i0 = (int)(((double)k + 0.5) * n / holes);
+            for (int off = 0; off < n; ++off) {
+                int i = (i0 + off) % n;
+                if (cfg[i] == want) { cfg[i] = 0; break; }
+            }
+        }
+        struct ObsMeta { const char* kind; int r; };
+        std::vector<std::vector<MPOSite>> obs;
+        std::vector<ObsMeta> meta;
+        for (int r = 1; r <= rmax && x0 + r < Lx; ++r)
+            for (int y = 0; y < Wd - 1; ++y) {
+                obs.push_back(build_pair_corr_mpo(n, Wd, x0, y, 'y', x0 + r, y, 'y'));
+                meta.push_back({"yy", r});
+            }
+        for (int r = 2; r <= rmax && x0 + r + 1 < Lx; ++r) {
+            obs.push_back(build_pair_corr_mpo(n, Wd, x0, 1, 'x', x0 + r, 1, 'x'));
+            meta.push_back({"xx", r});
+        }
+        for (int r = 1; r <= rmax && x0 + r + 1 < Lx; ++r) {
+            obs.push_back(build_pair_corr_mpo(n, Wd, x0, 1, 'y', x0 + r, 1, 'x'));
+            meta.push_back({"yx", r});
+        }
+        double E0 = 0;
+        auto t0 = std::chrono::steady_clock::now();
+        auto vals = gs_mpo_expectations(mpo, n, cchi, 1e-11, nsw, 1e-12,
+                                        pack_q2(Ne, 0), &cfg, obs, &E0);
+        double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        std::printf("PAIRS Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d x0=%d : "
+                    "E0=%.10f (%.1fs)  n_obs=%d\n",
+                    Lx, Wd, cchi, U, holes, hp, nsw, x0, E0, w0, (int)obs.size());
+        // aggregate: yy averaged over the Wd-1 leg positions; xx/yx as-is
+        for (int r = 1; r <= rmax; ++r) {
+            double s = 0; int c = 0;
+            for (size_t k = 0; k < meta.size(); ++k)
+                if (meta[k].r == r && std::strcmp(meta[k].kind, "yy") == 0) { s += vals[k]; ++c; }
+            if (c) std::printf("PAIRF yy %d %.10e\n", r, s / c);
+        }
+        for (size_t k = 0; k < meta.size(); ++k)
+            if (std::strcmp(meta[k].kind, "yy") != 0)
+                std::printf("PAIRF %s %d %.10e\n", meta[k].kind, meta[k].r, vals[k]);
         return 0;
     }
 

@@ -710,6 +710,52 @@ int main() {
                 std::printf("  STRIPE-MACH: ||H_pin||=%.1e ; gap=%.2e ; doped blk E err=%.1e ; "
                             "profile err=%.1e  %s\n", herrp, gap_ed, ep, eprof, okp?"OK":"FAIL");
                 fails += !okp;
+
+                // (m) PAIR-FIELD correlator MPO vs ED on the same pinned doped
+                // cylinder. Three bond geometries exercise the y and x orientations,
+                // the intra-pair JW string (x-bond: F carries across W-1 sites) and
+                // the parity-even between-pair stretch. Checks: ||O_MPO - O_ED|| == 0
+                // (contract vs explicit ferm products) and <GS|O|GS> from
+                // gs_mpo_expectations == the ED sector ground-vector expectation.
+                {
+                    auto delta_ed = [&](int x, int y, char o) {   // ferm-built Delta^dag_b
+                        int a = W3*x + y, b = (o=='y') ? a+1 : a+W3;
+                        return MatC(( ferm(n3,a,MatC(Cup.adjoint()))*ferm(n3,b,MatC(Cdn.adjoint()))
+                                    - ferm(n3,a,MatC(Cdn.adjoint()))*ferm(n3,b,MatC(Cup.adjoint())) )
+                                    / std::sqrt(2.0));
+                    };
+                    struct BP { int x1,y1; char o1; int x2,y2; char o2; };
+                    const BP bps[3] = { {0,0,'y', 1,0,'y'},     // y-y, r=1
+                                        {0,1,'y', 1,0,'y'},     // y-y cross-leg
+                                        {0,0,'x', 1,1,'y'} };   // x-y (strings + mixed orient)
+                    double e_mpo = 0, e_gs = 0;
+                    std::vector<std::vector<MPOSite>> obs;
+                    std::vector<double> phi_ed;
+                    for (auto& bp : bps) {
+                        auto omp = build_pair_corr_mpo(n3, W3, bp.x1, bp.y1, bp.o1,
+                                                       bp.x2, bp.y2, bp.o2);
+                        MatC O_ed = delta_ed(bp.x1,bp.y1,bp.o1)
+                                  * delta_ed(bp.x2,bp.y2,bp.o2).adjoint();
+                        e_mpo = std::max(e_mpo, (O_ed - contract_mpo(omp)).cwiseAbs().maxCoeff());
+                        obs.push_back(std::move(omp));
+                        Cxd acc = 0;
+                        for (int a2 = 0; a2 < mp; ++a2)
+                            for (int b2 = 0; b2 < mp; ++b2)
+                                acc += std::conj(esp.eigenvectors()(a2,0))
+                                     * O_ed(idp[a2], idp[b2]) * esp.eigenvectors()(b2,0);
+                        phi_ed.push_back(acc.real());
+                    }
+                    double Egs = 0;
+                    auto phi = gs_mpo_expectations(cylp, n3, 256, 1e-11, 120, 1e-11,
+                                                   pack_q2(4,0), &cp, obs, &Egs);
+                    for (size_t k = 0; k < phi.size(); ++k)
+                        e_gs = std::max(e_gs, std::abs(phi[k] - phi_ed[k]));
+                    bool okpf = e_mpo < 1e-12 && e_gs < 1e-7 && std::abs(Egs - Ep_ed) < 1e-8;
+                    std::printf("  PAIR-FIELD: ||O_MPO-O_ED||=%.1e ; <GS|O|GS> err=%.1e "
+                                "(3 geoms, |Phi|~%.1e)  %s\n",
+                                e_mpo, e_gs, std::abs(phi_ed[0]), okpf?"OK":"FAIL");
+                    fails += !okpf;
+                }
             }
         }
     }

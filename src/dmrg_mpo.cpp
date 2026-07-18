@@ -522,6 +522,91 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
     return mpo;
 }
 
+// Singlet pair-field correlator MPO on the width-W lattice (column-major sites):
+//   O = Delta^dag_{b1} Delta_{b2},   Delta^dag_b = (1/sqrt2)(c^dag_{i up} c^dag_{i' dn}
+//                                                          - c^dag_{i dn} c^dag_{i' up})
+// for bonds b = (x, y, orient): orient 'y' -> i' = i+1 (rung bond, needs y < W-1),
+// orient 'x' -> i' = i+W (leg bond). The SC order-parameter correlator of the doped
+// Hubbard lattice; measured between y/x oriented bonds it exposes the d-wave sign
+// structure (Phi_xy < 0). Chain-ordered JW form of each pair (p1 < p2):
+//   c^#_{p1 s} c^#_{p2 s'} = (a^#_s F)_{p1} (x) F^(x)(p2-p1-1) (x) (a^#_s')_{p2}
+// -- the ED-validated hop pattern (emit carries F, intervening F, bare complete),
+// valid for any dagger combination. Each completed pair is parity-EVEN, so the
+// stretch between b1 and b2 carries plain identity (no string).
+// chi=7 slots (one charge per slot, derive_mpo_sym-compatible):
+//   0=done(0); 1,2 = creation channels c^dag_up/c^dag_dn emitted; 3 = start carry(0);
+//   4 = between-pairs carry (charge pack(2,0)); 5,6 = annihilation channels.
+// Requires b1 strictly left of b2 (last site of b1 < first site of b2).
+std::vector<MPOSite> build_pair_corr_mpo(int n, int W, int x1, int y1, char o1,
+                                         int x2, int y2, char o2) {
+    const int d = 4, chi = 7, start = 3, done = 0, mid = 4;
+    auto bond_sites = [&](int x, int y, char o, int& a, int& b) {
+        if (o != 'x' && o != 'y')
+            throw std::runtime_error("build_pair_corr_mpo: orient must be 'x' or 'y'");
+        if (y < 0 || y >= W || x < 0)
+            throw std::runtime_error("build_pair_corr_mpo: bond (x,y) outside lattice");
+        a = W * x + y;
+        b = (o == 'y') ? a + 1 : a + W;
+        if (o == 'y' && y >= W - 1)
+            throw std::runtime_error("build_pair_corr_mpo: y-bond needs y < W-1");
+        if (b >= n) throw std::runtime_error("build_pair_corr_mpo: bond leaves lattice");
+    };
+    int i1, i1e, i2, i2e;
+    bond_sites(x1, y1, o1, i1, i1e);
+    bond_sites(x2, y2, o2, i2, i2e);
+    if (i1e >= i2)
+        throw std::runtime_error("build_pair_corr_mpo: bonds must be disjoint, b1 < b2");
+
+    Mat I4 = Mat::Identity(4, 4);
+    Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
+    Mat Cup = Mat::Zero(4, 4); Cup(0,1)=1; Cup(2,3)=1;
+    Mat Cdn = Mat::Zero(4, 4); Cdn(0,2)=1; Cdn(1,3)=-1;
+    const double s2 = 1.0 / std::sqrt(2.0);
+
+    std::vector<MPOSite> mpo(n);
+    for (int i = 0; i < n; ++i) {
+        std::array<std::array<Mat, 7>, 7> Wm;
+        for (auto& row : Wm) for (auto& e : row) e = Mat::Zero(4, 4);
+        Wm[done][done] = I4;
+        if (i < i1) Wm[start][start] = I4;
+        if (i == i1) {                                    // emit creation pair
+            Wm[start][1] = s2 * Mat(Cup.adjoint() * F);
+            Wm[start][2] = s2 * Mat(Cdn.adjoint() * F);
+        }
+        if (i > i1 && i < i1e) { Wm[1][1] = F; Wm[2][2] = F; }   // x-bond JW carry
+        if (i == i1e) {                                   // complete creation pair
+            Wm[1][mid] = Mat(Cdn.adjoint());
+            Wm[2][mid] = -Mat(Cup.adjoint());
+        }
+        if (i > i1e && i < i2) Wm[mid][mid] = I4;         // even stretch: no string
+        if (i == i2) {                                    // emit annihilation pair:
+            // Delta_{b2} = (1/sqrt2)(-c_{j up}c_{j' dn} + c_{j dn}c_{j' up});
+            // c_{p1}c_{p2} chain form = (a F)_{p1} (x) F... (x) (a)_{p2}, so the
+            // emit is C*F (NOT the hop convention's F*C = -C*F, which encodes the
+            // reordering sign of c^dag_{p2} c_{p1} -- absent here).
+            Wm[mid][5] = -s2 * Mat(Cup * F);
+            Wm[mid][6] =  s2 * Mat(Cdn * F);
+        }
+        if (i > i2 && i < i2e) { Wm[5][5] = F; Wm[6][6] = F; }
+        if (i == i2e) {                                   // complete annihilation pair
+            Wm[5][done] = Cdn;
+            Wm[6][done] = Cup;
+        }
+        int cl = (i == 0) ? 1 : chi, cr = (i == n - 1) ? 1 : chi;
+        auto& site = mpo[i];
+        site.chi_l = cl; site.chi_r = cr;
+        site.d = d;
+        site.phys_charge = {pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
+        site.ops.assign(cl * cr, Mat::Zero(d, d));
+        for (int a = 0; a < cl; ++a)
+            for (int b = 0; b < cr; ++b) {
+                int ar = (i == 0) ? start : a, br = (i == n - 1) ? done : b;
+                site.W(a, b) = Wm[ar][br];
+            }
+    }
+    return mpo;
+}
+
 // J1-J2 (next-nearest-neighbour) XXZ chain MPO: H = sum_i [J1 h_{i,i+1} + J2
 // h_{i,i+2}], h = XX+YY+delta ZZ = 2(sigma+ sigma- + sigma- sigma+) + delta ZZ.
 // 8-wide: each emitted operator completes at range 1, or passes one identity and

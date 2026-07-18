@@ -187,6 +187,12 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t = 1
                                                      double U = 0.0, double mu = 0.0,
                                                      bool y_periodic = false,
                                                      double hpin = 0.0);
+// Singlet pair-field correlator MPO O = Delta^dag_{b1} Delta_{b2} on the width-W
+// lattice; bond b = (x, y, orient) with orient 'y' (rung, i'=i+1, y < W-1) or 'x'
+// (leg, i'=i+W). b1 must lie strictly left of b2. chi=7; N- and Sz-conserving
+// (overall charge 0), so <GS|O|GS> is measurable in the GS sector directly.
+std::vector<MPOSite> build_pair_corr_mpo(int n, int W, int x1, int y1, char o1,
+                                         int x2, int y2, char o2);
 
 // -- U(1)/Sz symmetry of an MPO (for the block-sparse path) -------------------
 // delta[b] = (bra accumulated Sz) - (ket accumulated Sz) carried by MPO bond b.
@@ -226,12 +232,14 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
     for (int i = 0; i < (int)mpo.size(); ++i)
         if (mpo[i].chi_l == chi && mpo[i].chi_r == chi) { first = i; break; }
     std::vector<std::array<int,3>> edges;       // (a,b,c): bond a->b carries charge c
-    int taken = 0;
-    for (int i = first; i < (int)mpo.size() && taken < 8; ++i) {
+    for (int i = first; i < (int)mpo.size(); ++i) {
         const MPOSite& W = mpo[i];
         if (W.chi_l != chi || W.chi_r != chi) continue;    // boundary sites
-        ++taken;                                 // 8 consecutive bulk sites cover period <= 8
-                                                 // (width-W cylinders are period-W MPOs)
+        // EVERY full-width site contributes edges (previously capped at 8 -- enough
+        // for period-W cylinder MPOs, but measurement MPOs like the pair-field
+        // correlator activate their channel slots only at arbitrary positions deep
+        // in the chain, so the full scan is required; for periodic MPOs the extra
+        // sites contribute identical edges and behaviour is unchanged).
         for (int a = 0; a < chi; ++a)
             for (int b = 0; b < chi; ++b) {
                 const Mat& m = W.W(a, b);
@@ -251,6 +259,47 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
 
     MPOSym sym; sym.chi = chi; sym.delta.assign(chi, 0);
     std::vector<char> known(chi, 0); known[0] = 1;     // anchor delta[0]=0
+
+    // Boundary sites pin ABSOLUTE charges: the first site's single row is the
+    // start slot (left vacuum, charge 0), the last site's single column the
+    // done/closure slot (total operator charge -- 0 for an Sz-conserving MPO).
+    // Bulk edges alone can leave slots unreachable (e.g. a measurement MPO whose
+    // final completion lands on the last site); these anchors close the gap, and
+    // for Hamiltonian MPOs they add redundant-but-consistent constraints only.
+    auto block_charge = [&](const Mat& m, int& c) -> bool {   // false = zero block
+        bool any = false;
+        for (int s = 0; s < ld; ++s)
+            for (int sp = 0; sp < ld; ++sp)
+                if (std::abs(m(s, sp)) > 1e-13) {
+                    int cc = qphys[s] - qphys[sp];
+                    if (!any) { c = cc; any = true; }
+                    else if (cc != c)
+                        throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
+                                                 "(bond carries mixed charge)");
+                }
+        return any;
+    };
+    auto pin = [&](int slot, int val) {
+        if (known[slot] && sym.delta[slot] != val)
+            throw std::runtime_error("derive_mpo_sym: MPO not Sz-conserving "
+                                     "(inconsistent bond charges)");
+        sym.delta[slot] = val; known[slot] = 1;
+    };
+    if (mpo.front().chi_l == 1 && mpo.front().chi_r == chi)
+        for (int b = 0; b < chi; ++b) {
+            int c;
+            if (block_charge(mpo.front().W(0, b), c)) pin(b, c);
+        }
+    // NOTE: the -c pin assumes TOTAL operator charge 0 (true for every Hamiltonian
+    // and for particle-conserving correlators like Delta^dag Delta). A deliberately
+    // CHARGED operator MPO (e.g. a bare Delta^dag excitation) would need this
+    // anchor offset by its total charge -- extend here if such an MPO ever exists.
+    if (mpo.back().chi_l == chi && mpo.back().chi_r == 1)
+        for (int a = 0; a < chi; ++a) {
+            int c;
+            if (block_charge(mpo.back().W(a, 0), c)) pin(a, -c);
+        }
+
     bool changed = true; int guard = 0;
     while (changed && guard++ <= chi + 1) {
         changed = false;
@@ -287,6 +336,17 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff, int n_sweeps, double tol,
                            int total_charge = 0,
                            const std::vector<int>* init_config = nullptr);
+
+// One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
+// (e.g. pair-field correlators): the GS is computed once, then for each obs MPO
+// the environments are rebuilt and the two-site H_eff expectation evaluated.
+// Real-MPO path only (fail-loud otherwise). E0_out (optional) receives the GS energy.
+std::vector<double> gs_mpo_expectations(const std::vector<MPOSite>& H, int n,
+                                        int max_bond, double cutoff, int n_sweeps,
+                                        double tol, int total_charge,
+                                        const std::vector<int>* init_config,
+                                        const std::vector<std::vector<MPOSite>>& obs,
+                                        double* E0_out = nullptr);
 
 // Block-sparse (Sz-symmetric) TDVP2 time evolution from the Neel state.
 struct TDVPBlockResult {
