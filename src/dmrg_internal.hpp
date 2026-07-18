@@ -290,6 +290,10 @@ inline MPOSym derive_mpo_sym(const std::vector<MPOSite>& mpo) {
             int c;
             if (block_charge(mpo.front().W(0, b), c)) pin(b, c);
         }
+    // NOTE: the -c pin assumes TOTAL operator charge 0 (true for every Hamiltonian
+    // and for particle-conserving correlators like Delta^dag Delta). A deliberately
+    // CHARGED operator MPO (e.g. a bare Delta^dag excitation) would need this
+    // anchor offset by its total charge -- extend here if such an MPO ever exists.
     if (mpo.back().chi_l == chi && mpo.back().chi_r == 1)
         for (int a = 0; a < chi; ++a) {
             int c;

@@ -17,7 +17,7 @@ LOG = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "pairfield_16x4_c
 
 head, data = None, {"yy": [], "xx": [], "yx": []}
 for line in open(LOG):
-    m = re.match(r"PAIRS Lx=(\d+) W=(\d+) chi=(\d+) U=([\d.]+) holes=(\d+) hpin=([\d.]+) "
+    m = re.match(r"PAIRS Lx=(\d+) W=(\d+) chi=(\d+) U=(-?[\d.]+) holes=(\d+) hpin=(-?[\d.]+) "
                  r"nsw=(\d+) x0=(\d+) : E0=(-?[\d.]+) \(([\d.]+)s\)", line)
     if m:
         head = dict(Lx=int(m[1]), W=int(m[2]), chi=int(m[3]), U=float(m[4]),
@@ -34,14 +34,17 @@ with open(os.path.join(HERE, "..", "docs", "hubbard_pairfield.csv"), "w", newlin
         for r, v in sorted(data[kind]):
             f.write(f"{kind},{r},{v:.10e}\n")
 
-# exponential fit ln|phi_yy| = a - r/xi over r >= 2
+# exponential fit ln|phi_yy| = a - r/xi over r >= 2 (needs >= 2 points)
 fit = [(r, math.log(abs(v))) for r, v in data["yy"] if r >= 2 and v != 0]
-xs = [r for r, _ in fit]; ys = [l for _, l in fit]
-nf = len(xs); sx = sum(xs); sy = sum(ys)
-sxx = sum(x * x for x in xs); sxy = sum(x * y for x, y in zip(xs, ys))
-slope = (nf * sxy - sx * sy) / (nf * sxx - sx * sx)
-aa = (sy - slope * sx) / nf
-xi = -1.0 / slope if slope < 0 else float("inf")
+if len(fit) >= 2:
+    xs = [r for r, _ in fit]; ys = [l for _, l in fit]
+    nf = len(xs); sx = sum(xs); sy = sum(ys)
+    sxx = sum(x * x for x in xs); sxy = sum(x * y for x, y in zip(xs, ys))
+    slope = (nf * sxy - sx * sy) / (nf * sxx - sx * sx)
+    aa = (sy - slope * sx) / nf
+    xi = -1.0 / slope if slope < 0 else float("inf")
+else:
+    slope, aa, xi = 0.0, 0.0, float("inf")
 
 vals = [abs(v) for k in data for _, v in data[k] if v != 0]
 lo = 10 ** math.floor(math.log10(min(vals)))
@@ -60,9 +63,10 @@ LBL = {"yy": "rung&#8211;rung  &#934;yy(r), y-averaged",
 
 s = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" font-family="Segoe UI, Arial, sans-serif">',
      f'<rect width="{W}" height="{H}" fill="white"/>']
+dop = f'&#948;=1/{(head["Lx"]*head["W"])//head["holes"]}' if head["holes"] else "undoped"
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="28" text-anchor="middle" font-size="15.5" font-weight="bold" fill="#111">'
          f'Singlet pair-field correlations on the stripe state &#8212; {head["Lx"]}&#215;{head["W"]} Hubbard cylinder, '
-         f'U={head["U"]:g}t, &#948;=1/{(head["Lx"]*head["W"])//head["holes"]}</text>')
+         f'U={head["U"]:g}t, {dop}</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="48" text-anchor="middle" font-size="11.5" fill="#555">'
          f'&#934;(r) = &#10216;&#916;&#8224;(x&#8320;={head["x0"]}) &#916;(x&#8320;+r)&#10217;, singlet pairs on rung/leg bonds; '
          f'&#967;={head["chi"]}, {head["nsw"]} mixer sweeps + {sum(len(v) for v in data.values())} correlator MPOs; '

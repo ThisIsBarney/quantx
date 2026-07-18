@@ -4165,8 +4165,10 @@ std::vector<double> gs_mpo_expectations(const std::vector<MPOSite>& H, int n,
     if (!mpo_is_real(H))
         throw std::runtime_error("gs_mpo_expectations: real-MPO path only");
     for (auto& o : obs)
-        if (!mpo_is_real(o) || (int)o.size() != n)
-            throw std::runtime_error("gs_mpo_expectations: obs MPO must be real, length n");
+        if (!mpo_is_real(o) || (int)o.size() != n ||
+            o[0].d != H[0].d || o[0].phys_charge != H[0].phys_charge)
+            throw std::runtime_error("gs_mpo_expectations: obs MPO must be real, length n, "
+                                     "same local dimension and physical charges as H");
     BlockDMRG<double>::BMPS state;
     DMRGResult r = BlockDMRG<double>::run(H, n, max_bond, cutoff, n_sweeps, tol,
                                           &state, total_charge, init_config);

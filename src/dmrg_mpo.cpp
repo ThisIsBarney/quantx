@@ -541,6 +541,10 @@ std::vector<MPOSite> build_pair_corr_mpo(int n, int W, int x1, int y1, char o1,
                                          int x2, int y2, char o2) {
     const int d = 4, chi = 7, start = 3, done = 0, mid = 4;
     auto bond_sites = [&](int x, int y, char o, int& a, int& b) {
+        if (o != 'x' && o != 'y')
+            throw std::runtime_error("build_pair_corr_mpo: orient must be 'x' or 'y'");
+        if (y < 0 || y >= W || x < 0)
+            throw std::runtime_error("build_pair_corr_mpo: bond (x,y) outside lattice");
         a = W * x + y;
         b = (o == 'y') ? a + 1 : a + W;
         if (o == 'y' && y >= W - 1)
