@@ -4151,6 +4151,35 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                               nullptr, total_charge, init_config);
 }
 
+// Entry point: GS once, then <GS|O|GS> per measurement MPO. The exported state has
+// its centre on site 0 with environments rebuilt per obs MPO (each obs derives its
+// own bond charges -- derive_mpo_sym scans the full chain, so correlator MPOs whose
+// channels open at arbitrary positions are handled).
+std::vector<double> gs_mpo_expectations(const std::vector<MPOSite>& H, int n,
+                                        int max_bond, double cutoff, int n_sweeps,
+                                        double tol, int total_charge,
+                                        const std::vector<int>* init_config,
+                                        const std::vector<std::vector<MPOSite>>& obs,
+                                        double* E0_out) {
+    require_uniform_local_dim(H, "gs_mpo_expectations");
+    if (!mpo_is_real(H))
+        throw std::runtime_error("gs_mpo_expectations: real-MPO path only");
+    for (auto& o : obs)
+        if (!mpo_is_real(o) || (int)o.size() != n)
+            throw std::runtime_error("gs_mpo_expectations: obs MPO must be real, length n");
+    BlockDMRG<double>::BMPS state;
+    DMRGResult r = BlockDMRG<double>::run(H, n, max_bond, cutoff, n_sweeps, tol,
+                                          &state, total_charge, init_config);
+    if (E0_out) *E0_out = r.energy;
+    std::vector<double> out;
+    out.reserve(obs.size());
+    for (auto& o : obs) {
+        BlockDMRG<double>::rebuild_mpo_envs(state, o);
+        out.push_back(BlockDMRG<double>::bt_energy(state, o));
+    }
+    return out;
+}
+
 // Entry point: Haldane string-order parameter of the ground state.
 double string_order_blocks(const std::vector<MPOSite>& mpo, int n, int i0, int j0,
                            int max_bond, double cutoff, int n_sweeps) {

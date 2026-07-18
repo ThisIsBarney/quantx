@@ -533,3 +533,46 @@ competitor — separating them takes χ well past 10⁴ plus extrapolation (Zhen
 al., Science 355, 1155 (2017)). This figure demonstrates the stripe *machinery*
 (doped sectors + pinning + profiles + mixer convergence on 64 sites at χ=1024 in
 51 min), not a resolution of the λ=4/λ=8 energetics.
+
+## Showcase: pair-field correlations on the stripe state
+
+![Hubbard pair-field](hubbard_pairfield.svg)
+
+Do the stripes coexist with superconducting pairing? The natural follow-up runs on
+the same 16×4, U=8, δ=1/8 stripe ground state: singlet pair-field correlators
+
+    Φ(r) = ⟨Δ†_{b(x0)} Δ_{b(x0+r)}⟩,   Δ†_b = (c†_{i↑}c†_{i'↓} − c†_{i↓}c†_{i'↑})/√2
+
+between rung- and leg-oriented bonds. The machinery is the **universal-MPO story
+paying off**: each correlator is itself a 7-wide MPO (`build_pair_corr_mpo` —
+creation/annihilation pair emissions with the exact Jordan–Wigner carries, a
+parity-even identity stretch between the pairs), and `gs_mpo_expectations` computes
+the ground state **once**, then evaluates every observable by an environment rebuild —
+**54 correlators cost 43 s on top of the 51-min GS run** (~0.8 s each at χ=1024).
+Validation (`qx_hubbard_test` PAIR-FIELD): the correlator MPO equals the explicit
+fermionic operator to **‖·‖ = 0.0 exactly**, and ⟨GS|Δ†Δ|GS⟩ matches the ED
+sector ground vector to **1.9e-9** across three bond geometries.
+
+The physics read (χ=1024, 20 mixer sweeps):
+
+- **short-range pairing**: Φ_yy(r) is uniformly positive and decays exponentially
+  with **ξ_pair ≈ 1.8** lattice spacings — the λ=4 stripe state does not carry
+  quasi-long-range superconductivity at these parameters, consistent with the
+  literature on W=4 Hubbard cylinders (pairing is enhanced by t′ or larger W);
+- **d-wave internal structure**: the mixed correlator **Φ_yx(r) < 0** while
+  Φ_yy(r) > 0 — the sign flip between orthogonal bond orientations is the d-wave
+  form-factor fingerprint;
+- **stripe-modulated pair field**: Φ_yy shows period-4 bumps (r ≈ 4, 8 — one and
+  two charge stripes crossed), and the leg–leg channel Φ_xx *oscillates in sign*
+  with the stripe period — a pair-density-wave-like modulation riding on the
+  stripe background (qualitative at this χ).
+
+Two engine-level pieces fell out of making this exact rather than approximate:
+the chain-JW form of a **pure annihilation pair** is `(a F) ⊗ F… ⊗ a` — the hop
+convention's `F·C = −C·F` encodes a reordering sign that must *not* be applied —
+and `derive_mpo_sym` now **anchors absolute charges at both boundary sites**
+(first site's row = left vacuum, last site's column = total operator charge),
+without which a measurement MPO whose final completion lands on the last site has
+underivable channel charges (caught by an exact-zero expectation in the x-bond
+test geometry; for Hamiltonian MPOs the anchors are redundant-but-consistent, and
+the whole regression is bit-identical).
