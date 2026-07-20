@@ -4160,7 +4160,7 @@ std::vector<double> gs_mpo_expectations(const std::vector<MPOSite>& H, int n,
                                         double tol, int total_charge,
                                         const std::vector<int>* init_config,
                                         const std::vector<std::vector<MPOSite>>& obs,
-                                        double* E0_out) {
+                                        DMRGResult* res_out) {
     require_uniform_local_dim(H, "gs_mpo_expectations");
     if (!mpo_is_real(H))
         throw std::runtime_error("gs_mpo_expectations: real-MPO path only");
@@ -4172,7 +4172,7 @@ std::vector<double> gs_mpo_expectations(const std::vector<MPOSite>& H, int n,
     BlockDMRG<double>::BMPS state;
     DMRGResult r = BlockDMRG<double>::run(H, n, max_bond, cutoff, n_sweeps, tol,
                                           &state, total_charge, init_config);
-    if (E0_out) *E0_out = r.energy;
+    if (res_out) *res_out = r;
     std::vector<double> out;
     out.reserve(obs.size());
     for (auto& o : obs) {

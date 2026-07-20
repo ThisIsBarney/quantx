@@ -431,20 +431,38 @@ std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t, double tpe
 //   y-hops: (x,y)-(x,y+1) = chain-NN (emitted only from y < W-1);
 //   y-wrap (y_periodic): (x,0)-(x,W-1) = chain range-(W-1), emitted only from y=0;
 //   x-hops: (x,y)-(x+1,y) = chain range-W, emitted from EVERY site (uniform).
+// tp: next-nearest-neighbour DIAGONAL hops (x,y)-(x+1,y+-1) (the t-t'-U model;
+// H gains -tp on every diagonal bond). Four coupling classes by chain range:
+//   up-diag (y<W-1)        -> own range-(W+1) chains;
+//   down-diag (y>0)        -> range W-1: REUSES the y-wrap chains (same range,
+//                             different emitters: y=0 emits -t, y>0 emits -tp);
+//   wrap-up (y=W-1 -> next column y=0, cylinder) -> range 1 = chain-adjacent:
+//                             REUSES the y-NN complete slots (emit -tp);
+//   wrap-down (y=0 -> next column y=W-1, cylinder) -> own range-(2W-1) chains.
 // Every intervening site of a range-r hop carries the parity F (Jordan-Wigner),
 // exactly the (ED-validated) ladder-split pattern generalized: emit = C^dag F / F C
 // forms, diagonal F-carry chains (o, rem) -> (o, rem-1), complete = C / C^dag.
-// PERIOD-W MPO (only the start-row emits are y-dependent); derive_mpo_sym merges the
-// constraints of up to 8 consecutive bulk sites, so W <= 8 is supported.
-// chi = 2 + 4W (x-chains) + 4 (y-NN) + [y_periodic: 4(W-1) wrap chains].
+// PERIOD-W MPO (only the start-row emits are y-dependent).
+// chi = 2 + 4W + 4 + [wrap or tp: 4(W-1)] + [tp: 4(W+1)] + [tp cylinder: 4(2W-1)]
+// (34 for the W=4 cylinder, 82 with tp). tp=0 layout is IDENTICAL to before.
 // W=2 open reproduces build_hubbard_ladder_split_mpo's Hamiltonian (self-check).
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
                                                      double U, double mu,
-                                                     bool y_periodic, double hpin) {
+                                                     bool y_periodic, double hpin,
+                                                     double tp) {
     const int d = 4, n = W * Lx;
-    const int nx = 4 * W;                        // x-hop carry slots
-    const int nw = y_periodic ? 4 * (W - 1) : 0; // y-wrap carry slots
-    const int chi = 2 + nx + 4 + nw;
+    if (y_periodic && W == 2)
+        // W=2 wrap coincides with the y-NN bond -- would double-count the rung.
+        throw std::runtime_error("build_hubbard_lattice_split_mpo: y_periodic "
+                                 "needs W >= 3 (W=2 wrap duplicates the rung)");
+    const bool has_w = (y_periodic && W > 2) || (tp != 0.0);  // range-(W-1) chains
+    const bool has_u = (tp != 0.0);                           // range-(W+1) up-diag
+    const bool has_v = (tp != 0.0) && y_periodic;             // range-(2W-1) wrap-down
+    const int nx = 4 * W;
+    const int nw = has_w ? 4 * (W - 1) : 0;
+    const int nu = has_u ? 4 * (W + 1) : 0;
+    const int nv = has_v ? 4 * (2 * W - 1) : 0;
+    const int chi = 2 + nx + 4 + nw + nu + nv;
     Mat I4 = Mat::Identity(4, 4);
     Mat F  = Mat::Zero(4, 4); F(0,0)=1; F(1,1)=-1; F(2,2)=-1; F(3,3)=1;
     Mat Nu = Mat::Zero(4, 4); Nu(1,1)=1; Nu(3,3)=1;
@@ -455,14 +473,15 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
     const Mat em[4] = { Mat(Cup.adjoint() * F), Mat(Cdn.adjoint() * F),
                         Mat(F * Cup), Mat(F * Cdn) };
     const Mat co[4] = { Cup, Cdn, Mat(Cup.adjoint()), Mat(Cdn.adjoint()) };
-    // slot layout: 0 = done; x-chains 1 .. 4W (op o slot base 1+o*W, rem = 0..W-1 at
-    // base+rem); y-NN 1+4W .. 4+4W; wrap chains next (op o base, rem = 0..W-2);
-    // start = chi-1.
-    const int xbase = 1, ybase = 1 + nx, wbase = ybase + 4, start = chi - 1, done = 0;
+    // slot layout: 0 = done; x-chains 1 .. 4W (op o slot base 1+o*W, rem at
+    // base+rem); y-NN next 4; then the optional chain blocks; start = chi-1.
+    const int xbase = 1, ybase = 1 + nx, wbase = ybase + 4,
+              ubase = wbase + nw, vbase = ubase + nu, start = chi - 1, done = 0;
 
     // one W-matrix per leg index y (period W); only the start-row differs across y.
-    std::vector<std::array<std::array<Mat, 64>, 64>> Wy;   // chi <= 2+32+4+28 = 66? guard below
-    if (chi > 64) throw std::runtime_error("build_hubbard_lattice_split_mpo: W too large (chi > 64)");
+    std::vector<std::array<std::array<Mat, 128>, 128>> Wy;
+    if (chi > 128)
+        throw std::runtime_error("build_hubbard_lattice_split_mpo: W too large (chi > 128)");
     Wy.resize(W);
     for (int y = 0; y < W; ++y) {
         auto& Wm = Wy[y];
@@ -475,20 +494,36 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
             for (int rem = 1; rem < W; ++rem)
                 Wm[xbase + o*W + rem][xbase + o*W + rem - 1] = F;
             Wm[xbase + o*W + 0][done] = co[o];
-            // y-NN: emit only below the top leg; complete uniformly
+            // y-NN (complete at the NEXT site): emit -t below the top leg; the
+            // cylinder wrap-up DIAGONAL (x,W-1)-(x+1,0) is chain-adjacent too and
+            // reuses these slots with amplitude -tp.
             if (y < W - 1) Wm[start][ybase + o] = -t * em[o];
+            else if (y_periodic && tp != 0.0) Wm[start][ybase + o] = -tp * em[o];
             Wm[ybase + o][done] = co[o];
-            // y-wrap (cylinder): emit only from y=0, range W-1 (W-2 F-carries)
-            if (y_periodic && W > 2) {
-                if (y == 0) Wm[start][wbase + o*(W-1) + (W - 2)] = -t * em[o];
+            // range-(W-1) chains, shared: y-wrap (x,0)-(x,W-1) emits -t from y=0
+            // (cylinder); down-diag (x,y)-(x+1,y-1) emits -tp from y>0.
+            if (has_w) {
+                if (y == 0 && y_periodic && W > 2)
+                    Wm[start][wbase + o*(W-1) + (W - 2)] = -t * em[o];
+                if (y > 0 && tp != 0.0)
+                    Wm[start][wbase + o*(W-1) + (W - 2)] = -tp * em[o];
                 for (int rem = 1; rem < W - 1; ++rem)
                     Wm[wbase + o*(W-1) + rem][wbase + o*(W-1) + rem - 1] = F;
                 Wm[wbase + o*(W-1) + 0][done] = co[o];
-            } else if (y_periodic && W == 2) {
-                // W=2 wrap coincides with the y-NN bond: double the y coupling? No --
-                // a 2-leg "cylinder" would double-count the rung; reject loudly.
-                throw std::runtime_error("build_hubbard_lattice_split_mpo: y_periodic "
-                                         "needs W >= 3 (W=2 wrap duplicates the rung)");
+            }
+            // range-(W+1) chains: up-diag (x,y)-(x+1,y+1), emitted from y < W-1
+            if (has_u) {
+                if (y < W - 1) Wm[start][ubase + o*(W+1) + W] = -tp * em[o];
+                for (int rem = 1; rem < W + 1; ++rem)
+                    Wm[ubase + o*(W+1) + rem][ubase + o*(W+1) + rem - 1] = F;
+                Wm[ubase + o*(W+1) + 0][done] = co[o];
+            }
+            // range-(2W-1) chains: cylinder wrap-down diag (x,0)-(x+1,W-1), y=0 only
+            if (has_v) {
+                if (y == 0) Wm[start][vbase + o*(2*W-1) + (2*W - 2)] = -tp * em[o];
+                for (int rem = 1; rem < 2*W - 1; ++rem)
+                    Wm[vbase + o*(2*W-1) + rem][vbase + o*(2*W-1) + rem - 1] = F;
+                Wm[vbase + o*(2*W-1) + 0][done] = co[o];
             }
         }
     }

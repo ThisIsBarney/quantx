@@ -745,9 +745,10 @@ int main() {
                                      * O_ed(idp[a2], idp[b2]) * esp.eigenvectors()(b2,0);
                         phi_ed.push_back(acc.real());
                     }
-                    double Egs = 0;
+                    DMRGResult rgs;
                     auto phi = gs_mpo_expectations(cylp, n3, 256, 1e-11, 120, 1e-11,
-                                                   pack_q2(4,0), &cp, obs, &Egs);
+                                                   pack_q2(4,0), &cp, obs, &rgs);
+                    double Egs = rgs.energy;
                     for (size_t k = 0; k < phi.size(); ++k)
                         e_gs = std::max(e_gs, std::abs(phi[k] - phi_ed[k]));
                     bool okpf = e_mpo < 1e-12 && e_gs < 1e-7 && std::abs(Egs - Ep_ed) < 1e-8;
@@ -755,6 +756,44 @@ int main() {
                                 "(3 geoms, |Phi|~%.1e)  %s\n",
                                 e_mpo, e_gs, std::abs(phi_ed[0]), okpf?"OK":"FAIL");
                     fails += !okpf;
+                }
+
+                // (n) t-t'-U: the diagonal-hop cylinder vs ED. All four coupling
+                // classes fire on the W=3 Lx=2 cylinder (up-diag range 4, down-diag
+                // sharing the range-2 wrap chains, wrap-up-diag reusing the y-NN
+                // slots, wrap-down-diag range 5 = the full chain). Pinned + doped
+                // GS energy vs sector ED closes the loop through the block engine.
+                {
+                    const double tp3 = 0.3;
+                    auto cyl_tp = build_hubbard_lattice_split_mpo(L3, W3, t, U6, 0.0,
+                                                                  true, hpin, tp3);
+                    MatC Htp = Hp;   // pinned U6 cylinder from (l), + diagonal hops
+                    {
+                        auto hop_tp = [&](int i, int j) {
+                            MatC h = ferm(n3,i,Cup.adjoint())*ferm(n3,j,Cup)
+                                   + ferm(n3,i,Cdn.adjoint())*ferm(n3,j,Cdn);
+                            Htp += -tp3 * (h + MatC(h.adjoint()));
+                        };
+                        for (int x = 0; x < L3 - 1; ++x)
+                            for (int y = 0; y < W3; ++y) {
+                                hop_tp(W3*x + y, W3*(x+1) + ((y + 1) % W3));       // up-diag
+                                hop_tp(W3*x + y, W3*(x+1) + ((y - 1 + W3) % W3));  // down-diag
+                            }
+                    }
+                    double herr_tp = (Htp - contract_mpo(cyl_tp)).cwiseAbs().maxCoeff();
+                    MatC Hstp(mp, mp);
+                    for (int a2=0;a2<mp;++a2) for (int b2=0;b2<mp;++b2)
+                        Hstp(a2,b2) = Htp(idp[a2], idp[b2]);
+                    Eigen::SelfAdjointEigenSolver<MatC> estp(Hstp);
+                    double Etp_ed = estp.eigenvalues()(0);
+                    double Etp_blk = run_dmrg_blocks(cyl_tp, n3, 256, 1e-11, 120, 1e-11,
+                                                     pack_q2(4, 0), &cp).energy;
+                    double etp = std::abs(Etp_blk - Etp_ed);
+                    bool oktp = herr_tp < 1e-12 && etp < 1e-8;
+                    std::printf("  T-TP-U: ||H_MPO-H_JW||=%.1e ; doped blk E err=%.1e "
+                                "(tp=%.2f, E=%.8f)  %s\n",
+                                herr_tp, etp, tp3, Etp_blk, oktp?"OK":"FAIL");
+                    fails += !oktp;
                 }
             }
         }

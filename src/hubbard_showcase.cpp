@@ -57,8 +57,8 @@ int main(int argc, char** argv) {
     // holes must be even (removed as up/dn pairs so the target sector is 2Sz=0).
     if (const char* sz = std::getenv("QX_STRIPES")) {
         int Lx = 16, Wd = 4, cchi = 1024; double U = 8.0;
-        int holes = 8; double hp = 0.5; int nsw = 16;
-        std::sscanf(sz, "%d %d %d %lf %d %lf %d", &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw);
+        int holes = 8; double hp = 0.5; int nsw = 16; double tp = 0.0;
+        std::sscanf(sz, "%d %d %d %lf %d %lf %d %lf", &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw, &tp);
         const int n = Wd * Lx, Ne = n - holes;
         if (holes < 0 || holes > n || holes % 2 != 0 || n % 2 != 0) {
             std::fprintf(stderr, "QX_STRIPES: need even n and even holes in [0, n] "
@@ -70,7 +70,7 @@ int main(int argc, char** argv) {
 #else
         setenv("QX_PROFILES", "1", 1);
 #endif
-        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp);
+        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp, tp);
         // init: half-filling Neel, then dig the holes at evenly spread sites,
         // alternating up/dn removals so the seed lands exactly in (Ne, 2Sz=0).
         std::vector<int> cfg(n);
@@ -89,9 +89,9 @@ int main(int argc, char** argv) {
         double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         double nsum = 0;
         for (double v : r.site_n) nsum += v;
-        std::printf("STRIPES Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d : "
+        std::printf("STRIPES Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d tp=%.2f : "
                     "E0=%.10f (%.1fs)  sum<n>=%.6f (target %d)\n",
-                    Lx, Wd, cchi, U, holes, hp, nsw, r.energy, w0, nsum, Ne);
+                    Lx, Wd, cchi, U, holes, hp, nsw, tp, r.energy, w0, nsum, Ne);
         for (int i = 0; i < n; ++i)
             std::printf("PROF %d %d %d %.8f %.8f\n", i, i / Wd, i % Wd,
                         r.site_n[i], r.site_2sz[i]);
@@ -106,15 +106,20 @@ int main(int argc, char** argv) {
     // sign test: Phi_yx < 0 while Phi_yy > 0). Emits "PAIRF kind r phi" lines.
     if (const char* pz = std::getenv("QX_PAIRS")) {
         int Lx = 16, Wd = 4, cchi = 1024; double U = 8.0;
-        int holes = 8; double hp = 0.5; int nsw = 20, x0 = 2, rmax = 11;
-        std::sscanf(pz, "%d %d %d %lf %d %lf %d %d %d",
-                    &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw, &x0, &rmax);
+        int holes = 8; double hp = 0.5; int nsw = 20, x0 = 2, rmax = 11; double tp = 0.0;
+        std::sscanf(pz, "%d %d %d %lf %d %lf %d %d %d %lf",
+                    &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw, &x0, &rmax, &tp);
         const int n = Wd * Lx, Ne = n - holes;
         if (holes < 0 || holes > n || holes % 2 != 0 || n % 2 != 0 || x0 < 0 || x0 >= Lx) {
             std::fprintf(stderr, "QX_PAIRS: bad geometry (n=%d holes=%d x0=%d)\n", n, holes, x0);
             return 1;
         }
-        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp);
+#ifdef _WIN32
+        _putenv_s("QX_PROFILES", "1");
+#else
+        setenv("QX_PROFILES", "1", 1);
+#endif
+        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp, tp);
         std::vector<int> cfg(n);
         for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
         for (int k = 0; k < holes; ++k) {
@@ -141,14 +146,17 @@ int main(int argc, char** argv) {
             obs.push_back(build_pair_corr_mpo(n, Wd, x0, 1, 'y', x0 + r, 1, 'x'));
             meta.push_back({"yx", r});
         }
-        double E0 = 0;
+        DMRGResult rgs;
         auto t0 = std::chrono::steady_clock::now();
         auto vals = gs_mpo_expectations(mpo, n, cchi, 1e-11, nsw, 1e-12,
-                                        pack_q2(Ne, 0), &cfg, obs, &E0);
+                                        pack_q2(Ne, 0), &cfg, obs, &rgs);
         double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        std::printf("PAIRS Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d x0=%d : "
+        std::printf("PAIRS Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d x0=%d tp=%.2f : "
                     "E0=%.10f (%.1fs)  n_obs=%d\n",
-                    Lx, Wd, cchi, U, holes, hp, nsw, x0, E0, w0, (int)obs.size());
+                    Lx, Wd, cchi, U, holes, hp, nsw, x0, tp, rgs.energy, w0, (int)obs.size());
+        for (int i = 0; i < n && i < (int)rgs.site_n.size(); ++i)
+            std::printf("PROF %d %d %d %.8f %.8f\n", i, i / Wd, i % Wd,
+                        rgs.site_n[i], rgs.site_2sz[i]);
         // aggregate: yy averaged over the Wd-1 leg positions; xx/yx as-is
         for (int r = 1; r <= rmax; ++r) {
             double s = 0; int c = 0;
