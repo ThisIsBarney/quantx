@@ -1136,13 +1136,40 @@ static std::pair<std::map<int,Mat>, BondSpace> expand_M_LR(
     const int d = (int)qphys.size();
     // 1) enumerate the expansion column groups: (b', q_R_ket) -> charge q_ext, width
     //    dR(q_R_ket); assign each pair a column offset within its q_ext extension.
+    // ONLY pairs actually FED by the nonzero (L, W, M) structure are allocated: a
+    // blind chi_r x sectors enumeration allocates mostly-zero extension columns and
+    // explodes as O(chi_W * chi * d) memory for wide MPOs at large chi (the 82-wide
+    // t-t'-U cylinder at chi=1024 peaked >10 GB in P and crashed; the fed set is
+    // ~2 nonzero W blocks per slot, dozens of times smaller).
     struct Ext { int bprime, q_R_ket, off, width; };
     std::map<int, std::vector<Ext>> ext_groups;          // q_ext -> pairs
     std::map<int, int> ext_width;                        // q_ext -> total extension width
-    for (int qi = 0; qi < bs_mid.n_sectors(); ++qi) {
-        int q_R = bs_mid.qns[qi], dR = bs_mid.dims[qi];
-        if (dR == 0) continue;
-        for (int bp = 0; bp < W.chi_r; ++bp) {
+    {
+        std::set<std::pair<int,int>> fed;                // (b', q_R_ket)
+        for (auto& [q_L_ket, Mblk] : M) {
+            auto mcols = phys_groups(bs_mid, q_L_ket, +1, qphys);
+            for (int b = 0; b < W.chi_l; ++b) {
+                auto it_L = L.blocks[b].find(q_L_ket);
+                if (it_L == L.blocks[b].end()) continue;
+                if (bs_L.dim(q_L_ket + delta[b]) != it_L->second.rows() ||
+                    it_L->second.cols() != Mblk.rows()) continue;
+                int q_L_bra = q_L_ket + delta[b];
+                for (int sp = 0; sp < d; ++sp) {
+                    if (mcols[sp].width == 0) continue;
+                    for (int bp = 0; bp < W.chi_r; ++bp)
+                        for (int s = 0; s < d; ++s) {
+                            if (std::abs(mscal(W.W(b, bp)(s, sp))) < 1e-15) continue;
+                            // charge bookkeeping: row group s of P[q_L_bra] must
+                            // carry exactly q_ext = q_R_ket + delta[bp]
+                            if (q_L_bra + qphys[s] != mcols[sp].q + delta[bp]) continue;
+                            fed.insert({bp, mcols[sp].q});
+                        }
+                }
+            }
+        }
+        for (auto& [bp, q_R] : fed) {
+            int dR = bs_mid.dim(q_R);
+            if (dR == 0) continue;
             int q_ext = q_R + delta[bp];
             int& wsum = ext_width[q_ext];
             ext_groups[q_ext].push_back({bp, q_R, wsum, dR});
@@ -3831,6 +3858,10 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
         }
 
         result.sweep_energies.push_back(E0);
+        if (const char* tr = std::getenv("QX_DMRG_TRACE"); tr && std::atoi(tr) != 0) {
+            printf("[trace] 2site sweep %d : E=%.10f trunc=%.3e\n", sweep, E0, sweep_trunc);
+            fflush(stdout);
+        }
         result.truncation_error = sweep_trunc;
         double dE = (sweep > 0) ? std::abs(E0 - prev_energy) : 1e30;
         result.n_sweeps_done = sweep + 1;
@@ -3989,6 +4020,10 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
             if (mix_alpha < 1e-6) mix_alpha = 0.0;
 
             result.sweep_energies.push_back(E0);
+            if (const char* tr = std::getenv("QX_DMRG_TRACE"); tr && std::atoi(tr) != 0) {
+                printf("[trace] 1site sweep %d : E=%.10f alpha=%.3g\n", sweep, E0, mix_alpha);
+                fflush(stdout);
+            }
             if (std::abs(E0 - prev_energy) < tol) {
                 result.energy = E0; result.n_sweeps_done = sweep + 1; break;
             }
