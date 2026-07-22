@@ -21,6 +21,46 @@
 #include <cstring>
 #include <vector>
 
+// Crash reporter (QX_CRASH_STACK=1): on an unhandled SEH exception (access
+// violation etc.) print a dbghelp-symbolized stack to stderr and exit. Debugging
+// aid for long detached runs on a box with no debugger installed; with a /Zi PDB
+// next to the exe the frames come out as function [file:line].
+#ifdef _WIN32
+#include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+static LONG WINAPI qx_crash_report(EXCEPTION_POINTERS* ep) {
+    HANDLE proc = GetCurrentProcess();
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+    SymInitialize(proc, nullptr, TRUE);
+    std::fprintf(stderr, "\n=== QX CRASH: code=0x%08lx addr=%p ===\n",
+                 (unsigned long)ep->ExceptionRecord->ExceptionCode,
+                 ep->ExceptionRecord->ExceptionAddress);
+    void* frames[62];
+    USHORT nf = CaptureStackBackTrace(0, 62, frames, nullptr);
+    alignas(SYMBOL_INFO) char buf[sizeof(SYMBOL_INFO) + 256];
+    for (USHORT k = 0; k < nf; ++k) {
+        auto* si = (SYMBOL_INFO*)buf;
+        si->SizeOfStruct = sizeof(SYMBOL_INFO); si->MaxNameLen = 255;
+        DWORD64 disp = 0; DWORD ld = 0;
+        IMAGEHLP_LINE64 line; line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+        if (SymFromAddr(proc, (DWORD64)frames[k], &disp, si)) {
+            if (SymGetLineFromAddr64(proc, (DWORD64)frames[k], &ld, &line))
+                std::fprintf(stderr, "  #%02u %s +0x%llx  [%s:%lu]\n", k, si->Name,
+                             (unsigned long long)disp, line.FileName,
+                             (unsigned long)line.LineNumber);
+            else
+                std::fprintf(stderr, "  #%02u %s +0x%llx\n", k, si->Name,
+                             (unsigned long long)disp);
+        } else {
+            std::fprintf(stderr, "  #%02u %p\n", k, frames[k]);
+        }
+    }
+    std::fflush(stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
 using namespace qx_dmrg;
 
 constexpr double PI = 3.14159265358979323846;
@@ -48,6 +88,10 @@ static double lieb_wu_e(double U) {
 }
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    if (const char* cs = std::getenv("QX_CRASH_STACK"); cs && std::atoi(cs) != 0)
+        SetUnhandledExceptionFilter(qx_crash_report);
+#endif
     int chi = argc > 1 ? std::atoi(argv[1]) : 128;   // Mott is area-law: chi=128 is converged
     const double t = 1.0;
 

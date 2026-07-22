@@ -1254,6 +1254,32 @@ static std::pair<std::map<int,Mat>, BondSpace> expand_M_LR(
     return {std::move(Mext), std::move(bs_ext)};
 }
 
+// Robust thin SVD X = U diag(sv) Vt for the single-site splits. Eigen's BDCSVD
+// corrupts the stack inside computeSVDofM (divide-and-conquer deflation) on large
+// blocks -- reproduced twice at chi=1024 on the 82-wide t-t'-U cylinder (the L->R
+// split, then the R->L split), a data-dependent Eigen bug that only bites once the
+// blocks and near-degenerate spectra grow big enough (chi<=512 never hit it). Route
+// large blocks to the same LAPACK xgesdd the two-site truncation already trusts at
+// chi=1024; keep BDCSVD for small blocks so the default lossless split (and every ED
+// assertion) stays bit-identical. Jacobi is the no-LAPACKE crash-free fallback. The
+// SVD's per-column sign/order gauge cancels in the downstream A*C reconstruction.
+static void robust_thin_svd(const Mat& X, Mat& U, Mat& Vt, RVec& sv) {
+    const int kdim = std::min((int)X.rows(), (int)X.cols());
+#ifdef QX_HAS_LAPACKE
+    if (kdim >= gesdd_min()) {
+        Mat V;
+        if (thin_svd_gesdd(X, U, V, sv)) { Vt = V.adjoint(); return; }
+    }
+#endif
+    if (kdim >= 256) {   // large block, no usable LAPACKE: Jacobi never crashes
+        Eigen::JacobiSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        U = svd.matrixU(); Vt = svd.matrixV().adjoint(); sv = svd.singularValues();
+    } else {
+        Eigen::BDCSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+        U = svd.matrixU(); Vt = svd.matrixV().adjoint(); sv = svd.singularValues();
+    }
+}
+
 static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
                                     const BondSpace& bs_L, const BondSpace& bs_mid,
                                     const std::vector<int>& qphys = SPIN_HALF_CHARGES,
@@ -1288,9 +1314,11 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
             X.middleRows(src[s].off, src[s].width) =
                 it->second.middleCols(mcols[s].off, dRmid);
         }
-        Eigen::BDCSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        svds.push_back({q_R, svd.matrixU(), Mat(svd.matrixV().adjoint()),
-                        RVec(svd.singularValues())});
+        // Robust per-sector SVD: the mixer's subspace expansion widens these blocks
+        // far past chi, where Eigen's BDCSVD crashes -- see robust_thin_svd.
+        Mat Uq, Vtq; RVec svq;
+        robust_thin_svd(X, Uq, Vtq, svq);
+        svds.push_back({q_R, std::move(Uq), std::move(Vtq), std::move(svq)});
     }
     // Phase 2: keep counts. Default (max_bond <= 0): keep everything -- the historical
     // lossless split. With a cap (the subspace-expansion path widens the columns far
@@ -1362,11 +1390,12 @@ static SiteMove singlesite_split_RL(const std::map<int,Mat>& M) {
     std::vector<std::pair<int,int>> new_sectors;
     for (auto& [q_L, Mblk] : M) {
         if (Mblk.size() == 0) continue;
-        Eigen::BDCSVD<Mat> svd(Mblk, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        int keep = (int)svd.singularValues().size();
-        mv.A[q_L] = svd.matrixV().adjoint().topRows(keep);   // keep x cols (right-canonical)
-        Mat Cp = svd.matrixU().leftCols(keep);               // dL x keep
-        for (int k = 0; k < keep; ++k) Cp.col(k) *= svd.singularValues()[k];
+        Mat U, Vt; RVec sv;                                  // robust_thin_svd: BDCSVD
+        robust_thin_svd(Mblk, U, Vt, sv);                    // crashes on large blocks
+        int keep = (int)sv.size();
+        mv.A[q_L] = Vt.topRows(keep);                        // keep x cols (right-canonical)
+        Mat Cp = U.leftCols(keep);                           // dL x keep
+        for (int k = 0; k < keep; ++k) Cp.col(k) *= sv[k];
         mv.C[q_L] = Cp;                                      // U S
         new_sectors.emplace_back(q_L, keep);
     }
@@ -3963,6 +3992,12 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                         }
                     }
                     M = std::move(Mn);
+                    // A silently EMPTY centre would make every later Lanczos return
+                    // E=0 on a zero state and the run would "complete" with garbage
+                    // (seen once at chi=1024 x 82-wide MPO); fail loudly instead.
+                    if (M.empty())
+                        throw std::runtime_error("dmrg single-site L->R: centre lost all "
+                                                 "sectors at site " + std::to_string(i));
                     tt = clk::now();
                     L[i+1] = block_update_left(L[i], block_A[i], bond[i], bond[i+1], mpo[i], delta);
                     tick(t_env, tt);
@@ -4005,6 +4040,9 @@ static DMRGResult run(const std::vector<MPOSite>& mpo, int n,
                         Mp[q_Lp] = Mb;
                     }
                     M = std::move(Mp);
+                    if (M.empty())
+                        throw std::runtime_error("dmrg single-site R->L: centre lost all "
+                                                 "sectors at site " + std::to_string(i));
                     tt = clk::now();
                     R[i] = block_update_right(R[i+1], block_A[i], bond[i], bond[i+1], mpo[i], delta);
                     tick(t_env, tt);
