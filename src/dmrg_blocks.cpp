@@ -1255,29 +1255,26 @@ static std::pair<std::map<int,Mat>, BondSpace> expand_M_LR(
 }
 
 // Robust thin SVD X = U diag(sv) Vt for the single-site splits. Eigen's BDCSVD
-// corrupts the stack inside computeSVDofM (divide-and-conquer deflation) on large
-// blocks -- reproduced twice at chi=1024 on the 82-wide t-t'-U cylinder (the L->R
-// split, then the R->L split), a data-dependent Eigen bug that only bites once the
-// blocks and near-degenerate spectra grow big enough (chi<=512 never hit it). Route
-// large blocks to the same LAPACK xgesdd the two-site truncation already trusts at
-// chi=1024; keep BDCSVD for small blocks so the default lossless split (and every ED
-// assertion) stays bit-identical. Jacobi is the no-LAPACKE crash-free fallback. The
-// SVD's per-column sign/order gauge cancels in the downstream A*C reconstruction.
+// corrupts the stack inside computeSVDofM (its divide-and-conquer DEFLATION step) on
+// near-degenerate spectra -- reproduced three times at chi=1024 on the 82-wide t-t'-U
+// cylinder (the L->R split, the R->L split, then again deep in the converged single-
+// site sweeps where the Schmidt spectrum is densely degenerate). It is NOT purely a
+// large-block bug: the late-sweep crash hit a modest block whose singular values had
+// bunched up. So the single-site path avoids BDCSVD ENTIRELY -- LAPACK xgesdd for the
+// large blocks (the fast backend the two-site truncation already trusts at chi=1024),
+// and Eigen's JacobiSVD (two-sided Jacobi: no deflation step, the numerically
+// bulletproof SVD) for everything else. Jacobi and BDCSVD agree to SVD roundoff
+// (~1e-13), so every ED assertion holds; the per-column sign/order gauge cancels in
+// the downstream A*C reconstruction anyway.
 static void robust_thin_svd(const Mat& X, Mat& U, Mat& Vt, RVec& sv) {
-    const int kdim = std::min((int)X.rows(), (int)X.cols());
 #ifdef QX_HAS_LAPACKE
-    if (kdim >= gesdd_min()) {
+    if (std::min((int)X.rows(), (int)X.cols()) >= gesdd_min()) {
         Mat V;
         if (thin_svd_gesdd(X, U, V, sv)) { Vt = V.adjoint(); return; }
     }
 #endif
-    if (kdim >= 256) {   // large block, no usable LAPACKE: Jacobi never crashes
-        Eigen::JacobiSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        U = svd.matrixU(); Vt = svd.matrixV().adjoint(); sv = svd.singularValues();
-    } else {
-        Eigen::BDCSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
-        U = svd.matrixU(); Vt = svd.matrixV().adjoint(); sv = svd.singularValues();
-    }
+    Eigen::JacobiSVD<Mat> svd(X, Eigen::ComputeThinU | Eigen::ComputeThinV);
+    U = svd.matrixU(); Vt = svd.matrixV().adjoint(); sv = svd.singularValues();
 }
 
 static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
