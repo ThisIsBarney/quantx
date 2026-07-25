@@ -185,6 +185,8 @@ std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t = 1.0, doub
 // standard practice for exposing stripe/AF order in a symmetric DMRG ground state.
 // tp: next-nearest-neighbour diagonal hopping (t-t'-U model), H -= tp on every
 // (x,y)-(x+1,y+-1) bond (cylinder: y wraps mod W). chi grows 34 -> 82 for W=4.
+// Width limit (fail-loud, chi <= 128): W <= 15 at tp=0, W <= 10 open / W <= 6
+// cylinder with tp != 0 (chi = 20W+2 there).
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t = 1.0,
                                                      double U = 0.0, double mu = 0.0,
                                                      bool y_periodic = false,

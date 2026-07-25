@@ -455,9 +455,13 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
         // W=2 wrap coincides with the y-NN bond -- would double-count the rung.
         throw std::runtime_error("build_hubbard_lattice_split_mpo: y_periodic "
                                  "needs W >= 3 (W=2 wrap duplicates the rung)");
-    const bool has_w = (y_periodic && W > 2) || (tp != 0.0);  // range-(W-1) chains
-    const bool has_u = (tp != 0.0);                           // range-(W+1) up-diag
-    const bool has_v = (tp != 0.0) && y_periodic;             // range-(2W-1) wrap-down
+    // A W=1 "lattice" is a plain chain: it has no y-bonds and no diagonals, so none
+    // of the optional chain blocks exist (with W=1 the range-(W-1) block would also
+    // be zero-width and alias wbase onto ubase).
+    const bool diag = (tp != 0.0) && W > 1;
+    const bool has_w = (y_periodic && W > 2) || diag;         // range-(W-1) chains
+    const bool has_u = diag;                                  // range-(W+1) up-diag
+    const bool has_v = diag && y_periodic;                    // range-(2W-1) wrap-down
     const int nx = 4 * W;
     const int nw = has_w ? 4 * (W - 1) : 0;
     const int nu = has_u ? 4 * (W + 1) : 0;
@@ -498,14 +502,14 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
             // cylinder wrap-up DIAGONAL (x,W-1)-(x+1,0) is chain-adjacent too and
             // reuses these slots with amplitude -tp.
             if (y < W - 1) Wm[start][ybase + o] = -t * em[o];
-            else if (y_periodic && tp != 0.0) Wm[start][ybase + o] = -tp * em[o];
+            else if (y_periodic && diag) Wm[start][ybase + o] = -tp * em[o];
             Wm[ybase + o][done] = co[o];
             // range-(W-1) chains, shared: y-wrap (x,0)-(x,W-1) emits -t from y=0
             // (cylinder); down-diag (x,y)-(x+1,y-1) emits -tp from y>0.
             if (has_w) {
                 if (y == 0 && y_periodic && W > 2)
                     Wm[start][wbase + o*(W-1) + (W - 2)] = -t * em[o];
-                if (y > 0 && tp != 0.0)
+                if (y > 0 && diag)
                     Wm[start][wbase + o*(W-1) + (W - 2)] = -tp * em[o];
                 for (int rem = 1; rem < W - 1; ++rem)
                     Wm[wbase + o*(W-1) + rem][wbase + o*(W-1) + rem - 1] = F;

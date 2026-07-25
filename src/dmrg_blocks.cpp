@@ -1266,6 +1266,14 @@ static std::pair<std::map<int,Mat>, BondSpace> expand_M_LR(
 // bulletproof SVD) for everything else. Jacobi and BDCSVD agree to SVD roundoff
 // (~1e-13), so every ED assertion holds; the per-column sign/order gauge cancels in
 // the downstream A*C reconstruction anyway.
+// PERFORMANCE NOTE: without QX_ENABLE_BLAS there is no xgesdd, so every block --
+// including the mixer-widened ones -- takes the Jacobi path, which is several times
+// slower than BDCSVD on large blocks. The single-site/mixer phase at production chi
+// therefore wants the BLAS build (all benchmarks and production runs use it).
+// SCOPE NOTE: BDCSVD still backs the two-site block_svd_truncate below (size-gated,
+// and only on the early non-degenerate sweeps) and the dynamics/dense paths. Those
+// have never crashed -- the fault needs the bunched-up Schmidt spectrum of a deeply
+// converged single-site sweep -- but if one ever does, route it here too.
 static void robust_thin_svd(const Mat& X, Mat& U, Mat& Vt, RVec& sv) {
 #ifdef QX_HAS_LAPACKE
     if (std::min((int)X.rows(), (int)X.cols()) >= gesdd_min()) {

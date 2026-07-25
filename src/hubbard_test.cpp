@@ -789,10 +789,36 @@ int main() {
                     double Etp_blk = run_dmrg_blocks(cyl_tp, n3, 256, 1e-11, 120, 1e-11,
                                                      pack_q2(4, 0), &cp).energy;
                     double etp = std::abs(Etp_blk - Etp_ed);
-                    bool oktp = herr_tp < 1e-12 && etp < 1e-8;
-                    std::printf("  T-TP-U: ||H_MPO-H_JW||=%.1e ; doped blk E err=%.1e "
-                                "(tp=%.2f, E=%.8f)  %s\n",
-                                herr_tp, etp, tp3, Etp_blk, oktp?"OK":"FAIL");
+                    // The complementary geometry: the OPEN strip with tp. Here the
+                    // y_periodic guards on the wrap emitters are the whole story --
+                    // they must keep the (x,0)-(x,W-1) wrap AND the two wrap-diagonals
+                    // out, while the shared range-(W-1) chains still carry the
+                    // down-diagonal (the slot-sharing case). Same 4^6 ED cost.
+                    MatC Ho = MatC::Zero(dim, dim);
+                    {
+                        auto hpo = [&](int i, int j, double amp) {
+                            MatC h = ferm(n3,i,Cup.adjoint())*ferm(n3,j,Cup)
+                                   + ferm(n3,i,Cdn.adjoint())*ferm(n3,j,Cdn);
+                            Ho += -amp * (h + MatC(h.adjoint()));
+                        };
+                        for (int x = 0; x < L3; ++x)                       // y-NN only (open)
+                            for (int y = 0; y < W3 - 1; ++y) hpo(W3*x + y, W3*x + y + 1, t);
+                        for (int x = 0; x < L3 - 1; ++x)
+                            for (int y = 0; y < W3; ++y) {
+                                hpo(W3*x + y, W3*(x+1) + y, t);            // x-hop
+                                if (y + 1 < W3) hpo(W3*x + y, W3*(x+1) + y + 1, tp3);
+                                if (y - 1 >= 0) hpo(W3*x + y, W3*(x+1) + y - 1, tp3);
+                            }
+                        for (int i = 0; i < n3; ++i) Ho += U6 * (ferm(n3,i,Nu) * ferm(n3,i,Nd));
+                    }
+                    auto stripo = build_hubbard_lattice_split_mpo(L3, W3, t, U6, 0.0,
+                                                                  /*y_periodic*/false,
+                                                                  0.0, tp3);
+                    double herro = (Ho - contract_mpo(stripo)).cwiseAbs().maxCoeff();
+                    bool oktp = herr_tp < 1e-12 && etp < 1e-8 && herro < 1e-12;
+                    std::printf("  T-TP-U: ||H_MPO-H_JW||=%.1e (cyl) / %.1e (open) ; "
+                                "doped blk E err=%.1e (tp=%.2f, E=%.8f)  %s\n",
+                                herr_tp, herro, etp, tp3, Etp_blk, oktp?"OK":"FAIL");
                     fails += !oktp;
                 }
             }
