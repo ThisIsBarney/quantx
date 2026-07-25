@@ -178,15 +178,20 @@ std::vector<MPOSite> build_hubbard_ladder_mpo(int Lx, double t = 1.0, double tpe
 std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t = 1.0, double tperp = 1.0,
                                                     double U = 0.0, double mu = 0.0);
 // Width-W Hubbard strip / CYLINDER (y_periodic), site-split d=4, period-W MPO
-// (column-major, x-hops range-W with F-carry chains). W <= 8. Isotropic t.
+// (column-major, x-hops range-W with F-carry chains). Isotropic t.
 // Half filling target: pack_q2(W*Lx, 0).
 // hpin: staggered Zeeman pinning on the x=0 edge column, H -= hpin sum_y (-1)^y
 // Sz_{0,y} (even legs pinned up). Sz-diagonal, so both U(1) charges stay conserved;
 // standard practice for exposing stripe/AF order in a symmetric DMRG ground state.
+// tp: next-nearest-neighbour diagonal hopping (t-t'-U model), H -= tp on every
+// (x,y)-(x+1,y+-1) bond (cylinder: y wraps mod W). chi grows 34 -> 82 for W=4.
+// Width limit (fail-loud, chi <= 128): W <= 15 at tp=0, W <= 10 open / W <= 6
+// cylinder with tp != 0 (chi = 20W+2 there).
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t = 1.0,
                                                      double U = 0.0, double mu = 0.0,
                                                      bool y_periodic = false,
-                                                     double hpin = 0.0);
+                                                     double hpin = 0.0,
+                                                     double tp = 0.0);
 // Singlet pair-field correlator MPO O = Delta^dag_{b1} Delta_{b2} on the width-W
 // lattice; bond b = (x, y, orient) with orient 'y' (rung, i'=i+1, y < W-1) or 'x'
 // (leg, i'=i+W). b1 must lie strictly left of b2. chi=7; N- and Sz-conserving
@@ -340,13 +345,14 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
 // One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
 // (e.g. pair-field correlators): the GS is computed once, then for each obs MPO
 // the environments are rebuilt and the two-site H_eff expectation evaluated.
-// Real-MPO path only (fail-loud otherwise). E0_out (optional) receives the GS energy.
+// Real-MPO path only (fail-loud otherwise). res_out (optional) receives the full
+// DMRGResult of the GS run (energy, and profiles when QX_PROFILES=1).
 std::vector<double> gs_mpo_expectations(const std::vector<MPOSite>& H, int n,
                                         int max_bond, double cutoff, int n_sweeps,
                                         double tol, int total_charge,
                                         const std::vector<int>* init_config,
                                         const std::vector<std::vector<MPOSite>>& obs,
-                                        double* E0_out = nullptr);
+                                        DMRGResult* res_out = nullptr);
 
 // Block-sparse (Sz-symmetric) TDVP2 time evolution from the Neel state.
 struct TDVPBlockResult {

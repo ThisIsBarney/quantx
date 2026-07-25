@@ -36,3 +36,8 @@ benchmarks/results_*.json
 
 # local build helper (machine-specific MSVC path)
 build_thermal.bat
+build-asan/
+build-dbg/
+build_asan_local.bat
+build_dbg_local.bat
+benchmarks/*.err

@@ -18,11 +18,11 @@ LOG = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "pairfield_16x4_c
 head, data = None, {"yy": [], "xx": [], "yx": []}
 for line in open(LOG):
     m = re.match(r"PAIRS Lx=(\d+) W=(\d+) chi=(\d+) U=(-?[\d.]+) holes=(\d+) hpin=(-?[\d.]+) "
-                 r"nsw=(\d+) x0=(\d+) : E0=(-?[\d.]+) \(([\d.]+)s\)", line)
+                 r"nsw=(\d+) x0=(\d+)(?: tp=(-?[\d.]+))? : E0=(-?[\d.]+) \(([\d.]+)s\)", line)
     if m:
         head = dict(Lx=int(m[1]), W=int(m[2]), chi=int(m[3]), U=float(m[4]),
                     holes=int(m[5]), hpin=float(m[6]), nsw=int(m[7]), x0=int(m[8]),
-                    E0=float(m[9]), wall=float(m[10]))
+                    tp=float(m[9] or 0.0), E0=float(m[10]), wall=float(m[11]))
     m = re.match(r"PAIRF (\w+) (\d+) (-?[\d.eE+-]+)", line)
     if m and m[1] in data:
         data[m[1]].append((int(m[2]), float(m[3])))

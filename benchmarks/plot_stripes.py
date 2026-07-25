@@ -20,12 +20,12 @@ LOG = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "stripes_16x4_chi
 
 head, sites = None, {}
 for line in open(LOG):
-    m = re.match(r"STRIPES Lx=(\d+) W=(\d+) chi=(\d+) U=([\d.]+) holes=(\d+) "
-                 r"hpin=([\d.]+) nsw=(\d+) : E0=(-?[\d.]+) \(([\d.]+)s\)", line)
+    m = re.match(r"STRIPES Lx=(\d+) W=(\d+) chi=(\d+) U=(-?[\d.]+) holes=(\d+) "
+                 r"hpin=(-?[\d.]+) nsw=(\d+)(?: tp=(-?[\d.]+))? : E0=(-?[\d.]+) \(([\d.]+)s\)", line)
     if m:
         head = dict(Lx=int(m[1]), W=int(m[2]), chi=int(m[3]), U=float(m[4]),
                     holes=int(m[5]), hpin=float(m[6]), nsw=int(m[7]),
-                    E0=float(m[8]), wall=float(m[9]))
+                    tp=float(m[8] or 0.0), E0=float(m[9]), wall=float(m[10]))
     m = re.match(r"PROF (\d+) (\d+) (\d+) (-?[\d.]+) (-?[\d.]+)", line)
     if m:
         sites[int(m[1])] = (int(m[2]), int(m[3]), float(m[4]), float(m[5]))

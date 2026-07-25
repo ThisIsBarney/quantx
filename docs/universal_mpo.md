@@ -576,3 +576,87 @@ without which a measurement MPO whose final completion lands on the last site ha
 underivable channel charges (caught by an exact-zero expectation in the x-bond
 test geometry; for Hamiltonian MPOs the anchors are redundant-but-consistent, and
 the whole regression is bit-identical).
+
+## Showcase: stripes vs pairing under diagonal hopping t'
+
+![Hubbard t-t'-U](hubbard_ttprime.svg)
+
+The natural sequel to the previous two figures: switch on the **next-nearest-neighbour
+diagonal hopping t'** and watch the stripe crystal and the pair field respond. Same
+16×4 cylinder, same U=8, same δ=1/8, same χ=1024 / 20-mixer-sweep protocol — *only t'
+changes* (convention: `H = −t Σ_NN − t' Σ_diag`, so t' > 0 has the same sign as t).
+
+| t' | stripe order parameter¹ | hole-density peak-to-peak | Φ_yy(r=1) | Σ_r \|Φ_yy\| | E₀ |
+|---|---|---|---|---|---|
+| −0.25 | 0.0269 | 0.0550 | 1.85e−2 | 2.20e−2 | −48.802 |
+| 0 | 0.0258 | 0.0535 | 1.57e−2 | 1.96e−2 | −48.263 |
+| **+0.25** | **0.0149** | **0.0327** | **2.75e−2** | **3.42e−2** | −52.544 |
+
+<sub>¹ amplitude of the period-4 Fourier component of the rung-averaged hole density
+over the bulk columns x = 2…13 (edges dropped).</sub>
+
+**The competition, quantitatively.** At t' = +0.25 the stripe amplitude drops **42 %**
+while the short-range pair field grows **75 %** — the diagonal hopping frustrates the
+antiphase stripe crystal and feeds the singlet channel, the textbook stripes-versus-
+superconductivity trade-off, here measured on one engine with one protocol. At
+t' = −0.25 the trend reverses mildly (stripes slightly firmer, pairing slightly
+weaker than at t' = 0). The ±t' asymmetry is large and physical: t' breaks the
+particle–hole symmetry of the doped band, and E₀ differs by 4.3 t between the two
+signs at fixed filling.
+
+**Honest scope.** These are single-(U, δ, χ) data points at 20 sweeps: the *trends*
+are robust (they exceed the sweep-to-sweep drift by an order of magnitude), the
+absolute numbers are not converged, and the ξ_pair fits printed on the figure are
+unreliable at t' = +0.25 where Φ_yy(r) changes sign twice in the tail. Comparing to
+the literature t' phase diagram (e.g. Jiang & Devereaux, *Science* **365**, 1424
+(2019)) needs matched sign conventions plus χ ≫ 10⁴ with extrapolation; this figure
+demonstrates that the *machinery* — arbitrary-range JW chains, doped sectors,
+correlator MPOs, mixer convergence — composes into a t'-sweep at production scale.
+
+### The MPO: four diagonal chain classes
+
+`build_hubbard_lattice_split_mpo` gains `tp`. On the column-major chain a diagonal
+bond (x,y)–(x+1,y±1) is a *range-(W±1)* hop, so the builder grows four coupling
+classes — and two of them cost **nothing** because they share existing chains:
+
+| diagonal | chain range | slots |
+|---|---|---|
+| up-diag (y < W−1) | W+1 | own chains |
+| down-diag (y > 0) | W−1 | **reuses the y-wrap chains** (different emitter, same range) |
+| wrap-up (y = W−1 → next column y = 0) | 1 | **reuses the y-NN complete slots** |
+| wrap-down (y = 0 → next column y = W−1) | 2W−1 | own chains |
+
+χ grows 34 → 82 for the W=4 cylinder; `tp = 0` reproduces the previous layout
+exactly. ED-validated in `qx_hubbard_test` (section T-TP-U): all four classes fire on
+the W=3 cylinder and the MPO equals the explicit Jordan–Wigner Hamiltonian to
+**3.6e-15**, with the doped pinned ground state matching sector ED to **1.9e-13**.
+
+### What the 82-wide MPO broke (three engine bugs)
+
+Running the wider MPO at χ=1024 was itself a stress test, and it exposed three real
+engine defects that χ≤512 had never reached — each caught by a `QX_DMRG_TRACE` sweep
+trace plus a dbghelp-symbolized crash stack (`QX_CRASH_STACK=1`), on a box with no
+debugger installed:
+
+1. **Mixer expansion memory bomb.** `expand_M_LR` enumerated `chi_r × sectors`
+   extension column groups blindly — mostly zero, O(χ_W·χ·d) memory, >10 GB inside
+   the enrichment block at χ=1024. Now a pre-pass over the *same* nonzero (L, W, M)
+   structure collects only the (b′, q_R) pairs actually fed by a nonzero W block with
+   consistent charges. Zero columns could never survive the top-χ split, so kept
+   content is unchanged.
+2. **BDCSVD deflation crash, twice.** Both single-site splits called Eigen's `BDCSVD`
+   directly; it corrupts the stack inside `computeSVDofM` (its divide-and-conquer
+   deflation) — access violation symbolized to `BDCSVD.h:660`, first from the L→R
+   split at sweep 6, then from the R→L split at sweep 12.
+3. **…and it is not a size bug.** A size-gated fix (BDCSVD kept for small blocks)
+   still crashed at sweep 15, on a *modest* block whose singular values had bunched
+   into near-degeneracy. The single-site path now avoids BDCSVD entirely: LAPACK
+   `xgesdd` for large blocks (the backend the two-site truncation already trusts at
+   χ=1024), Eigen `JacobiSVD` (two-sided Jacobi — no deflation step) for the rest.
+
+Plus two fail-loud guards: a single-site centre that loses *all* charge sectors now
+throws instead of silently returning E=0 on a zero state — the failure mode that
+first showed up as a "successful" run reporting `E0 = 0.0` with all-zero profiles.
+After the fixes the t'=+0.25 production run completed all 20 sweeps clean
+(6567 s, 54 correlators), and the whole regression suite is bit-identical
+(`large_block` 3.644e-07).
