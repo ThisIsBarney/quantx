@@ -449,7 +449,8 @@ std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t, double tpe
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
                                                      double U, double mu,
                                                      bool y_periodic, double hpin,
-                                                     double tp) {
+                                                     double tp, double vamp, int vlam) {
+    constexpr double PI_QX = 3.14159265358979323846;
     const int d = 4, n = W * Lx;
     if (y_periodic && W == 2)
         // W=2 wrap coincides with the y-NN bond -- would double-count the rung.
@@ -556,6 +557,22 @@ std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t,
         for (int y = 0; y < W && y < n; ++y) {
             double h = -hpin * ((y % 2 == 0) ? 1.0 : -1.0);
             mpo[y].W((y == 0) ? 0 : start, 0) += h * Sz;   // site 0: cl=1, row 0 IS start
+        }
+    }
+    // Charge modulation: H += vamp * sum_i cos(2 pi (x_i - vlam/2) / vlam) n_i, a
+    // stripe-wavelength BIAS that imprints a chosen charge pattern (electrons are
+    // pushed off the columns where the cosine peaks, i.e. off x = vlam/2 + k*vlam,
+    // exactly where the stripe seed digs its holes). n is diagonal in both charges,
+    // so the bond structure is untouched -- same post-assembly patch as hpin.
+    // The biased ground state is NOT a state of the physical H: to compare stripe
+    // patterns fairly, measure the UNBIASED H on it (a legitimate variational upper
+    // bound for any vamp), which is what the QX_STRIPES duel mode does.
+    if (vamp != 0.0 && vlam > 0) {
+        Mat Nop = Mat::Zero(4, 4); Nop(1,1) = 1; Nop(2,2) = 1; Nop(3,3) = 2;
+        for (int i = 0; i < n; ++i) {
+            int x = i / W;
+            double v = vamp * std::cos(2.0 * PI_QX * (x - 0.5 * vlam) / vlam);
+            mpo[i].W((i == 0) ? 0 : start, (i == n - 1) ? 0 : done) += v * Nop;
         }
     }
     return mpo;

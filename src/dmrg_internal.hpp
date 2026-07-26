@@ -187,11 +187,17 @@ std::vector<MPOSite> build_hubbard_ladder_split_mpo(int Lx, double t = 1.0, doub
 // (x,y)-(x+1,y+-1) bond (cylinder: y wraps mod W). chi grows 34 -> 82 for W=4.
 // Width limit (fail-loud, chi <= 128): W <= 15 at tp=0, W <= 10 open / W <= 6
 // cylinder with tp != 0 (chi = 20W+2 there).
+// vamp/vlam: charge-modulation BIAS, H += vamp sum_i cos(2 pi (x_i - vlam/2)/vlam) n_i
+// -- imprints a stripe pattern of wavelength vlam (holes gather at x = vlam/2 + k*vlam).
+// n-diagonal, so both charges stay conserved. The biased GS is not a state of the
+// physical H; measure the UNBIASED H on it (variational upper bound) to compare
+// competing stripe patterns fairly.
 std::vector<MPOSite> build_hubbard_lattice_split_mpo(int Lx, int W, double t = 1.0,
                                                      double U = 0.0, double mu = 0.0,
                                                      bool y_periodic = false,
                                                      double hpin = 0.0,
-                                                     double tp = 0.0);
+                                                     double tp = 0.0,
+                                                     double vamp = 0.0, int vlam = 0);
 // Singlet pair-field correlator MPO O = Delta^dag_{b1} Delta_{b2} on the width-W
 // lattice; bond b = (x, y, orient) with orient 'y' (rung, i'=i+1, y < W-1) or 'x'
 // (leg, i'=i+W). b1 must lie strictly left of b2. chi=7; N- and Sz-conserving

@@ -95,14 +95,19 @@ int main(int argc, char** argv) {
     int chi = argc > 1 ? std::atoi(argv[1]) : 128;   // Mott is area-law: chi=128 is converged
     const double t = 1.0;
 
-    // STRIPES showcase: QX_STRIPES="Lx W chi [U holes hpin nsw]" -> hole-doped
+    // STRIPES showcase: QX_STRIPES="Lx W chi [U holes hpin nsw tp lam]" -> hole-doped
     // width-W cylinder GS with staggered edge pinning (x=0 column); emits per-site
     // charge/spin profiles ("PROF i x y n 2sz" lines) for the stripe-order figure.
     // holes must be even (removed as up/dn pairs so the target sector is 2Sz=0).
+    // lam > 0 seeds a stripe pattern of WAVELENGTH lam: Lx/lam stripes, holes/(Lx/lam)
+    // holes dug from each stripe column -- the lambda=4 (half-filled) vs lambda=8
+    // (filled) duel at delta=1/8. lam = 0 keeps the evenly-spread seed.
     if (const char* sz = std::getenv("QX_STRIPES")) {
         int Lx = 16, Wd = 4, cchi = 1024; double U = 8.0;
-        int holes = 8; double hp = 0.5; int nsw = 16; double tp = 0.0;
-        std::sscanf(sz, "%d %d %d %lf %d %lf %d %lf", &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw, &tp);
+        int holes = 8; double hp = 0.5; int nsw = 16; double tp = 0.0, lam = 0, vamp = 0.0;
+        std::sscanf(sz, "%d %d %d %lf %d %lf %d %lf %lf %lf",
+                    &Lx, &Wd, &cchi, &U, &holes, &hp, &nsw, &tp, &lam, &vamp);
+        const int lami = (int)lam;
         const int n = Wd * Lx, Ne = n - holes;
         if (holes < 0 || holes > n || holes % 2 != 0 || n % 2 != 0) {
             std::fprintf(stderr, "QX_STRIPES: need even n and even holes in [0, n] "
@@ -114,28 +119,79 @@ int main(int argc, char** argv) {
 #else
         setenv("QX_PROFILES", "1", 1);
 #endif
-        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp, tp);
-        // init: half-filling Neel, then dig the holes at evenly spread sites,
-        // alternating up/dn removals so the seed lands exactly in (Ne, 2Sz=0).
+        // vamp != 0: run the BIASED Hamiltonian (charge modulation of wavelength lam,
+        // which holds a stripe pattern that a bare product seed cannot -- the seed is
+        // washed out by the two-site bond ramp) and report <H_0> measured on the
+        // resulting state. <psi|H_0|psi> is a legitimate variational upper bound for
+        // the physical H_0 whatever the bias was, so the two patterns can be compared.
+        auto mpo = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp, tp,
+                                                   vamp, lami);
+        auto mpo0 = build_hubbard_lattice_split_mpo(Lx, Wd, 1.0, U, 0.0, true, hp, tp);
+        // init: half-filling Neel, then dig the holes.
         std::vector<int> cfg(n);
         for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
-        for (int k = 0; k < holes; ++k) {
-            int want = (k % 2 == 0) ? 1 : 2;              // remove up, then dn, ...
-            int i0 = (int)(((double)k + 0.5) * n / holes);
-            for (int off = 0; off < n; ++off) {
-                int i = (i0 + off) % n;
-                if (cfg[i] == want) { cfg[i] = 0; break; }
+        if (lami > 0) {
+            // stripe seed: ns stripes of hps holes, one stripe column per period,
+            // centred in its period so the pattern is symmetric about the cylinder.
+            if (Lx % lami != 0) {
+                std::fprintf(stderr, "QX_STRIPES: lam=%d must divide Lx=%d\n", lami, Lx);
+                return 1;
+            }
+            const int ns = Lx / lami, hps = holes / ns;
+            if (ns == 0 || holes % ns != 0 || hps > Wd || hps % 2 != 0) {
+                std::fprintf(stderr, "QX_STRIPES: holes=%d cannot form %d stripes of an "
+                             "even count <= W=%d\n", holes, ns, Wd);
+                return 1;
+            }
+            for (int k = 0; k < ns; ++k) {
+                int xs = lami / 2 + k * lami;             // stripe column
+                for (int y = 0; y < hps; ++y) cfg[Wd * xs + y] = 0;
+            }
+        } else {
+            for (int k = 0; k < holes; ++k) {             // evenly spread (the default)
+                int want = (k % 2 == 0) ? 1 : 2;          // remove up, then dn, ...
+                int i0 = (int)(((double)k + 0.5) * n / holes);
+                for (int off = 0; off < n; ++off) {
+                    int i = (i0 + off) % n;
+                    if (cfg[i] == want) { cfg[i] = 0; break; }
+                }
+            }
+        }
+        // The seed must land exactly in the target sector, or the bond spaces have no
+        // path for it and DMRG throws a confusing width-0 error deep inside.
+        {
+            const int qs[4] = {pack_q2(0,0), pack_q2(1,+1), pack_q2(1,-1), pack_q2(2,0)};
+            int qtot = 0;
+            for (int i = 0; i < n; ++i) qtot += qs[cfg[i]];
+            if (qtot != pack_q2(Ne, 0)) {
+                std::fprintf(stderr, "QX_STRIPES: seed charge %d != target %d "
+                             "(hole pattern broke N or 2Sz)\n", qtot, pack_q2(Ne, 0));
+                return 1;
             }
         }
         auto t0 = std::chrono::steady_clock::now();
-        DMRGResult r = run_dmrg_blocks(mpo, n, cchi, 1e-11, nsw, 1e-12,
-                                       pack_q2(Ne, 0), &cfg);
+        DMRGResult r;
+        double EH0;
+        if (vamp != 0.0) {
+            auto vals = gs_mpo_expectations(mpo, n, cchi, 1e-11, nsw, 1e-12,
+                                            pack_q2(Ne, 0), &cfg, {mpo0}, &r);
+            EH0 = vals[0];                       // <psi_biased| H_0 |psi_biased>
+        } else {
+            r = run_dmrg_blocks(mpo, n, cchi, 1e-11, nsw, 1e-12, pack_q2(Ne, 0), &cfg);
+            EH0 = r.energy;                      // unbiased run: the GS energy itself
+        }
         double w0 = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
         double nsum = 0;
         for (double v : r.site_n) nsum += v;
+        // NOTE: everything after the wall time is appended, so the existing
+        // plot_stripes.py header regex (which ends there) keeps matching. E0 is the
+        // energy of whatever Hamiltonian was optimised; EH0 is always the physical
+        // (unbiased) energy -- the quantity to compare across stripe patterns.
         std::printf("STRIPES Lx=%d W=%d chi=%d U=%.2f holes=%d hpin=%.2f nsw=%d tp=%.2f : "
-                    "E0=%.10f (%.1fs)  sum<n>=%.6f (target %d)\n",
-                    Lx, Wd, cchi, U, holes, hp, nsw, tp, r.energy, w0, nsum, Ne);
+                    "E0=%.10f (%.1fs)  sum<n>=%.6f (target %d) lam=%d trunc=%.6e "
+                    "E0site=%.10f vamp=%.4f EH0=%.10f EH0site=%.10f\n",
+                    Lx, Wd, cchi, U, holes, hp, nsw, tp, r.energy, w0, nsum, Ne,
+                    lami, r.truncation_error, r.energy / n, vamp, EH0, EH0 / n);
         for (int i = 0; i < n; ++i)
             std::printf("PROF %d %d %d %.8f %.8f\n", i, i / Wd, i % Wd,
                         r.site_n[i], r.site_2sz[i]);
