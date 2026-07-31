@@ -384,7 +384,7 @@ int main(int argc, char** argv) {
         std::vector<int> cfg(n_c);
         for (int i = 0; i < n_c; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
         const int target = pack_q2(n_c, 0);
-        auto psi0 = hva_prepare_init(mpo0, n_c, chi_b, target, &cfg);
+        auto psi0 = hva_prepare_init(mpo0, n_c, chi_prep, target, &cfg);
         double E_exact = run_dmrg_blocks(mpo, n_c, 512, 1e-12, 60, 1e-11,
                                          target, &cfg).energy;
         for (int p : depths_c) {

@@ -654,6 +654,11 @@ add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
 add_test(NAME qx_tdvp_blocks_test COMMAND qx_tdvp_blocks_test)
 add_test(NAME qx_mpo_sym_test COMMAND qx_mpo_sym_test)
 add_test(NAME qx_hubbard_test COMMAND qx_hubbard_test)
+# Measured ~17 min on a 20-core box: the ED sections build dense 4^6 fermion
+# operators and run several 120-sweep DMRGs, and the HVA circuit case adds a
+# state-vector reference. ctest's 1500 s default leaves no headroom on a slower or
+# CPU-only machine.
+set_tests_properties(qx_hubbard_test PROPERTIES TIMEOUT 5400)
 add_test(NAME qx_thermal_blocks_test COMMAND qx_thermal_blocks_test)
 add_test(NAME qx_thermal_spectral_test COMMAND qx_thermal_spectral_test)
 add_test(NAME qx_thermal_transport_test COMMAND qx_thermal_transport_test)

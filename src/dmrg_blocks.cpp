@@ -2316,6 +2316,36 @@ static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<i
     return s;
 }
 
+// Same, but selecting each site's local state BY INDEX. cps_init's charge lookup is
+// ambiguous whenever qphys is non-injective -- single-U(1) Hubbard has
+// qphys = {0,1,1,2}, so charge 1 silently resolves to |up> and a |dn> seed becomes
+// |up> with no error (the total charge still checks out). Anything that needs a
+// specific singly-occupied product state, like the VQE circuits, must come here.
+static BMPS cps_init_states(const std::vector<MPOSite>& mpo, int n,
+                            const std::vector<int>& cfg,
+                            const std::vector<int>& qphys) {
+    BMPS s; s.n = n;
+    std::vector<int> qb(n + 1); qb[0] = 0;
+    for (int i = 0; i < n; ++i) qb[i+1] = qb[i] + qphys[cfg[i]];
+    s.bond.resize(n + 1);
+    for (int i = 0; i <= n; ++i) s.bond[i] = BondSpace::from_pairs({{qb[i], 1}});
+    s.A.resize(n);
+    for (int i = 0; i < n; ++i) {
+        int q_L = qb[i];
+        auto cols = phys_groups(s.bond[i+1], q_L, +1, qphys);
+        Mat blk = Mat::Zero(1, phys_total(cols));
+        blk(0, cols[cfg[i]].off) = S(1);          // the requested state, unambiguously
+        s.A[i][q_L] = blk;
+    }
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+    s.L.assign(n + 1, BlockEnv()); s.R.assign(n + 1, BlockEnv());
+    { BlockEnv L0; L0.bs = s.bond[0]; L0.blocks[0][qb[0]] = Mat::Constant(1,1,S(1)); s.L[0] = L0; }
+    { BlockEnv Rn; Rn.bs = s.bond[n]; Rn.blocks[0][qb[n]] = Mat::Constant(1,1,S(1)); s.R[n] = Rn; }
+    for (int i = n - 1; i >= 0; --i)
+        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i], delta);
+    return s;
+}
+
 // One symmetric second-order block TDVP2 step (mutates s; centre returns to 0).
 static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
                               double dt, bool imag, int chi_max, double cutoff) {
@@ -2845,15 +2875,6 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     const int d = mpo[0].d;
 
     // initial product state (default: the Neel-like alternation cps_init uses)
-    std::vector<int> cfg;
-    if (init_config) cfg = *init_config;
-    else { cfg.assign(n, 0); for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2; }
-    {   // fail loudly if the seed is not in the requested sector
-        int qtot = 0;
-        for (int i = 0; i < n; ++i) qtot += qphys[cfg[i]];
-        if (qtot != total_charge)
-            throw std::runtime_error("run_hva: init_config charge does not match total_charge");
-    }
     BMPS s;
     if (init_state) {
         // |psi_0> = ground state of init_mpo (the standard HVA state preparation:
@@ -2864,11 +2885,36 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
         // the singlet ground state -- measured as a ~35% energy plateau that no
         // depth or optimiser budget removes, and that persists at U=0 where the
         // exact ground state is a free-fermion determinant.
-        s = *init_state;                  // prepared once by hva_prepare_init
+        // Validate the state we ACTUALLY use (not the init_config we ignore): a
+        // handle prepared at another size would run off the end of s.A, and one at
+        // another filling would silently answer for the wrong sector.
+        if (init_state->n != n)
+            throw std::runtime_error("run_hva: prepared init state has a different length");
+        const BondSpace& bR = init_state->bond[n];
+        if (bR.n_sectors() != 1 || bR.qns[0] != total_charge)
+            throw std::runtime_error("run_hva: prepared init state is not in the "
+                                     "requested total-charge sector");
+        s = *init_state;                  // deep copy: every call starts from |psi_0>
     } else {
-        std::vector<int> seed(n);
-        for (int i = 0; i < n; ++i) seed[i] = qphys[cfg[i]];
-        s = cps_init(mpo, n, seed, qphys);
+        std::vector<int> cfg;
+        if (init_config) {
+            cfg = *init_config;
+            if ((int)cfg.size() != n)
+                throw std::runtime_error("run_hva: init_config length must equal n");
+            for (int c : cfg)
+                if (c < 0 || c >= d)
+                    throw std::runtime_error("run_hva: init_config state index out of range [0,d)");
+        } else {
+            cfg.assign(n, 0);
+            for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        }
+        int qtot = 0;
+        for (int i = 0; i < n; ++i) qtot += qphys[cfg[i]];
+        if (qtot != total_charge)
+            throw std::runtime_error("run_hva: sum of init_config charges != total_charge");
+        // BY STATE INDEX, not by charge: a non-injective qphys (single-U(1) Hubbard
+        // is {0,1,1,2}) would otherwise turn a |dn> seed into |up> silently.
+        s = cps_init_states(mpo, n, cfg, qphys);
     }
 
     // the on-site term's diagonal (checked to BE diagonal -- HVA needs it exact)
@@ -2883,6 +2929,35 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
             if (a != b && std::abs(hs(a, b)) > 1e-13)
                 throw std::runtime_error("run_hva: on-site term is not diagonal "
                                          "(the U layer would need a general one-site gate)");
+    // ONE bulk site supplies both the bond gate and the on-site phases, and they are
+    // then applied to every bond/site -- so the MPO must actually be uniform along
+    // the chain. Site-dependent on-site terms exist in this very codebase (the
+    // cylinder builder's hpin edge pinning and vamp charge modulation), and a
+    // position-dependent MPO would otherwise be simulated as if it were uniform,
+    // silently answering for a different Hamiltonian. Compare every site's start-row
+    // and done-column against the bulk (boundary sites store the start row / done
+    // column at index 0).
+    {
+        const int st = Wb.chi_r - 1, dn = 0;
+        auto same = [](const Mat& a, const Mat& b) {
+            return a.rows() == b.rows() && a.cols() == b.cols() &&
+                   (a - b).cwiseAbs().maxCoeff() <= 1e-12;
+        };
+        auto bail = []() {
+            throw std::runtime_error("run_hva: MPO is not uniform along the chain "
+                "(site-dependent terms such as edge pinning or a charge bias are not "
+                "representable by one repeated layer gate)");
+        };
+        for (int i = 0; i < n; ++i) {
+            const MPOSite& W = mpo[i];
+            const int sr = (W.chi_l == 1) ? 0 : st;   // this site's start row
+            const int dc = (W.chi_r == 1) ? 0 : dn;   // this site's done column
+            for (int b = 0; b < W.chi_r; ++b)         // emitted channels + on-site term
+                if (!same(W.W(sr, b), Wb.W(st, (W.chi_r == 1) ? dn : b))) bail();
+            for (int a = 0; a < W.chi_l; ++a)         // completing channels
+                if (!same(W.W(a, dc), Wb.W((W.chi_l == 1) ? st : a, dn))) bail();
+        }
+    }
 
     HVAResult out;
     const std::map<int,RVec> no_sv;
@@ -2940,7 +3015,8 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
         onsite_layer(lay[2]);           // on-site U
         out.layer_bond.push_back(max_bond());
     }
-    out.max_bond = out.layer_bond.empty() ? max_bond() : out.layer_bond.back();
+    out.max_bond = max_bond();
+    for (int b : out.layer_bond) out.max_bond = std::max(out.max_bond, b);
     out.trunc_err = worst_trunc;
     // Half-chain entanglement entropy: walk the orthogonality centre (which the last
     // bond_layer left at site 0) to the middle bond LOSSLESSLY and read the Schmidt
@@ -4398,11 +4474,17 @@ struct HVAInitState { BlockDMRG<Cx>::BMPS state; };
 
 std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_mpo,
                                                int n, int chi_max, int total_charge,
-                                               const std::vector<int>* init_config) {
+                                               const std::vector<int>* init_config,
+                                               DMRGResult* prep_out) {
     require_uniform_local_dim(init_mpo, "hva_prepare_init");
     auto h = std::make_shared<HVAInitState>();
-    BlockDMRG<Cx>::run(init_mpo, n, chi_max, 1e-12, 60, 1e-12, &h->state,
-                       total_charge, init_config);
+    // The preparation's own truncation is NOT part of the circuit's trunc_err, and
+    // callers deliberately prepare at a smaller chi than they run the circuit at, so
+    // hand the DMRGResult back rather than dropping it: at large n the state-prep
+    // error can dominate everything the circuit reports.
+    DMRGResult r = BlockDMRG<Cx>::run(init_mpo, n, chi_max, 1e-12, 60, 1e-12, &h->state,
+                                      total_charge, init_config);
+    if (prep_out) *prep_out = r;
     return h;
 }
 

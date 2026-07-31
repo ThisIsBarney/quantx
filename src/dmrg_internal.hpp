@@ -367,9 +367,13 @@ struct HVAResult {
     // classical simulability: an MPS needs chi ~ e^S, so S saturating with depth means
     // the ansatz stays classically cheap no matter how many qubits it uses, while S
     // growing toward the volume-law value (~n) is what a quantum computer would be
-    // needed for. Cap-independent, unlike max_bond.
+    // needed for. Read from a LOSSLESS centre walk, so it is not distorted by the
+    // cutoff -- but it is still the entropy of the chi-capped state and is bounded by
+    // ln(chi); trust it only while trunc_err stays far below the scale of interest.
     double S_half = 0;
-    double trunc_err = 0;              // largest discarded weight during the circuit
+    // LARGEST single discarded weight over the circuit's ~2(n-1)p truncations, not
+    // their sum: the accumulated error can be up to that factor larger.
+    double trunc_err = 0;
 };
 // Prepared initial state for repeated circuit runs. VQE evaluates the SAME circuit
 // from the SAME |psi_0> thousands of times, so preparing the state once per
@@ -380,9 +384,13 @@ struct HVAInitState;
 // is the U=0 (non-interacting) ground state. This is structural, not cosmetic: every
 // HVA generator commutes with S^2, so <S^2> is conserved along the entire circuit and
 // a Neel product state (<S^2> = 3 at n=6) can never reach the singlet ground state.
+// prep_out (optional): the state-preparation DMRG's own result. Its truncation is
+// NOT included in the circuit's trunc_err, and preparing at a smaller chi than the
+// circuit runs at is normal, so check it when n is large.
 std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_mpo,
                                                int n, int chi_max, int total_charge = 0,
-                                               const std::vector<int>* init_config = nullptr);
+                                               const std::vector<int>* init_config = nullptr,
+                                               DMRGResult* prep_out = nullptr);
 HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::vector<std::array<double,3>>& angles,
                           int chi_max, double cutoff, int total_charge = 0,

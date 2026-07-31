@@ -736,10 +736,21 @@ circuit is simulated to a discarded weight of **4.5e-11**. The quantum-advantage
 threshold for this ansatz is therefore not the qubit count but the depth — and Part A
 shows the depth that would be needed grows with the system.
 
-*Reading χ correctly:* the reported χ hits the 4096 cap at n ≥ 16, which does **not**
-contradict S ≈ 1.5. χ is the total bond dimension summed over all charge sectors at a
-1e-10 cutoff, so it tracks the Schmidt tail, while S is cutoff-independent. That is
-exactly why the primary metric here is S and not χ.
+*Three things to read correctly here.* (i) The reported χ hits the 4096 cap at
+n ≥ 16, which does **not** contradict S ≈ 1.5: χ is the total bond dimension summed
+over all charge sectors at a 1e-10 cutoff, so it tracks the Schmidt tail, while S
+does not — which is why S is the primary metric. (ii) S is read from a *lossless*
+centre walk, but it is still the entropy of the χ-capped state and is bounded by
+ln χ = 8.3; at S ≈ 1.5 with a discarded weight of 1e-11 that bound is nowhere near
+binding, but the number is not unconditionally cap-free. (iii) The quoted
+`trunc_err` is the **largest single** discarded weight over the circuit's ~2(n−1)p
+truncations, not their sum, so the accumulated error can be up to that factor
+larger — still ~1e-8 at the worst point, far below the energy scales here.
+
+*The p=1 row is the identity circuit.* θ=0 is an exact stationary point of this
+ansatz (⟨ψ|[A,B]|ψ⟩ = 0 for a real ψ and real symmetric generators, and |ψ₀⟩ is
+real), so the optimiser correctly finds nothing to do at depth 1 and `frac = 0` on
+every p=1 point. Its S is the *state-preparation* entropy, not a circuit result.
 
 ### Part C — does the angle transfer hold up?
 

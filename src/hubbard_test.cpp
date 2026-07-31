@@ -846,11 +846,23 @@ int main() {
                 (i % 2 == 0 ? Hev : Hod) += -t * (hop + MatC(hop.adjoint()));
             }
             for (int i = 0; i < n; ++i) Hu += U * (ferm(n,i,Nu) * ferm(n,i,Nd));
-            auto expo = [&](const MatC& Hx, double th) {
+            // Diagonalise each generator ONCE: the angles vary per layer, the
+            // eigenbasis does not. (Doing it inside the layer loop cost 9 eigen-
+            // solves on 4096x4096 matrices at n=6 -- minutes of test time.) H_U is
+            // diagonal already, so it needs no solver at all.
+            struct Eig { MatC V; Eigen::VectorXd w; bool diag = false; };
+            auto prep = [&](const MatC& Hx, bool is_diag) {
+                Eig e; e.diag = is_diag;
+                if (is_diag) { e.w = Hx.diagonal().real(); return e; }
                 Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
-                Eigen::ArrayXcd ph = (Cxd(0,-th) * es.eigenvalues().array().cast<Cxd>()).exp();
-                return MatC(es.eigenvectors() * ph.matrix().asDiagonal()
-                            * es.eigenvectors().adjoint());
+                e.V = es.eigenvectors(); e.w = es.eigenvalues();
+                return e;
+            };
+            const Eig Eev = prep(Hev, false), Eod = prep(Hod, false), Eu = prep(Hu, true);
+            auto apply = [&](const Eig& e, double th, Eigen::VectorXcd v) {
+                Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
+                if (e.diag) return Eigen::VectorXcd(ph * v.array());
+                return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
             };
             // Neel product state |up dn up dn ...>, index = sum_i state_i * 4^(n-1-i)
             std::vector<int> cfg(n);
@@ -866,9 +878,9 @@ int main() {
                                                      {-0.13, 0.29, -0.31},
                                                      {0.19, 0.41, 0.23}};
             for (auto& L : ang) {
-                v = expo(Hev, L[0]) * v;
-                v = expo(Hod, L[1]) * v;
-                v = expo(Hu,  L[2]) * v;
+                v = apply(Eev, L[0], v);
+                v = apply(Eod, L[1], v);
+                v = apply(Eu,  L[2], v);
             }
             const MatC& Hfull = hubbard_ed_H(n, t, U);
             double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
