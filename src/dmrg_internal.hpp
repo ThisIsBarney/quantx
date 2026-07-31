@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <memory>
 #include <stdexcept>
 #include <Eigen/Dense>
 #include <nlohmann/json.hpp>
@@ -347,6 +348,46 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                            int max_bond, double cutoff, int n_sweeps, double tol,
                            int total_charge = 0,
                            const std::vector<int>* init_config = nullptr);
+
+// -- VQE / quantum-circuit simulation on the block-sparse engine ---------------
+// Hamiltonian Variational Ansatz (HVA), the standard fermionic VQE circuit:
+//   |psi(theta)> = prod_l e^{-i th_U^l H_U} e^{-i th_odd^l H_odd} e^{-i th_even^l H_even} |psi_0>
+// Each layer's angles are {even-bond hopping, odd-bond hopping, on-site U}. The bonds
+// within one parity class commute, so its exponential factorizes EXACTLY into two-site
+// gates (no Trotter error inside a layer) and the on-site layer is a diagonal one-site
+// gate. The ansatz conserves N and 2Sz, so the U(1)xU(1) block machinery applies to the
+// circuit -- exact simulation at sizes far past current quantum hardware, with the
+// bond dimension reached measuring the VQE state's entanglement.
+struct HVAResult {
+    double energy = 0;                 // <psi(theta)| H |psi(theta)>
+    int max_bond = 0;                  // largest bond dimension the circuit reached
+    double wall_s = 0;
+    std::vector<int> layer_bond;       // max bond after each layer (entanglement growth)
+    // Half-chain von Neumann entropy of the prepared state. THE number that decides
+    // classical simulability: an MPS needs chi ~ e^S, so S saturating with depth means
+    // the ansatz stays classically cheap no matter how many qubits it uses, while S
+    // growing toward the volume-law value (~n) is what a quantum computer would be
+    // needed for. Cap-independent, unlike max_bond.
+    double S_half = 0;
+    double trunc_err = 0;              // largest discarded weight during the circuit
+};
+// Prepared initial state for repeated circuit runs. VQE evaluates the SAME circuit
+// from the SAME |psi_0> thousands of times, so preparing the state once per
+// optimisation instead of once per energy evaluation is the difference between
+// seconds and hours. Opaque handle: the block MPS type is internal to dmrg_blocks.cpp.
+struct HVAInitState;
+// |psi_0> = the DMRG ground state of init_mpo -- the standard HVA state preparation
+// is the U=0 (non-interacting) ground state. This is structural, not cosmetic: every
+// HVA generator commutes with S^2, so <S^2> is conserved along the entire circuit and
+// a Neel product state (<S^2> = 3 at n=6) can never reach the singlet ground state.
+std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_mpo,
+                                               int n, int chi_max, int total_charge = 0,
+                                               const std::vector<int>* init_config = nullptr);
+HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
+                          const std::vector<std::array<double,3>>& angles,
+                          int chi_max, double cutoff, int total_charge = 0,
+                          const std::vector<int>* init_config = nullptr,
+                          const std::shared_ptr<HVAInitState>& init = nullptr);
 
 // One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
 // (e.g. pair-field correlators): the GS is computed once, then for each obs MPO

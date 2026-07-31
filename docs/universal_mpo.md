@@ -660,3 +660,120 @@ first showed up as a "successful" run reporting `E0 = 0.0` with all-zero profile
 After the fixes the t'=+0.25 production run completed all 20 sweeps clean
 (6567 s, 54 correlators), and the whole regression suite is bit-identical
 (`large_block` 3.644e-07).
+
+## Showcase: fermionic VQE — how deep, and is the circuit classically hard?
+
+![VQE on the block engine](vqe_hubbard.svg)
+
+The engine turned on quantum computing. The **Hamiltonian Variational Ansatz** (HVA),
+the standard fermionic VQE circuit for the Hubbard model, is p layers of
+
+    e^{-i θ_U H_U} · e^{-i θ_odd H_odd} · e^{-i θ_even H_even}
+
+and **every layer conserves N and 2Sz** — so the whole U(1)×U(1) block-sparse
+machinery applies to a *quantum circuit*, not just to a Hamiltonian. Bonds within one
+parity class commute, so that layer's exponential factorizes **exactly** into two-site
+gates (no Trotter error inside a layer), and the on-site layer is a diagonal one-site
+gate: free, and it generates no entanglement. Both gates come from the model's own
+MPO — `build_gate_from_mpo(mpo, -iθ, 0, 0)` drops the on-site weights and returns
+exactly the bond hopping term.
+
+**Exactness gate** (`qx_hubbard_test`, section HVA CIRCUIT): the same circuit, the same
+initial state, the same angles, run on the block MPS and on a dense 4ⁿ state-vector
+simulator agree to **5.3e-15 (n=4)** and **4.0e-11 (n=6)**, with the bond dimension
+sitting at the full-Hilbert-space bound — i.e. **no truncation**, so the comparison is
+clean rather than accidentally right.
+
+### The structural trap: ⟨S²⟩ is conserved by the whole circuit
+
+Starting the HVA from a Néel product state, the energy plateaus **~35 % above the
+ground state** and no circuit depth and no optimiser budget removes it. The diagnosis
+chain is worth recording because the symptom looks like an optimisation failure:
+
+1. the *relative* error is ~34 % at U=1, 4 and 12 alike — a bad-overlap story would
+   depend strongly on U;
+2. decisive test: it plateaus **at U→0 too**, where the exact ground state is just a
+   free-fermion Slater determinant;
+3. root cause: every HVA generator commutes with **S²**, so ⟨S²⟩ is a constant of
+   motion of the entire circuit. The Néel state has ⟨S²⟩ = 4.5 + 2[6·¼ + 9·(−¼)] =
+   **3.0**, not 0, so a singlet ground state is unreachable — the best possible energy
+   is bounded by Σ_S |c_S|² E₀(S).
+
+The fix is the literature-standard state preparation: start from the **U=0 ground
+state** (a closed-shell Slater determinant, hence a singlet), prepared by DMRG. The
+error immediately drops from the 1.05 plateau to 0.24 at p=2.
+
+### Part A — how deep must the circuit be (exact simulation)
+
+Restricted to sizes where the MPS is lossless by construction (χ = 4^{n/2}), so the
+numbers are the ansatz's own, not a truncation artefact:
+
+| error/site | p=2 | p=4 | p=6 | p=8 |
+|---|---|---|---|---|
+| n=4 (8 qubits) | 1.8e-2 | 7.6e-3 | 2.8e-4 | **1.6e-7** |
+| n=6 (12 qubits) | 4.0e-2 | 2.5e-2 | 1.0e-2 | 6.4e-3 |
+| n=8 (16 qubits) | 5.6e-2 | 2.5e-2 | 2.2e-2 | 1.2e-2 |
+
+The depth needed grows with the system: p=8 essentially solves 8 qubits and is still
+~1 % per site at 16.
+
+### Part B — and is the state classically hard? (the headline)
+
+One circuit run per point, no optimiser (angles transferred from the largest
+exactly-simulable size), so this reaches sizes the optimisation never could:
+
+| | 16 qubits | 24 | 32 | 48 | **64** |
+|---|---|---|---|---|---|
+| half-chain entropy S (p=8) | 0.579 | 0.843 | 1.053 | 1.309 | **1.467** |
+| S / n | 0.072 | 0.070 | 0.066 | 0.055 | **0.046** |
+| correlation energy captured | 96 % | 94 % | 92 % | 89 % | **88 %** |
+
+**S/n falls monotonically — this is not volume-law entanglement.** A logarithmic fit
+`S ≈ 0.647 ln n − 0.759` reproduces every point to **0.018**. Since an MPS needs
+χ ~ e^S, a VQE state whose entropy grows like log n stays classically representable
+*at any qubit count*: at 64 qubits, capturing 88 % of the correlation energy, the
+circuit is simulated to a discarded weight of **4.5e-11**. The quantum-advantage
+threshold for this ansatz is therefore not the qubit count but the depth — and Part A
+shows the depth that would be needed grows with the system.
+
+*Reading χ correctly:* the reported χ hits the 4096 cap at n ≥ 16, which does **not**
+contradict S ≈ 1.5. χ is the total bond dimension summed over all charge sectors at a
+1e-10 cutoff, so it tracks the Schmidt tail, while S is cutoff-independent. That is
+exactly why the primary metric here is S and not χ.
+
+### Part C — does the angle transfer hold up?
+
+Part B's premise is that the depth-p optimum at the largest exactly-simulable size
+stands in for the VQE circuit at larger n. Tested at n=12 by re-optimising the
+transferred angles in place:
+
+| p | S transferred | S re-optimised | ΔS | energy change |
+|---|---|---|---|---|
+| 2 | 1.007 | 1.022 | +0.014 | −5.6158 → −5.6281 |
+| 4 | 0.876 | 0.912 | +0.037 | −6.0830 → −6.0855 |
+| 6 | 0.815 | — | — | short Adam found no improvement |
+| 8 | 0.843 | — | — | short Adam found no improvement |
+
+At p=2 and 4 re-optimisation moves the energy by <0.05 % and S by ≤0.04, so the
+entanglement conclusion does not rest on the transfer. At p=6 and 8 the 25-step Adam
+made no progress at all, which neither confirms nor refutes the transfer there — the
+honest statement is that the check is positive at two depths and inconclusive at two.
+
+### Engineering notes
+
+Two cost mistakes worth recording, both found by watching wall-clock rather than by
+reasoning:
+
+- **The two questions do not belong in one loop.** "How deep" needs thousands of
+  circuit runs per point; "how entangled" needs *one*. Running them together spent
+  4 h on a single n=16 point that was truncation-limited anyway. Split apart, the
+  whole study is ~2 h, and Part A's exactness is guaranteed by construction (χ set to
+  4^{n/2}) instead of checked afterwards.
+- **State preparation deserves its own χ.** Passing the circuit's budget (4096) to
+  the DMRG that prepares |ψ₀⟩ cost 4 h and 11.6 GB at n=32 — to build a *free-fermion*
+  state whose entropy grows like (1/3)ln n and which is lossless at χ=256.
+
+The optimiser matters for honesty, not just speed: a Nelder-Mead simplex stalls in 3p
+dimensions (at p=6 a 6× larger budget only halved the error), which would have
+inflated the reported "depth needed". Layer-wise warm start → simplex → Adam on
+central-difference gradients is what the numbers above use.
