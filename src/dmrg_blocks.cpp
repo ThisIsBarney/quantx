@@ -2316,6 +2316,36 @@ static BMPS cps_init(const std::vector<MPOSite>& mpo, int n, const std::vector<i
     return s;
 }
 
+// Same, but selecting each site's local state BY INDEX. cps_init's charge lookup is
+// ambiguous whenever qphys is non-injective -- single-U(1) Hubbard has
+// qphys = {0,1,1,2}, so charge 1 silently resolves to |up> and a |dn> seed becomes
+// |up> with no error (the total charge still checks out). Anything that needs a
+// specific singly-occupied product state, like the VQE circuits, must come here.
+static BMPS cps_init_states(const std::vector<MPOSite>& mpo, int n,
+                            const std::vector<int>& cfg,
+                            const std::vector<int>& qphys) {
+    BMPS s; s.n = n;
+    std::vector<int> qb(n + 1); qb[0] = 0;
+    for (int i = 0; i < n; ++i) qb[i+1] = qb[i] + qphys[cfg[i]];
+    s.bond.resize(n + 1);
+    for (int i = 0; i <= n; ++i) s.bond[i] = BondSpace::from_pairs({{qb[i], 1}});
+    s.A.resize(n);
+    for (int i = 0; i < n; ++i) {
+        int q_L = qb[i];
+        auto cols = phys_groups(s.bond[i+1], q_L, +1, qphys);
+        Mat blk = Mat::Zero(1, phys_total(cols));
+        blk(0, cols[cfg[i]].off) = S(1);          // the requested state, unambiguously
+        s.A[i][q_L] = blk;
+    }
+    const std::vector<int> delta = derive_mpo_sym(mpo).delta;
+    s.L.assign(n + 1, BlockEnv()); s.R.assign(n + 1, BlockEnv());
+    { BlockEnv L0; L0.bs = s.bond[0]; L0.blocks[0][qb[0]] = Mat::Constant(1,1,S(1)); s.L[0] = L0; }
+    { BlockEnv Rn; Rn.bs = s.bond[n]; Rn.blocks[0][qb[n]] = Mat::Constant(1,1,S(1)); s.R[n] = Rn; }
+    for (int i = n - 1; i >= 0; --i)
+        s.R[i] = block_update_right(s.R[i+1], s.A[i], s.bond[i], s.bond[i+1], mpo[i], delta);
+    return s;
+}
+
 // One symmetric second-order block TDVP2 step (mutates s; centre returns to 0).
 static void tdvp2_step_blocks(BMPS& s, const std::vector<MPOSite>& mpo,
                               double dt, bool imag, int chi_max, double cutoff) {
@@ -2814,6 +2844,214 @@ static void apply_site_diag(BMPS& s, int site, const std::vector<S>& diag,
         for (int sc = 0; sc < (int)diag.size(); ++sc)
             if (cols[sc].width > 0) blk.middleCols(cols[sc].off, cols[sc].width) *= diag[sc];
     }
+}
+
+// ---- Hamiltonian Variational Ansatz (VQE) circuit simulation -----------------
+// |psi(theta)> = prod_{l=1..p} e^{-i th_U^l H_U} e^{-i th_o^l H_odd} e^{-i th_e^l H_even}
+//                |psi_0>, the standard HVA for the Hubbard model: H_even/H_odd are the
+// hopping terms on even/odd bonds (each a set of COMMUTING two-site terms, so its
+// exponential factorizes EXACTLY into two-site gates -- no Trotter error inside a
+// layer), H_U = sum_i U n_up n_dn is diagonal (exact one-site phases, no truncation).
+//
+// The point: this ansatz conserves N and 2Sz by construction, so the whole U(1)xU(1)
+// block-sparse machinery applies to a QUANTUM CIRCUIT -- the same simulation a
+// state-vector simulator does in 4^n memory runs here in the symmetry blocks, at
+// system sizes far past what quantum hardware reaches. The bond dimension the circuit
+// actually needs (layer_bond below) measures the VQE state's entanglement, i.e. where
+// classical simulability of the ansatz ends.
+//
+// Both gates come from the SAME model MPO: build_gate_from_mpo(mpo, tau, 0, 0) drops
+// the on-site weights and returns exp(tau * h_hop) for one bond, and W(start,done) is
+// the on-site term itself (diagonal for Hubbard: U n_up n_dn - mu n).
+static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
+                         const std::vector<std::array<double,3>>& angles,
+                         int chi_max, double cutoff, int total_charge,
+                         const std::vector<int>* init_config,
+                         const BMPS* init_state) {
+    static_assert(std::is_same_v<S, Cx>, "HVA circuits are complex");
+    using clk = std::chrono::steady_clock;
+    auto t0 = clk::now();
+    const std::vector<int>& qphys = mpo[0].phys_charge;
+    const int d = mpo[0].d;
+
+    // initial product state (default: the Neel-like alternation cps_init uses)
+    BMPS s;
+    if (init_state) {
+        // |psi_0> = ground state of init_mpo (the standard HVA state preparation:
+        // the NON-INTERACTING ground state, a closed-shell Slater determinant).
+        // This matters structurally, not just for overlap: every HVA generator
+        // commutes with S^2, so <S^2> is a constant of motion of the whole circuit.
+        // A Neel product state has <S^2> = 3 at n=6 (not 0), so it can NEVER reach
+        // the singlet ground state -- measured as a ~35% energy plateau that no
+        // depth or optimiser budget removes, and that persists at U=0 where the
+        // exact ground state is a free-fermion determinant.
+        // Validate the state we ACTUALLY use (not the init_config we ignore): a
+        // handle prepared at another size would run off the end of s.A, and one at
+        // another filling would silently answer for the wrong sector.
+        if (init_state->n != n)
+            throw std::runtime_error("run_hva: prepared init state has a different length");
+        const BondSpace& bR = init_state->bond[n];
+        if (bR.n_sectors() != 1 || bR.qns[0] != total_charge)
+            throw std::runtime_error("run_hva: prepared init state is not in the "
+                                     "requested total-charge sector");
+        s = *init_state;                  // deep copy: every call starts from |psi_0>
+    } else {
+        std::vector<int> cfg;
+        if (init_config) {
+            cfg = *init_config;
+            if ((int)cfg.size() != n)
+                throw std::runtime_error("run_hva: init_config length must equal n");
+            for (int c : cfg)
+                if (c < 0 || c >= d)
+                    throw std::runtime_error("run_hva: init_config state index out of range [0,d)");
+        } else {
+            cfg.assign(n, 0);
+            for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        }
+        int qtot = 0;
+        for (int i = 0; i < n; ++i) qtot += qphys[cfg[i]];
+        if (qtot != total_charge)
+            throw std::runtime_error("run_hva: sum of init_config charges != total_charge");
+        // BY STATE INDEX, not by charge: a non-injective qphys (single-U(1) Hubbard
+        // is {0,1,1,2}) would otherwise turn a |dn> seed into |up> silently.
+        s = cps_init_states(mpo, n, cfg, qphys);
+    }
+
+    // the on-site term's diagonal (checked to BE diagonal -- HVA needs it exact)
+    int bulk = -1, bw = 0;
+    for (int i = 0; i < n; ++i)
+        if (mpo[i].chi_l == mpo[i].chi_r && mpo[i].chi_l >= bw) { bw = mpo[i].chi_l; bulk = i; }
+    if (bulk < 0) throw std::runtime_error("run_hva: no square bulk MPO site");
+    const MPOSite& Wb = mpo[bulk];
+    const Mat& hs = Wb.W(Wb.chi_r - 1, 0);
+    for (int a = 0; a < d; ++a)
+        for (int b = 0; b < d; ++b)
+            if (a != b && std::abs(hs(a, b)) > 1e-13)
+                throw std::runtime_error("run_hva: on-site term is not diagonal "
+                                         "(the U layer would need a general one-site gate)");
+    // ONE bulk site supplies both the bond gate and the on-site phases, and they are
+    // then applied to every bond/site -- so the MPO must actually be uniform along
+    // the chain. Site-dependent on-site terms exist in this very codebase (the
+    // cylinder builder's hpin edge pinning and vamp charge modulation), and a
+    // position-dependent MPO would otherwise be simulated as if it were uniform,
+    // silently answering for a different Hamiltonian. Compare every site's start-row
+    // and done-column against the bulk (boundary sites store the start row / done
+    // column at index 0).
+    {
+        const int st = Wb.chi_r - 1, dn = 0;
+        auto same = [](const Mat& a, const Mat& b) {
+            return a.rows() == b.rows() && a.cols() == b.cols() &&
+                   (a - b).cwiseAbs().maxCoeff() <= 1e-12;
+        };
+        auto bail = []() {
+            throw std::runtime_error("run_hva: MPO is not uniform along the chain "
+                "(site-dependent terms such as edge pinning or a charge bias are not "
+                "representable by one repeated layer gate)");
+        };
+        for (int i = 0; i < n; ++i) {
+            const MPOSite& W = mpo[i];
+            const int sr = (W.chi_l == 1) ? 0 : st;   // this site's start row
+            const int dc = (W.chi_r == 1) ? 0 : dn;   // this site's done column
+            for (int b = 0; b < W.chi_r; ++b)         // emitted channels + on-site term
+                if (!same(W.W(sr, b), Wb.W(st, (W.chi_r == 1) ? dn : b))) bail();
+            for (int a = 0; a < W.chi_l; ++a)         // completing channels
+                if (!same(W.W(a, dc), Wb.W((W.chi_l == 1) ? st : a, dn))) bail();
+        }
+    }
+
+    HVAResult out;
+    const std::map<int,RVec> no_sv;
+    double worst_trunc = 0;
+    // One layer of two-site gates on the bonds of a given parity. The bonds within a
+    // parity class are disjoint hence commuting, so applying them in a sweep is EXACT;
+    // the sweep also carries the orthogonality centre, and bonds of the other parity
+    // are still split (identity gate) so the centre keeps moving and every truncation
+    // happens in a canonical frame.
+    auto bond_layer = [&](double theta, int parity) {
+        if (theta == 0.0) return;
+        const Mat G = build_gate_from_mpo(mpo, Cx(0, -theta), 0.0, 0.0);
+        for (int i = 0; i < n - 1; ++i) {
+            auto theta_blk = form_theta(s.A[i], s.A[i+1], no_sv,
+                                        s.bond[i], s.bond[i+1], s.bond[i+2], true, qphys);
+            bt_expand_theta(theta_blk, s.bond[i], s.bond[i+2], qphys);
+            if (i % 2 == parity)
+                apply_gate_theta_general(theta_blk, s.bond[i], s.bond[i+2], G, d, qphys);
+            auto svd = block_svd_truncate(theta_blk, s.bond[i], s.bond[i+2],
+                                          chi_max, cutoff, false, false, qphys);
+            worst_trunc = std::max(worst_trunc, svd.trunc_err);
+            s.bond[i+1] = svd.new_mid_bs;
+            s.A[i]   = bt_A_from_U(svd, s.bond[i], s.bond[i+1], qphys);
+            s.A[i+1] = bt_center_LR(svd);
+        }
+        for (int i = n - 2; i >= 0; --i) {          // sweep back: centre returns to 0
+            auto theta_blk = form_theta(s.A[i], s.A[i+1], no_sv,
+                                        s.bond[i], s.bond[i+1], s.bond[i+2], true, qphys);
+            bt_expand_theta(theta_blk, s.bond[i], s.bond[i+2], qphys);
+            auto svd = block_svd_truncate(theta_blk, s.bond[i], s.bond[i+2],
+                                          chi_max, cutoff, false, false, qphys);
+            worst_trunc = std::max(worst_trunc, svd.trunc_err);
+            s.bond[i+1] = svd.new_mid_bs;
+            s.A[i+1] = svd.Vt;
+            s.A[i]   = bt_center_RL(svd, s.bond[i], s.bond[i+1], qphys);
+        }
+    };
+    // The on-site layer: a diagonal one-site gate, applied exactly (no SVD, no
+    // truncation) -- the U rotation of the HVA costs nothing classically.
+    auto onsite_layer = [&](double theta) {
+        if (theta == 0.0) return;
+        std::vector<S> ph(d);
+        for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, -theta) * hs(a, a));
+        for (int i = 0; i < n; ++i) apply_site_diag(s, i, ph, qphys);
+    };
+    auto max_bond = [&]() {
+        int m = 0;
+        for (auto& b : s.bond) { int tt = 0; for (int dd : b.dims) tt += dd; m = std::max(m, tt); }
+        return m;
+    };
+
+    for (auto& lay : angles) {
+        bond_layer(lay[0], 0);          // even bonds
+        bond_layer(lay[1], 1);          // odd bonds
+        onsite_layer(lay[2]);           // on-site U
+        out.layer_bond.push_back(max_bond());
+    }
+    out.max_bond = max_bond();
+    for (int b : out.layer_bond) out.max_bond = std::max(out.max_bond, b);
+    out.trunc_err = worst_trunc;
+    // Half-chain entanglement entropy: walk the orthogonality centre (which the last
+    // bond_layer left at site 0) to the middle bond LOSSLESSLY and read the Schmidt
+    // spectrum there. Unlike max_bond this does not depend on the chi cap, so it stays
+    // meaningful exactly where the simulation is truncated.
+    {
+        BMPS c = s;
+        double ent = 0;
+        for (int i = 0; i < n - 1; ++i) {
+            auto th = form_theta(c.A[i], c.A[i+1], no_sv,
+                                 c.bond[i], c.bond[i+1], c.bond[i+2], true, qphys);
+            bt_expand_theta(th, c.bond[i], c.bond[i+2], qphys);
+            auto svd = block_svd_truncate(th, c.bond[i], c.bond[i+2],
+                                          1 << 30, 0.0, false, false, qphys);
+            if (i == n / 2 - 1) {
+                double nrm2 = 0;
+                for (auto& [q, v] : svd.sv) nrm2 += v.squaredNorm();
+                if (nrm2 > 0)
+                    for (auto& [q, v] : svd.sv)
+                        for (int k = 0; k < v.size(); ++k) {
+                            double pk = v[k] * v[k] / nrm2;
+                            if (pk > 1e-16) ent -= pk * std::log(pk);
+                        }
+                break;
+            }
+            c.bond[i+1] = svd.new_mid_bs;
+            c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);
+            c.A[i+1] = bt_center_LR(svd);
+        }
+        out.S_half = ent;
+    }
+    rebuild_mpo_envs(s, mpo);
+    out.energy = bt_energy(s, mpo);
+    out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
+    return out;
 }
 
 // Den Nijs-Rommelse string order parameter of the ground state:
@@ -4227,6 +4465,37 @@ DMRGResult run_dmrg_blocks(const std::vector<MPOSite>& mpo, int n,
                                       nullptr, total_charge, init_config);
     return BlockDMRG<Cx>::run(mpo, n, max_bond, cutoff, n_sweeps, tol,
                               nullptr, total_charge, init_config);
+}
+
+// Entry point: HVA (VQE) circuit simulation. Complex scalar only -- a circuit is
+// unitary evolution, so the state is genuinely complex even for a real Hamiltonian.
+// The opaque prepared-state handle: a converged block MPS ready to be evolved.
+struct HVAInitState { BlockDMRG<Cx>::BMPS state; };
+
+std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_mpo,
+                                               int n, int chi_max, int total_charge,
+                                               const std::vector<int>* init_config,
+                                               DMRGResult* prep_out) {
+    require_uniform_local_dim(init_mpo, "hva_prepare_init");
+    auto h = std::make_shared<HVAInitState>();
+    // The preparation's own truncation is NOT part of the circuit's trunc_err, and
+    // callers deliberately prepare at a smaller chi than they run the circuit at, so
+    // hand the DMRGResult back rather than dropping it: at large n the state-prep
+    // error can dominate everything the circuit reports.
+    DMRGResult r = BlockDMRG<Cx>::run(init_mpo, n, chi_max, 1e-12, 60, 1e-12, &h->state,
+                                      total_charge, init_config);
+    if (prep_out) *prep_out = r;
+    return h;
+}
+
+HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
+                          const std::vector<std::array<double,3>>& angles,
+                          int chi_max, double cutoff, int total_charge,
+                          const std::vector<int>* init_config,
+                          const std::shared_ptr<HVAInitState>& init) {
+    require_uniform_local_dim(mpo, "run_hva_circuit");
+    return BlockDMRG<Cx>::run_hva(mpo, n, angles, chi_max, cutoff, total_charge,
+                                  init_config, init ? &init->state : nullptr);
 }
 
 // Entry point: GS once, then <GS|O|GS> per measurement MPO. The exported state has

@@ -483,6 +483,21 @@ endif()
 qx_set_config_output_dirs(qx_thermal_skw_emit)
 
 # J1-J2 frustrated-chain showcase of the universal-MPO block path (not a ctest).
+add_executable(qx_vqe_showcase src/vqe_showcase.cpp
+  src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
+target_link_libraries(qx_vqe_showcase PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_vqe_showcase PRIVATE OpenMP::OpenMP_CXX)
+endif()
+target_include_directories(qx_vqe_showcase PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src)
+if(QX_USE_CUDA)
+  target_link_libraries(qx_vqe_showcase PRIVATE qx_gpu)
+  target_compile_definitions(qx_vqe_showcase PRIVATE QX_USE_CUDA=1)
+endif()
+qx_set_config_output_dirs(qx_vqe_showcase)
+
 add_executable(qx_j1j2_showcase src/j1j2_showcase.cpp
   src/dmrg_mpo.cpp src/dmrg_dense.cpp src/dmrg_blocks.cpp)
 target_link_libraries(qx_j1j2_showcase PRIVATE qx_eigen nlohmann_json::nlohmann_json qx_blas)
@@ -639,6 +654,11 @@ add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
 add_test(NAME qx_tdvp_blocks_test COMMAND qx_tdvp_blocks_test)
 add_test(NAME qx_mpo_sym_test COMMAND qx_mpo_sym_test)
 add_test(NAME qx_hubbard_test COMMAND qx_hubbard_test)
+# Measured ~17 min on a 20-core box: the ED sections build dense 4^6 fermion
+# operators and run several 120-sweep DMRGs, and the HVA circuit case adds a
+# state-vector reference. ctest's 1500 s default leaves no headroom on a slower or
+# CPU-only machine.
+set_tests_properties(qx_hubbard_test PROPERTIES TIMEOUT 5400)
 add_test(NAME qx_thermal_blocks_test COMMAND qx_thermal_blocks_test)
 add_test(NAME qx_thermal_spectral_test COMMAND qx_thermal_spectral_test)
 add_test(NAME qx_thermal_transport_test COMMAND qx_thermal_transport_test)

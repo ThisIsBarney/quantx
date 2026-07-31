@@ -825,6 +825,78 @@ int main() {
         }
     }
 
+    // (o) HVA (VQE) CIRCUIT vs a dense state-vector simulation of the SAME circuit.
+    // The block-sparse circuit must reproduce, to machine precision, what a 4^n
+    // state-vector simulator gets: same product initial state, same layer angles,
+    // same gate order (even hops, odd hops, on-site U). This is the "our quantum
+    // circuit simulator is exact" gate -- with chi large enough that no truncation
+    // happens, the two must agree to ~1e-13.
+    {
+        const double t = 1.0, U = 4.0;
+        int cf = 0;
+        for (int n : {4, 6}) {
+            int dim = 1; for (int k = 0; k < n; ++k) dim *= 4;
+            auto mpo = build_hubbard_mpo(n, t, U, /*two_u1*/true);
+            // dense pieces: the even/odd hopping Hamiltonians and the on-site term
+            MatC Hev = MatC::Zero(dim, dim), Hod = MatC::Zero(dim, dim),
+                 Hu  = MatC::Zero(dim, dim);
+            for (int i = 0; i < n - 1; ++i) {
+                MatC hop = ferm(n,i,MatC(Cup.adjoint()))*ferm(n,i+1,Cup)
+                         + ferm(n,i,MatC(Cdn.adjoint()))*ferm(n,i+1,Cdn);
+                (i % 2 == 0 ? Hev : Hod) += -t * (hop + MatC(hop.adjoint()));
+            }
+            for (int i = 0; i < n; ++i) Hu += U * (ferm(n,i,Nu) * ferm(n,i,Nd));
+            // Diagonalise each generator ONCE: the angles vary per layer, the
+            // eigenbasis does not. (Doing it inside the layer loop cost 9 eigen-
+            // solves on 4096x4096 matrices at n=6 -- minutes of test time.) H_U is
+            // diagonal already, so it needs no solver at all.
+            struct Eig { MatC V; Eigen::VectorXd w; bool diag = false; };
+            auto prep = [&](const MatC& Hx, bool is_diag) {
+                Eig e; e.diag = is_diag;
+                if (is_diag) { e.w = Hx.diagonal().real(); return e; }
+                Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
+                e.V = es.eigenvectors(); e.w = es.eigenvalues();
+                return e;
+            };
+            const Eig Eev = prep(Hev, false), Eod = prep(Hod, false), Eu = prep(Hu, true);
+            auto apply = [&](const Eig& e, double th, Eigen::VectorXcd v) {
+                Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
+                if (e.diag) return Eigen::VectorXcd(ph * v.array());
+                return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
+            };
+            // Neel product state |up dn up dn ...>, index = sum_i state_i * 4^(n-1-i)
+            std::vector<int> cfg(n);
+            for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+            Eigen::VectorXcd v = Eigen::VectorXcd::Zero(dim);
+            {
+                int idx = 0;
+                for (int i = 0; i < n; ++i) idx = idx * 4 + cfg[i];
+                v(idx) = 1.0;
+            }
+            // three layers of deliberately non-trivial angles
+            std::vector<std::array<double,3>> ang = {{0.37, -0.21, 0.44},
+                                                     {-0.13, 0.29, -0.31},
+                                                     {0.19, 0.41, 0.23}};
+            for (auto& L : ang) {
+                v = apply(Eev, L[0], v);
+                v = apply(Eod, L[1], v);
+                v = apply(Eu,  L[2], v);
+            }
+            const MatC& Hfull = hubbard_ed_H(n, t, U);
+            double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
+            // the same circuit on the block-sparse MPS (chi large enough = exact)
+            HVAResult hr = run_hva_circuit(mpo, n, ang, 4096, 1e-14,
+                                           pack_q2(n, 0), &cfg);
+            double err = std::abs(hr.energy - E_ed);
+            bool okc = err < 1e-10;
+            std::printf("  HVA CIRCUIT n=%d: <H> block=%.10f  statevector=%.10f  "
+                        "err=%.1e  chi_used=%d  %s\n",
+                        n, hr.energy, E_ed, err, hr.max_bond, okc ? "OK" : "FAIL");
+            cf += !okc;
+        }
+        fails += cf;
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }
