@@ -2924,11 +2924,29 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     if (bulk < 0) throw std::runtime_error("run_hva: no square bulk MPO site");
     const MPOSite& Wb = mpo[bulk];
     const Mat& hs = Wb.W(Wb.chi_r - 1, 0);
+    // The on-site layer is exp(-i theta * h_site) applied to every site. For the
+    // Hubbard CHAIN h_site = U n_up n_dn is diagonal, so it is a pure phase (free,
+    // creates no entanglement). For a RUNG-FUSED ladder the fused site's on-site
+    // block also carries the RUNG HOPPING -- genuinely off-diagonal -- so the layer
+    // needs a general one-site unitary. That is fine as long as h_site does not mix
+    // different local charges, which would break the bond structure; check that.
+    bool hs_diag = true;
     for (int a = 0; a < d; ++a)
-        for (int b = 0; b < d; ++b)
-            if (a != b && std::abs(hs(a, b)) > 1e-13)
-                throw std::runtime_error("run_hva: on-site term is not diagonal "
-                                         "(the U layer would need a general one-site gate)");
+        for (int b = 0; b < d; ++b) {
+            if (a == b || std::abs(hs(a, b)) <= 1e-13) continue;
+            hs_diag = false;
+            if (qphys[a] != qphys[b])
+                throw std::runtime_error("run_hva: the on-site term mixes different "
+                    "local charges, so it cannot act as a one-site gate on a "
+                    "charge-blocked MPS");
+        }
+    // eigendecomposition once: only the angle varies between layers
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> hs_es;
+    if (!hs_diag) {
+        Eigen::MatrixXcd hsz = hs.template cast<Cx>();
+        hsz = 0.5 * (hsz + hsz.adjoint().eval());
+        hs_es.compute(hsz);
+    }
     // ONE bulk site supplies both the bond gate and the on-site phases, and they are
     // then applied to every bond/site -- so the MPO must actually be uniform along
     // the chain. Site-dependent on-site terms exist in this very codebase (the
@@ -2999,9 +3017,17 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     // truncation) -- the U rotation of the HVA costs nothing classically.
     auto onsite_layer = [&](double theta) {
         if (theta == 0.0) return;
-        std::vector<S> ph(d);
-        for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, -theta) * hs(a, a));
-        for (int i = 0; i < n; ++i) apply_site_diag(s, i, ph, qphys);
+        if (hs_diag) {                       // pure phases (the chain): unchanged
+            std::vector<S> ph(d);
+            for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, -theta) * hs(a, a));
+            for (int i = 0; i < n; ++i) apply_site_diag(s, i, ph, qphys);
+        } else {                             // general one-site unitary (fused ladder)
+            Eigen::ArrayXcd ph = (Cx(0, -theta) *
+                                  hs_es.eigenvalues().array().cast<Cx>()).exp();
+            Eigen::MatrixXcd G = hs_es.eigenvectors() * ph.matrix().asDiagonal()
+                               * hs_es.eigenvectors().adjoint();
+            apply_site_gate_all(s, G.template cast<S>(), qphys);
+        }
     };
     auto max_bond = [&]() {
         int m = 0;
@@ -3052,6 +3078,40 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     out.energy = bt_energy(s, mpo);
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
+}
+
+// Apply a general one-site gate G (d x d) to every site of a block MPS. G must be
+// block-diagonal in the LOCAL CHARGE -- it may mix states s, s' only when
+// qphys[s] == qphys[s'] -- or the bond charge structure would break; this is checked
+// by the caller, not assumed. Within one charge class every column group maps to the
+// same right-bond sector, hence has the same width, so the mixing is conformable.
+// Unitary G preserves canonical form exactly as the diagonal case does
+// (sum_s G(s,s')* G(s,s'') = delta), so no re-canonicalisation is needed.
+static void apply_site_gate_all(BMPS& s, const Mat& G, const std::vector<int>& qphys) {
+    const int d = (int)qphys.size();
+    std::map<int, std::vector<int>> classes;          // charge -> local states
+    for (int t = 0; t < d; ++t) classes[qphys[t]].push_back(t);
+    for (int i = 0; i < s.n; ++i) {
+        for (auto& [q_L, blk] : s.A[i]) {
+            auto cols = phys_groups(s.bond[i+1], q_L, +1, qphys);
+            for (auto& [q, sts] : classes) {
+                std::vector<Mat> old(sts.size());
+                for (size_t a = 0; a < sts.size(); ++a)
+                    if (cols[sts[a]].width > 0)
+                        old[a] = blk.middleCols(cols[sts[a]].off, cols[sts[a]].width);
+                for (size_t a = 0; a < sts.size(); ++a) {
+                    if (cols[sts[a]].width == 0) continue;
+                    Mat acc = Mat::Zero(blk.rows(), cols[sts[a]].width);
+                    for (size_t b = 0; b < sts.size(); ++b) {
+                        if (cols[sts[b]].width == 0) continue;
+                        S g = mscal(G(sts[a], sts[b]));
+                        if (std::abs(g) > 1e-15) acc.noalias() += g * old[b];
+                    }
+                    blk.middleCols(cols[sts[a]].off, cols[sts[a]].width) = acc;
+                }
+            }
+        }
+    }
 }
 
 // Den Nijs-Rommelse string order parameter of the ground state:

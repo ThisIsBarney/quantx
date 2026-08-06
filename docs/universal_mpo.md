@@ -788,3 +788,56 @@ The optimiser matters for honesty, not just speed: a Nelder-Mead simplex stalls 
 dimensions (at p=6 a 6× larger budget only halved the error), which would have
 inflated the reported "depth needed". Layer-wise warm start → simplex → Adam on
 central-difference gradients is what the numbers above use.
+
+### Geometry: what quasi-2D costs a fermionic VQE
+
+![VQE geometry](vqe_geometry.svg)
+
+The 1D result above has an obvious hole: a chain's *target* state is itself only
+log-law entangled, so no depth can make the ansatz classically hard there. The
+quantity that decides hardness is the **width** — a width-W cut carries S ~ W and
+χ ~ e^W. The first step into that regime is the **2-leg Hubbard ladder**, rung-fused
+so each MPS site is a whole rung (d=16) and the chain is nearest-neighbour again.
+That fusion puts the **rung hopping inside the on-site block**, which is off-diagonal:
+the on-site layer becomes a *general one-site unitary* instead of a free phase. It is
+still exactly applicable, because the rung hop moves a particle between legs without
+changing the fused site's N or Sz, so the gate stays block-diagonal in the local
+charge (checked at run time, not assumed). ED gate: the ladder circuit matches a dense
+state-vector simulator to **1.2e-13**.
+
+At **matched qubit count and matched depth**, with each geometry using its own
+optimised angles and both simulations lossless (χ = 4^{n/2} / 16^{Lx/2}):
+
+| | 12 qubits | | 16 qubits | |
+|---|---|---|---|---|
+| | chain (n=6) | ladder (Lx=3) | chain (n=8) | ladder (Lx=4) |
+| half-chain entropy S (p=8) | 1.154 | **2.063** | 0.579 | **2.523** |
+| relative energy error (p=8) | 1.25 % | **9.52 %** | 1.85 % | **12.4 %** |
+
+**Quasi-2D costs the ansatz twice.** The ladder state carries 1.8–4.4× the entropy —
+so it is that much harder to simulate classically — *and* the same circuit depth lands
+5–7× further from the ground state. Width does not merely make the state expensive to
+represent; it makes the ansatz converge worse. That is the sharper form of the earlier
+conclusion: the barrier for this ansatz is geometry and depth, not qubit count.
+
+*Scope, and three protocols it took to get here.* Two designs were tried and rejected
+by their own data before this one, and both failures are recorded in the source
+because each is an easy trap:
+
+1. **Transferring the ladder optimum upward** (the trick that worked for the chain)
+   fails. It worked on the chain because the n=8 optimum already captures 96 % of the
+   correlation energy — it is close to an adiabatic schedule. The Lx=4 ladder optimum
+   only reaches 75 %, i.e. it is overfitted to four rungs: transferred to Lx ≥ 6 it
+   gave **frac < 0** — the circuit ends up *above* the state it started from — while S
+   inflated to 4.9–6.2 purely because a bad circuit scrambles the state. Reporting
+   that as "entanglement of the VQE state" would have been meaningless.
+2. **A fixed adiabatic ramp** on both geometries fails too: at the depths a VQE
+   actually uses, τ/p is far too coarse to be adiabatic and the circuit *heats* the
+   state (frac ≈ −4).
+3. What remains is small on purpose: **each geometry at its own optimum, only at sizes
+   that are exactly simulable.** Two matched pairs instead of a broad sweep — but every
+   point is properly optimised and truncation-free.
+
+The decisive width scan (W = 3, 4, … at fixed length, where χ ~ e^W should bite) needs
+range-W gates that rung fusion cannot provide — a fermionic SWAP network on the
+site-split cylinder MPO. That is the next increment, not a claim made here.
