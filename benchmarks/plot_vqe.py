@@ -39,7 +39,7 @@ def a_err(n, p):
 
 def b_S(n, p):
     m = [r for r in B if int(r["n"]) == n and int(r["p"]) == p]
-    return float(m[0]["S_half"]) if m else None
+    return float(m[0]["S_max"]) if m else None
 
 def b_row(n, p):
     m = [r for r in B if int(r["n"]) == n and int(r["p"]) == p]
@@ -160,7 +160,7 @@ top = b_row(sizes_b[-1], p_top)
 if top:
     s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-24}" text-anchor="middle" font-size="11" fill="#0a7d28" font-weight="bold">'
              f'At {2*sizes_b[-1]} qubits and depth {p_top} the circuit captures {100*float(top["frac"]):.0f}% of the correlation '
-             f'energy with S = {float(top["S_half"]):.2f} &#8212; simulated classically to a discarded weight of '
+             f'energy with S = {float(top["S_max"]):.2f} &#8212; simulated classically to a discarded weight of '
              f'{float(top["trunc_err"]):.0e} at &#967; = {top["chi_used"]}.</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-8}" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">'
          '&#967; is the total bond dimension over all charge sectors at a 1e-10 cutoff, so it far exceeds e'
@@ -173,7 +173,7 @@ print("wrote", os.path.normpath(out))
 print(f"  S(p={p_top}) fit: S = {b_fit:.3f} ln(n) {a_fit:+.3f}   (max deviation {resid:.4f})")
 for n in sizes_b:
     r = b_row(n, p_top)
-    if r: print(f"  n={n:>2} ({2*n:>2}q): S={float(r['S_half']):.3f}  S/n={float(r['S_half'])/n:.4f}  "
+    if r: print(f"  n={n:>2} ({2*n:>2}q): S={float(r['S_max']):.3f}  S/n={float(r['S_max'])/n:.4f}  "
                 f"frac={float(r['frac']):.3f}  chi={r['chi_used']}  trunc={float(r['trunc_err']):.1e}")
 if C:
     print("  transfer check (part C):")

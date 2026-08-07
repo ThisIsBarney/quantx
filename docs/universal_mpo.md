@@ -724,17 +724,23 @@ exactly-simulable size), so this reaches sizes the optimisation never could:
 
 | | 16 qubits | 24 | 32 | 48 | **64** |
 |---|---|---|---|---|---|
-| half-chain entropy S (p=8) | 0.579 | 0.843 | 1.053 | 1.309 | **1.467** |
-| S / n | 0.072 | 0.070 | 0.066 | 0.055 | **0.046** |
-| correlation energy captured | 96 % | 94 % | 92 % | 89 % | **88 %** |
+| largest bond entropy S (p=8) | 1.214 | 1.392 | 1.545 | 1.739 | **1.864** |
+| S / n | 0.152 | 0.116 | 0.097 | 0.073 | **0.058** |
+| correlation energy captured | 97 % | 94 % | 92 % | 90 % | **88 %** |
 
 **S/n falls monotonically — this is not volume-law entanglement.** A logarithmic fit
-`S ≈ 0.647 ln n − 0.759` reproduces every point to **0.018**. Since an MPS needs
+`S ≈ 0.475 ln n + 0.222` reproduces every point to **0.011**. Since an MPS needs
 χ ~ e^S, a VQE state whose entropy grows like log n stays classically representable
 *at any qubit count*: at 64 qubits, capturing 88 % of the correlation energy, the
-circuit is simulated to a discarded weight of **4.5e-11**. The quantum-advantage
+circuit is simulated to a discarded weight of **4.4e-11**. The quantum-advantage
 threshold for this ansatz is therefore not the qubit count but the depth — and Part A
 shows the depth that would be needed grows with the system.
+
+<sub>S is the **largest** bond entropy, not the middle-bond one. Reading a single
+"half-chain" bond was a real bug: for odd site counts there is no middle bond and the
+code silently reported a lopsided cut, and even for even counts an open chain's most
+entangled cut is not the middle one (at n=8 the middle bond gives 0.58 against a true
+maximum of 1.21). Every S in this document is the max over cuts.</sub>
 
 *Three things to read correctly here.* (i) The reported χ hits the 4096 cap at
 n ≥ 16, which does **not** contradict S ≈ 1.5: χ is the total bond dimension summed
@@ -760,12 +766,12 @@ transferred angles in place:
 
 | p | S transferred | S re-optimised | ΔS | energy change |
 |---|---|---|---|---|
-| 2 | 1.007 | 1.022 | +0.014 | −5.6158 → −5.6281 |
-| 4 | 0.876 | 0.912 | +0.037 | −6.0830 → −6.0855 |
-| 6 | 0.815 | — | — | short Adam found no improvement |
-| 8 | 0.843 | — | — | short Adam found no improvement |
+| 2 | 1.599 | 1.595 | −0.004 | −5.6158 → −5.6281 |
+| 4 | 1.457 | 1.456 | −0.001 | −6.0830 → −6.0855 |
+| 6 | 1.455 | — | — | short Adam found no improvement |
+| 8 | 1.392 | — | — | short Adam found no improvement |
 
-At p=2 and 4 re-optimisation moves the energy by <0.05 % and S by ≤0.04, so the
+At p=2 and 4 re-optimisation moves the energy by <0.05 % and S by ≤0.004, so the
 entanglement conclusion does not rest on the transfer. At p=6 and 8 the 25-step Adam
 made no progress at all, which neither confirms nor refutes the transfer there — the
 honest statement is that the check is positive at two depths and inconclusive at two.
@@ -808,17 +814,22 @@ state-vector simulator to **1.2e-13**.
 At **matched qubit count and matched depth**, with each geometry using its own
 optimised angles and both simulations lossless (χ = 4^{n/2} / 16^{Lx/2}):
 
-| | 12 qubits | | 16 qubits | |
+| | 12 qubits (p=8) | | 16 qubits (p=5) | |
 |---|---|---|---|---|
 | | chain (n=6) | ladder (Lx=3) | chain (n=8) | ladder (Lx=4) |
-| half-chain entropy S (p=8) | 1.154 | **2.063** | 0.579 | **2.523** |
-| relative energy error (p=8) | 1.25 % | **9.52 %** | 1.85 % | **12.4 %** |
+| largest bond entropy S | 1.154 | **1.927** | 1.244 | **2.619** |
+| relative energy error | 1.25 % | **4.02 %** | 4.34 % | **19.5 %** |
+| ratio | | **×1.67 S, ×3.2 error** | | **×2.11 S, ×4.5 error** |
 
-**Quasi-2D costs the ansatz twice.** The ladder state carries 1.8–4.4× the entropy —
+**Quasi-2D costs the ansatz twice.** The ladder state carries 1.7–2.1× the entropy —
 so it is that much harder to simulate classically — *and* the same circuit depth lands
-5–7× further from the ground state. Width does not merely make the state expensive to
-represent; it makes the ansatz converge worse. That is the sharper form of the earlier
-conclusion: the barrier for this ansatz is geometry and depth, not qubit count.
+3–4.5× further from the ground state. Width does not merely make the state expensive
+to represent; it makes the ansatz converge worse. That is the sharper form of the
+earlier conclusion: the barrier for this ansatz is geometry and depth, not qubit count.
+The ratios are stable across depth (S: 1.58–1.68 at 12 qubits, 1.89–2.15 at 16 over
+every p ≥ 2), so this is not a single-depth artefact. The two pairs cover different
+depth ranges because the ladder scan was stopped after 16 qubits / p=5 — its cost per
+point grows steeply and the effect was already flat in p.
 
 *Scope, and three protocols it took to get here.* Two designs were tried and rejected
 by their own data before this one, and both failures are recorded in the source

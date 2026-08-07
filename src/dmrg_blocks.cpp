@@ -2930,10 +2930,14 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     // block also carries the RUNG HOPPING -- genuinely off-diagonal -- so the layer
     // needs a general one-site unitary. That is fine as long as h_site does not mix
     // different local charges, which would break the bond structure; check that.
+    // Thresholds are RELATIVE to the term's own scale: an absolute 1e-13 would call a
+    // weak-but-real off-diagonal term "diagonal" and silently drop it into the phase
+    // fast path.
+    const double hs_scale = std::max(1e-300, (double)hs.cwiseAbs().maxCoeff());
     bool hs_diag = true;
     for (int a = 0; a < d; ++a)
         for (int b = 0; b < d; ++b) {
-            if (a == b || std::abs(hs(a, b)) <= 1e-13) continue;
+            if (a == b || std::abs(hs(a, b)) <= 1e-13 * hs_scale) continue;
             hs_diag = false;
             if (qphys[a] != qphys[b])
                 throw std::runtime_error("run_hva: the on-site term mixes different "
@@ -2944,6 +2948,12 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> hs_es;
     if (!hs_diag) {
         Eigen::MatrixXcd hsz = hs.template cast<Cx>();
+        // Zero the sub-threshold cross-charge entries the check tolerated: left in,
+        // they give exp(-i theta hs) cross-charge elements that apply_site_gate_all
+        // then discards, making the gate actually applied slightly non-unitary.
+        for (int a = 0; a < d; ++a)
+            for (int b = 0; b < d; ++b)
+                if (qphys[a] != qphys[b]) hsz(a, b) = Cx(0, 0);
         hsz = 0.5 * (hsz + hsz.adjoint().eval());
         hs_es.compute(hsz);
     }
@@ -3044,10 +3054,13 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     out.max_bond = max_bond();
     for (int b : out.layer_bond) out.max_bond = std::max(out.max_bond, b);
     out.trunc_err = worst_trunc;
-    // Half-chain entanglement entropy: walk the orthogonality centre (which the last
-    // bond_layer left at site 0) to the middle bond LOSSLESSLY and read the Schmidt
-    // spectrum there. Unlike max_bond this does not depend on the chi cap, so it stays
-    // meaningful exactly where the simulation is truncated.
+    // Entanglement entropy: walk the orthogonality centre (which the last bond_layer
+    // left at site 0) LOSSLESSLY across the chain and take the LARGEST bond entropy.
+    // Not the middle bond: for odd n there is no middle bond, and reading bond n/2-1
+    // silently reports a 1|2 cut as if it were a half cut (this bit the Lx=3 ladder,
+    // where a 4-qubit|8-qubit split was compared against a chain's true 6|6). The max
+    // is defined for every n and is what sets the MPS cost, chi ~ e^S. Unlike
+    // max_bond it does not depend on the chi cap.
     {
         BMPS c = s;
         double ent = 0;
@@ -3057,22 +3070,22 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
             bt_expand_theta(th, c.bond[i], c.bond[i+2], qphys);
             auto svd = block_svd_truncate(th, c.bond[i], c.bond[i+2],
                                           1 << 30, 0.0, false, false, qphys);
-            if (i == n / 2 - 1) {
-                double nrm2 = 0;
+            {
+                double nrm2 = 0, e_i = 0;
                 for (auto& [q, v] : svd.sv) nrm2 += v.squaredNorm();
                 if (nrm2 > 0)
                     for (auto& [q, v] : svd.sv)
                         for (int k = 0; k < v.size(); ++k) {
                             double pk = v[k] * v[k] / nrm2;
-                            if (pk > 1e-16) ent -= pk * std::log(pk);
+                            if (pk > 1e-16) e_i -= pk * std::log(pk);
                         }
-                break;
+                ent = std::max(ent, e_i);
             }
             c.bond[i+1] = svd.new_mid_bs;
             c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);
             c.A[i+1] = bt_center_LR(svd);
         }
-        out.S_half = ent;
+        out.S_max = ent;
     }
     rebuild_mpo_envs(s, mpo);
     out.energy = bt_energy(s, mpo);

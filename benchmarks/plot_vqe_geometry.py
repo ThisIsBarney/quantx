@@ -25,6 +25,12 @@ L = {(int(r["Lx"]), int(r["p"])): r for r in csv.DictReader(open(os.path.join(DO
 # matched pairs: (qubits, chain sites, ladder rungs)
 PAIRS = [(12, 6, 3), (16, 8, 4)]
 depths = sorted({p for (_, p) in L})
+def pair_depths(lx):
+    """Depths actually available for this pair. The ladder scan was stopped after
+    Lx=4 p=4 (its per-point cost grows steeply and the effect is already flat in p),
+    so the two matched pairs cover different depth ranges -- shown as-is rather than
+    padded."""
+    return [p for p in depths if (lx, p) in L]
 
 def chain_err(n, p):
     r = A.get((n, p))
@@ -39,11 +45,11 @@ def ladder_err(lx, p):
 def chain_S(n, p):
     # part B covers n >= 8; part A now records S too and covers the smaller sizes
     r = B.get((n, p)) or A.get((n, p))
-    return float(r["S_half"]) if r and "S_half" in r else None
+    return float(r["S_max"]) if r and "S_max" in r else None
 
 def ladder_S(lx, p):
     r = L.get((lx, p))
-    return float(r["S_half"]) if r else None
+    return float(r["S_max"]) if r else None
 
 W, H = 820, 430
 PY0, PY1 = 108, 330
@@ -63,7 +69,7 @@ s.append(f'<text x="{W/2:.0f}" y="66" text-anchor="middle" font-size="10.5" fill
          'solid = chain, dashed = ladder; colour = qubit count</text>')
 
 # ---- left panel: relative energy error (log) ----
-errs = [e for q, n, lx in PAIRS for p in depths
+errs = [e for q, n, lx in PAIRS for p in pair_depths(lx)
         for e in (chain_err(n, p), ladder_err(lx, p)) if e]
 lo = 10 ** math.floor(math.log10(min(errs)))
 hi = 10 ** math.ceil(math.log10(max(errs)))
@@ -79,8 +85,8 @@ while v <= hi * 1.0001:
     v *= 10
 for q, n, lx in PAIRS:
     c = COL[q]
-    cp = [(p, chain_err(n, p)) for p in depths if chain_err(n, p)]
-    lp = [(p, ladder_err(lx, p)) for p in depths if ladder_err(lx, p)]
+    cp = [(p, chain_err(n, p)) for p in pair_depths(lx) if chain_err(n, p)]
+    lp = [(p, ladder_err(lx, p)) for p in pair_depths(lx) if ladder_err(lx, p)]
     if cp:
         s.append('<polyline points="' + " ".join(f"{lxpx(p):.1f},{lypx(e):.1f}" for p, e in cp) +
                  f'" fill="none" stroke="{c}" stroke-width="2.1"/>')
@@ -91,7 +97,7 @@ for q, n, lx in PAIRS:
         for p, e in lp: s.append(f'<circle cx="{lxpx(p):.1f}" cy="{lypx(e):.1f}" r="3.2" fill="white" stroke="{c}" stroke-width="1.8"/>')
 
 # ---- right panel: half-chain entropy (linear) ----
-Ss = [x for q, n, lx in PAIRS for p in depths
+Ss = [x for q, n, lx in PAIRS for p in pair_depths(lx)
       for x in (chain_S(n, p), ladder_S(lx, p)) if x]
 smax = max(Ss) * 1.15
 def rxpx(p): return RX0 + (p - depths[0]) / (depths[-1] - depths[0]) * (RX1 - RX0)
@@ -106,8 +112,8 @@ while g <= smax:
     g += 0.5
 for q, n, lx in PAIRS:
     c = COL[q]
-    cp = [(p, chain_S(n, p)) for p in depths if chain_S(n, p)]
-    lp = [(p, ladder_S(lx, p)) for p in depths if ladder_S(lx, p)]
+    cp = [(p, chain_S(n, p)) for p in pair_depths(lx) if chain_S(n, p)]
+    lp = [(p, ladder_S(lx, p)) for p in pair_depths(lx) if ladder_S(lx, p)]
     if cp:
         s.append('<polyline points="' + " ".join(f"{rxpx(p):.1f},{rypx(e):.1f}" for p, e in cp) +
                  f'" fill="none" stroke="{c}" stroke-width="2.1"/>')
@@ -131,7 +137,7 @@ for q, n, lx in PAIRS:
     s.append(f'<text x="{RX1-90}" y="{ly+4}" font-size="11" fill="#333">{q} qubits</text>')
     ly += 18
 
-pmax = depths[-1]
+pmax = pair_depths(4)[-1]
 cs, ls_ = chain_S(8, pmax), ladder_S(4, pmax)
 ce, le = chain_err(8, pmax), ladder_err(4, pmax)
 if cs and ls_ and ce and le:
@@ -146,6 +152,7 @@ out = os.path.join(DOCS, "vqe_geometry.svg")
 open(out, "w", encoding="utf-8").write("\n".join(s))
 print("wrote", os.path.normpath(out))
 for q, n, lx in PAIRS:
-    for p in (depths[-1],):
-        print(f"  {q:>2}q p={p}: chain S={chain_S(n,p)}, err={chain_err(n,p):.3%} | "
-              f"ladder S={ladder_S(lx,p):.3f}, err={ladder_err(lx,p):.3%}")
+    p = pair_depths(lx)[-1]
+    print(f"  {q:>2}q p={p}: chain S={chain_S(n,p):.3f}, err={chain_err(n,p):.3%} | "
+          f"ladder S={ladder_S(lx,p):.3f}, err={ladder_err(lx,p):.3%} | "
+          f"S x{ladder_S(lx,p)/chain_S(n,p):.2f}, err x{ladder_err(lx,p)/chain_err(n,p):.1f}")

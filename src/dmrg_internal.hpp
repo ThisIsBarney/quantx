@@ -363,14 +363,16 @@ struct HVAResult {
     int max_bond = 0;                  // largest bond dimension the circuit reached
     double wall_s = 0;
     std::vector<int> layer_bond;       // max bond after each layer (entanglement growth)
-    // Half-chain von Neumann entropy of the prepared state. THE number that decides
+    // LARGEST bond entropy of the prepared state (max over every cut, not the middle
+    // bond: odd n has no middle bond, and reading n/2-1 there reports a lopsided cut
+    // as if it were a half cut). THE number that decides
     // classical simulability: an MPS needs chi ~ e^S, so S saturating with depth means
     // the ansatz stays classically cheap no matter how many qubits it uses, while S
     // growing toward the volume-law value (~n) is what a quantum computer would be
     // needed for. Read from a LOSSLESS centre walk, so it is not distorted by the
     // cutoff -- but it is still the entropy of the chi-capped state and is bounded by
     // ln(chi); trust it only while trunc_err stays far below the scale of interest.
-    double S_half = 0;
+    double S_max = 0;
     // LARGEST single discarded weight over the circuit's ~2(n-1)p truncations, not
     // their sum: the accumulated error can be up to that factor larger.
     double trunc_err = 0;

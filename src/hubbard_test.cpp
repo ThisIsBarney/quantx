@@ -908,7 +908,8 @@ int main() {
     // relabelling.
     {
         const double t = 1.0, tp = 1.0, U = 4.0;
-        const int Lx = 3, nm = 2 * Lx, dim6 = 4096;
+        const int Lx = 3, nm = 2 * Lx;
+        int dim6 = 1; for (int k = 0; k < nm; ++k) dim6 *= 4;   // 4^(2Lx)
         auto mpo = build_hubbard_ladder_mpo(Lx, t, tp, U);
         // dense pieces in the PHYSICAL basis: leg hopping on even/odd rung bonds,
         // and the on-site block (rung hopping + U)
@@ -957,7 +958,7 @@ int main() {
         bool okl = err < 1e-9;
         std::printf("  HVA LADDER Lx=%d (%d qubits, fused d=16): <H> block=%.10f  "
                     "statevector=%.10f  err=%.1e  chi=%d  S=%.4f  %s\n",
-                    Lx, 2*nm, hr.energy, E_ed, err, hr.max_bond, hr.S_half,
+                    Lx, 2*nm, hr.energy, E_ed, err, hr.max_bond, hr.S_max,
                     okl ? "OK" : "FAIL");
         fails += !okl;
     }

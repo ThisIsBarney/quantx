@@ -19,33 +19,27 @@
 <circle cx="300.6" cy="295.9" r="3.2" fill="#1f77b4"/>
 <circle cx="346.3" cy="308.0" r="3.2" fill="#1f77b4"/>
 <circle cx="392.0" cy="319.3" r="3.2" fill="#1f77b4"/>
-<polyline points="72.0,137.5 117.7,176.2 163.4,194.0 209.1,216.7 254.9,218.7 300.6,221.1 346.3,221.2 392.0,221.4" fill="none" stroke="#1f77b4" stroke-width="2.1" stroke-dasharray="6,4"/>
+<polyline points="72.0,137.5 117.7,176.2 163.4,194.0 209.1,216.7 254.9,236.2 300.6,255.0 346.3,261.4 392.0,263.0" fill="none" stroke="#1f77b4" stroke-width="2.1" stroke-dasharray="6,4"/>
 <circle cx="72.0" cy="137.5" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
 <circle cx="117.7" cy="176.2" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
 <circle cx="163.4" cy="194.0" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
 <circle cx="209.1" cy="216.7" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="254.9" cy="218.7" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="300.6" cy="221.1" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="346.3" cy="221.2" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="392.0" cy="221.4" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<polyline points="72.0,129.4 117.7,216.1 163.4,239.6 209.1,259.8 254.9,260.8 300.6,275.4 346.3,284.8 392.0,300.2" fill="none" stroke="#d62728" stroke-width="2.1"/>
+<circle cx="254.9" cy="236.2" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="300.6" cy="255.0" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="346.3" cy="261.4" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="392.0" cy="263.0" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<polyline points="72.0,129.4 117.7,216.1 163.4,239.6 209.1,255.8 254.9,259.2" fill="none" stroke="#d62728" stroke-width="2.1"/>
 <circle cx="72.0" cy="129.4" r="3.2" fill="#d62728"/>
 <circle cx="117.7" cy="216.1" r="3.2" fill="#d62728"/>
 <circle cx="163.4" cy="239.6" r="3.2" fill="#d62728"/>
-<circle cx="209.1" cy="259.8" r="3.2" fill="#d62728"/>
-<circle cx="254.9" cy="260.8" r="3.2" fill="#d62728"/>
-<circle cx="300.6" cy="275.4" r="3.2" fill="#d62728"/>
-<circle cx="346.3" cy="284.8" r="3.2" fill="#d62728"/>
-<circle cx="392.0" cy="300.2" r="3.2" fill="#d62728"/>
-<polyline points="72.0,140.8 117.7,162.7 163.4,164.6 209.1,172.0 254.9,184.3 300.6,196.8 346.3,207.9 392.0,208.7" fill="none" stroke="#d62728" stroke-width="2.1" stroke-dasharray="6,4"/>
+<circle cx="209.1" cy="255.8" r="3.2" fill="#d62728"/>
+<circle cx="254.9" cy="259.2" r="3.2" fill="#d62728"/>
+<polyline points="72.0,140.8 117.7,162.7 163.4,169.4 209.1,182.2 254.9,186.8" fill="none" stroke="#d62728" stroke-width="2.1" stroke-dasharray="6,4"/>
 <circle cx="72.0" cy="140.8" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
 <circle cx="117.7" cy="162.7" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="163.4" cy="164.6" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="209.1" cy="172.0" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="254.9" cy="184.3" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="300.6" cy="196.8" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="346.3" cy="207.9" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="392.0" cy="208.7" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
+<circle cx="163.4" cy="169.4" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
+<circle cx="209.1" cy="182.2" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
+<circle cx="254.9" cy="186.8" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
 <text x="631" y="94" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">half-chain entropy S</text>
 <line x1="470" y1="330.0" x2="792" y2="330.0" stroke="#eee"/>
 <text x="463" y="334.0" text-anchor="end" font-size="10" fill="#444">0.0</text>
@@ -70,33 +64,27 @@
 <circle cx="700.0" cy="249.0" r="3.2" fill="#1f77b4"/>
 <circle cx="746.0" cy="249.0" r="3.2" fill="#1f77b4"/>
 <circle cx="792.0" cy="249.8" r="3.2" fill="#1f77b4"/>
-<polyline points="470.0,173.7 516.0,174.4 562.0,182.9 608.0,192.9 654.0,191.1 700.0,187.6 746.0,187.0 792.0,186.7" fill="none" stroke="#1f77b4" stroke-width="2.1" stroke-dasharray="6,4"/>
+<polyline points="470.0,173.7 516.0,174.4 562.0,182.9 608.0,187.8 654.0,193.7 700.0,195.5 746.0,195.8 792.0,196.1" fill="none" stroke="#1f77b4" stroke-width="2.1" stroke-dasharray="6,4"/>
 <circle cx="470.0" cy="173.7" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
 <circle cx="516.0" cy="174.4" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
 <circle cx="562.0" cy="182.9" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="608.0" cy="192.9" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="654.0" cy="191.1" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="700.0" cy="187.6" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="746.0" cy="187.0" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<circle cx="792.0" cy="186.7" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
-<polyline points="470.0,250.8 516.0,275.8 562.0,280.7 608.0,289.2 654.0,293.6 700.0,292.8 746.0,293.1 792.0,289.8" fill="none" stroke="#d62728" stroke-width="2.1"/>
-<circle cx="470.0" cy="250.8" r="3.2" fill="#d62728"/>
-<circle cx="516.0" cy="275.8" r="3.2" fill="#d62728"/>
-<circle cx="562.0" cy="280.7" r="3.2" fill="#d62728"/>
-<circle cx="608.0" cy="289.2" r="3.2" fill="#d62728"/>
-<circle cx="654.0" cy="293.6" r="3.2" fill="#d62728"/>
-<circle cx="700.0" cy="292.8" r="3.2" fill="#d62728"/>
-<circle cx="746.0" cy="293.1" r="3.2" fill="#d62728"/>
-<circle cx="792.0" cy="289.8" r="3.2" fill="#d62728"/>
-<polyline points="470.0,137.4 516.0,137.0 562.0,142.2 608.0,140.7 654.0,145.0 700.0,147.2 746.0,154.8 792.0,154.7" fill="none" stroke="#d62728" stroke-width="2.1" stroke-dasharray="6,4"/>
+<circle cx="608.0" cy="187.8" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="654.0" cy="193.7" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="700.0" cy="195.5" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="746.0" cy="195.8" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<circle cx="792.0" cy="196.1" r="3.2" fill="white" stroke="#1f77b4" stroke-width="1.8"/>
+<polyline points="470.0,228.0 516.0,230.0 562.0,237.4 608.0,243.1 654.0,243.6" fill="none" stroke="#d62728" stroke-width="2.1"/>
+<circle cx="470.0" cy="228.0" r="3.2" fill="#d62728"/>
+<circle cx="516.0" cy="230.0" r="3.2" fill="#d62728"/>
+<circle cx="562.0" cy="237.4" r="3.2" fill="#d62728"/>
+<circle cx="608.0" cy="243.1" r="3.2" fill="#d62728"/>
+<circle cx="654.0" cy="243.6" r="3.2" fill="#d62728"/>
+<polyline points="470.0,137.4 516.0,137.0 562.0,138.3 608.0,142.9 654.0,148.0" fill="none" stroke="#d62728" stroke-width="2.1" stroke-dasharray="6,4"/>
 <circle cx="470.0" cy="137.4" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
 <circle cx="516.0" cy="137.0" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="562.0" cy="142.2" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="608.0" cy="140.7" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="654.0" cy="145.0" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="700.0" cy="147.2" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="746.0" cy="154.8" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<circle cx="792.0" cy="154.7" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
+<circle cx="562.0" cy="138.3" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
+<circle cx="608.0" cy="142.9" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
+<circle cx="654.0" cy="148.0" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
 <line x1="72.0" y1="330" x2="72.0" y2="335" stroke="#444"/>
 <text x="72.0" y="349" text-anchor="middle" font-size="10" fill="#444">1</text>
 <line x1="117.7" y1="330" x2="117.7" y2="335" stroke="#444"/>
@@ -139,6 +127,6 @@
 <text x="702" y="118" font-size="11" fill="#333">12 qubits</text>
 <line x1="674" y1="132" x2="696" y2="132" stroke="#d62728" stroke-width="2.4"/>
 <text x="702" y="136" font-size="11" fill="#333">16 qubits</text>
-<text x="410" y="404" text-anchor="middle" font-size="11" fill="#0a7d28" font-weight="bold">At 16 qubits and depth 8: the ladder needs 4.4&#215; the entropy and still lands 6.7&#215; further from the ground state.</text>
+<text x="410" y="404" text-anchor="middle" font-size="11" fill="#0a7d28" font-weight="bold">At 16 qubits and depth 5: the ladder needs 2.1&#215; the entropy and still lands 4.5&#215; further from the ground state.</text>
 <text x="410" y="421" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">The width, not the qubit count, is what makes a fermionic VQE state hard &#8212; and the same width makes the ansatz converge worse.</text>
 </svg>
