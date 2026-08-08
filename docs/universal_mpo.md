@@ -680,7 +680,7 @@ exactly the bond hopping term.
 
 **Exactness gate** (`qx_hubbard_test`, section HVA CIRCUIT): the same circuit, the same
 initial state, the same angles, run on the block MPS and on a dense 4ⁿ state-vector
-simulator agree to **5.3e-15 (n=4)** and **4.0e-11 (n=6)**, with the bond dimension
+simulator agree to **~1e-15 (n=4)** and **4.0e-11 (n=6)**, with the bond dimension
 sitting at the full-Hilbert-space bound — i.e. **no truncation**, so the comparison is
 clean rather than accidentally right.
 
@@ -710,7 +710,7 @@ numbers are the ansatz's own, not a truncation artefact:
 
 | error/site | p=2 | p=4 | p=6 | p=8 |
 |---|---|---|---|---|
-| n=4 (8 qubits) | 1.8e-2 | 7.6e-3 | 2.8e-4 | **1.6e-7** |
+| n=4 (8 qubits) | 1.8e-2 | 7.5e-3 | 2.8e-4 | **1.6e-7** |
 | n=6 (12 qubits) | 4.0e-2 | 2.5e-2 | 1.0e-2 | 6.4e-3 |
 | n=8 (16 qubits) | 5.6e-2 | 2.5e-2 | 2.2e-2 | 1.1e-2 |
 

@@ -71,7 +71,7 @@ s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="52" text-anchor="middle" font-size="11
          'Hamiltonian Variational Ansatz, 1D Hubbard chain, U=4t, half filling; every layer conserves N and 2Sz, '
          'so the U(1)&#215;U(1) block engine simulates the circuit exactly</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="70" text-anchor="middle" font-size="10.5" fill="#777">'
-         'circuit vs a dense state-vector simulator: 5.3e-15 (n=4), 4.0e-11 (n=6) &#8212; qx_hubbard_test, section HVA CIRCUIT</text>')
+         'circuit vs a dense state-vector simulator: ~1e-15 (n=4), 4.0e-11 (n=6) &#8212; qx_hubbard_test, section HVA CIRCUIT</text>')
 
 # ---------- top panel: energy error vs depth ----------
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{TY0-16}" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">'

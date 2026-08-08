@@ -265,7 +265,7 @@ int main(int argc, char** argv) {
                                           : std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8};
     const int chi_b = quick ? 128 : 4096;
     // State preparation gets its OWN, much smaller chi. |psi_0> is the U=0 ground
-    // state -- a Slater determinant whose half-chain entropy grows only like
+    // state -- a Slater determinant whose largest bond entropy grows only like
     // (1/3) log n, so a couple of hundred states is already lossless for it. Passing
     // the circuit's chi budget here instead cost hours: at n=32 the complex-scalar
     // DMRG ran 60 sweeps with chi=4096 allowed (11.6 GB resident) to prepare a state
@@ -386,7 +386,7 @@ int main(int argc, char** argv) {
     // stand-in for the VQE circuit at larger n. Here that assumption is TESTED at one
     // size: re-optimise the transferred angles in place (a short Adam run -- they are
     // already a good warm start) and compare both the energy and, crucially, the
-    // half-chain entropy. If S is essentially unchanged, the entanglement conclusion
+    // largest bond entropy. If S is essentially unchanged, the entanglement conclusion
     // does not depend on the transfer; if it moves a lot, Part B's S values are only
     // indicative and the doc must say so.
     const int n_c = quick ? 6 : 12;

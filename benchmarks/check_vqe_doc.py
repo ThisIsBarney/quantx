@@ -1,4 +1,7 @@
-"""Audit every VQE figure quoted in docs/universal_mpo.md against the CSVs.
+"""Audit every CSV-DERIVED VQE figure quoted in docs/universal_mpo.md.
+
+Figures that come from test stdout (the exactness numbers vs the state-vector
+reference) are out of scope -- they are not in any CSV.
 
 Three review rounds in a row found numbers in the prose that no longer matched the
 data -- stale after a re-run, or simply mistyped (one cell was literally another
@@ -61,11 +64,35 @@ dev = max(abs(v - (a + b*x)) for x, v in zip(xs, Sv))
 expect("part B log fit", f"`S ≈ {b:.3f} ln n + {a:.3f}` reproduces every point to **{dev:.3f}**")
 
 # ---- part A: the one row the doc tabulates in full ----
+MINUS, ARROW, EMDASH = "−", "→", "—"   # the doc's typography
+
 def sci(v):                    # doc convention: 1.1e-2, not python's 1.1e-02
     return f"{v:.1e}".replace("e-0", "e-").replace("e+0", "e+")
-expect("part A n=8 row",
-       "| n=8 (16 qubits) | " +
-       " | ".join(sci(float(A[(8, p)]["err_site"])) for p in (2, 4, 6, 8)) + " |")
+
+def num(v, nd):                # minus sign, not hyphen
+    return f"{v:.{nd}f}".replace("-", MINUS)
+def row_cells(prefix):
+    """The doc's table cells for the row starting with `prefix`, bold markers and
+    whitespace stripped -- comparing cell by cell survives **bolding** of whichever
+    cell an author decided to emphasise."""
+    for line in doc.split(chr(10)):
+        if line.startswith(prefix):
+            return [c.strip().replace("*", "") for c in line.strip("|").split("|")]
+    return None
+
+for n in (4, 6, 8):            # the doc tabulates all three, not just n=8
+    want = [sci(float(A[(n, p)]["err_site"])) for p in (2, 4, 6, 8)]
+    got = row_cells(f"| n={n} ({2*n} qubits) |")
+    if got is None:
+        fails.append(f"part A n={n} row: not found in the doc")
+    elif got[1:] != want:
+        fails.append(f"part A n={n} row: doc {got[1:]} vs csv {want}")
+
+# part B's correlation-energy row is fully derivable too
+expect("part B frac row",
+       "| correlation energy captured | " +
+       " | ".join(f"{float(B[(n, 8)]['frac']):.0%}" for n in NS[:-1]).replace("%", " %") +
+       f" | **{float(B[(NS[-1], 8)]['frac']):.0%}** |".replace("%", " %"))
 
 # ---- part D / geometry: matched pairs at each pair's deepest available depth ----
 pairs = []
@@ -92,14 +119,31 @@ expect("geometry ratio row",
 # ---- the two caveats on the entropy claim ----
 r1 = [float(L[(d['lx'], 1)]["S_max"]) / S(d['n'], 1) for d in q]
 expect("p=1 identity ratios", f"×{r1[0]:.2f} and ×{r1[1]:.2f}")
+# the doc frames this as a RATIO excess, so the check must use the same reading;
+# the absolute-difference reading (S_L-S_C at p=1 over the same at p_final) gives a
+# LARGER share, so this formula understates the caveat rather than inflating it
 share = [100*(r1[i] - 1) / ((q[i]['ls']/q[i]['cs']) - 1) for i in (0, 1)]
 expect("state-prep share",
        f"**{min(share):.0f}–{max(share):.0f} % of the excess entropy")
 
 # ---- part C transfer check ----
 for r in C:
-    expect(f"part C p={r['p']}",
-           f"| {r['p']} | {float(r['S_transfer']):.3f} |")
+    # the whole row, not just S_transfer: a mutation harness showed the reopt and
+    # energy columns were passing unchecked
+    p_ = int(r["p"])
+    if p_ in (2, 4):           # deeper rows are the "Adam found nothing" placeholders
+        dS = float(r["dS"])
+        expect(f"part C p={p_}",
+               f"| {p_} | {float(r['S_transfer']):.3f} | {float(r['S_reopt']):.3f} | "
+               f"{'+' if dS >= 0 else MINUS}{abs(dS):.3f} | "
+               f"{num(float(r['E_transfer']), 4)} {ARROW} {num(float(r['E_reopt']), 4)} |")
+    else:
+        expect(f"part C p={p_}",
+               f"| {p_} | {float(r['S_transfer']):.3f} | {EMDASH} | {EMDASH} |")
+    # and the prose figure for the re-optimisation energy shift
+    if p_ == 2:
+        shift = abs(float(r["E_reopt"]) - float(r["E_transfer"])) / abs(float(r["E_transfer"]))
+        expect("part C prose shift", f"moves the energy by {shift:.2%}".replace("%", " %"))
 
 if fails:
     print(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")

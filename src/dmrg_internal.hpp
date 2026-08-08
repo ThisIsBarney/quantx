@@ -375,9 +375,10 @@ struct HVAResult {
     double S_max = 0;
     // Entropy at the BALANCED cut (equal site counts either side). Stays 0 for ODD n,
     // where no such cut exists -- bond n/2-1 there is the lopsided one that the old
-    // half-chain reading got wrong, so it is deliberately NOT stored. S_max can sit on a boundary bond, capped by ln(d) of a single site --
-    // ln 16 for the fused ladder -- so comparing maxima across geometries with
-    // different local dimensions partly compares those dimensions, not the states.
+    // half-chain reading got wrong, so it is deliberately NOT stored. Worth having
+    // next to S_max because a maximum can sit on a BOUNDARY bond, where it is capped
+    // by ln(d) of one site -- ln 16 for the fused ladder -- so comparing maxima
+    // across geometries partly compares local dimensions, not the states.
     double S_mid = 0;
     // LARGEST single discarded weight over the circuit's ~2(n-1)p truncations, not
     // their sum: the accumulated error can be up to that factor larger.
