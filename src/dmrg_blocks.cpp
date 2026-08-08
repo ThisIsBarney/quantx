@@ -2867,7 +2867,7 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
                          const std::vector<std::array<double,3>>& angles,
                          int chi_max, double cutoff, int total_charge,
                          const std::vector<int>* init_config,
-                         const BMPS* init_state) {
+                         const BMPS* init_state, bool want_entropy) {
     static_assert(std::is_same_v<S, Cx>, "HVA circuits are complex");
     using clk = std::chrono::steady_clock;
     auto t0 = clk::now();
@@ -2924,11 +2924,41 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     if (bulk < 0) throw std::runtime_error("run_hva: no square bulk MPO site");
     const MPOSite& Wb = mpo[bulk];
     const Mat& hs = Wb.W(Wb.chi_r - 1, 0);
+    // The on-site layer is exp(-i theta * h_site) applied to every site. For the
+    // Hubbard CHAIN h_site = U n_up n_dn is diagonal, so it is a pure phase (free,
+    // creates no entanglement). For a RUNG-FUSED ladder the fused site's on-site
+    // block also carries the RUNG HOPPING -- genuinely off-diagonal -- so the layer
+    // needs a general one-site unitary. That is fine as long as h_site does not mix
+    // different local charges, which would break the bond structure; check that.
+    // Thresholds are RELATIVE to the term's own scale: an absolute 1e-13 would call a
+    // weak-but-real off-diagonal term "diagonal" and silently drop it into the phase
+    // fast path.
+    const double hs_scale = std::max(1e-300, (double)hs.cwiseAbs().maxCoeff());
+    bool hs_diag = true;
     for (int a = 0; a < d; ++a)
-        for (int b = 0; b < d; ++b)
-            if (a != b && std::abs(hs(a, b)) > 1e-13)
-                throw std::runtime_error("run_hva: on-site term is not diagonal "
-                                         "(the U layer would need a general one-site gate)");
+        for (int b = 0; b < d; ++b) {
+            if (a == b || std::abs(hs(a, b)) <= 1e-13 * hs_scale) continue;
+            hs_diag = false;
+            if (qphys[a] != qphys[b])
+                throw std::runtime_error("run_hva: the on-site term mixes different "
+                    "local charges, so it cannot act as a one-site gate on a "
+                    "charge-blocked MPS");
+        }
+    // eigendecomposition once: only the angle varies between layers
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXcd> hs_es;
+    if (!hs_diag) {
+        Eigen::MatrixXcd hsz = hs.template cast<Cx>();
+        // Zero the sub-threshold cross-charge entries the check tolerated: left in,
+        // they give exp(-i theta hs) cross-charge elements that apply_site_gate_all
+        // then discards, making the gate actually applied slightly non-unitary.
+        for (int a = 0; a < d; ++a)
+            for (int b = 0; b < d; ++b)
+                if (qphys[a] != qphys[b]) hsz(a, b) = Cx(0, 0);
+        hsz = 0.5 * (hsz + hsz.adjoint().eval());
+        hs_es.compute(hsz);
+        if (hs_es.info() != Eigen::Success)
+            throw std::runtime_error("run_hva: on-site term eigendecomposition failed");
+    }
     // ONE bulk site supplies both the bond gate and the on-site phases, and they are
     // then applied to every bond/site -- so the MPO must actually be uniform along
     // the chain. Site-dependent on-site terms exist in this very codebase (the
@@ -2999,9 +3029,17 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     // truncation) -- the U rotation of the HVA costs nothing classically.
     auto onsite_layer = [&](double theta) {
         if (theta == 0.0) return;
-        std::vector<S> ph(d);
-        for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, -theta) * hs(a, a));
-        for (int i = 0; i < n; ++i) apply_site_diag(s, i, ph, qphys);
+        if (hs_diag) {                       // pure phases (the chain): unchanged
+            std::vector<S> ph(d);
+            for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, -theta) * hs(a, a));
+            for (int i = 0; i < n; ++i) apply_site_diag(s, i, ph, qphys);
+        } else {                             // general one-site unitary (fused ladder)
+            Eigen::ArrayXcd ph = (Cx(0, -theta) *
+                                  hs_es.eigenvalues().array().cast<Cx>()).exp();
+            Eigen::MatrixXcd G = hs_es.eigenvectors() * ph.matrix().asDiagonal()
+                               * hs_es.eigenvectors().adjoint();
+            apply_site_gate_all(s, G.template cast<S>(), qphys);
+        }
     };
     auto max_bond = [&]() {
         int m = 0;
@@ -3018,11 +3056,14 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     out.max_bond = max_bond();
     for (int b : out.layer_bond) out.max_bond = std::max(out.max_bond, b);
     out.trunc_err = worst_trunc;
-    // Half-chain entanglement entropy: walk the orthogonality centre (which the last
-    // bond_layer left at site 0) to the middle bond LOSSLESSLY and read the Schmidt
-    // spectrum there. Unlike max_bond this does not depend on the chi cap, so it stays
-    // meaningful exactly where the simulation is truncated.
-    {
+    // Entanglement entropy: walk the orthogonality centre (which the last bond_layer
+    // left at site 0) LOSSLESSLY across the chain and take the LARGEST bond entropy.
+    // Not the middle bond: for odd n there is no middle bond, and reading bond n/2-1
+    // silently reports a 1|2 cut as if it were a half cut (this bit the Lx=3 ladder,
+    // where a 4-qubit|8-qubit split was compared against a chain's true 6|6). The max
+    // is defined for every n and is what sets the MPS cost, chi ~ e^S. Unlike
+    // max_bond it does not depend on the chi cap.
+    if (want_entropy) {
         BMPS c = s;
         double ent = 0;
         for (int i = 0; i < n - 1; ++i) {
@@ -3031,27 +3072,71 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
             bt_expand_theta(th, c.bond[i], c.bond[i+2], qphys);
             auto svd = block_svd_truncate(th, c.bond[i], c.bond[i+2],
                                           1 << 30, 0.0, false, false, qphys);
-            if (i == n / 2 - 1) {
-                double nrm2 = 0;
+            {
+                double nrm2 = 0, e_i = 0;
                 for (auto& [q, v] : svd.sv) nrm2 += v.squaredNorm();
                 if (nrm2 > 0)
                     for (auto& [q, v] : svd.sv)
                         for (int k = 0; k < v.size(); ++k) {
                             double pk = v[k] * v[k] / nrm2;
-                            if (pk > 1e-16) ent -= pk * std::log(pk);
+                            if (pk > 1e-16) e_i -= pk * std::log(pk);
                         }
-                break;
+                ent = std::max(ent, e_i);
+                // the balanced cut (equal site counts either side) as well as the
+                // max: the max can land on a BOUNDARY bond, whose entropy is capped
+                // by ln(d) of one site -- for the d=16 fused ladder that is ln 16 =
+                // 2.7726, and a maximally mixed edge rung hits it exactly. Comparing
+                // maxima across geometries then partly compares local dimensions
+                // rather than the states.
+                // even n only: for odd n there is no balanced cut, and bond
+                // n/2-1 is exactly the lopsided one the old S_half bug reported.
+                // Leave the sentinel rather than silently storing that.
+                if (n % 2 == 0 && i == n / 2 - 1) out.S_mid = e_i;
             }
             c.bond[i+1] = svd.new_mid_bs;
             c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);
             c.A[i+1] = bt_center_LR(svd);
         }
-        out.S_half = ent;
+        out.S_max = ent;
     }
     rebuild_mpo_envs(s, mpo);
     out.energy = bt_energy(s, mpo);
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
+}
+
+// Apply a general one-site gate G (d x d) to every site of a block MPS. G must be
+// block-diagonal in the LOCAL CHARGE -- it may mix states s, s' only when
+// qphys[s] == qphys[s'] -- or the bond charge structure would break; this is checked
+// by the caller, not assumed. Within one charge class every column group maps to the
+// same right-bond sector, hence has the same width, so the mixing is conformable.
+// Unitary G preserves canonical form exactly as the diagonal case does
+// (sum_s G(s,s')* G(s,s'') = delta), so no re-canonicalisation is needed.
+static void apply_site_gate_all(BMPS& s, const Mat& G, const std::vector<int>& qphys) {
+    const int d = (int)qphys.size();
+    std::map<int, std::vector<int>> classes;          // charge -> local states
+    for (int t = 0; t < d; ++t) classes[qphys[t]].push_back(t);
+    for (int i = 0; i < s.n; ++i) {
+        for (auto& [q_L, blk] : s.A[i]) {
+            auto cols = phys_groups(s.bond[i+1], q_L, +1, qphys);
+            for (auto& [q, sts] : classes) {
+                std::vector<Mat> old(sts.size());
+                for (size_t a = 0; a < sts.size(); ++a)
+                    if (cols[sts[a]].width > 0)
+                        old[a] = blk.middleCols(cols[sts[a]].off, cols[sts[a]].width);
+                for (size_t a = 0; a < sts.size(); ++a) {
+                    if (cols[sts[a]].width == 0) continue;
+                    Mat acc = Mat::Zero(blk.rows(), cols[sts[a]].width);
+                    for (size_t b = 0; b < sts.size(); ++b) {
+                        if (cols[sts[b]].width == 0) continue;
+                        S g = mscal(G(sts[a], sts[b]));
+                        if (std::abs(g) > 1e-15) acc.noalias() += g * old[b];
+                    }
+                    blk.middleCols(cols[sts[a]].off, cols[sts[a]].width) = acc;
+                }
+            }
+        }
+    }
 }
 
 // Den Nijs-Rommelse string order parameter of the ground state:
@@ -4492,10 +4577,12 @@ HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::vector<std::array<double,3>>& angles,
                           int chi_max, double cutoff, int total_charge,
                           const std::vector<int>* init_config,
-                          const std::shared_ptr<HVAInitState>& init) {
+                          const std::shared_ptr<HVAInitState>& init,
+                          bool want_entropy) {
     require_uniform_local_dim(mpo, "run_hva_circuit");
     return BlockDMRG<Cx>::run_hva(mpo, n, angles, chi_max, cutoff, total_charge,
-                                  init_config, init ? &init->state : nullptr);
+                                  init_config, init ? &init->state : nullptr,
+                                  want_entropy);
 }
 
 // Entry point: GS once, then <GS|O|GS> per measurement MPO. The exported state has

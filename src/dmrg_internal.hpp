@@ -363,14 +363,23 @@ struct HVAResult {
     int max_bond = 0;                  // largest bond dimension the circuit reached
     double wall_s = 0;
     std::vector<int> layer_bond;       // max bond after each layer (entanglement growth)
-    // Half-chain von Neumann entropy of the prepared state. THE number that decides
+    // LARGEST bond entropy of the prepared state (max over every cut, not the middle
+    // bond: odd n has no middle bond, and reading n/2-1 there reports a lopsided cut
+    // as if it were a half cut). THE number that decides
     // classical simulability: an MPS needs chi ~ e^S, so S saturating with depth means
     // the ansatz stays classically cheap no matter how many qubits it uses, while S
     // growing toward the volume-law value (~n) is what a quantum computer would be
     // needed for. Read from a LOSSLESS centre walk, so it is not distorted by the
     // cutoff -- but it is still the entropy of the chi-capped state and is bounded by
     // ln(chi); trust it only while trunc_err stays far below the scale of interest.
-    double S_half = 0;
+    double S_max = 0;
+    // Entropy at the BALANCED cut (equal site counts either side). Stays 0 for ODD n,
+    // where no such cut exists -- bond n/2-1 there is the lopsided one that the old
+    // half-chain reading got wrong, so it is deliberately NOT stored. Worth having
+    // next to S_max because a maximum can sit on a BOUNDARY bond, where it is capped
+    // by ln(d) of one site -- ln 16 for the fused ladder -- so comparing maxima
+    // across geometries partly compares local dimensions, not the states.
+    double S_mid = 0;
     // LARGEST single discarded weight over the circuit's ~2(n-1)p truncations, not
     // their sum: the accumulated error can be up to that factor larger.
     double trunc_err = 0;
@@ -391,11 +400,15 @@ std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_
                                                int n, int chi_max, int total_charge = 0,
                                                const std::vector<int>* init_config = nullptr,
                                                DMRGResult* prep_out = nullptr);
+// want_entropy: the entropy walk is a full extra lossless sweep, so a VQE optimiser
+// (which calls this thousands of times but reads S only from the final run) should
+// leave it off -- it doubled the wall time of the depth scan when it was always on.
 HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::vector<std::array<double,3>>& angles,
                           int chi_max, double cutoff, int total_charge = 0,
                           const std::vector<int>* init_config = nullptr,
-                          const std::shared_ptr<HVAInitState>& init = nullptr);
+                          const std::shared_ptr<HVAInitState>& init = nullptr,
+                          bool want_entropy = true);
 
 // One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
 // (e.g. pair-field correlators): the GS is computed once, then for each obs MPO

@@ -2,14 +2,14 @@
 classical-simulability question.
 
 Reads docs/vqe_hubbard.csv (part A: depth convergence, exact simulation),
-docs/vqe_entanglement.csv (part B: half-chain entropy vs size) and, if present,
+docs/vqe_entanglement.csv (part B: largest-bond entropy vs size) and, if present,
 docs/vqe_transfer_check.csv (part C: is the angle transfer sound?), and renders
 docs/vqe_hubbard.svg:
 
   top    -- energy error per site vs circuit depth p, at the sizes where the MPS
             simulation is EXACT (chi = 4^(n/2)): how deep the ansatz must be, and
             how that depth grows with the system;
-  bottom -- half-chain entanglement entropy S of the prepared state vs system size
+  bottom -- largest bond entanglement entropy S of the prepared state vs system size
             (log x), for several depths, with a logarithmic fit. S is what decides
             classical simulability (an MPS needs chi ~ e^S): S growing like log n
             rather than like n means the VQE state is NOT volume-law entangled, so
@@ -39,7 +39,7 @@ def a_err(n, p):
 
 def b_S(n, p):
     m = [r for r in B if int(r["n"]) == n and int(r["p"]) == p]
-    return float(m[0]["S_half"]) if m else None
+    return float(m[0]["S_max"]) if m else None
 
 def b_row(n, p):
     m = [r for r in B if int(r["n"]) == n and int(r["p"]) == p]
@@ -71,7 +71,7 @@ s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="52" text-anchor="middle" font-size="11
          'Hamiltonian Variational Ansatz, 1D Hubbard chain, U=4t, half filling; every layer conserves N and 2Sz, '
          'so the U(1)&#215;U(1) block engine simulates the circuit exactly</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="70" text-anchor="middle" font-size="10.5" fill="#777">'
-         'circuit vs a dense state-vector simulator: 5.3e-15 (n=4), 4.0e-11 (n=6) &#8212; qx_hubbard_test, section HVA CIRCUIT</text>')
+         'circuit vs a dense state-vector simulator: ~1e-15 (n=4), 4.0e-11 (n=6) &#8212; qx_hubbard_test, section HVA CIRCUIT</text>')
 
 # ---------- top panel: energy error vs depth ----------
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{TY0-16}" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">'
@@ -109,7 +109,7 @@ s.append(f'<text x="26" y="{(TY0+TY1)/2:.0f}" text-anchor="middle" font-size="12
 
 # ---------- bottom panel: entropy vs size ----------
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{BY0-52}" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">'
-         'half-chain entanglement entropy of the prepared state vs system size</text>')
+         'largest bond entanglement entropy of the prepared state vs system size</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{BY0-34}" text-anchor="middle" font-size="10.8" fill="#666">'
          'an MPS needs &#967; ~ e<tspan baseline-shift="super" font-size="8">S</tspan>: S growing like log n, not like n, '
          'means the ansatz is NOT volume-law entangled at these depths</text>')
@@ -153,14 +153,14 @@ s.append(f'<line x1="{PX0}" y1="{BY1}" x2="{PX1}" y2="{BY1}" stroke="#444" strok
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{BY1+50:.1f}" text-anchor="middle" font-size="12" fill="#222">'
          'chain length n (log scale) &#8212; the circuit uses 2n qubits</text>')
 s.append(f'<text x="26" y="{(BY0+BY1)/2:.0f}" text-anchor="middle" font-size="12" fill="#222" '
-         f'transform="rotate(-90 26 {(BY0+BY1)/2:.0f})">half-chain entropy S</text>')
+         f'transform="rotate(-90 26 {(BY0+BY1)/2:.0f})">largest bond entropy S</text>')
 
 # footer: the headline number at the largest size
 top = b_row(sizes_b[-1], p_top)
 if top:
     s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-24}" text-anchor="middle" font-size="11" fill="#0a7d28" font-weight="bold">'
              f'At {2*sizes_b[-1]} qubits and depth {p_top} the circuit captures {100*float(top["frac"]):.0f}% of the correlation '
-             f'energy with S = {float(top["S_half"]):.2f} &#8212; simulated classically to a discarded weight of '
+             f'energy with S = {float(top["S_max"]):.2f} &#8212; simulated classically to a discarded weight of '
              f'{float(top["trunc_err"]):.0e} at &#967; = {top["chi_used"]}.</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-8}" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">'
          '&#967; is the total bond dimension over all charge sectors at a 1e-10 cutoff, so it far exceeds e'
@@ -173,7 +173,7 @@ print("wrote", os.path.normpath(out))
 print(f"  S(p={p_top}) fit: S = {b_fit:.3f} ln(n) {a_fit:+.3f}   (max deviation {resid:.4f})")
 for n in sizes_b:
     r = b_row(n, p_top)
-    if r: print(f"  n={n:>2} ({2*n:>2}q): S={float(r['S_half']):.3f}  S/n={float(r['S_half'])/n:.4f}  "
+    if r: print(f"  n={n:>2} ({2*n:>2}q): S={float(r['S_max']):.3f}  S/n={float(r['S_max'])/n:.4f}  "
                 f"frac={float(r['frac']):.3f}  chi={r['chi_used']}  trunc={float(r['trunc_err']):.1e}")
 if C:
     print("  transfer check (part C):")

@@ -897,6 +897,72 @@ int main() {
         fails += cf;
     }
 
+    // (p) HVA CIRCUIT on the RUNG-FUSED LADDER (d=16) -- the first quasi-2D VQE
+    // circuit, and the first whose on-site layer is a GENERAL one-site unitary: the
+    // fused site's on-site block carries the rung hopping, which is off-diagonal
+    // (but charge-block-diagonal, so it still acts site-locally on the blocked MPS).
+    // The fused and physical index conventions coincide exactly -- fused state
+    // 4*s_a+s_b at rung x sits at physical sites (2x, 2x+1), and
+    // sum_x fused_x 16^(Lx-1-x) == sum_i s_i 4^(2Lx-1-i) -- so a physical-basis
+    // state-vector reference can be compared to the fused-basis MPS with no
+    // relabelling.
+    {
+        const double t = 1.0, tp = 1.0, U = 4.0;
+        const int Lx = 3, nm = 2 * Lx;
+        int dim6 = 1; for (int k = 0; k < nm; ++k) dim6 *= 4;   // 4^(2Lx)
+        auto mpo = build_hubbard_ladder_mpo(Lx, t, tp, U);
+        // dense pieces in the PHYSICAL basis: leg hopping on even/odd rung bonds,
+        // and the on-site block (rung hopping + U)
+        MatC Hev = MatC::Zero(dim6, dim6), Hod = MatC::Zero(dim6, dim6),
+             Hon = MatC::Zero(dim6, dim6);
+        auto hop = [&](int i, int j, double amp, MatC& dst) {
+            MatC h = ferm(nm,i,MatC(Cup.adjoint()))*ferm(nm,j,Cup)
+                   + ferm(nm,i,MatC(Cdn.adjoint()))*ferm(nm,j,Cdn);
+            dst += -amp * (h + MatC(h.adjoint()));
+        };
+        for (int x = 0; x < Lx - 1; ++x) {              // leg bonds between rungs
+            MatC& dst = (x % 2 == 0) ? Hev : Hod;
+            hop(2*x,     2*(x+1),     t, dst);          // leg a
+            hop(2*x + 1, 2*(x+1) + 1, t, dst);          // leg b
+        }
+        for (int x = 0; x < Lx; ++x) hop(2*x, 2*x + 1, tp, Hon);   // rung hopping
+        for (int i = 0; i < nm; ++i) Hon += U * (ferm(nm,i,Nu) * ferm(nm,i,Nd));
+        struct Eig { MatC V; Eigen::VectorXd w; };
+        auto prep = [&](const MatC& Hx) {
+            Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
+            return Eig{es.eigenvectors(), es.eigenvalues()};
+        };
+        const Eig Eev = prep(Hev), Eod = prep(Hod), Eon = prep(Hon);
+        auto apply = [&](const Eig& e, double th, Eigen::VectorXcd v) {
+            Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
+            return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
+        };
+        // half-filling CDW product start in the FUSED basis (as the ladder showcase
+        // uses): rung x holds |up,dn> or |dn,up> => fused index 4*1+2 / 4*2+1
+        std::vector<int> cfg(Lx);
+        for (int x = 0; x < Lx; ++x) cfg[x] = (x % 2 == 0) ? (4*1 + 2) : (4*2 + 1);
+        Eigen::VectorXcd v = Eigen::VectorXcd::Zero(dim6);
+        { int idx = 0; for (int x = 0; x < Lx; ++x) idx = idx * 16 + cfg[x]; v(idx) = 1.0; }
+        std::vector<std::array<double,3>> ang = {{0.29, -0.17, 0.36},
+                                                 {-0.22, 0.31, -0.14},
+                                                 {0.18, 0.25, 0.33}};
+        for (auto& L : ang) {
+            v = apply(Eev, L[0], v);
+            v = apply(Eod, L[1], v);
+            v = apply(Eon, L[2], v);
+        }
+        MatC Hfull = Hev + Hod + Hon;
+        double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
+        HVAResult hr = run_hva_circuit(mpo, Lx, ang, 4096, 1e-14, pack_q2(nm, 0), &cfg);
+        double err = std::abs(hr.energy - E_ed);
+        bool okl = err < 1e-9;
+        std::printf("  HVA LADDER Lx=%d (%d qubits, fused d=16): <H> block=%.10f  "
+                    "statevector=%.10f  err=%.1e  chi=%d  S=%.4f  %s\n",
+                    Lx, 2*nm, hr.energy, E_ed, err, hr.max_bond, hr.S_max,
+                    okl ? "OK" : "FAIL");
+        fails += !okl;
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }

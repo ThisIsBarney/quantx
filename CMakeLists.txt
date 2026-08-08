@@ -653,6 +653,37 @@ add_test(NAME qx_su2_run_test COMMAND qx_su2_run_test)
 add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
 add_test(NAME qx_tdvp_blocks_test COMMAND qx_tdvp_blocks_test)
 add_test(NAME qx_mpo_sym_test COMMAND qx_mpo_sym_test)
+# Doc/data consistency: every VQE figure quoted in docs/universal_mpo.md must be
+# derivable from the committed CSVs. Three review rounds in a row shipped numbers that
+# had drifted from the data (one cell was literally another row's value), so this is a
+# test rather than a habit. stdlib-only and cwd-independent; if no interpreter can be
+# found the test is not registered and CMake WARNS -- it never blocks the build, but it
+# never disappears quietly either.
+# -DQX_PYTHON=<path> overrides; otherwise try PATH, then the usual conda location
+# on this box (find_package(Python3) misses an interpreter that is not on PATH).
+if(NOT QX_PYTHON)
+  find_package(Python3 COMPONENTS Interpreter QUIET)
+  if(Python3_Interpreter_FOUND)
+    set(QX_PYTHON "${Python3_EXECUTABLE}")
+  else()
+    find_program(QX_PYTHON NAMES python3 python
+                 HINTS "C:/ProgramData/miniforge3" "C:/ProgramData/miniconda3"
+                       "$ENV{LOCALAPPDATA}/Programs/Python")
+  endif()
+endif()
+if(QX_PYTHON)
+  add_test(NAME qx_vqe_doc_figures
+           COMMAND "${QX_PYTHON}"
+                   ${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/check_vqe_doc.py)
+  set_tests_properties(qx_vqe_doc_figures PROPERTIES TIMEOUT 60)
+  message(STATUS "qx_vqe_doc_figures: doc/CSV consistency test enabled (${QX_PYTHON})")
+else()
+  # Say so rather than skipping in silence -- a check that quietly does not exist is
+  # exactly the failure mode it was added to prevent.
+  message(WARNING "No python found: the docs/universal_mpo.md figure check "
+                  "(qx_vqe_doc_figures) is NOT registered. Pass -DQX_PYTHON=<path>.")
+endif()
+
 add_test(NAME qx_hubbard_test COMMAND qx_hubbard_test)
 # Measured ~17 min on a 20-core box: the ED sections build dense 4^6 fermion
 # operators and run several 120-sweep DMRGs, and the HVA circuit case adds a

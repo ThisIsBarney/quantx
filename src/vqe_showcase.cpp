@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <map>
 #include <random>
@@ -141,7 +142,7 @@ static std::vector<std::array<double,3>> to_layers(const std::vector<double>& x)
 struct VQEPoint {
     double E_vqe = 0, E_exact = 0, err = 0, err_site = 0;
     int max_bond = 0, nfev = 0, p = 0, n = 0;
-    double wall = 0, S_half = 0, trunc = 0;
+    double wall = 0, S_max = 0, trunc = 0;
 };
 
 // prev_best (optional, in/out): the optimal angles at depth p-1, used to WARM-START
@@ -172,7 +173,8 @@ static VQEPoint vqe_point(int n, int p, int chi, double U, int max_fev, double t
     auto psi0 = hva_prepare_init(mpo0, n, chi, target, &cfg);
     int nfev_total = 0, bond_seen = 0;
     auto energy_of = [&](const std::vector<double>& x) {
-        HVAResult r = run_hva_circuit(mpo, n, to_layers(x), chi, 1e-12, target, &cfg, psi0);
+        HVAResult r = run_hva_circuit(mpo, n, to_layers(x), chi, 1e-12, target, &cfg,
+                                      psi0, /*want_entropy*/false);
         ++nfev_total;
         bond_seen = std::max(bond_seen, r.max_bond);
         return r.energy;
@@ -211,7 +213,7 @@ static VQEPoint vqe_point(int n, int p, int chi, double U, int max_fev, double t
     {   // one final run at the optimum, to record the state's entanglement
         HVAResult rb = run_hva_circuit(mpo, n, to_layers(best_x), chi, 1e-12,
                                        target, &cfg, psi0);
-        out.S_half = rb.S_half; out.trunc = rb.trunc_err;
+        out.S_max = rb.S_max; out.trunc = rb.trunc_err;
     }
     out.E_vqe = best;
     out.nfev = nfev_total;
@@ -237,10 +239,10 @@ int main(int argc, char** argv) {
         VQEPoint r;
         for (int q = 1; q <= p; ++q) r = vqe_point(n, q, chi, U, iters, 1.0, &carry);
         std::printf("VQE n=%d (%d qubits) p=%d chi=%d U=%.2f : E_vqe=%.10f "
-                    "E_exact=%.10f err=%.3e err/site=%.3e chi_used=%d S_half=%.4f "
+                    "E_exact=%.10f err=%.3e err/site=%.3e chi_used=%d S_max=%.4f "
                     "trunc=%.1e nfev=%d (%.1fs)\n",
                     n, 2*n, p, chi, U, r.E_vqe, r.E_exact, r.err, r.err_site,
-                    r.max_bond, r.S_half, r.trunc, r.nfev, r.wall);
+                    r.max_bond, r.S_max, r.trunc, r.nfev, r.wall);
         return 0;
     }
 
@@ -261,30 +263,54 @@ int main(int argc, char** argv) {
                                           : std::vector<int>{4, 6, 8};
     const std::vector<int> depths = quick ? std::vector<int>{1, 2}
                                           : std::vector<int>{1, 2, 3, 4, 5, 6, 7, 8};
+    const int chi_b = quick ? 128 : 4096;
+    // State preparation gets its OWN, much smaller chi. |psi_0> is the U=0 ground
+    // state -- a Slater determinant whose largest bond entropy grows only like
+    // (1/3) log n, so a couple of hundred states is already lossless for it. Passing
+    // the circuit's chi budget here instead cost hours: at n=32 the complex-scalar
+    // DMRG ran 60 sweeps with chi=4096 allowed (11.6 GB resident) to prepare a state
+    // that needs a fraction of that.
+    const int chi_prep = quick ? 64 : 256;
+    const double cutoff_b = 1e-10;
+    // QX_VQE_ONLY=D reruns just the ladder study: parts A/B/C are unaffected by the
+    // ladder work and their CSVs are already committed, so redoing them would cost
+    // ~2 h for identical numbers.
+    const char* only = std::getenv("QX_VQE_ONLY");
+    // NOTE strchr(set, NUL) returns a pointer to the terminator, so an EMPTY value
+    // would pass validation and then match no part -- the exact silent no-op this
+    // check exists to prevent. Only the first character is examined; C runs with B.
+    if (only && (*only == char(0) || !std::strchr("AaBbDd", *only))) {
+        std::fprintf(stderr, "QX_VQE_ONLY must be A, B or D (got '%s')\n", only);
+        return 1;
+    }
+    auto want = [&](char c) { return !only || *only == c || *only == (c ^ 32); };
+    std::map<int, std::vector<double>> angles_ref;   // part A -> part B
+    // Part B consumes the per-depth optima part A produces, so asking for B alone
+    // would otherwise print headers and no rows. B implies A.
+    if (want('A') || want('B')) {
     std::printf("# PART A -- VQE depth convergence, 1D Hubbard, U=%.1ft, half filling\n", U);
     std::printf("# (exact simulation: chi is at the full-Hilbert-space bound 4^(n/2))\n");
-    std::printf("# n qubits p E_vqe E_exact err err_site chi_used nfev wall_s\n");
+    std::printf("# n qubits p E_vqe E_exact err err_site chi_used S_max trunc nfev wall_s\n");
     FILE* f = std::fopen("docs/vqe_hubbard.csv", "w");
-    if (f) std::fprintf(f, "n,qubits,p,E_vqe,E_exact,err,err_site,chi_used,nfev,wall_s\n");
-    // the optimum at EACH depth from the largest exactly-simulable size, reused in
-    // part B. Storing per depth matters: the first p layers of a depth-8 optimum are
-    // NOT the depth-p optimum (using them made the p=1 transfer land above the
-    // starting state).
-    std::map<int, std::vector<double>> angles_ref;
+    if (f) std::fprintf(f, "n,qubits,p,E_vqe,E_exact,err,err_site,chi_used,S_max,trunc,nfev,wall_s\n");
+    // angles_ref (declared above, so part B can see it) holds the optimum at EACH
+    // depth from the largest exactly-simulable size. Storing per depth matters: the
+    // first p layers of a depth-8 optimum are NOT the depth-p optimum (using them
+    // made the p=1 transfer land above the starting state).
     for (int n : sizes) {
         int chi_exact = 1; for (int k = 0; k < n / 2; ++k) chi_exact *= 4;
         std::vector<double> carry;              // depth-(p-1) optimum, warm-starts p
         for (int p : depths) {
             VQEPoint r = vqe_point(n, p, chi_exact, U, iters, 1.0, &carry);
             if (n == sizes.back()) angles_ref[p] = carry;   // depth-p optimum
-            std::printf("%d %d %d %.10f %.10f %.4e %.4e %d %d %.1f\n",
+            std::printf("%d %d %d %.10f %.10f %.4e %.4e %d %.6f %.1e %d %.1f\n",
                         n, 2*n, p, r.E_vqe, r.E_exact, r.err, r.err_site,
-                        r.max_bond, r.nfev, r.wall);
+                        r.max_bond, r.S_max, r.trunc, r.nfev, r.wall);
             std::fflush(stdout);
             if (f) {
-                std::fprintf(f, "%d,%d,%d,%.10f,%.10f,%.6e,%.6e,%d,%d,%.1f\n",
+                std::fprintf(f, "%d,%d,%d,%.10f,%.10f,%.6e,%.6e,%d,%.6f,%.3e,%d,%.1f\n",
                              n, 2*n, p, r.E_vqe, r.E_exact, r.err, r.err_site,
-                             r.max_bond, r.nfev, r.wall);
+                             r.max_bond, r.S_max, r.trunc, r.nfev, r.wall);
                 std::fflush(f);
             }
         }
@@ -292,6 +318,9 @@ int main(int argc, char** argv) {
     }
     if (f) std::fclose(f);
 
+    }   // end of part A
+
+    if (want('B')) {
     // ================================================================= PART B ====
     // Is the state the circuit prepares classically simulable? This needs NO
     // optimiser -- one circuit run per (n, p) at FIXED angles -- so it is thousands
@@ -301,18 +330,9 @@ int main(int argc, char** argv) {
     // schedule and are only weakly size-dependent, so the transferred circuit is a
     // faithful stand-in for "the VQE circuit" at larger n. (Stated as a transfer, not
     // claimed to be each size's own optimum.)
-    // The metric is the half-chain entropy S, not the bond dimension: chi is capped by
+    // The metric is the largest bond entropy S, not the bond dimension: chi is capped by
     // whatever we can afford, S is not. An MPS needs chi ~ e^S, so S saturating with
     // depth means the ansatz stays classically cheap at ANY qubit count.
-    const int chi_b = quick ? 128 : 4096;
-    // State preparation gets its OWN, much smaller chi. |psi_0> is the U=0 ground
-    // state -- a Slater determinant whose half-chain entropy grows only like
-    // (1/3) log n, so a couple of hundred states is already lossless for it. Passing
-    // the circuit's chi budget here instead cost hours: at n=32 the complex-scalar
-    // DMRG ran 60 sweeps with chi=4096 allowed (11.6 GB resident) to prepare a state
-    // that needs a fraction of that.
-    const int chi_prep = quick ? 64 : 256;
-    const double cutoff_b = 1e-10;
     const std::vector<int> sizes_b = quick ? std::vector<int>{6, 8}
                                            : std::vector<int>{8, 12, 16, 24, 32};
     std::printf("\n# PART B -- entanglement of the prepared state (angles transferred "
@@ -320,9 +340,9 @@ int main(int argc, char** argv) {
     std::printf("# E_circ is the TRANSFERRED circuit's energy (not re-optimised at this\n"
                 "# size); frac = captured correlation energy (E_psi0 - E_circ)/(E_psi0 -\n"
                 "# E_exact), so the reader can judge how representative the transfer is.\n");
-    std::printf("# n qubits p S_half chi_used trunc_err E_circ E_exact frac wall_s\n");
+    std::printf("# n qubits p S_max chi_used trunc_err E_circ E_exact frac wall_s\n");
     FILE* g = std::fopen("docs/vqe_entanglement.csv", "w");
-    if (g) std::fprintf(g, "n,qubits,p,S_half,chi_used,trunc_err,E_circ,E_exact,frac,wall_s\n");
+    if (g) std::fprintf(g, "n,qubits,p,S_max,chi_used,trunc_err,E_circ,E_exact,frac,wall_s\n");
     for (int n : sizes_b) {
         auto mpo  = build_hubbard_mpo(n, 1.0, U, true);
         auto mpo0 = build_hubbard_mpo(n, 1.0, 0.0, true);
@@ -347,12 +367,12 @@ int main(int argc, char** argv) {
             double frac = (E_psi0 - E_exact) != 0.0
                         ? (E_psi0 - r.energy) / (E_psi0 - E_exact) : 0.0;
             std::printf("%d %d %d %.6f %d %.2e %.10f %.10f %.4f %.1f\n",
-                        n, 2*n, p, r.S_half, r.max_bond, r.trunc_err, r.energy,
+                        n, 2*n, p, r.S_max, r.max_bond, r.trunc_err, r.energy,
                         E_exact, frac, w);
             std::fflush(stdout);
             if (g) {
                 std::fprintf(g, "%d,%d,%d,%.6f,%d,%.3e,%.10f,%.10f,%.4f,%.1f\n",
-                             n, 2*n, p, r.S_half, r.max_bond, r.trunc_err, r.energy,
+                             n, 2*n, p, r.S_max, r.max_bond, r.trunc_err, r.energy,
                              E_exact, frac, w);
                 std::fflush(g);
             }
@@ -366,7 +386,7 @@ int main(int argc, char** argv) {
     // stand-in for the VQE circuit at larger n. Here that assumption is TESTED at one
     // size: re-optimise the transferred angles in place (a short Adam run -- they are
     // already a good warm start) and compare both the energy and, crucially, the
-    // half-chain entropy. If S is essentially unchanged, the entanglement conclusion
+    // largest bond entropy. If S is essentially unchanged, the entanglement conclusion
     // does not depend on the transfer; if it moves a lot, Part B's S values are only
     // indicative and the doc must say so.
     const int n_c = quick ? 6 : 12;
@@ -396,7 +416,7 @@ int main(int argc, char** argv) {
             std::vector<double> x = it->second;
             auto energy_of = [&](const std::vector<double>& y) {
                 return run_hva_circuit(mpo, n_c, to_layers(y), chi_b, cutoff_b,
-                                       target, &cfg, psi0).energy;
+                                       target, &cfg, psi0, false).energy;
             };
             double E_re = adam_min(energy_of, x, adam_steps, 0.02);
             HVAResult rr = run_hva_circuit(mpo, n_c, to_layers(x), chi_b, cutoff_b,
@@ -404,17 +424,115 @@ int main(int argc, char** argv) {
             double w = std::chrono::duration<double>(
                            std::chrono::steady_clock::now() - t0).count();
             std::printf("%d %d %.6f %.6f %+.6f %.10f %.10f %.10f %.1f\n",
-                        n_c, p, rt.S_half, rr.S_half, rr.S_half - rt.S_half,
+                        n_c, p, rt.S_max, rr.S_max, rr.S_max - rt.S_max,
                         rt.energy, E_re, E_exact, w);
             std::fflush(stdout);
             if (h) {
                 std::fprintf(h, "%d,%d,%.6f,%.6f,%+.6f,%.10f,%.10f,%.10f,%.1f\n",
-                             n_c, p, rt.S_half, rr.S_half, rr.S_half - rt.S_half,
+                             n_c, p, rt.S_max, rr.S_max, rr.S_max - rt.S_max,
                              rt.energy, E_re, E_exact, w);
                 std::fflush(h);
             }
         }
     }
     if (h) std::fclose(h);
+    }   // end of parts B/C
+
+    if (want('D')) {
+    // ================================================================= PART D ====
+    // Geometry at MATCHED qubit count: does a quasi-2D system entangle more than a
+    // chain? The 2-leg Hubbard ladder is rung-fused, so each MPS site is a whole rung
+    // (d=16) and the chain is nearest-neighbour again -- and its on-site block carries
+    // the RUNG HOPPING, making this the first VQE layer here that is a general
+    // one-site unitary rather than a free phase.
+    //
+    // Each geometry uses ITS OWN optimised angles, at sizes where the simulation is
+    // lossless by construction (chi = 16^(Lx/2) for the ladder). Two protocols were
+    // tried and rejected first, and both failures are the reason this one is small:
+    //   * transferring the Lx=4 optimum upward -- the ladder optimum at 4 rungs is
+    //     far from converged (61.5% of the correlation energy at the depths reached),
+    //     i.e. it is overfitted to that size,
+    //     and at Lx >= 6 it gave frac < 0 (the circuit ended ABOVE the state it
+    //     started from) with S inflated to 4.9-6.2 purely by scrambling;
+    //   * a fixed adiabatic ramp -- at the depths a VQE actually uses, tau/p is far
+    //     too coarse to be adiabatic, and the circuit HEATS the state (frac ~ -4).
+    // So the comparison is deliberately restricted to exactly-simulable, properly
+    // optimised points rather than being large and meaningless.
+    // Lx >= 3: derive_mpo_sym needs a square bulk MPO site, so a 2-rung ladder throws.
+    const std::vector<int> lx_d = quick ? std::vector<int>{3}
+                                        : std::vector<int>{3, 4};
+    std::printf("\n# PART D -- 2-leg ladder (rung-fused d=16) at its OWN optimum\n");
+    std::printf("# compare against the chain at matched qubits (part A/B: 2n qubits)\n");
+    std::printf("# Lx qubits p E_vqe E_exact frac S_max chi_used trunc nfev wall_s\n");
+    std::fflush(stdout);
+    FILE* q = std::fopen("docs/vqe_ladder.csv", "w");
+    if (q) std::fprintf(q, "Lx,qubits,p,E_vqe,E_exact,frac,S_max,chi_used,trunc,nfev,wall_s\n");
+    for (int Lx : lx_d) {
+        const int nm = 2 * Lx, target = pack_q2(nm, 0);
+        auto mpo  = build_hubbard_ladder_mpo(Lx, 1.0, 1.0, U);
+        auto mpo0 = build_hubbard_ladder_mpo(Lx, 1.0, 1.0, 0.0);
+        std::vector<int> cfg(Lx);
+        for (int x = 0; x < Lx; ++x) cfg[x] = (x % 2 == 0) ? (4*1 + 2) : (4*2 + 1);
+        int chi_ex = 1; for (int k = 0; k < Lx / 2; ++k) chi_ex *= 16;   // lossless
+        auto psi0 = hva_prepare_init(mpo0, Lx, chi_ex, target, &cfg);
+        double E_exact = run_dmrg_blocks(mpo, Lx, 512, 1e-12, 60, 1e-11,
+                                         target, &cfg).energy;
+        double E_psi0 = run_hva_circuit(mpo, Lx, {}, chi_ex, 1e-12,
+                                        target, &cfg, psi0).energy;
+        std::vector<double> carry;
+        for (int p : depths) {
+            auto t0 = std::chrono::steady_clock::now();
+            int nfev = 0;
+            auto energy_of = [&](const std::vector<double>& x) {
+                ++nfev;
+                return run_hva_circuit(mpo, Lx, to_layers(x), chi_ex, 1e-12,
+                                       target, &cfg, psi0, false).energy;
+            };
+            // SAME search protocol as part A (warm start + small-angle start + three
+            // random restarts + Adam polish). Anything weaker here would show up as
+            // "the ladder converges worse" -- the very claim this part makes -- so
+            // the two geometries must be searched identically.
+            std::mt19937 rng(9871 + 31 * Lx + 7 * p);
+            std::uniform_real_distribution<double> uni(-1.5, 1.5);
+            double best = 1e300; std::vector<double> best_x;
+            auto try_start = [&](std::vector<double> x0, int budget) {
+                NMResult r0 = nelder_mead(energy_of, x0, 0.3, budget);
+                if (r0.f < best) { best = r0.f; best_x = r0.x; }
+            };
+            { std::vector<double> x0 = carry;               // layer-wise warm start
+              x0.insert(x0.end(), {0.0, 0.0, 0.0});
+              try_start(x0, iters / 2); }
+            { std::vector<double> xs(3 * p);                // near-identity start
+              for (int k = 0; k < 3*p; ++k) xs[k] = 0.15 * ((k % 3 == 2) ? -1.0 : 1.0);
+              try_start(xs, iters / 4); }
+            for (int r = 0; r < 3; ++r) {                   // random restarts
+                std::vector<double> x0(3 * p);
+                for (int k = 0; k < 3*p; ++k) x0[k] = uni(rng);
+                try_start(x0, iters / 12);
+            }
+            carry = best_x;
+            int st = std::max(60, iters / (12 * p));
+            adam_min(energy_of, carry, st, 0.05);
+            double E = adam_min(energy_of, carry, st, 0.01);
+            HVAResult rb = run_hva_circuit(mpo, Lx, to_layers(carry), chi_ex, 1e-12,
+                                           target, &cfg, psi0);
+            double w = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() - t0).count();
+            double frac = (E_psi0 - E_exact) != 0.0
+                        ? (E_psi0 - E) / (E_psi0 - E_exact) : 0.0;
+            std::printf("%d %d %d %.10f %.10f %.4f %.6f %d %.1e %d %.1f\n",
+                        Lx, 4*Lx, p, E, E_exact, frac, rb.S_max, rb.max_bond,
+                        rb.trunc_err, nfev, w);
+            std::fflush(stdout);
+            if (q) {
+                std::fprintf(q, "%d,%d,%d,%.10f,%.10f,%.4f,%.6f,%d,%.3e,%d,%.1f\n",
+                             Lx, 4*Lx, p, E, E_exact, frac, rb.S_max, rb.max_bond,
+                             rb.trunc_err, nfev, w);
+                std::fflush(q);
+            }
+        }
+    }
+    if (q) std::fclose(q);
+    }   // end of part D
     return 0;
 }

@@ -680,7 +680,7 @@ exactly the bond hopping term.
 
 **Exactness gate** (`qx_hubbard_test`, section HVA CIRCUIT): the same circuit, the same
 initial state, the same angles, run on the block MPS and on a dense 4ⁿ state-vector
-simulator agree to **5.3e-15 (n=4)** and **4.0e-11 (n=6)**, with the bond dimension
+simulator agree to **~1e-15 (n=4)** and **4.0e-11 (n=6)**, with the bond dimension
 sitting at the full-Hilbert-space bound — i.e. **no truncation**, so the comparison is
 clean rather than accidentally right.
 
@@ -710,9 +710,9 @@ numbers are the ansatz's own, not a truncation artefact:
 
 | error/site | p=2 | p=4 | p=6 | p=8 |
 |---|---|---|---|---|
-| n=4 (8 qubits) | 1.8e-2 | 7.6e-3 | 2.8e-4 | **1.6e-7** |
+| n=4 (8 qubits) | 1.8e-2 | 7.5e-3 | 2.8e-4 | **1.6e-7** |
 | n=6 (12 qubits) | 4.0e-2 | 2.5e-2 | 1.0e-2 | 6.4e-3 |
-| n=8 (16 qubits) | 5.6e-2 | 2.5e-2 | 2.2e-2 | 1.2e-2 |
+| n=8 (16 qubits) | 5.6e-2 | 2.5e-2 | 2.2e-2 | 1.1e-2 |
 
 The depth needed grows with the system: p=8 essentially solves 8 qubits and is still
 ~1 % per site at 16.
@@ -724,17 +724,25 @@ exactly-simulable size), so this reaches sizes the optimisation never could:
 
 | | 16 qubits | 24 | 32 | 48 | **64** |
 |---|---|---|---|---|---|
-| half-chain entropy S (p=8) | 0.579 | 0.843 | 1.053 | 1.309 | **1.467** |
-| S / n | 0.072 | 0.070 | 0.066 | 0.055 | **0.046** |
-| correlation energy captured | 96 % | 94 % | 92 % | 89 % | **88 %** |
+| largest bond entropy S (p=8) | 1.214 | 1.392 | 1.545 | 1.739 | **1.864** |
+| S / n (n = sites) | 0.152 | 0.116 | 0.097 | 0.072 | **0.058** |
+| correlation energy captured | 97 % | 94 % | 92 % | 90 % | **88 %** |
 
 **S/n falls monotonically — this is not volume-law entanglement.** A logarithmic fit
-`S ≈ 0.647 ln n − 0.759` reproduces every point to **0.018**. Since an MPS needs
+`S ≈ 0.475 ln n + 0.222` reproduces every point to **0.011**. Since an MPS needs
 χ ~ e^S, a VQE state whose entropy grows like log n stays classically representable
 *at any qubit count*: at 64 qubits, capturing 88 % of the correlation energy, the
-circuit is simulated to a discarded weight of **4.5e-11**. The quantum-advantage
+circuit is simulated to a discarded weight of **4.4e-11**. The quantum-advantage
 threshold for this ansatz is therefore not the qubit count but the depth — and Part A
 shows the depth that would be needed grows with the system.
+
+<sub>S is the **largest** bond entropy, not the middle-bond one. Reading a single
+bond was a real bug: the code indexed `n/2 - 1`, which for ODD site counts is not a
+balanced cut at all — the 3-rung ladder reported a 4-qubit | 8-qubit split as if it
+were a half cut. Switching to the max over cuts also raises the values, since an open
+chain's most entangled cut need not be the balanced one. Every S in this document is
+the max over cuts; `S_mid` (the balanced cut) is now recorded separately because a
+max can sit on a boundary bond, where it is capped by ln(d) of one site.</sub>
 
 *Three things to read correctly here.* (i) The reported χ hits the 4096 cap at
 n ≥ 16, which does **not** contradict S ≈ 1.5: χ is the total bond dimension summed
@@ -760,12 +768,12 @@ transferred angles in place:
 
 | p | S transferred | S re-optimised | ΔS | energy change |
 |---|---|---|---|---|
-| 2 | 1.007 | 1.022 | +0.014 | −5.6158 → −5.6281 |
-| 4 | 0.876 | 0.912 | +0.037 | −6.0830 → −6.0855 |
-| 6 | 0.815 | — | — | short Adam found no improvement |
-| 8 | 0.843 | — | — | short Adam found no improvement |
+| 2 | 1.599 | 1.595 | −0.004 | −5.6158 → −5.6281 |
+| 4 | 1.457 | 1.456 | −0.001 | −6.0830 → −6.0855 |
+| 6 | 1.455 | — | — | short Adam found no improvement |
+| 8 | 1.392 | — | — | short Adam found no improvement |
 
-At p=2 and 4 re-optimisation moves the energy by <0.05 % and S by ≤0.04, so the
+At p=2 and 4 re-optimisation moves the energy by 0.22 % and 0.04 % and S by ≤0.004, so the
 entanglement conclusion does not rest on the transfer. At p=6 and 8 the 25-step Adam
 made no progress at all, which neither confirms nor refutes the transfer there — the
 honest statement is that the check is positive at two depths and inconclusive at two.
@@ -788,3 +796,77 @@ The optimiser matters for honesty, not just speed: a Nelder-Mead simplex stalls 
 dimensions (at p=6 a 6× larger budget only halved the error), which would have
 inflated the reported "depth needed". Layer-wise warm start → simplex → Adam on
 central-difference gradients is what the numbers above use.
+
+### Geometry: what quasi-2D costs a fermionic VQE
+
+![VQE geometry](vqe_geometry.svg)
+
+The 1D result above has an obvious hole: a chain's *target* state is itself only
+log-law entangled, so no depth can make the ansatz classically hard there. The
+quantity that decides hardness is the **width** — a width-W cut carries S ~ W and
+χ ~ e^W. The first step into that regime is the **2-leg Hubbard ladder**, rung-fused
+so each MPS site is a whole rung (d=16) and the chain is nearest-neighbour again.
+That fusion puts the **rung hopping inside the on-site block**, which is off-diagonal:
+the on-site layer becomes a *general one-site unitary* instead of a free phase. It is
+still exactly applicable, because the rung hop moves a particle between legs without
+changing the fused site's N or Sz, so the gate stays block-diagonal in the local
+charge (checked at run time, not assumed). ED gate: the ladder circuit matches a dense
+state-vector simulator to **1.2e-13**.
+
+At **matched qubit count and matched depth**, with each geometry using its own
+optimised angles and both simulations lossless (χ = 4^{n/2} / 16^{Lx/2}):
+
+| | 12 qubits (p=8) | | 16 qubits (p=5) | |
+|---|---|---|---|---|
+| | chain (n=6) | ladder (Lx=3) | chain (n=8) | ladder (Lx=4) |
+| relative energy error | 1.25 % | **4.01 %** | 4.34 % | **19.5 %** |
+| correlation energy captured | 98.2 % | **92.6 %** | 93.2 % | **61.5 %** |
+| largest bond entropy S | 1.154 | 1.927 | 1.244 | 2.619 |
+| ratio | | **×3.2 error**, ×1.67 S | | **×4.5 error**, ×2.11 S |
+
+**The robust half: the ansatz converges worse on the ladder.** At the same qubit count
+and the same depth the ladder lands 3.2–4.5× further from its ground state, and the
+gap widens with size — at 16 qubits and p=5 the chain has captured 93 % of the
+correlation energy while the ladder is at 61.5 %. That is a statement about the *ansatz*,
+it is immune to how entropy is defined, and it is the sharper form of the earlier
+conclusion: the barrier is geometry and depth, not qubit count. The ratios are stable
+across depth (error ×2.2–3.2 at 12 qubits, ×3.0–4.6 at 16 for every p ≥ 2).
+
+**The entropy half does not survive scrutiny as a 2D signal, and is reported here only
+with its two defects stated.** (i) Most of it is *state preparation*, not the circuit:
+at p=1, where the optimiser correctly finds the identity and the circuit does nothing,
+the ratios are already ×1.56 and ×1.89 — **80–84 % of the excess entropy is in the
+non-interacting |ψ₀⟩ before a single gate acts**. (ii) `S_max` is the largest bond
+entropy, and for the fused ladder a *boundary* bond is capped by ln 16 = 2.7726 — the
+Lx=4 p=1 value is **exactly** that, a maximally mixed edge rung. So part of the ratio
+compares ln(d_rung) against ln(d_site), not areas. A clean version needs the entropy
+at cuts that split the qubits evenly on both geometries (`S_mid`, now recorded but not
+yet measured across this scan) and interior cuts only; until then, treat ×1.67/×2.11
+as an upper bound on a quasi-2D effect, not a measurement of one.
+
+The two pairs cover different depth ranges because the ladder scan was stopped after
+16 qubits / p=5 — its cost per point grows steeply and the error ratios were already
+flat in p.
+
+*Scope, and three protocols it took to get here.* Two designs were tried and rejected
+by their own data before this one, and both failures are recorded in the source
+because each is an easy trap:
+
+1. **Transferring the ladder optimum upward** (the trick that worked for the chain)
+   fails. It worked on the chain because the n=8 optimum already captures 97 % of the
+   correlation energy — it is close to an adiabatic schedule. The Lx=4 ladder optimum
+   is far from converged (61.5 % at the depths reached), i.e. it is overfitted to four
+   rungs: transferred to Lx ≥ 6 it
+   gave **frac < 0** — the circuit ends up *above* the state it started from — while S
+   inflated to 4.9–6.2 purely because a bad circuit scrambles the state. Reporting
+   that as "entanglement of the VQE state" would have been meaningless.
+2. **A fixed adiabatic ramp** on both geometries fails too: at the depths a VQE
+   actually uses, τ/p is far too coarse to be adiabatic and the circuit *heats* the
+   state (frac ≈ −4).
+3. What remains is small on purpose: **each geometry at its own optimum, only at sizes
+   that are exactly simulable.** Two matched pairs instead of a broad sweep — but every
+   point is properly optimised and truncation-free.
+
+The decisive width scan (W = 3, 4, … at fixed length, where χ ~ e^W should bite) needs
+range-W gates that rung fusion cannot provide — a fermionic SWAP network on the
+site-split cylinder MPO. That is the next increment, not a claim made here.
