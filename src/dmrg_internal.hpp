@@ -373,8 +373,9 @@ struct HVAResult {
     // cutoff -- but it is still the entropy of the chi-capped state and is bounded by
     // ln(chi); trust it only while trunc_err stays far below the scale of interest.
     double S_max = 0;
-    // Entropy at the BALANCED cut (equal site counts either side; only meaningful for
-    // even n). S_max can sit on a boundary bond, capped by ln(d) of a single site --
+    // Entropy at the BALANCED cut (equal site counts either side). Stays 0 for ODD n,
+    // where no such cut exists -- bond n/2-1 there is the lopsided one that the old
+    // half-chain reading got wrong, so it is deliberately NOT stored. S_max can sit on a boundary bond, capped by ln(d) of a single site --
     // ln 16 for the fused ladder -- so comparing maxima across geometries with
     // different local dimensions partly compares those dimensions, not the states.
     double S_mid = 0;

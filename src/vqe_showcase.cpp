@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
     // schedule and are only weakly size-dependent, so the transferred circuit is a
     // faithful stand-in for "the VQE circuit" at larger n. (Stated as a transfer, not
     // claimed to be each size's own optimum.)
-    // The metric is the half-chain entropy S, not the bond dimension: chi is capped by
+    // The metric is the largest bond entropy S, not the bond dimension: chi is capped by
     // whatever we can afford, S is not. An MPS needs chi ~ e^S, so S saturating with
     // depth means the ansatz stays classically cheap at ANY qubit count.
     const std::vector<int> sizes_b = quick ? std::vector<int>{6, 8}
@@ -450,7 +450,7 @@ int main(int argc, char** argv) {
     // lossless by construction (chi = 16^(Lx/2) for the ladder). Two protocols were
     // tried and rejected first, and both failures are the reason this one is small:
     //   * transferring the Lx=4 optimum upward -- the ladder optimum at 4 rungs is
-    //     far from converged (61% of the correlation energy at the depths reached),
+    //     far from converged (61.5% of the correlation energy at the depths reached),
     //     i.e. it is overfitted to that size,
     //     and at Lx >= 6 it gave frac < 0 (the circuit ended ABOVE the state it
     //     started from) with S inflated to 4.9-6.2 purely by scrambling;

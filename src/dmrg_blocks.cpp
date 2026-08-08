@@ -3088,7 +3088,10 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
                 // 2.7726, and a maximally mixed edge rung hits it exactly. Comparing
                 // maxima across geometries then partly compares local dimensions
                 // rather than the states.
-                if (i == n / 2 - 1) out.S_mid = e_i;
+                // even n only: for odd n there is no balanced cut, and bond
+                // n/2-1 is exactly the lopsided one the old S_half bug reported.
+                // Leave the sentinel rather than silently storing that.
+                if (n % 2 == 0 && i == n / 2 - 1) out.S_mid = e_i;
             }
             c.bond[i+1] = svd.new_mid_bs;
             c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);

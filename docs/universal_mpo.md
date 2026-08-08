@@ -712,7 +712,7 @@ numbers are the ansatz's own, not a truncation artefact:
 |---|---|---|---|---|
 | n=4 (8 qubits) | 1.8e-2 | 7.6e-3 | 2.8e-4 | **1.6e-7** |
 | n=6 (12 qubits) | 4.0e-2 | 2.5e-2 | 1.0e-2 | 6.4e-3 |
-| n=8 (16 qubits) | 5.6e-2 | 2.5e-2 | 2.2e-2 | 1.2e-2 |
+| n=8 (16 qubits) | 5.6e-2 | 2.5e-2 | 2.2e-2 | 1.1e-2 |
 
 The depth needed grows with the system: p=8 essentially solves 8 qubits and is still
 ~1 % per site at 16.
@@ -725,7 +725,7 @@ exactly-simulable size), so this reaches sizes the optimisation never could:
 | | 16 qubits | 24 | 32 | 48 | **64** |
 |---|---|---|---|---|---|
 | largest bond entropy S (p=8) | 1.214 | 1.392 | 1.545 | 1.739 | **1.864** |
-| S / n | 0.152 | 0.116 | 0.097 | 0.072 | **0.058** |
+| S / n (n = sites) | 0.152 | 0.116 | 0.097 | 0.072 | **0.058** |
 | correlation energy captured | 97 % | 94 % | 92 % | 90 % | **88 %** |
 
 **S/n falls monotonically — this is not volume-law entanglement.** A logarithmic fit
@@ -819,15 +819,15 @@ optimised angles and both simulations lossless (χ = 4^{n/2} / 16^{Lx/2}):
 | | 12 qubits (p=8) | | 16 qubits (p=5) | |
 |---|---|---|---|---|
 | | chain (n=6) | ladder (Lx=3) | chain (n=8) | ladder (Lx=4) |
-| relative energy error | 1.25 % | **4.02 %** | 4.34 % | **19.5 %** |
-| correlation energy captured | 96.6 % | **92.6 %** | 93.3 % | **61.5 %** |
+| relative energy error | 1.25 % | **4.01 %** | 4.34 % | **19.5 %** |
+| correlation energy captured | 98.2 % | **92.6 %** | 93.2 % | **61.5 %** |
 | largest bond entropy S | 1.154 | 1.927 | 1.244 | 2.619 |
 | ratio | | **×3.2 error**, ×1.67 S | | **×4.5 error**, ×2.11 S |
 
 **The robust half: the ansatz converges worse on the ladder.** At the same qubit count
 and the same depth the ladder lands 3.2–4.5× further from its ground state, and the
 gap widens with size — at 16 qubits and p=5 the chain has captured 93 % of the
-correlation energy while the ladder is at 62 %. That is a statement about the *ansatz*,
+correlation energy while the ladder is at 61.5 %. That is a statement about the *ansatz*,
 it is immune to how entropy is defined, and it is the sharper form of the earlier
 conclusion: the barrier is geometry and depth, not qubit count. The ratios are stable
 across depth (error ×2.2–3.2 at 12 qubits, ×3.0–4.6 at 16 for every p ≥ 2).
@@ -855,7 +855,7 @@ because each is an easy trap:
 1. **Transferring the ladder optimum upward** (the trick that worked for the chain)
    fails. It worked on the chain because the n=8 optimum already captures 97 % of the
    correlation energy — it is close to an adiabatic schedule. The Lx=4 ladder optimum
-   is far from converged (62 % at the depths reached), i.e. it is overfitted to four
+   is far from converged (61.5 % at the depths reached), i.e. it is overfitted to four
    rungs: transferred to Lx ≥ 6 it
    gave **frac < 0** — the circuit ends up *above* the state it started from — while S
    inflated to 4.9–6.2 purely because a bad circuit scrambles the state. Reporting
