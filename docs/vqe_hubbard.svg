@@ -70,7 +70,7 @@
 <line x1="92" y1="330" x2="744" y2="330" stroke="#444" stroke-width="1.2"/>
 <text x="418" y="368.0" text-anchor="middle" font-size="12" fill="#222">circuit depth p (layers)</text>
 <text x="26" y="219" text-anchor="middle" font-size="12" fill="#222" transform="rotate(-90 26 219)">|E&#8321;&#8323;&#8331; &#8722; E&#8320;| / site (t)</text>
-<text x="418" y="380" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">half-chain entanglement entropy of the prepared state vs system size</text>
+<text x="418" y="380" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">largest bond entanglement entropy of the prepared state vs system size</text>
 <text x="418" y="398" text-anchor="middle" font-size="10.8" fill="#666">an MPS needs &#967; ~ e<tspan baseline-shift="super" font-size="8">S</tspan>: S growing like log n, not like n, means the ansatz is NOT volume-law entangled at these depths</text>
 <text x="418" y="416" text-anchor="middle" font-size="10.5" fill="#777">angles transferred from the largest exactly-simulable size (validated in part C)</text>
 <line x1="92" y1="636.0" x2="744" y2="636.0" stroke="#eee"/>
@@ -131,7 +131,7 @@
 <line x1="92" y1="432" x2="92" y2="636" stroke="#444" stroke-width="1.2"/>
 <line x1="92" y1="636" x2="744" y2="636" stroke="#444" stroke-width="1.2"/>
 <text x="418" y="686.0" text-anchor="middle" font-size="12" fill="#222">chain length n (log scale) &#8212; the circuit uses 2n qubits</text>
-<text x="26" y="534" text-anchor="middle" font-size="12" fill="#222" transform="rotate(-90 26 534)">half-chain entropy S</text>
+<text x="26" y="534" text-anchor="middle" font-size="12" fill="#222" transform="rotate(-90 26 534)">largest bond entropy S</text>
 <text x="418" y="676" text-anchor="middle" font-size="11" fill="#0a7d28" font-weight="bold">At 64 qubits and depth 8 the circuit captures 88% of the correlation energy with S = 1.86 &#8212; simulated classically to a discarded weight of 4e-11 at &#967; = 4096.</text>
 <text x="418" y="692" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">&#967; is the total bond dimension over all charge sectors at a 1e-10 cutoff, so it far exceeds e<tspan baseline-shift="super" font-size="7">S</tspan>; S is the cutoff-independent measure.</text>
 </svg>

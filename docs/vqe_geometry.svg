@@ -40,7 +40,7 @@
 <circle cx="163.4" cy="169.4" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
 <circle cx="209.1" cy="182.2" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
 <circle cx="254.9" cy="186.8" r="3.2" fill="white" stroke="#d62728" stroke-width="1.8"/>
-<text x="631" y="94" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">half-chain entropy S</text>
+<text x="631" y="94" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">largest bond entropy S</text>
 <line x1="470" y1="330.0" x2="792" y2="330.0" stroke="#eee"/>
 <text x="463" y="334.0" text-anchor="end" font-size="10" fill="#444">0.0</text>
 <line x1="470" y1="295.3" x2="792" y2="295.3" stroke="#eee"/>

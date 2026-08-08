@@ -173,7 +173,8 @@ static VQEPoint vqe_point(int n, int p, int chi, double U, int max_fev, double t
     auto psi0 = hva_prepare_init(mpo0, n, chi, target, &cfg);
     int nfev_total = 0, bond_seen = 0;
     auto energy_of = [&](const std::vector<double>& x) {
-        HVAResult r = run_hva_circuit(mpo, n, to_layers(x), chi, 1e-12, target, &cfg, psi0);
+        HVAResult r = run_hva_circuit(mpo, n, to_layers(x), chi, 1e-12, target, &cfg,
+                                      psi0, /*want_entropy*/false);
         ++nfev_total;
         bond_seen = std::max(bond_seen, r.max_bond);
         return r.energy;
@@ -275,7 +276,10 @@ int main(int argc, char** argv) {
     // ladder work and their CSVs are already committed, so redoing them would cost
     // ~2 h for identical numbers.
     const char* only = std::getenv("QX_VQE_ONLY");
-    if (only && !std::strchr("AaBbDd", *only)) {
+    // NOTE strchr(set, NUL) returns a pointer to the terminator, so an EMPTY value
+    // would pass validation and then match no part -- the exact silent no-op this
+    // check exists to prevent. Only the first character is examined; C runs with B.
+    if (only && (*only == char(0) || !std::strchr("AaBbDd", *only))) {
         std::fprintf(stderr, "QX_VQE_ONLY must be A, B or D (got '%s')\n", only);
         return 1;
     }
@@ -412,7 +416,7 @@ int main(int argc, char** argv) {
             std::vector<double> x = it->second;
             auto energy_of = [&](const std::vector<double>& y) {
                 return run_hva_circuit(mpo, n_c, to_layers(y), chi_b, cutoff_b,
-                                       target, &cfg, psi0).energy;
+                                       target, &cfg, psi0, false).energy;
             };
             double E_re = adam_min(energy_of, x, adam_steps, 0.02);
             HVAResult rr = run_hva_circuit(mpo, n_c, to_layers(x), chi_b, cutoff_b,
@@ -445,8 +449,9 @@ int main(int argc, char** argv) {
     // Each geometry uses ITS OWN optimised angles, at sizes where the simulation is
     // lossless by construction (chi = 16^(Lx/2) for the ladder). Two protocols were
     // tried and rejected first, and both failures are the reason this one is small:
-    //   * transferring the Lx=4 optimum upward -- the ladder optimum at 4 rungs only
-    //     reaches 75% of the correlation energy, i.e. it is overfitted to that size,
+    //   * transferring the Lx=4 optimum upward -- the ladder optimum at 4 rungs is
+    //     far from converged (61% of the correlation energy at the depths reached),
+    //     i.e. it is overfitted to that size,
     //     and at Lx >= 6 it gave frac < 0 (the circuit ended ABOVE the state it
     //     started from) with S inflated to 4.9-6.2 purely by scrambling;
     //   * a fixed adiabatic ramp -- at the depths a VQE actually uses, tau/p is far
@@ -481,7 +486,7 @@ int main(int argc, char** argv) {
             auto energy_of = [&](const std::vector<double>& x) {
                 ++nfev;
                 return run_hva_circuit(mpo, Lx, to_layers(x), chi_ex, 1e-12,
-                                       target, &cfg, psi0).energy;
+                                       target, &cfg, psi0, false).energy;
             };
             // SAME search protocol as part A (warm start + small-angle start + three
             // random restarts + Adam polish). Anything weaker here would show up as

@@ -6,7 +6,7 @@ docs/vqe_geometry.svg -- two panels against circuit depth, one pair of curves pe
 matched qubit count:
 
   left  -- relative energy error |E_VQE - E_0| / |E_0|: how well the ansatz does;
-  right -- half-chain entropy S: how hard the prepared state is to simulate.
+  right -- largest bond entropy S: how hard the prepared state is to simulate.
 
 Both simulations are LOSSLESS at these sizes (chi = 4^(n/2) for the chain,
 16^(Lx/2) for the ladder), so neither curve is a truncation artefact.
@@ -27,7 +27,7 @@ PAIRS = [(12, 6, 3), (16, 8, 4)]
 depths = sorted({p for (_, p) in L})
 def pair_depths(lx):
     """Depths actually available for this pair. The ladder scan was stopped after
-    Lx=4 p=4 (its per-point cost grows steeply and the effect is already flat in p),
+    Lx=4 p=5 (its per-point cost grows steeply and the effect is already flat in p),
     so the two matched pairs cover different depth ranges -- shown as-is rather than
     padded."""
     return [p for p in depths if (lx, p) in L]
@@ -96,14 +96,14 @@ for q, n, lx in PAIRS:
                  f'" fill="none" stroke="{c}" stroke-width="2.1" stroke-dasharray="6,4"/>')
         for p, e in lp: s.append(f'<circle cx="{lxpx(p):.1f}" cy="{lypx(e):.1f}" r="3.2" fill="white" stroke="{c}" stroke-width="1.8"/>')
 
-# ---- right panel: half-chain entropy (linear) ----
+# ---- right panel: largest bond entropy (linear) ----
 Ss = [x for q, n, lx in PAIRS for p in pair_depths(lx)
       for x in (chain_S(n, p), ladder_S(lx, p)) if x]
 smax = max(Ss) * 1.15
 def rxpx(p): return RX0 + (p - depths[0]) / (depths[-1] - depths[0]) * (RX1 - RX0)
 def rypx(v): return PY1 - v / smax * (PY1 - PY0)
 s.append(f'<text x="{(RX0+RX1)/2:.0f}" y="{PY0-14}" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">'
-         'half-chain entropy S</text>')
+         'largest bond entropy S</text>')
 g = 0.0
 while g <= smax:
     y = rypx(g)

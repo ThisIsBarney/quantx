@@ -373,6 +373,11 @@ struct HVAResult {
     // cutoff -- but it is still the entropy of the chi-capped state and is bounded by
     // ln(chi); trust it only while trunc_err stays far below the scale of interest.
     double S_max = 0;
+    // Entropy at the BALANCED cut (equal site counts either side; only meaningful for
+    // even n). S_max can sit on a boundary bond, capped by ln(d) of a single site --
+    // ln 16 for the fused ladder -- so comparing maxima across geometries with
+    // different local dimensions partly compares those dimensions, not the states.
+    double S_mid = 0;
     // LARGEST single discarded weight over the circuit's ~2(n-1)p truncations, not
     // their sum: the accumulated error can be up to that factor larger.
     double trunc_err = 0;
@@ -393,11 +398,15 @@ std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_
                                                int n, int chi_max, int total_charge = 0,
                                                const std::vector<int>* init_config = nullptr,
                                                DMRGResult* prep_out = nullptr);
+// want_entropy: the entropy walk is a full extra lossless sweep, so a VQE optimiser
+// (which calls this thousands of times but reads S only from the final run) should
+// leave it off -- it doubled the wall time of the depth scan when it was always on.
 HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::vector<std::array<double,3>>& angles,
                           int chi_max, double cutoff, int total_charge = 0,
                           const std::vector<int>* init_config = nullptr,
-                          const std::shared_ptr<HVAInitState>& init = nullptr);
+                          const std::shared_ptr<HVAInitState>& init = nullptr,
+                          bool want_entropy = true);
 
 // One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
 // (e.g. pair-field correlators): the GS is computed once, then for each obs MPO

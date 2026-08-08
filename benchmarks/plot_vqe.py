@@ -2,14 +2,14 @@
 classical-simulability question.
 
 Reads docs/vqe_hubbard.csv (part A: depth convergence, exact simulation),
-docs/vqe_entanglement.csv (part B: half-chain entropy vs size) and, if present,
+docs/vqe_entanglement.csv (part B: largest-bond entropy vs size) and, if present,
 docs/vqe_transfer_check.csv (part C: is the angle transfer sound?), and renders
 docs/vqe_hubbard.svg:
 
   top    -- energy error per site vs circuit depth p, at the sizes where the MPS
             simulation is EXACT (chi = 4^(n/2)): how deep the ansatz must be, and
             how that depth grows with the system;
-  bottom -- half-chain entanglement entropy S of the prepared state vs system size
+  bottom -- largest bond entanglement entropy S of the prepared state vs system size
             (log x), for several depths, with a logarithmic fit. S is what decides
             classical simulability (an MPS needs chi ~ e^S): S growing like log n
             rather than like n means the VQE state is NOT volume-law entangled, so
@@ -109,7 +109,7 @@ s.append(f'<text x="26" y="{(TY0+TY1)/2:.0f}" text-anchor="middle" font-size="12
 
 # ---------- bottom panel: entropy vs size ----------
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{BY0-52}" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">'
-         'half-chain entanglement entropy of the prepared state vs system size</text>')
+         'largest bond entanglement entropy of the prepared state vs system size</text>')
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{BY0-34}" text-anchor="middle" font-size="10.8" fill="#666">'
          'an MPS needs &#967; ~ e<tspan baseline-shift="super" font-size="8">S</tspan>: S growing like log n, not like n, '
          'means the ansatz is NOT volume-law entangled at these depths</text>')
@@ -153,7 +153,7 @@ s.append(f'<line x1="{PX0}" y1="{BY1}" x2="{PX1}" y2="{BY1}" stroke="#444" strok
 s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{BY1+50:.1f}" text-anchor="middle" font-size="12" fill="#222">'
          'chain length n (log scale) &#8212; the circuit uses 2n qubits</text>')
 s.append(f'<text x="26" y="{(BY0+BY1)/2:.0f}" text-anchor="middle" font-size="12" fill="#222" '
-         f'transform="rotate(-90 26 {(BY0+BY1)/2:.0f})">half-chain entropy S</text>')
+         f'transform="rotate(-90 26 {(BY0+BY1)/2:.0f})">largest bond entropy S</text>')
 
 # footer: the headline number at the largest size
 top = b_row(sizes_b[-1], p_top)

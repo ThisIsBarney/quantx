@@ -2867,7 +2867,7 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
                          const std::vector<std::array<double,3>>& angles,
                          int chi_max, double cutoff, int total_charge,
                          const std::vector<int>* init_config,
-                         const BMPS* init_state) {
+                         const BMPS* init_state, bool want_entropy) {
     static_assert(std::is_same_v<S, Cx>, "HVA circuits are complex");
     using clk = std::chrono::steady_clock;
     auto t0 = clk::now();
@@ -2956,6 +2956,8 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
                 if (qphys[a] != qphys[b]) hsz(a, b) = Cx(0, 0);
         hsz = 0.5 * (hsz + hsz.adjoint().eval());
         hs_es.compute(hsz);
+        if (hs_es.info() != Eigen::Success)
+            throw std::runtime_error("run_hva: on-site term eigendecomposition failed");
     }
     // ONE bulk site supplies both the bond gate and the on-site phases, and they are
     // then applied to every bond/site -- so the MPO must actually be uniform along
@@ -3061,7 +3063,7 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     // where a 4-qubit|8-qubit split was compared against a chain's true 6|6). The max
     // is defined for every n and is what sets the MPS cost, chi ~ e^S. Unlike
     // max_bond it does not depend on the chi cap.
-    {
+    if (want_entropy) {
         BMPS c = s;
         double ent = 0;
         for (int i = 0; i < n - 1; ++i) {
@@ -3080,6 +3082,13 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
                             if (pk > 1e-16) e_i -= pk * std::log(pk);
                         }
                 ent = std::max(ent, e_i);
+                // the balanced cut (equal site counts either side) as well as the
+                // max: the max can land on a BOUNDARY bond, whose entropy is capped
+                // by ln(d) of one site -- for the d=16 fused ladder that is ln 16 =
+                // 2.7726, and a maximally mixed edge rung hits it exactly. Comparing
+                // maxima across geometries then partly compares local dimensions
+                // rather than the states.
+                if (i == n / 2 - 1) out.S_mid = e_i;
             }
             c.bond[i+1] = svd.new_mid_bs;
             c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);
@@ -4565,10 +4574,12 @@ HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::vector<std::array<double,3>>& angles,
                           int chi_max, double cutoff, int total_charge,
                           const std::vector<int>* init_config,
-                          const std::shared_ptr<HVAInitState>& init) {
+                          const std::shared_ptr<HVAInitState>& init,
+                          bool want_entropy) {
     require_uniform_local_dim(mpo, "run_hva_circuit");
     return BlockDMRG<Cx>::run_hva(mpo, n, angles, chi_max, cutoff, total_charge,
-                                  init_config, init ? &init->state : nullptr);
+                                  init_config, init ? &init->state : nullptr,
+                                  want_entropy);
 }
 
 // Entry point: GS once, then <GS|O|GS> per measurement MPO. The exported state has
