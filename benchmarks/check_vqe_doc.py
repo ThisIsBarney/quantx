@@ -77,7 +77,7 @@ def row_cells(prefix):
     cell an author decided to emphasise."""
     for line in doc.split(chr(10)):
         if line.startswith(prefix):
-            return [c.strip().replace("*", "") for c in line.strip("|").split("|")]
+            return [c.strip().replace("*", "") for c in line.strip().strip("|").split("|")]
     return None
 
 for n in (4, 6, 8):            # the doc tabulates all three, not just n=8
@@ -144,6 +144,23 @@ for r in C:
     if p_ == 2:
         shift = abs(float(r["E_reopt"]) - float(r["E_transfer"])) / abs(float(r["E_transfer"]))
         expect("part C prose shift", f"moves the energy by {shift:.2%}".replace("%", " %"))
+
+# ---- remaining CSV-derivable prose figures ----
+dS_max = max(abs(float(r["dS"])) for r in C)
+expect("part C dS bound", f"S by ≤{dS_max:.3f}")
+p4 = next(r for r in C if int(r["p"]) == 4)
+shift4 = abs(float(p4["E_reopt"]) - float(p4["E_transfer"])) / abs(float(p4["E_transfer"]))
+expect("part C p=4 shift", f"and {shift4:.2%}".replace("%", " %"))
+worst = float(B[(32, 8)]["trunc_err"])
+expect("part B discarded weight", f"discarded weight of **{worst:.1e}**".replace("e-", "e-"))
+expect("part D chain frac", f"optimum already captures {float(B[(8, 8)]['frac']):.0%}".replace("%", " %"))
+# depth-stability ranges quoted in the geometry prose
+for d, lo_hi in ((q[0], "12 qubits"), (q[1], "16 qubits")):
+    rr = [rel_err(L[(d["lx"], pp)]) / rel_err(A[(d["n"], pp)])
+          for pp in sorted(pp for (l, pp) in L if l == d["lx"] and pp >= 2)]
+    expect(f"error-ratio range {lo_hi}", f"×{min(rr):.1f}–{max(rr):.1f} at {lo_hi}"
+           if lo_hi == "12 qubits" else f"×{min(rr):.1f}–{max(rr):.1f} at 16")
+expect("ln 16 cap", f"ln 16 = {math.log(16):.4f}")
 
 if fails:
     print(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")

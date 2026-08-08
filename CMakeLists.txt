@@ -656,8 +656,9 @@ add_test(NAME qx_mpo_sym_test COMMAND qx_mpo_sym_test)
 # Doc/data consistency: every VQE figure quoted in docs/universal_mpo.md must be
 # derivable from the committed CSVs. Three review rounds in a row shipped numbers that
 # had drifted from the data (one cell was literally another row's value), so this is a
-# test rather than a habit. stdlib-only and cwd-independent; skipped when no python is
-# on PATH so it never blocks a build that has no interpreter.
+# test rather than a habit. stdlib-only and cwd-independent; if no interpreter can be
+# found the test is not registered and CMake WARNS -- it never blocks the build, but it
+# never disappears quietly either.
 # -DQX_PYTHON=<path> overrides; otherwise try PATH, then the usual conda location
 # on this box (find_package(Python3) misses an interpreter that is not on PATH).
 if(NOT QX_PYTHON)
