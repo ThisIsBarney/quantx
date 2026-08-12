@@ -410,6 +410,16 @@ HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::shared_ptr<HVAInitState>& init = nullptr,
                           bool want_entropy = true);
 
+// TEST HOOK for the fermionic-swap network. Prepares the product state init_config,
+// applies exp(-i theta * h) for the hopping bond between MODES i and j (any distance;
+// a swap network brings them adjacent and back), and returns <psi| probe |psi>.
+// Exposed so the ED test can check the primitive itself -- a long-range fermionic
+// rotation is exactly where a JW sign error hides.
+double hva_swap_probe(const std::vector<MPOSite>& hop_mpo,
+                      const std::vector<MPOSite>& probe, int n, int i, int j,
+                      double theta, int chi_max, int total_charge,
+                      const std::vector<int>& init_config);
+
 // One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
 // (e.g. pair-field correlators): the GS is computed once, then for each obs MPO
 // the environments are rebuilt and the two-site H_eff expectation evaluated.

@@ -963,6 +963,48 @@ int main() {
         fails += !okl;
     }
 
+    // (q) FERMIONIC SWAP NETWORK -- the primitive the width-W lattice circuits need.
+    // Jordan-Wigner puts the lattice on a chain, so a width-W cylinder's x-hops are
+    // range-W and cannot be applied as a two-site gate. The cure is to fswap the two
+    // MODES adjacent, apply the plain nearest-neighbour gate, and fswap back; the JW
+    // string's signs are absorbed by the swaps. A long-range fermionic rotation is
+    // exactly where a sign error hides, so it is validated on its own here, before
+    // any circuit is built on it: apply exp(-i th (c^dag_i c_j + h.c.)) through the
+    // network and compare <probe> against the same rotation applied densely.
+    {
+        const double t = 1.0, U = 4.0;
+        const int n = 6;
+        int dimq = 1; for (int k = 0; k < n; ++k) dimq *= 4;
+        auto hop = build_hubbard_mpo(n, t, 0.0, /*two_u1*/true);   // hopping only
+        auto probe = build_hubbard_mpo(n, t, U, /*two_u1*/true);   // the observable
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        Eigen::VectorXcd v0 = Eigen::VectorXcd::Zero(dimq);
+        { int idx = 0; for (int i = 0; i < n; ++i) idx = idx * 4 + cfg[i]; v0(idx) = 1.0; }
+        const MatC& Hpr = hubbard_ed_H(n, t, U);
+        double worst = 0;
+        const int prs[4][2] = {{0,4},{1,5},{0,3},{2,5}};
+        for (auto& pr : prs) {
+            const int i0 = pr[0], j0 = pr[1];
+            const double th = 0.37;
+            MatC h = ferm(n,i0,MatC(Cup.adjoint()))*ferm(n,j0,Cup)
+                   + ferm(n,i0,MatC(Cdn.adjoint()))*ferm(n,j0,Cdn);
+            MatC hb = -t * (h + MatC(h.adjoint()));
+            Eigen::SelfAdjointEigenSolver<MatC> es(hb);
+            Eigen::ArrayXcd ph = (Cxd(0,-th) * es.eigenvalues().array().cast<Cxd>()).exp();
+            Eigen::VectorXcd v = es.eigenvectors() *
+                                 (ph * (es.eigenvectors().adjoint() * v0).array()).matrix();
+            double E_ed = (v.adjoint() * Hpr * v).real()(0,0) / v.squaredNorm();
+            double E_blk = hva_swap_probe(hop, probe, n, i0, j0, th, 4096,
+                                          pack_q2(n, 0), cfg);
+            worst = std::max(worst, std::abs(E_blk - E_ed));
+        }
+        bool oksw = worst < 1e-10;
+        std::printf("  FSWAP NETWORK: max |<probe>_blk - <probe>_ED| over 4 long-range "
+                    "bonds = %.1e  %s\n", worst, oksw ? "OK" : "FAIL");
+        fails += !oksw;
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }

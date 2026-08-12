@@ -3105,6 +3105,114 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     return out;
 }
 
+// ---- fermionic SWAP and long-range two-site gates -----------------------------
+// Jordan-Wigner puts the lattice on a 1D chain, so any bond that is not
+// chain-adjacent (the width-W cylinder's x-hops are range W, its y-wrap range W-1)
+// cannot be applied as a two-site gate directly. The standard cure is the FERMIONIC
+// swap: |s1 s2> -> (-1)^{p(s1) p(s2)} |s2 s1>, with p the local fermion parity. It
+// exchanges the two MODES, not just the labels, so after swapping a pair to adjacency
+// the JW string between them is GONE and the plain nearest-neighbour hopping gate is
+// the right operator -- the string's signs have been absorbed by the swaps.
+// Parity comes from the packed charge's N component; the gate is charge-conserving
+// (it permutes states, and the sign is diagonal), so it stays block-compatible.
+static Mat build_fswap_gate(int d, const std::vector<int>& qphys) {
+    Mat G = Mat::Zero(d * d, d * d);
+    auto par = [&](int st) {
+        double N, twoSz; obs2_of_charge(qphys[st], N, twoSz);
+        return ((int)std::llround(N)) & 1;
+    };
+    for (int s1 = 0; s1 < d; ++s1)
+        for (int s2 = 0; s2 < d; ++s2) {
+            double sign = (par(s1) && par(s2)) ? -1.0 : 1.0;
+            G(s2 * d + s1, s1 * d + s2) = S(sign);   // output (s2,s1) <- input (s1,s2)
+        }
+    return G;
+}
+
+// Apply a two-site gate at bond k (sites k, k+1) of a block MPS whose orthogonality
+// centre is already at site k; the centre is left at site k+1. Truncates to
+// (chi_max, cutoff) and reports the discarded weight.
+static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cutoff,
+                            const std::vector<int>& qphys) {
+    const std::map<int,RVec> no_sv;
+    const int d = (int)qphys.size();
+    auto th = form_theta(s.A[k], s.A[k+1], no_sv, s.bond[k], s.bond[k+1], s.bond[k+2],
+                         true, qphys);
+    bt_expand_theta(th, s.bond[k], s.bond[k+2], qphys);
+    apply_gate_theta_general(th, s.bond[k], s.bond[k+2], G, d, qphys);
+    auto svd = block_svd_truncate(th, s.bond[k], s.bond[k+2], chi_max, cutoff,
+                                  false, false, qphys);
+    s.bond[k+1] = svd.new_mid_bs;
+    s.A[k]   = bt_A_from_U(svd, s.bond[k], s.bond[k+1], qphys);
+    s.A[k+1] = bt_center_LR(svd);
+    return svd.trunc_err;
+}
+
+// Move the orthogonality centre from site `from` to site `to` losslessly (no gate).
+static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys) {
+    const std::map<int,RVec> no_sv;
+    while (from < to) {                       // rightward
+        auto th = form_theta(s.A[from], s.A[from+1], no_sv, s.bond[from],
+                             s.bond[from+1], s.bond[from+2], true, qphys);
+        bt_expand_theta(th, s.bond[from], s.bond[from+2], qphys);
+        auto svd = block_svd_truncate(th, s.bond[from], s.bond[from+2],
+                                      1 << 30, 0.0, false, false, qphys);
+        s.bond[from+1] = svd.new_mid_bs;
+        s.A[from]   = bt_A_from_U(svd, s.bond[from], s.bond[from+1], qphys);
+        s.A[from+1] = bt_center_LR(svd);
+        ++from;
+    }
+    while (from > to) {                       // leftward
+        auto th = form_theta(s.A[from-1], s.A[from], no_sv, s.bond[from-1],
+                             s.bond[from], s.bond[from+1], true, qphys);
+        bt_expand_theta(th, s.bond[from-1], s.bond[from+1], qphys);
+        auto svd = block_svd_truncate(th, s.bond[from-1], s.bond[from+1],
+                                      1 << 30, 0.0, false, false, qphys);
+        s.bond[from] = svd.new_mid_bs;
+        s.A[from]   = svd.Vt;
+        s.A[from-1] = bt_center_RL(svd, s.bond[from-1], s.bond[from], qphys);
+        --from;
+    }
+}
+
+// Apply a two-site gate to the pair of MODES currently at sites (i, j), j > i, of a
+// chain, using a fermionic-swap network: walk j down to i+1, apply G there, walk it
+// back. 2*(j-i-1) swaps, each an ordinary two-site gate application. The swaps are
+// exact permutations but they still go through the truncating split, so they are the
+// dominant cost AND a source of error for long-range bonds -- which is precisely why
+// a width-W lattice is expensive on an MPS.
+// Leaves the orthogonality centre at site i+1. move_centre TRUSTS its `from`
+// argument, so a caller that assumes a different exit position will form theta from
+// the wrong pair and silently drop the centre's weight (measured as a 0.68 error in
+// the probe before this was documented).
+static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FSWAP,
+                              int chi_max, double cutoff,
+                              const std::vector<int>& qphys) {
+    if (j <= i) throw std::runtime_error("apply_pair_gate: need j > i");
+    // The swaps walk monotonically, so the centre follows them: after applying at
+    // bond k it sits at k+1 and the next target is k-1, two steps away. Returning it
+    // to i after every swap (the obvious first draft) makes the network cost
+    // O(range^2) lossless SVDs instead of O(range) -- on a width-W cylinder, where
+    // every x-hop has range W, that is the difference between W and W^2 per bond.
+    double worst = 0;
+    int c = 0;                                // current centre
+    for (int k = j - 1; k > i; --k) {         // bring mode j down to site i+1
+        move_centre(s, c, k, qphys);
+        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
+        c = k + 1;
+    }
+    move_centre(s, c, i, qphys);
+    worst = std::max(worst, apply_gate_at(s, i, G, chi_max, cutoff, qphys));
+    c = i + 1;
+    for (int k = i + 1; k < j; ++k) {         // and walk it back up
+        move_centre(s, c, k, qphys);
+        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
+        c = k + 1;
+    }
+    move_centre(s, c, i + 1, qphys);          // documented exit position
+    return worst;
+}
+
 // Apply a general one-site gate G (d x d) to every site of a block MPS. G must be
 // block-diagonal in the LOCAL CHARGE -- it may mix states s, s' only when
 // qphys[s] == qphys[s'] -- or the bond charge structure would break; this is checked
@@ -4571,6 +4679,25 @@ std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_
                                       total_charge, init_config);
     if (prep_out) *prep_out = r;
     return h;
+}
+
+double hva_swap_probe(const std::vector<MPOSite>& hop_mpo,
+                      const std::vector<MPOSite>& probe, int n, int i, int j,
+                      double theta, int chi_max, int total_charge,
+                      const std::vector<int>& init_config) {
+    require_uniform_local_dim(hop_mpo, "hva_swap_probe");
+    using BD = BlockDMRG<Cx>;
+    const std::vector<int>& qphys = hop_mpo[0].phys_charge;
+    const int d = hop_mpo[0].d;
+    BD::BMPS s = BD::cps_init_states(hop_mpo, n, init_config, qphys);
+    // the ADJACENT hopping gate: once the swap network has brought the two modes
+    // together the JW string between them is gone, so this is the right operator
+    Mat G = BD::build_gate_from_mpo(hop_mpo, Cx(0, -theta), 0.0, 0.0);
+    Mat FS = BD::build_fswap_gate(d, qphys);
+    BD::apply_pair_gate(s, i, j, G, FS, chi_max, 0.0, qphys);
+    BD::move_centre(s, i + 1, 0, qphys);      // apply_pair_gate exits with centre at i+1
+    BD::rebuild_mpo_envs(s, probe);
+    return BD::bt_energy(s, probe);
 }
 
 HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
