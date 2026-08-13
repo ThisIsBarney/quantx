@@ -1011,13 +1011,18 @@ int main() {
     // on-site layer -- not just the primitive. The reference drives the SAME groups in
     // the SAME order (groups do not commute), but builds each group's Hamiltonian from
     // explicit JW operators, so the physics is constructed independently.
-    {
+    // Run it at all three widths of the part-E scan, not just the cylinder: W=1 (every
+    // bond adjacent, no swaps), W=2 (range-2 x-hops) and W=3 (range-3 x-hops plus the
+    // range-2 y-wrap) take visibly different paths through apply_pair_gate, and the
+    // width scan's whole claim is that only the graph differs between them.
+    for (int wsel = 1; wsel <= 3; ++wsel) {
         const double t = 1.0, U = 4.0;
-        const int W3c = 3, L2c = 2, nc = W3c * L2c;
+        const int W3c = wsel, L2c = 6 / wsel, nc = W3c * L2c;
+        const bool yp = (W3c > 2);          // no wrap below W=3 (W=2 would double the rung)
         int dimc = 1; for (int k = 0; k < nc; ++k) dimc *= 4;
-        auto lat = build_hubbard_lattice_split_mpo(L2c, W3c, t, U, 0.0, /*y_periodic*/true);
+        auto lat = build_hubbard_lattice_split_mpo(L2c, W3c, t, U, 0.0, yp);
         auto hop = build_hubbard_mpo(nc, t, 0.0, /*two_u1*/true);
-        auto groups = hva_lattice_group_bonds(L2c, W3c, true);
+        auto groups = hva_lattice_group_bonds(L2c, W3c, yp);
         std::vector<int> cfg(nc);
         for (int i = 0; i < nc; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
         // dense: one Hamiltonian per group, plus the on-site term
@@ -1060,7 +1065,7 @@ int main() {
         }
         MatC Hfull = Hu; for (auto& Hx : Hg) Hfull += Hx;
         double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
-        HVAResult lr = run_hva_lattice(lat, hop, L2c, W3c, true, ang, 4096, 1e-14,
+        HVAResult lr = run_hva_lattice(lat, hop, L2c, W3c, yp, ang, 4096, 1e-14,
                                        pack_q2(nc, 0), &cfg);
         double err = std::abs(lr.energy - E_ed);
         bool okl = err < 1e-9;
@@ -1069,6 +1074,44 @@ int main() {
                     W3c, L2c, 2*nc, ng, lr.energy, E_ed, err, lr.max_bond,
                     okl ? "OK" : "FAIL");
         fails += !okl;
+    }
+
+    // (s) GEOMETRY GATE for the width scan. Part E compares W=1/2/3 in one common
+    // site-split representation, so the claim rests entirely on those MPOs really
+    // being the chain and the ladder. Pin each against the independent builder that
+    // already has its own ED gate: W=1 Lx=6 must reproduce build_hubbard_mpo(6), and
+    // W=2 Lx=3 must reproduce the rung-fused build_hubbard_ladder_mpo(3) -- a
+    // different local dimension (16 vs 4) and a different site ordering, so agreement
+    // is a real check on the bond list and not a tautology. It also pins the W=2
+    // y-wrap: emitting one would double the rung and visibly lower the energy.
+    {
+        const double tg = 1.0, Ug = 4.0;
+        struct { int W, Lx; const char* name; } geo[2] = {{1, 6, "chain"}, {2, 3, "ladder"}};
+        for (auto& g : geo) {
+            const int ng2 = g.W * g.Lx;
+            std::vector<int> cfg(ng2);
+            for (int i = 0; i < ng2; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+            double E_split = run_dmrg_blocks(
+                // no y-wrap below W=3: at W=2 it would duplicate the rung
+                build_hubbard_lattice_split_mpo(g.Lx, g.W, tg, Ug, 0.0, g.W > 2),
+                ng2, 256, 1e-12, 80, 1e-12, pack_q2(ng2, 0), &cfg).energy;
+            double E_ref;
+            if (g.W == 1) {
+                E_ref = run_dmrg_blocks(build_hubbard_mpo(ng2, tg, Ug, true), ng2, 256,
+                                        1e-12, 80, 1e-12, pack_q2(ng2, 0), &cfg).energy;
+            } else {
+                std::vector<int> rcfg(g.Lx, 6);          // one up + one dn per rung
+                E_ref = run_dmrg_blocks(build_hubbard_ladder_mpo(g.Lx, tg, tg, Ug, 0.0),
+                                        g.Lx, 256, 1e-12, 80, 1e-12,
+                                        pack_q2(ng2, 0), &rcfg).energy;
+            }
+            double err = std::abs(E_split - E_ref);
+            bool okg = err < 1e-8;
+            std::printf("  GEOMETRY W=%d Lx=%d (%s): split=%.10f  reference=%.10f  "
+                        "err=%.1e  %s\n",
+                        g.W, g.Lx, g.name, E_split, E_ref, err, okg ? "OK" : "FAIL");
+            fails += !okg;
+        }
     }
 
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");

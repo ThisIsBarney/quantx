@@ -3147,21 +3147,28 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
 // exact permutations but they still go through the truncating split, so they are the
 // dominant cost AND a source of error for long-range bonds -- which is precisely why
 // a width-W lattice is expensive on an MPS.
-// Leaves the orthogonality centre at site i+1. move_centre TRUSTS its `from`
-// argument, so a caller that assumes a different exit position will form theta from
-// the wrong pair and silently drop the centre's weight (measured as a 0.68 error in
-// the probe before this was documented).
+// `centre` is in/out: the caller states where the orthogonality centre is and gets
+// back i+1. Do NOT let this default to 0. move_centre TRUSTS its `from`, and a
+// rightward sweep only transports the real weight if it passes THROUGH it -- sweeping
+// 0 -> k when the centre is at m > k just re-splits isometries and leaves the weight
+// at m. The state stays exact (every split is lossless and the gate is unitary), so
+// the damage is invisible until something depends on the gauge, and then it is total:
+// the two-site energy formula reads a non-canonical right environment (measured as a
+// 4x wrong energy), and any truncating split ranks by singular values that are not
+// the Schmidt values.
 static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FSWAP,
                               int chi_max, double cutoff,
-                              const std::vector<int>& qphys) {
+                              const std::vector<int>& qphys, int& centre) {
     if (j <= i) throw std::runtime_error("apply_pair_gate: need j > i");
+    if (centre < 0 || centre >= s.n)
+        throw std::runtime_error("apply_pair_gate: centre out of range");
     // The swaps walk monotonically, so the centre follows them: after applying at
     // bond k it sits at k+1 and the next target is k-1, two steps away. Returning it
     // to i after every swap (the obvious first draft) makes the network cost
     // O(range^2) lossless SVDs instead of O(range) -- on a width-W cylinder, where
     // every x-hop has range W, that is the difference between W and W^2 per bond.
     double worst = 0;
-    int c = 0;                                // current centre
+    int c = centre;                           // current centre, as stated by the caller
     for (int k = j - 1; k > i; --k) {         // bring mode j down to site i+1
         move_centre(s, c, k, qphys);
         worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
@@ -3176,6 +3183,7 @@ static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FS
         c = k + 1;
     }
     move_centre(s, c, i + 1, qphys);          // documented exit position
+    centre = i + 1;
     return worst;
 }
 
@@ -4727,6 +4735,10 @@ int hva_lattice_groups(int Lx, int W, bool y_periodic) {
     return (int)lattice_bond_groups(Lx, W, y_periodic).size() + 1;   // + the on-site layer
 }
 
+int hva_lattice_nbonds(int Lx, int W, bool y_periodic) {
+    return (int)lattice_bonds(Lx, W, y_periodic).size();
+}
+
 std::vector<std::vector<std::pair<int,int>>>
 hva_lattice_group_bonds(int Lx, int W, bool y_periodic) {
     return lattice_bond_groups(Lx, W, y_periodic);
@@ -4800,13 +4812,15 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
         for (auto& bd : s.bond) { int tt = 0; for (int dd : bd.dims) tt += dd; m = std::max(m, tt); }
         return m;
     };
-    for (auto& lay : angles) {
+    int centre = 0;                     // cps_init_states is a product state: any site
+    for (auto& lay : angles) {          // is a valid centre, and 0 is where bt_energy wants it
         for (size_t g = 0; g < groups.size(); ++g) {
             if (lay[g] == 0.0) continue;
             const Mat G = BD::build_gate_from_mpo(hop_mpo, Cx(0, -lay[g]), 0.0, 0.0);
             for (auto& e : groups[g])
                 worst_trunc = std::max(worst_trunc,
-                    BD::apply_pair_gate(s, e.first, e.second, G, FS, chi_max, cutoff, qphys));
+                    BD::apply_pair_gate(s, e.first, e.second, G, FS, chi_max, cutoff,
+                                        qphys, centre));
         }
         double thU = lay.back();
         if (thU != 0.0) {
@@ -4819,9 +4833,16 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
     out.max_bond = max_bond();
     for (int b : out.layer_bond) out.max_bond = std::max(out.max_bond, b);
     out.trunc_err = worst_trunc;
-    // apply_pair_gate leaves the centre at (bond.first + 1); bring it to site 0 so
-    // bt_energy's two-site H_eff at the left edge is the whole energy
-    BD::move_centre(s, groups.empty() ? 0 : groups.back().back().first + 1, 0, qphys);
+    // Bring the centre to site 0 so bt_energy's two-site H_eff at the left edge is the
+    // whole energy. Sweep from the RIGHT END, not from the tracked centre: a leftward
+    // sweep starting at n-1 right-canonicalises every site above 0 whatever the gauge
+    // was, whereas starting at the tracked position leaves anything to its right
+    // untouched. An earlier version derived the start from the last group's last bond
+    // -- which is wrong the moment a group is skipped for a zero angle (that group
+    // then never ran, so the centre is further right than the formula says) and gave a
+    // silently 4x wrong energy on the W=1 lattice. n-1 extra lossless SVDs, once per
+    // circuit evaluation, buys an invariant that cannot be got wrong.
+    BD::move_centre(s, s.n - 1, 0, qphys);
     if (want_entropy) BD::entropy_walk(s, qphys, out.S_max, out.S_mid);
     BD::rebuild_mpo_envs(s, lattice_mpo);
     out.energy = BD::bt_energy(s, lattice_mpo);
@@ -4844,10 +4865,12 @@ double hva_lattice_layer_cost(const std::vector<MPOSite>& lattice_mpo,
     Mat G  = BD::build_gate_from_mpo(hop_mpo, Cx(0, -0.2), 0.0, 0.0);
     Mat FS = BD::build_fswap_gate(d, qphys);
     double worst = 0;
+    int centre = 0;                           // BD::run leaves the state canonical at 0
     for (int x = 0; x + 1 < Lx; ++x)          // every x-hop: range W on the chain
         for (int y = 0; y < W; ++y)
             worst = std::max(worst, BD::apply_pair_gate(s, W*x + y, W*(x+1) + y,
-                                                        G, FS, chi_max, 1e-10, qphys));
+                                                        G, FS, chi_max, 1e-10, qphys,
+                                                        centre));
     return worst;
 }
 
@@ -4864,8 +4887,9 @@ double hva_swap_probe(const std::vector<MPOSite>& hop_mpo,
     // together the JW string between them is gone, so this is the right operator
     Mat G = BD::build_gate_from_mpo(hop_mpo, Cx(0, -theta), 0.0, 0.0);
     Mat FS = BD::build_fswap_gate(d, qphys);
-    BD::apply_pair_gate(s, i, j, G, FS, chi_max, 0.0, qphys);
-    BD::move_centre(s, i + 1, 0, qphys);      // apply_pair_gate exits with centre at i+1
+    int centre = 0;                           // cps_init_states: product state
+    BD::apply_pair_gate(s, i, j, G, FS, chi_max, 0.0, qphys, centre);
+    BD::move_centre(s, s.n - 1, 0, qphys);    // right-canonicalise everything above 0
     BD::rebuild_mpo_envs(s, probe);
     return BD::bt_energy(s, probe);
 }

@@ -421,6 +421,10 @@ HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
 // the wider geometry, so a worse result there is the stronger claim.
 // n_groups() reports the count so a caller can size its angle vectors.
 int hva_lattice_groups(int Lx, int W, bool y_periodic);
+
+// Number of lattice bonds (y-NN, y-wrap when W>2, x-hops) -- reported alongside the
+// group count so the doc can state how much of the geometry each layer touches.
+int hva_lattice_nbonds(int Lx, int W, bool y_periodic);
 // The groups themselves, so a test can drive a dense reference with the SAME bonds in
 // the SAME order (groups do not commute with each other). Re-deriving the greedy
 // colouring in the test would risk diverging from what the circuit actually applies;
