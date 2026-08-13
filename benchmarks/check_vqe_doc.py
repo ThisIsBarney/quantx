@@ -162,6 +162,58 @@ for d, lo_hi in ((q[0], "12 qubits"), (q[1], "16 qubits")):
            if lo_hi == "12 qubits" else f"×{min(rr):.1f}–{max(rr):.1f} at 16")
 expect("ln 16 cap", f"ln 16 = {math.log(16):.4f}")
 
+# ---- part E: the width scan, all three geometries in one representation ----
+Wd = load("vqe_width.csv", ("W", "p"))
+ws = sorted({w for (w, _) in Wd})
+pw = max(p for (_, p) in Wd)
+def wcells(fmt):
+    return " | ".join(fmt(Wd[(w, pw)]) for w in ws)
+
+def pct2(r): return format(rel_err(r), ".2%").replace("%", " %")
+def pct1(r): return format(float(r["frac"]), ".1%").replace("%", " %")
+def smid3(r): return format(float(r["S_mid"]), ".3f")
+def nang(r): return str(int(r["nangle"]) // pw)
+
+expect("width error row", f"| relative energy error | {wcells(pct2)} |")
+expect("width frac row", f"| correlation energy captured | {wcells(pct1)} |")
+expect("width S_mid row", f"| entropy across the balanced cut | {wcells(smid3)} |")
+expect("width angle row", f"| angles per layer | {wcells(nang)} |")
+b1, bw = Wd[(ws[0], pw)], Wd[(ws[-1], pw)]
+expect("width headline ratio", f"×{rel_err(bw)/rel_err(b1):.1f} the chain's error")
+expect("width bond row", f"| bonds | {wcells(lambda r: r['nbond'])} |")
+# The entropy claim is that the balanced-cut ordering is NOT the width ordering, so
+# check the shape of the data, not a ratio: the peak must be at the ladder and it must
+# hold at every depth, or the prose is wrong and must be rewritten rather than retuned.
+peak = max(ws, key=lambda w: float(Wd[(w, pw)]["S_mid"]))
+if peak != 2:
+    fails.append(f"part E: S_mid peaks at W={peak}, but the doc says the ladder")
+for p_ in sorted({p for (_, p) in Wd}):
+    if max(ws, key=lambda w: float(Wd[(w, p_)]["S_mid"])) != 2:
+        fails.append(f"part E: S_mid does not peak at the ladder at p={p_}; "
+                     f"the doc claims it does at every depth")
+expect("width entropy peak", f"peaks at the *ladder* ({float(Wd[(2, pw)]['S_mid']):.3f}), "
+                             f"not the cylinder ({float(Wd[(3, pw)]['S_mid']):.3f})")
+expect("cylinder smax vs smid",
+       f"its S_max ({float(Wd[(3, pw)]['S_max']):.3f}) is well above its S_mid "
+       f"({float(Wd[(3, pw)]['S_mid']):.3f})")
+# the energy ordering is the surviving claim -- assert it at every depth the doc claims
+for p_ in sorted({p for (_, p) in Wd}):
+    if p_ < 2:
+        continue
+    fr = [float(Wd[(w, p_)]["frac"]) for w in ws]
+    if not all(fr[i] > fr[i+1] for i in range(len(fr)-1)):
+        fails.append(f"part E: frac is not monotone in W at p={p_} ({fr}); "
+                     f"the doc claims the ordering holds at every depth p>=2")
+# the whole point of part E is that nothing but the graph differs -- pin the
+# invariants the comparison rests on, so a re-run with a changed size fails loudly
+for w in ws:
+    r = Wd[(w, pw)]
+    # trunc is exact zero or denormal-small here; 1e-14 is "no state was discarded",
+    # not a tolerance on the result
+    if int(r["qubits"]) != 12 or int(r["chi"]) > 64 or float(r["trunc"]) > 1e-14:
+        fails.append(f"part E W={w}: not the matched lossless setup "
+                     f"(qubits={r['qubits']} chi={r['chi']} trunc={r['trunc']})")
+
 if fails:
     print(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")
     for f in fails:

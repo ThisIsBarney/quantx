@@ -839,10 +839,9 @@ the ratios are already ×1.56 and ×1.89 — **80–84 % of the excess entropy i
 non-interacting |ψ₀⟩ before a single gate acts**. (ii) `S_max` is the largest bond
 entropy, and for the fused ladder a *boundary* bond is capped by ln 16 = 2.7726 — the
 Lx=4 p=1 value is **exactly** that, a maximally mixed edge rung. So part of the ratio
-compares ln(d_rung) against ln(d_site), not areas. A clean version needs the entropy
-at cuts that split the qubits evenly on both geometries (`S_mid`, now recorded but not
-yet measured across this scan) and interior cuts only; until then, treat ×1.67/×2.11
-as an upper bound on a quasi-2D effect, not a measurement of one.
+compares ln(d_rung) against ln(d_site), not areas. Treat ×1.67/×2.11 as an upper bound
+on a quasi-2D effect, not a measurement of one — **and see the width scan below, which
+runs the clean version and finds the width ordering in entropy does not survive it.**
 
 The two pairs cover different depth ranges because the ladder scan was stopped after
 16 qubits / p=5 — its cost per point grows steeply and the error ratios were already
@@ -870,3 +869,72 @@ because each is an easy trap:
 The decisive width scan (W = 3, 4, … at fixed length, where χ ~ e^W should bite) needs
 range-W gates that rung fusion cannot provide — a fermionic SWAP network on the
 site-split cylinder MPO. That is the next increment, not a claim made here.
+
+### The width scan: one representation, three geometries
+
+![VQE width scan](vqe_width.svg)
+
+The section above compared a d=4 chain against a d=16 rung-fused ladder and had to
+retract half its own conclusion, because those two carry their entropy across
+different kinds of cut. This scan removes the confound instead of caveating it. All
+three geometries run **site-split (d=4) through the same driver**:
+
+  W=1 Lx=6 chain  ·  W=2 Lx=3 ladder  ·  W=3 Lx=2 cylinder
+
+n = 6 sites and 12 qubits for each, χ = 4³ = 64 lossless for each, the balanced cut is
+bond 2 for each, and each is optimised at its **own** optimum with an identical
+protocol. Only the connectivity graph changes. The site-split ladder is pinned against
+the independent rung-fused builder to **2.8e-14**, and the circuit itself against a
+dense state-vector reference at all three widths (2.2e-13 / 5.0e-14 / 6.2e-13).
+
+At depth 8:
+
+| | chain W=1 | ladder W=2 | cylinder W=3 |
+|---|---|---|---|
+| bonds | 5 | 7 | 9 |
+| angles per layer | 3 | 4 | 4 |
+| relative energy error | 1.01 % | 2.33 % | 3.63 % |
+| correlation energy captured | 98.5 % | 95.7 % | 90.7 % |
+| entropy across the balanced cut | 1.160 | 2.123 | 1.525 |
+
+**The energy result is clean and it is the one that survives.** The ordering
+chain < ladder < cylinder holds at **every** depth p ≥ 2, not just at p=8, and the
+wider lattices are handicapped in their own favour: they get **4 angles per layer
+against the chain's 3**, so a worse energy with more variational freedom is the
+stronger form of the claim. At p=8 the cylinder sits ×3.6 the chain's error.
+
+**The entropy result does not order by width, and this scan is what shows it.** The
+balanced-cut entropy peaks at the *ladder* (2.123), not the cylinder (1.525) — at every
+depth, not as a fluctuation. The reason is a limitation of the size, not a defect of
+the measurement: at 12 qubits the ladder has three columns, so the cut that splits the
+qubits evenly necessarily slices **through a rung**, while the cylinder's balanced cut
+is a clean column boundary. Both cross three bonds; they are not the same kind of cut.
+At 12 qubits with three different widths you can have "balanced in qubits" or "aligned
+with columns", not both. The cylinder's own numbers say the same thing from the other
+side: its S_max (1.787) is well above its S_mid (1.525), so its real bottleneck is not
+the middle cut at all, whereas for the chain and ladder the two coincide.
+
+This retires the earlier section's suspended claim rather than confirming it. The
+×1.67/×2.11 entropy ratios there were flagged as an upper bound pending a balanced-cut
+measurement; measured, with representation held fixed, **the width ordering in entropy
+disappears**. What is left is the energy statement.
+
+Two further corrections to the earlier section, both from having eight depths per
+geometry instead of a matched pair:
+
+* **The error ratio is not stable in depth.** The ladder-to-chain ratio wanders over
+  ×1.3–2.9 across p ≥ 2 and the cylinder-to-chain over ×1.9–3.6. These are ratios of
+  small differences, and the protocol's own run-to-run scatter is visible: this scan's
+  W=1 point (98.5 % at p=8) and part A's chain point at the same size and depth
+  (98.2 %) differ by 0.3 pp purely from multi-start seeding, the two paths having been
+  verified bit-for-bit identical. Read the ordering, not the ratio.
+* **p=1 is not a data point.** The optimiser correctly returns the identity there
+  (frac = 0.0000 at all three widths), so the p=1 entropies are pure state preparation
+  and the p=1 error "ratios" (< 1) are meaningless.
+
+*Scope.* Small, and deliberately. One x-hop layer costs 0.08 s at W=3 Lx=2 χ=64 but
+0.59 s at W=4 Lx=2 χ=256 and 10.65 s at W=3 Lx=4 χ=512 (measured, `QX_SWAPCOST`), and
+each of these 24 points spent 5–10 k circuit evaluations. An optimised scan at 24+
+qubits is tens of hours per point on this box, so the honest choice was 12 qubits where
+all three widths are also exactly simulable — not a wider lattice simulated with
+truncation, where the optimiser would be optimising something other than the ansatz.
