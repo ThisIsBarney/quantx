@@ -237,7 +237,9 @@ int main(int argc, char** argv) {
         int W = 3, Lx = 4, chi = 512;
         std::sscanf(sc, "%d %d %d", &W, &Lx, &chi);
         const int n = W * Lx, target = pack_q2(n, 0);
-        auto mpo  = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 4.0, 0.0, true);
+        // W=2 has no wrap (the builder rejects a width-2 cylinder), so derive it rather
+        // than assuming a cylinder -- `true` here threw for the ladder width
+        auto mpo  = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 4.0, 0.0, W > 2);
         auto hop  = build_hubbard_mpo(n, 1.0, 0.0, true);   // adjacent-hop gate source
         std::vector<int> cfg(n);
         for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
@@ -267,10 +269,14 @@ int main(int argc, char** argv) {
                                        target, &cfg, nullptr, false).energy;
         double e_chn = run_hva_circuit(chain, n, ac, 4096, 1e-14, target, &cfg,
                                        nullptr, false).energy;
+        // the two DMRG references the circuit energies should be read against -- at W=1
+        // the lattice and chain MPOs are the same Hamiltonian, so these must agree too
         double e_gs_lat = run_dmrg_blocks(mpo, n, 256, 1e-12, 60, 1e-12, target, &cfg).energy;
         double e_gs_chn = run_dmrg_blocks(chain, n, 256, 1e-12, 60, 1e-12, target, &cfg).energy;
         std::printf("LATCHK n=6 W=1: circuit lattice=%.10f chain=%.10f  d=%.1e\n",
                     e_lat, e_chn, std::abs(e_lat - e_chn));
+        std::printf("               gs      lattice=%.10f chain=%.10f  d=%.1e\n",
+                    e_gs_lat, e_gs_chn, std::abs(e_gs_lat - e_gs_chn));
         // isolate: one non-zero angle at a time, single layer
         const char* nm[3] = {"even", "odd ", "onsite"};
         for (int k = 0; k < 3; ++k) {

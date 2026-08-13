@@ -3160,6 +3160,11 @@ static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FS
                               int chi_max, double cutoff,
                               const std::vector<int>& qphys, int& centre) {
     if (j <= i) throw std::runtime_error("apply_pair_gate: need j > i");
+    // move_centre and apply_gate_at index s.A[k]/s.bond[k+1] with no bounds check of
+    // their own, so an out-of-range mode pair is a heap overrun rather than an error.
+    // hva_swap_probe is a public test hook that forwards raw (i, j) straight here.
+    if (i < 0 || j >= s.n)
+        throw std::runtime_error("apply_pair_gate: mode indices out of range");
     if (centre < 0 || centre >= s.n)
         throw std::runtime_error("apply_pair_gate: centre out of range");
     // The swaps walk monotonically, so the centre follows them: after applying at
@@ -4754,11 +4759,20 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           bool want_entropy) {
     using BD = BlockDMRG<Cx>;
     require_uniform_local_dim(lattice_mpo, "run_hva_lattice");
+    require_uniform_local_dim(hop_mpo, "run_hva_lattice (hop_mpo)");
     const int n = W * Lx;
     if ((int)lattice_mpo.size() != n)
         throw std::runtime_error("run_hva_lattice: MPO length must be W*Lx");
     const std::vector<int>& qphys = lattice_mpo[0].phys_charge;
     const int d = lattice_mpo[0].d;
+    // hop_mpo supplies the bond generator while d and qphys come from lattice_mpo, and
+    // apply_gate_theta_general indexes the gate with lattice_mpo's d. A mismatch is
+    // either a read past the end of G (Eigen's assert is compiled out under NDEBUG) or,
+    // when hop_mpo is the WIDER of the two, a silently wrong operator applied at the
+    // wrong stride. Neither announces itself in the energy.
+    if (hop_mpo.empty() || hop_mpo[0].d != d || hop_mpo[0].phys_charge != qphys)
+        throw std::runtime_error("run_hva_lattice: hop_mpo must share lattice_mpo's "
+                                 "local dimension and charge basis");
     auto groups = lattice_bond_groups(Lx, W, y_periodic);
     for (auto& lay : angles)
         if ((int)lay.size() != (int)groups.size() + 1)
@@ -4803,6 +4817,21 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
         for (int b = 0; b < d; ++b)
             if (a != b && std::abs(hs(a, b)) > 1e-13 * hs_scale)
                 throw std::runtime_error("run_hva_lattice: the on-site term is not diagonal");
+    // ...and it must be the SAME term everywhere, because the layer below applies these
+    // phases to every site. run_hva bails on this class of input (its comment names the
+    // culprits); this driver consumes the very builder that produces them, so it needs
+    // the same guard. hpin lives on sites 0..W-1 only and vamp varies with x -- both are
+    // diagonal, so the check above sees nothing wrong, and the circuit would then evolve
+    // under a Hamiltonian that is not the one bt_energy measures. Silently.
+    for (int i = 0; i < n; ++i) {
+        const MPOSite& Wi = lattice_mpo[i];
+        const Mat& hi = Wi.W((Wi.chi_l == 1) ? 0 : Wi.chi_l - 1, 0);
+        if (hi.rows() != hs.rows() || hi.cols() != hs.cols() ||
+            (hi - hs).cwiseAbs().maxCoeff() > 1e-12 * hs_scale)
+            throw std::runtime_error("run_hva_lattice: the on-site term is not uniform "
+                "across the lattice (edge pinning or a charge bias is not representable "
+                "by one repeated layer gate)");
+    }
 
     HVAResult out;
     double worst_trunc = 0;
@@ -4857,10 +4886,16 @@ double hva_lattice_layer_cost(const std::vector<MPOSite>& lattice_mpo,
     using BD = BlockDMRG<Cx>;
     const std::vector<int>& qphys = lattice_mpo[0].phys_charge;
     const int d = lattice_mpo[0].d;
+    if (n != W * Lx)
+        throw std::runtime_error("hva_lattice_layer_cost: n must equal W*Lx");
     // start from the U=0 ground state so the bond dimension is realistic, not the
     // trivial chi of a product state
     BD::BMPS s;
-    auto mpo0 = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 0.0, 0.0, true);
+    // W=2 has no wrap -- the builder rejects it outright, because a width-2 wrap would
+    // duplicate the rung. Hard-coding `true` here made this probe throw for the ladder,
+    // i.e. for one of the three widths the scan it was written to size actually uses.
+    const bool yp = (W > 2);
+    auto mpo0 = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 0.0, 0.0, yp);
     BD::run(mpo0, n, chi_max, 1e-12, 40, 1e-12, &s, total_charge, &init_config);
     Mat G  = BD::build_gate_from_mpo(hop_mpo, Cx(0, -0.2), 0.0, 0.0);
     Mat FS = BD::build_fswap_gate(d, qphys);
@@ -4882,6 +4917,20 @@ double hva_swap_probe(const std::vector<MPOSite>& hop_mpo,
     using BD = BlockDMRG<Cx>;
     const std::vector<int>& qphys = hop_mpo[0].phys_charge;
     const int d = hop_mpo[0].d;
+    // cps_init_states indexes qphys[cfg[i]] unchecked, and total_charge was accepted and
+    // then ignored -- so a config in the wrong sector, or of the wrong length, gave a
+    // confident answer for a different problem. run_hva validates both; a hook that
+    // exists for tests to poke the primitive directly attracts exactly these mistakes.
+    if ((int)init_config.size() != n)
+        throw std::runtime_error("hva_swap_probe: init_config length must equal n");
+    int qtot = 0;
+    for (int k = 0; k < n; ++k) {
+        if (init_config[k] < 0 || init_config[k] >= d)
+            throw std::runtime_error("hva_swap_probe: init_config state index out of range");
+        qtot += qphys[init_config[k]];
+    }
+    if (qtot != total_charge)
+        throw std::runtime_error("hva_swap_probe: sum of init_config charges != total_charge");
     BD::BMPS s = BD::cps_init_states(hop_mpo, n, init_config, qphys);
     // the ADJACENT hopping gate: once the swap network has brought the two modes
     // together the JW string between them is gone, so this is the right operator

@@ -884,8 +884,9 @@ three geometries run **site-split (d=4) through the same driver**:
 n = 6 sites and 12 qubits for each, χ = 4³ = 64 lossless for each, the balanced cut is
 bond 2 for each, and each is optimised at its **own** optimum with an identical
 protocol. Only the connectivity graph changes. The site-split ladder is pinned against
-the independent rung-fused builder to **2.8e-14**, and the circuit itself against a
-dense state-vector reference at all three widths (2.2e-13 / 5.0e-14 / 6.2e-13).
+the independent rung-fused builder to **1.3e-14**, and the circuit itself against a
+dense state-vector reference at all three widths (2.7e-12 / 3.6e-13 / 2.7e-13), over
+four layers two of which skip a bond group outright — the case that broke the gauge.
 
 At depth 8:
 
@@ -928,13 +929,14 @@ geometry instead of a matched pair:
   W=1 point (98.5 % at p=8) and part A's chain point at the same size and depth
   (98.2 %) differ by 0.3 pp purely from multi-start seeding, the two paths having been
   verified bit-for-bit identical. Read the ordering, not the ratio.
-* **p=1 is not a data point.** The optimiser correctly returns the identity there
-  (frac = 0.0000 at all three widths), so the p=1 entropies are pure state preparation
-  and the p=1 error "ratios" (< 1) are meaningless.
+* **p=1 is not a data point.** The chain and the ladder return the identity exactly
+  (frac = 0.0000); the cylinder reaches frac = 0.0002, i.e. it finds a circuit a mere
+  3e-4 of the correlation energy below the identity. So the p=1 entropies are state
+  preparation and nothing else, and the p=1 error "ratios" (< 1) are meaningless.
 
 *Scope.* Small, and deliberately. One x-hop layer costs 0.08 s at W=3 Lx=2 χ=64 but
 0.59 s at W=4 Lx=2 χ=256 and 10.65 s at W=3 Lx=4 χ=512 (measured, `QX_SWAPCOST`), and
-each of these 24 points spent 5–10 k circuit evaluations. An optimised scan at 24+
+these 24 points spent 744–10303 circuit evaluations each. An optimised scan at 24+
 qubits is tens of hours per point on this box, so the honest choice was 12 qubits where
 all three widths are also exactly simulable — not a wider lattice simulated with
 truncation, where the optimiser would be optimising something other than the ansatz.

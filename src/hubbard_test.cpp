@@ -1058,6 +1058,18 @@ int main() {
                                                       + 0.07 * l);
             ang.push_back(a);
         }
+        // Two more layers whose only job is to SKIP a group. run_hva_lattice drops any
+        // group with a zero angle, and the gauge bug this gate was widened to catch was
+        // exactly that: the outgoing orthogonality centre had been derived from the last
+        // group's last bond, which is wrong the moment that group never ran. With every
+        // angle non-zero the formula happens to land on the right site, so a circuit
+        // that never skips cannot see the bug. The ED side needs no special case --
+        // exp(-i*0*H) is the identity, so a zero angle is a no-op on both sides.
+        for (int g0 : {ng / 2, ng - 1}) {
+            std::vector<double> a;
+            for (int g = 0; g <= ng; ++g) a.push_back(g == g0 ? 0.0 : 0.11 * (g + 2));
+            ang.push_back(a);
+        }
         for (auto& a : ang) {
             for (int g = 0; g < ng; ++g) v = applyL(eg[g], a[g], v);
             Eigen::ArrayXcd phu = (Cxd(0,-a[ng]) * Hu.diagonal().real().array().cast<Cxd>()).exp();
@@ -1111,6 +1123,53 @@ int main() {
                         "err=%.1e  %s\n",
                         g.W, g.Lx, g.name, E_split, E_ref, err, okg ? "OK" : "FAIL");
             fails += !okg;
+        }
+    }
+
+    // (t) GUARD GATE. run_hva_lattice reads ONE bulk site for the on-site phases and
+    // applies them everywhere, and takes its local dimension from lattice_mpo while the
+    // gate comes from hop_mpo. Both assumptions fail silently when broken -- a pinned
+    // edge or a charge bias is still diagonal, and a mismatched hop_mpo still produces
+    // a gate of some size -- so the failure mode is a confident number for a different
+    // Hamiltonian, exactly like the gauge bug. Assert the guards actually fire.
+    {
+        std::printf("\n(t) input guards on the lattice circuit\n");
+        const int Lg = 3, Wg = 2, ngt = Lg * Wg;
+        std::vector<int> cfg(ngt);
+        for (int i = 0; i < ngt; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto hop_ok = build_hubbard_mpo(ngt, 1.0, 0.0, true);
+        std::vector<std::vector<double>> ang1 = {{0.11, 0.22, 0.33, 0.44}};
+        auto throws = [&](const char* what, const std::vector<MPOSite>& lat,
+                          const std::vector<MPOSite>& hop) {
+            bool threw = false;
+            try {
+                run_hva_lattice(lat, hop, Lg, Wg, false, ang1, 512, 1e-12,
+                                pack_q2(ngt, 0), &cfg);
+            } catch (const std::exception&) { threw = true; }
+            std::printf("  GUARD %-28s %s\n", what, threw ? "throws  OK" : "SILENT  FAIL");
+            fails += !threw;
+        };
+        // edge pinning: on sites 0..W-1 only, and diagonal, so the old "is it diagonal?"
+        // check saw nothing wrong while the circuit applied the UNPINNED phase everywhere
+        throws("hpin != 0 (non-uniform)",
+               build_hubbard_lattice_split_mpo(Lg, Wg, 1.0, 4.0, 0.0, false, 0.5), hop_ok);
+        // hop_mpo from a d=16 rung-fused builder against a d=4 split lattice: every index
+        // stays in range but the gate is read at the wrong stride
+        throws("hop_mpo local dim mismatch",
+               build_hubbard_lattice_split_mpo(Lg, Wg, 1.0, 4.0, 0.0, false),
+               build_hubbard_ladder_mpo(Lg, 1.0, 1.0, 0.0, 0.0));
+        // and the uniform case must still be accepted, or the guard is just a wall
+        {
+            bool ok = true;
+            try {
+                run_hva_lattice(build_hubbard_lattice_split_mpo(Lg, Wg, 1.0, 4.0, 0.0, false),
+                                hop_ok, Lg, Wg, false, ang1, 512, 1e-12,
+                                pack_q2(ngt, 0), &cfg);
+            } catch (const std::exception& e) { ok = false;
+                std::printf("    unexpected: %s\n", e.what()); }
+            std::printf("  GUARD %-28s %s\n", "uniform MPO still accepted",
+                        ok ? "runs    OK" : "THREW   FAIL");
+            fails += !ok;
         }
     }
 

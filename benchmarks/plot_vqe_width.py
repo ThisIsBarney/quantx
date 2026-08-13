@@ -53,7 +53,7 @@ s.append(f'<text x="{W/2:.0f}" y="48" text-anchor="middle" font-size="11.5" fill
 nang = {w: int(D[(w, depths[0])]["nangle"]) // depths[0] for w in widths if (w, depths[0]) in D}
 s.append(f'<text x="{W/2:.0f}" y="66" text-anchor="middle" font-size="10.5" fill="#777">'
          'each width optimised at its OWN optimum, identical search protocol; the wider ones get MORE angles per layer ('
-         + ', '.join(f'W={w}: {nang[w]}' for w in widths) + ')</text>')
+         + ', '.join(f'W={w}: {nang[w]}' for w in widths if w in nang) + ')</text>')
 
 # ---- left: relative energy error (log) ----
 errs = [e for w in widths for p in depths if (e := err(w, p))]

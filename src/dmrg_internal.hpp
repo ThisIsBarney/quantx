@@ -432,6 +432,14 @@ int hva_lattice_nbonds(int Lx, int W, bool y_periodic);
 // JW operators instead.
 std::vector<std::vector<std::pair<int,int>>>
 hva_lattice_group_bonds(int Lx, int W, bool y_periodic);
+// PRECONDITION, checked: lattice_mpo's on-site term must be diagonal and the same at
+// every site, and hop_mpo must share its local dimension and charge basis.
+// PRECONDITION, NOT checked: lattice_mpo's hopping graph must be exactly the y-NN /
+// y-wrap / x-hop set that lattice_bonds enumerates. A diagonal-hop MPO (tp != 0 in
+// build_hubbard_lattice_split_mpo) has terms this circuit has no generator for, so the
+// ansatz is strictly weaker than the Hamiltonian being measured -- still a valid
+// variational upper bound, but not the ansatz the caller named, and nothing here says
+// so. Every in-tree caller passes tp = 0.
 HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           const std::vector<MPOSite>& hop_mpo, int Lx, int W,
                           bool y_periodic,
