@@ -3063,42 +3063,8 @@ static HVAResult run_hva(const std::vector<MPOSite>& mpo, int n,
     // where a 4-qubit|8-qubit split was compared against a chain's true 6|6). The max
     // is defined for every n and is what sets the MPS cost, chi ~ e^S. Unlike
     // max_bond it does not depend on the chi cap.
-    if (want_entropy) {
-        BMPS c = s;
-        double ent = 0;
-        for (int i = 0; i < n - 1; ++i) {
-            auto th = form_theta(c.A[i], c.A[i+1], no_sv,
-                                 c.bond[i], c.bond[i+1], c.bond[i+2], true, qphys);
-            bt_expand_theta(th, c.bond[i], c.bond[i+2], qphys);
-            auto svd = block_svd_truncate(th, c.bond[i], c.bond[i+2],
-                                          1 << 30, 0.0, false, false, qphys);
-            {
-                double nrm2 = 0, e_i = 0;
-                for (auto& [q, v] : svd.sv) nrm2 += v.squaredNorm();
-                if (nrm2 > 0)
-                    for (auto& [q, v] : svd.sv)
-                        for (int k = 0; k < v.size(); ++k) {
-                            double pk = v[k] * v[k] / nrm2;
-                            if (pk > 1e-16) e_i -= pk * std::log(pk);
-                        }
-                ent = std::max(ent, e_i);
-                // the balanced cut (equal site counts either side) as well as the
-                // max: the max can land on a BOUNDARY bond, whose entropy is capped
-                // by ln(d) of one site -- for the d=16 fused ladder that is ln 16 =
-                // 2.7726, and a maximally mixed edge rung hits it exactly. Comparing
-                // maxima across geometries then partly compares local dimensions
-                // rather than the states.
-                // even n only: for odd n there is no balanced cut, and bond
-                // n/2-1 is exactly the lopsided one the old S_half bug reported.
-                // Leave the sentinel rather than silently storing that.
-                if (n % 2 == 0 && i == n / 2 - 1) out.S_mid = e_i;
-            }
-            c.bond[i+1] = svd.new_mid_bs;
-            c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);
-            c.A[i+1] = bt_center_LR(svd);
-        }
-        out.S_max = ent;
-    }
+    if (want_entropy) entropy_walk(s, qphys, out.S_max, out.S_mid);
+
     rebuild_mpo_envs(s, mpo);
     out.energy = bt_energy(s, mpo);
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
@@ -3211,6 +3177,41 @@ static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FS
     }
     move_centre(s, c, i + 1, qphys);          // documented exit position
     return worst;
+}
+
+// The entanglement walk, shared by every circuit entry: transport the orthogonality
+// centre across the chain LOSSLESSLY and record the largest bond entropy (S_max) and
+// the balanced-cut one (S_mid, even n only -- for odd n there is no balanced cut and
+// bond n/2-1 is the lopsided one an earlier version wrongly reported as a half cut).
+// Runs on a COPY, so the caller's state -- and hence its energy -- is untouched.
+static void entropy_walk(const BMPS& s0, const std::vector<int>& qphys,
+                         double& S_max, double& S_mid) {
+    const std::map<int,RVec> no_sv;
+    BMPS c = s0;
+    const int n = c.n;
+    double ent = 0;
+    S_mid = 0;
+    for (int i = 0; i < n - 1; ++i) {
+        auto th = form_theta(c.A[i], c.A[i+1], no_sv,
+                             c.bond[i], c.bond[i+1], c.bond[i+2], true, qphys);
+        bt_expand_theta(th, c.bond[i], c.bond[i+2], qphys);
+        auto svd = block_svd_truncate(th, c.bond[i], c.bond[i+2],
+                                      1 << 30, 0.0, false, false, qphys);
+        double nrm2 = 0, e_i = 0;
+        for (auto& [q, v] : svd.sv) nrm2 += v.squaredNorm();
+        if (nrm2 > 0)
+            for (auto& [q, v] : svd.sv)
+                for (int k = 0; k < v.size(); ++k) {
+                    double pk = v[k] * v[k] / nrm2;
+                    if (pk > 1e-16) e_i -= pk * std::log(pk);
+                }
+        ent = std::max(ent, e_i);
+        if (n % 2 == 0 && i == n / 2 - 1) S_mid = e_i;
+        c.bond[i+1] = svd.new_mid_bs;
+        c.A[i]   = bt_A_from_U(svd, c.bond[i], c.bond[i+1], qphys);
+        c.A[i+1] = bt_center_LR(svd);
+    }
+    S_max = ent;
 }
 
 // Apply a general one-site gate G (d x d) to every site of a block MPS. G must be
@@ -4679,6 +4680,175 @@ std::shared_ptr<HVAInitState> hva_prepare_init(const std::vector<MPOSite>& init_
                                       total_charge, init_config);
     if (prep_out) *prep_out = r;
     return h;
+}
+
+// ---- HVA on a width-W cylinder: bond groups + the circuit -------------------
+// The bond list of the site-split cylinder (column-major i = W*x + y):
+//   y-NN   (x,y)-(x,y+1)   for y < W-1        adjacent on the chain
+//   y-wrap (x,0)-(x,W-1)   if y_periodic      range W-1
+//   x-hop  (x,y)-(x+1,y)                      range W
+// Bonds that share a site do not commute, so they are partitioned into groups by a
+// greedy edge colouring; every group's exponential then factorises EXACTLY into
+// two-site gates, which is how the chain and ladder circuits are defined too (no
+// Trotter error inside a layer).
+static std::vector<std::pair<int,int>> lattice_bonds(int Lx, int W, bool y_periodic) {
+    std::vector<std::pair<int,int>> b;
+    auto site = [&](int x, int y) { return W * x + y; };
+    for (int x = 0; x < Lx; ++x) {
+        for (int y = 0; y + 1 < W; ++y) b.push_back({site(x, y), site(x, y + 1)});
+        if (y_periodic && W > 2) b.push_back({site(x, 0), site(x, W - 1)});
+    }
+    for (int x = 0; x + 1 < Lx; ++x)
+        for (int y = 0; y < W; ++y) b.push_back({site(x, y), site(x + 1, y)});
+    for (auto& e : b) if (e.first > e.second) std::swap(e.first, e.second);
+    return b;
+}
+
+static std::vector<std::vector<std::pair<int,int>>>
+lattice_bond_groups(int Lx, int W, bool y_periodic) {
+    auto bonds = lattice_bonds(Lx, W, y_periodic);
+    std::vector<std::vector<std::pair<int,int>>> groups;
+    std::vector<char> used;
+    for (auto& e : bonds) {
+        bool placed = false;
+        for (auto& g : groups) {
+            bool clash = false;
+            for (auto& f : g)
+                if (f.first == e.first || f.first == e.second ||
+                    f.second == e.first || f.second == e.second) { clash = true; break; }
+            if (!clash) { g.push_back(e); placed = true; break; }
+        }
+        if (!placed) groups.push_back({e});
+    }
+    return groups;
+}
+
+int hva_lattice_groups(int Lx, int W, bool y_periodic) {
+    return (int)lattice_bond_groups(Lx, W, y_periodic).size() + 1;   // + the on-site layer
+}
+
+std::vector<std::vector<std::pair<int,int>>>
+hva_lattice_group_bonds(int Lx, int W, bool y_periodic) {
+    return lattice_bond_groups(Lx, W, y_periodic);
+}
+
+HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
+                          const std::vector<MPOSite>& hop_mpo, int Lx, int W,
+                          bool y_periodic,
+                          const std::vector<std::vector<double>>& angles,
+                          int chi_max, double cutoff, int total_charge,
+                          const std::vector<int>* init_config,
+                          const std::shared_ptr<HVAInitState>& init,
+                          bool want_entropy) {
+    using BD = BlockDMRG<Cx>;
+    require_uniform_local_dim(lattice_mpo, "run_hva_lattice");
+    const int n = W * Lx;
+    if ((int)lattice_mpo.size() != n)
+        throw std::runtime_error("run_hva_lattice: MPO length must be W*Lx");
+    const std::vector<int>& qphys = lattice_mpo[0].phys_charge;
+    const int d = lattice_mpo[0].d;
+    auto groups = lattice_bond_groups(Lx, W, y_periodic);
+    for (auto& lay : angles)
+        if ((int)lay.size() != (int)groups.size() + 1)
+            throw std::runtime_error("run_hva_lattice: each layer needs one angle per "
+                                     "bond group plus one for the on-site term");
+
+    auto t0 = std::chrono::steady_clock::now();
+    BD::BMPS s;
+    std::vector<int> cfg;
+    if (init_config) cfg = *init_config;
+    else { cfg.assign(n, 0); for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2; }
+    if (init) {
+        if (init->state.n != n)
+            throw std::runtime_error("run_hva_lattice: prepared state has a different length");
+        const BondSpace& bR = init->state.bond[n];
+        if (bR.n_sectors() != 1 || bR.qns[0] != total_charge)
+            throw std::runtime_error("run_hva_lattice: prepared state is in the wrong sector");
+        s = init->state;
+    } else {
+        if ((int)cfg.size() != n)
+            throw std::runtime_error("run_hva_lattice: init_config length must equal W*Lx");
+        int qtot = 0;
+        for (int i = 0; i < n; ++i) {
+            if (cfg[i] < 0 || cfg[i] >= d)
+                throw std::runtime_error("run_hva_lattice: init_config state index out of range");
+            qtot += qphys[cfg[i]];
+        }
+        if (qtot != total_charge)
+            throw std::runtime_error("run_hva_lattice: sum of init_config charges != total_charge");
+        s = BD::cps_init_states(lattice_mpo, n, cfg, qphys);
+    }
+
+    // the on-site block of the lattice MPO (U n_up n_dn): diagonal, so a pure phase
+    int bulk = -1, bw = 0;
+    for (int i = 0; i < n; ++i)
+        if (lattice_mpo[i].chi_l == lattice_mpo[i].chi_r && lattice_mpo[i].chi_l >= bw)
+            { bw = lattice_mpo[i].chi_l; bulk = i; }
+    if (bulk < 0) throw std::runtime_error("run_hva_lattice: no square bulk MPO site");
+    const Mat& hs = lattice_mpo[bulk].W(lattice_mpo[bulk].chi_r - 1, 0);
+    const double hs_scale = std::max(1e-300, (double)hs.cwiseAbs().maxCoeff());
+    for (int a = 0; a < d; ++a)
+        for (int b = 0; b < d; ++b)
+            if (a != b && std::abs(hs(a, b)) > 1e-13 * hs_scale)
+                throw std::runtime_error("run_hva_lattice: the on-site term is not diagonal");
+
+    HVAResult out;
+    double worst_trunc = 0;
+    const Mat FS = BD::build_fswap_gate(d, qphys);
+    auto max_bond = [&]() {
+        int m = 0;
+        for (auto& bd : s.bond) { int tt = 0; for (int dd : bd.dims) tt += dd; m = std::max(m, tt); }
+        return m;
+    };
+    for (auto& lay : angles) {
+        for (size_t g = 0; g < groups.size(); ++g) {
+            if (lay[g] == 0.0) continue;
+            const Mat G = BD::build_gate_from_mpo(hop_mpo, Cx(0, -lay[g]), 0.0, 0.0);
+            for (auto& e : groups[g])
+                worst_trunc = std::max(worst_trunc,
+                    BD::apply_pair_gate(s, e.first, e.second, G, FS, chi_max, cutoff, qphys));
+        }
+        double thU = lay.back();
+        if (thU != 0.0) {
+            std::vector<Cx> ph(d);
+            for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, -thU) * hs(a, a));
+            for (int i = 0; i < n; ++i) BD::apply_site_diag(s, i, ph, qphys);
+        }
+        out.layer_bond.push_back(max_bond());
+    }
+    out.max_bond = max_bond();
+    for (int b : out.layer_bond) out.max_bond = std::max(out.max_bond, b);
+    out.trunc_err = worst_trunc;
+    // apply_pair_gate leaves the centre at (bond.first + 1); bring it to site 0 so
+    // bt_energy's two-site H_eff at the left edge is the whole energy
+    BD::move_centre(s, groups.empty() ? 0 : groups.back().back().first + 1, 0, qphys);
+    if (want_entropy) BD::entropy_walk(s, qphys, out.S_max, out.S_mid);
+    BD::rebuild_mpo_envs(s, lattice_mpo);
+    out.energy = BD::bt_energy(s, lattice_mpo);
+    out.wall_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return out;
+}
+
+double hva_lattice_layer_cost(const std::vector<MPOSite>& lattice_mpo,
+                              const std::vector<MPOSite>& hop_mpo, int n, int W,
+                              int Lx, int chi_max, int total_charge,
+                              const std::vector<int>& init_config) {
+    using BD = BlockDMRG<Cx>;
+    const std::vector<int>& qphys = lattice_mpo[0].phys_charge;
+    const int d = lattice_mpo[0].d;
+    // start from the U=0 ground state so the bond dimension is realistic, not the
+    // trivial chi of a product state
+    BD::BMPS s;
+    auto mpo0 = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 0.0, 0.0, true);
+    BD::run(mpo0, n, chi_max, 1e-12, 40, 1e-12, &s, total_charge, &init_config);
+    Mat G  = BD::build_gate_from_mpo(hop_mpo, Cx(0, -0.2), 0.0, 0.0);
+    Mat FS = BD::build_fswap_gate(d, qphys);
+    double worst = 0;
+    for (int x = 0; x + 1 < Lx; ++x)          // every x-hop: range W on the chain
+        for (int y = 0; y < W; ++y)
+            worst = std::max(worst, BD::apply_pair_gate(s, W*x + y, W*(x+1) + y,
+                                                        G, FS, chi_max, 1e-10, qphys));
+    return worst;
 }
 
 double hva_swap_probe(const std::vector<MPOSite>& hop_mpo,

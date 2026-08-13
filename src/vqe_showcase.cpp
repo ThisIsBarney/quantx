@@ -230,6 +230,26 @@ static VQEPoint vqe_point(int n, int p, int chi, double U, int max_fev, double t
 }
 
 int main(int argc, char** argv) {
+    // QX_SWAPCOST="W Lx chi" -> time ONE x-hop layer of a width-W cylinder through the
+    // fermionic-swap network, on a state prepared at that chi. Used to size the width
+    // scan from a measurement instead of an estimate.
+    if (const char* sc = std::getenv("QX_SWAPCOST")) {
+        int W = 3, Lx = 4, chi = 512;
+        std::sscanf(sc, "%d %d %d", &W, &Lx, &chi);
+        const int n = W * Lx, target = pack_q2(n, 0);
+        auto mpo  = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 4.0, 0.0, true);
+        auto hop  = build_hubbard_mpo(n, 1.0, 0.0, true);   // adjacent-hop gate source
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto t0 = std::chrono::steady_clock::now();
+        double e = hva_lattice_layer_cost(mpo, hop, n, W, Lx, chi, target, cfg);
+        double w = std::chrono::duration<double>(
+                       std::chrono::steady_clock::now() - t0).count();
+        std::printf("SWAPCOST W=%d Lx=%d n=%d chi=%d : one x-layer = %.2f s  "
+                    "(worst trunc %.1e)\n", W, Lx, n, chi, w, e);
+        return 0;
+    }
+
     if (const char* v = std::getenv("QX_VQE")) {          // single point
         int n = 8, p = 2, chi = 256, iters = 800; double U = 4.0;
         std::sscanf(v, "%d %d %d %lf %d", &n, &p, &chi, &U, &iters);

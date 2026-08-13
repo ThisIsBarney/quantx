@@ -1005,6 +1005,72 @@ int main() {
         fails += !oksw;
     }
 
+    // (r) LATTICE HVA CIRCUIT on a width-3 cylinder, through the swap network, vs a
+    // dense state-vector reference. This is the whole circuit -- bond grouping, gate
+    // ordering, swap networks for the range-3 x-hops and range-2 y-wrap, and the
+    // on-site layer -- not just the primitive. The reference drives the SAME groups in
+    // the SAME order (groups do not commute), but builds each group's Hamiltonian from
+    // explicit JW operators, so the physics is constructed independently.
+    {
+        const double t = 1.0, U = 4.0;
+        const int W3c = 3, L2c = 2, nc = W3c * L2c;
+        int dimc = 1; for (int k = 0; k < nc; ++k) dimc *= 4;
+        auto lat = build_hubbard_lattice_split_mpo(L2c, W3c, t, U, 0.0, /*y_periodic*/true);
+        auto hop = build_hubbard_mpo(nc, t, 0.0, /*two_u1*/true);
+        auto groups = hva_lattice_group_bonds(L2c, W3c, true);
+        std::vector<int> cfg(nc);
+        for (int i = 0; i < nc; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        // dense: one Hamiltonian per group, plus the on-site term
+        std::vector<MatC> Hg;
+        for (auto& g : groups) {
+            MatC Hx = MatC::Zero(dimc, dimc);
+            for (auto& e : g) {
+                MatC h = ferm(nc,e.first,MatC(Cup.adjoint()))*ferm(nc,e.second,Cup)
+                       + ferm(nc,e.first,MatC(Cdn.adjoint()))*ferm(nc,e.second,Cdn);
+                Hx += -t * (h + MatC(h.adjoint()));
+            }
+            Hg.push_back(Hx);
+        }
+        MatC Hu = MatC::Zero(dimc, dimc);
+        for (int i = 0; i < nc; ++i) Hu += U * (ferm(nc,i,Nu) * ferm(nc,i,Nd));
+        struct EigL { MatC V; Eigen::VectorXd w; };
+        std::vector<EigL> eg;
+        for (auto& Hx : Hg) {
+            Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
+            eg.push_back({es.eigenvectors(), es.eigenvalues()});
+        }
+        auto applyL = [&](const EigL& e, double th, Eigen::VectorXcd v) {
+            Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
+            return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
+        };
+        Eigen::VectorXcd v = Eigen::VectorXcd::Zero(dimc);
+        { int ix = 0; for (int i = 0; i < nc; ++i) ix = ix * 4 + cfg[i]; v(ix) = 1.0; }
+        const int ng = (int)groups.size();
+        std::vector<std::vector<double>> ang;
+        for (int l = 0; l < 2; ++l) {
+            std::vector<double> a;
+            for (int g = 0; g <= ng; ++g) a.push_back(0.13 * (g + 1) * (l ? -1.0 : 1.0)
+                                                      + 0.07 * l);
+            ang.push_back(a);
+        }
+        for (auto& a : ang) {
+            for (int g = 0; g < ng; ++g) v = applyL(eg[g], a[g], v);
+            Eigen::ArrayXcd phu = (Cxd(0,-a[ng]) * Hu.diagonal().real().array().cast<Cxd>()).exp();
+            v = Eigen::VectorXcd(phu * v.array());
+        }
+        MatC Hfull = Hu; for (auto& Hx : Hg) Hfull += Hx;
+        double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
+        HVAResult lr = run_hva_lattice(lat, hop, L2c, W3c, true, ang, 4096, 1e-14,
+                                       pack_q2(nc, 0), &cfg);
+        double err = std::abs(lr.energy - E_ed);
+        bool okl = err < 1e-9;
+        std::printf("  LATTICE HVA W=%d Lx=%d (%d qubits, %d bond groups): <H> block=%.10f  "
+                    "statevector=%.10f  err=%.1e  chi=%d  %s\n",
+                    W3c, L2c, 2*nc, ng, lr.energy, E_ed, err, lr.max_bond,
+                    okl ? "OK" : "FAIL");
+        fails += !okl;
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }
