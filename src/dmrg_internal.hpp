@@ -410,6 +410,63 @@ HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                           const std::shared_ptr<HVAInitState>& init = nullptr,
                           bool want_entropy = true);
 
+// HVA circuit on a width-W cylinder (site-split, column-major i = W*x + y). The
+// x-hops are range-W on the JW chain and the y-wrap range-(W-1), so every layer goes
+// through the fermionic-swap network.
+// Bonds are partitioned into COMMUTING GROUPS (greedy edge colouring: no two bonds in
+// a group share a site), one angle per group per layer, so each group's exponential
+// factorises exactly -- no Trotter error inside a layer, matching how the chain and
+// ladder circuits are defined. The number of groups is geometry-dependent, so a
+// width-W circuit has MORE parameters per layer than the chain's three; that favours
+// the wider geometry, so a worse result there is the stronger claim.
+// n_groups() reports the count so a caller can size its angle vectors.
+int hva_lattice_groups(int Lx, int W, bool y_periodic);
+
+// Number of lattice bonds (y-NN, y-wrap when W>2, x-hops) -- reported alongside the
+// group count so the doc can state how much of the geometry each layer touches.
+int hva_lattice_nbonds(int Lx, int W, bool y_periodic);
+// The groups themselves, so a test can drive a dense reference with the SAME bonds in
+// the SAME order (groups do not commute with each other). Re-deriving the greedy
+// colouring in the test would risk diverging from what the circuit actually applies;
+// the test's independence comes from building each group's Hamiltonian from explicit
+// JW operators instead.
+std::vector<std::vector<std::pair<int,int>>>
+hva_lattice_group_bonds(int Lx, int W, bool y_periodic);
+// PRECONDITION, checked: lattice_mpo's on-site term must be diagonal and the same at
+// every site, and hop_mpo must share its local dimension and charge basis.
+// PRECONDITION, NOT checked: lattice_mpo's hopping graph must be exactly the y-NN /
+// y-wrap / x-hop set that lattice_bonds enumerates. A diagonal-hop MPO (tp != 0 in
+// build_hubbard_lattice_split_mpo) has terms this circuit has no generator for, so the
+// ansatz is strictly weaker than the Hamiltonian being measured -- still a valid
+// variational upper bound, but not the ansatz the caller named, and nothing here says
+// so. Every in-tree caller passes tp = 0.
+HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
+                          const std::vector<MPOSite>& hop_mpo, int Lx, int W,
+                          bool y_periodic,
+                          const std::vector<std::vector<double>>& angles,
+                          int chi_max, double cutoff, int total_charge = 0,
+                          const std::vector<int>* init_config = nullptr,
+                          const std::shared_ptr<HVAInitState>& init = nullptr,
+                          bool want_entropy = true);
+
+// Cost probe: apply ONE layer of x-hops (all W*(Lx-1) range-W bonds) of a width-W
+// cylinder to a chi-sized state through the swap network, and return the worst
+// discarded weight. Exists so the width scan can be sized from a measurement.
+double hva_lattice_layer_cost(const std::vector<MPOSite>& lattice_mpo,
+                              const std::vector<MPOSite>& hop_mpo, int n, int W,
+                              int Lx, int chi_max, int total_charge,
+                              const std::vector<int>& init_config);
+
+// TEST HOOK for the fermionic-swap network. Prepares the product state init_config,
+// applies exp(-i theta * h) for the hopping bond between MODES i and j (any distance;
+// a swap network brings them adjacent and back), and returns <psi| probe |psi>.
+// Exposed so the ED test can check the primitive itself -- a long-range fermionic
+// rotation is exactly where a JW sign error hides.
+double hva_swap_probe(const std::vector<MPOSite>& hop_mpo,
+                      const std::vector<MPOSite>& probe, int n, int i, int j,
+                      double theta, int chi_max, int total_charge,
+                      const std::vector<int>& init_config);
+
 // One block DMRG ground-state run + <GS|O|GS> for a list of measurement MPOs
 // (e.g. pair-field correlators): the GS is computed once, then for each obs MPO
 // the environments are rebuilt and the two-site H_eff expectation evaluated.

@@ -230,6 +230,68 @@ static VQEPoint vqe_point(int n, int p, int chi, double U, int max_fev, double t
 }
 
 int main(int argc, char** argv) {
+    // QX_SWAPCOST="W Lx chi" -> time ONE x-hop layer of a width-W cylinder through the
+    // fermionic-swap network, on a state prepared at that chi. Used to size the width
+    // scan from a measurement instead of an estimate.
+    if (const char* sc = std::getenv("QX_SWAPCOST")) {
+        int W = 3, Lx = 4, chi = 512;
+        std::sscanf(sc, "%d %d %d", &W, &Lx, &chi);
+        const int n = W * Lx, target = pack_q2(n, 0);
+        // W=2 has no wrap (the builder rejects a width-2 cylinder), so derive it rather
+        // than assuming a cylinder -- `true` here threw for the ladder width
+        auto mpo  = build_hubbard_lattice_split_mpo(Lx, W, 1.0, 4.0, 0.0, W > 2);
+        auto hop  = build_hubbard_mpo(n, 1.0, 0.0, true);   // adjacent-hop gate source
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto t0 = std::chrono::steady_clock::now();
+        double e = hva_lattice_layer_cost(mpo, hop, n, W, Lx, chi, target, cfg);
+        double w = std::chrono::duration<double>(
+                       std::chrono::steady_clock::now() - t0).count();
+        std::printf("SWAPCOST W=%d Lx=%d n=%d chi=%d : one x-layer = %.2f s  "
+                    "(worst trunc %.1e)\n", W, Lx, n, chi, w, e);
+        return 0;
+    }
+
+    // QX_LATCHK=1 -> at W=1 the lattice driver IS the chain driver: same bonds, same
+    // odd/even grouping, no swaps. run_hva is ED-validated, so any disagreement here
+    // localises a lattice-driver bug without waiting on the full test suite.
+    if (std::getenv("QX_LATCHK")) {
+        const int n = 6, target = pack_q2(n, 0);
+        auto mpo = build_hubbard_lattice_split_mpo(n, 1, 1.0, 4.0, 0.0, true);
+        auto chain = build_hubbard_mpo(n, 1.0, 4.0, true);
+        auto hop = build_hubbard_mpo(n, 1.0, 0.0, true);
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        // groups are {even bonds, odd bonds} -- the same order run_hva_circuit uses
+        std::vector<std::vector<double>> ang = {{0.13, 0.26, 0.39}, {-0.06, -0.19, -0.32}};
+        std::vector<std::array<double,3>> ac = {{0.13, 0.26, 0.39}, {-0.06, -0.19, -0.32}};
+        double e_lat = run_hva_lattice(mpo, hop, n, 1, true, ang, 4096, 1e-14,
+                                       target, &cfg, nullptr, false).energy;
+        double e_chn = run_hva_circuit(chain, n, ac, 4096, 1e-14, target, &cfg,
+                                       nullptr, false).energy;
+        // the two DMRG references the circuit energies should be read against -- at W=1
+        // the lattice and chain MPOs are the same Hamiltonian, so these must agree too
+        double e_gs_lat = run_dmrg_blocks(mpo, n, 256, 1e-12, 60, 1e-12, target, &cfg).energy;
+        double e_gs_chn = run_dmrg_blocks(chain, n, 256, 1e-12, 60, 1e-12, target, &cfg).energy;
+        std::printf("LATCHK n=6 W=1: circuit lattice=%.10f chain=%.10f  d=%.1e\n",
+                    e_lat, e_chn, std::abs(e_lat - e_chn));
+        std::printf("               gs      lattice=%.10f chain=%.10f  d=%.1e\n",
+                    e_gs_lat, e_gs_chn, std::abs(e_gs_lat - e_gs_chn));
+        // isolate: one non-zero angle at a time, single layer
+        const char* nm[3] = {"even", "odd ", "onsite"};
+        for (int k = 0; k < 3; ++k) {
+            std::vector<double> one(3, 0.0); one[k] = 0.37;
+            std::array<double,3> onec = {one[0], one[1], one[2]};
+            double a = run_hva_lattice(mpo, hop, n, 1, true, {one}, 4096, 1e-14,
+                                       target, &cfg, nullptr, false).energy;
+            double b = run_hva_circuit(chain, n, {onec}, 4096, 1e-14, target, &cfg,
+                                       nullptr, false).energy;
+            std::printf("LATCHK   only %s : lattice=%.10f chain=%.10f  d=%.1e\n",
+                        nm[k], a, b, std::abs(a - b));
+        }
+        return 0;
+    }
+
     if (const char* v = std::getenv("QX_VQE")) {          // single point
         int n = 8, p = 2, chi = 256, iters = 800; double U = 4.0;
         std::sscanf(v, "%d %d %d %lf %d", &n, &p, &chi, &U, &iters);
@@ -279,8 +341,8 @@ int main(int argc, char** argv) {
     // NOTE strchr(set, NUL) returns a pointer to the terminator, so an EMPTY value
     // would pass validation and then match no part -- the exact silent no-op this
     // check exists to prevent. Only the first character is examined; C runs with B.
-    if (only && (*only == char(0) || !std::strchr("AaBbDd", *only))) {
-        std::fprintf(stderr, "QX_VQE_ONLY must be A, B or D (got '%s')\n", only);
+    if (only && (*only == char(0) || !std::strchr("AaBbDdEe", *only))) {
+        std::fprintf(stderr, "QX_VQE_ONLY must be A, B, D or E (got '%s')\n", only);
         return 1;
     }
     auto want = [&](char c) { return !only || *only == c || *only == (c ^ 32); };
@@ -534,5 +596,119 @@ int main(int argc, char** argv) {
     }
     if (q) std::fclose(q);
     }   // end of part D
+
+    if (want('E')) {
+    // ================================================================= PART E ====
+    // The width scan, done so the three geometries are actually comparable.
+    //
+    // Part D compared a rung-fused ladder (d=16, cuts between rungs) against a chain
+    // (d=4, cuts between sites). Those cuts are not the same object, so an entropy
+    // difference between them is partly a difference of representation. Here all three
+    // widths run in the SAME site-split representation through the SAME driver:
+    //
+    //   W=1 Lx=6  chain        W=2 Lx=3  ladder        W=3 Lx=2  cylinder
+    //
+    // n = W*Lx = 6 sites and 12 qubits for every one; d = 4 for every one; the
+    // balanced cut is bond 2 (3|3 sites = 6|6 qubits) for every one; chi = 4^3 = 64
+    // is lossless for every one. The only thing that varies is the connectivity graph
+    // -- which is exactly the variable under study.
+    //
+    // Every geometry is optimised at its OWN optimum with an identical protocol
+    // (warm start + small-angle start + 3 random restarts + two Adam refinements).
+    // The wider geometries get MORE angles per layer, which favours them; a worse
+    // energy at equal depth is therefore the stronger claim.
+    //
+    // Small on purpose. Measured with QX_SWAPCOST, not guessed -- one x-hop layer:
+    //   W=3 Lx=2 chi=64   0.08 s      (this scan)
+    //   W=4 Lx=2 chi=256  0.59 s
+    //   W=3 Lx=4 chi=256  5.76 s      W=3 Lx=4 chi=512  10.65 s
+    // A VQE needs thousands of circuit evaluations per point and each evaluation is
+    // many layers, so an optimised scan at 24+ qubits is tens of hours PER POINT on
+    // this box. Hence 12 qubits, where all three widths are also exactly simulable.
+    const int n_e = 6, target_e = pack_q2(n_e, 0);
+    int chi_e = 1; for (int k = 0; k < n_e / 2; ++k) chi_e *= 4;      // 64, lossless
+    const int widths[3] = {1, 2, 3};
+    std::vector<int> cfg_e(n_e);
+    for (int i = 0; i < n_e; ++i) cfg_e[i] = (i % 2 == 0) ? 1 : 2;
+    std::printf("\n# PART E -- width scan, all three geometries site-split at 12 qubits\n");
+    std::printf("# W Lx qubits nbond ngroup nangle p E_vqe E_exact frac S_mid S_max chi trunc nfev wall_s\n");
+    std::fflush(stdout);
+    FILE* fe = std::fopen("docs/vqe_width.csv", "w");
+    if (fe) std::fprintf(fe, "W,Lx,qubits,nbond,ngroup,nangle,p,E_vqe,E_exact,frac,S_mid,S_max,chi,trunc,nfev,wall_s\n");
+    for (int wi = 0; wi < 3; ++wi) {
+        const int W_e = widths[wi], Lx_e = n_e / W_e;
+        // the y-wrap exists only for W>2: at W=2 it would duplicate the rung (the MPO
+        // builder rejects it outright) and at W=1 there is no y direction at all
+        const bool yp = (W_e > 2);
+        auto mpo_e  = build_hubbard_lattice_split_mpo(Lx_e, W_e, 1.0, U, 0.0, yp);
+        auto mpo0_e = build_hubbard_lattice_split_mpo(Lx_e, W_e, 1.0, 0.0, 0.0, yp);
+        auto hop_e  = build_hubbard_mpo(n_e, 1.0, 0.0, true);
+        const int ng_e = hva_lattice_groups(Lx_e, W_e, yp);       // bond groups + on-site
+        const int nb_e = hva_lattice_nbonds(Lx_e, W_e, yp);
+        auto psi0 = hva_prepare_init(mpo0_e, n_e, chi_e, target_e, &cfg_e);
+        double E_exact = run_dmrg_blocks(mpo_e, n_e, 512, 1e-12, 60, 1e-11,
+                                         target_e, &cfg_e).energy;
+        double E_psi0 = run_hva_lattice(mpo_e, hop_e, Lx_e, W_e, yp, {}, chi_e,
+                                        1e-12, target_e, &cfg_e, psi0, false).energy;
+        std::vector<double> carry;
+        for (int p : depths) {
+            auto t0 = std::chrono::steady_clock::now();
+            int nfev = 0;
+            auto to_layers_e = [&](const std::vector<double>& x) {
+                std::vector<std::vector<double>> a(x.size() / ng_e);
+                for (size_t l = 0; l < a.size(); ++l)
+                    a[l].assign(x.begin() + l * ng_e, x.begin() + (l + 1) * ng_e);
+                return a;
+            };
+            auto energy_of = [&](const std::vector<double>& x) {
+                ++nfev;
+                return run_hva_lattice(mpo_e, hop_e, Lx_e, W_e, yp, to_layers_e(x),
+                                       chi_e, 1e-12, target_e, &cfg_e, psi0, false).energy;
+            };
+            // IDENTICAL search protocol to parts A and D
+            std::mt19937 rng(4421 + 13 * p + 101 * W_e);
+            std::uniform_real_distribution<double> uni(-1.5, 1.5);
+            double best = 1e300; std::vector<double> best_x;
+            auto try_start = [&](std::vector<double> x0, int budget) {
+                NMResult r0 = nelder_mead(energy_of, x0, 0.3, budget);
+                if (r0.f < best) { best = r0.f; best_x = r0.x; }
+            };
+            { std::vector<double> x0 = carry;
+              x0.insert(x0.end(), ng_e, 0.0);
+              try_start(x0, iters / 2); }
+            { std::vector<double> xs(ng_e * p);
+              for (int k = 0; k < ng_e * p; ++k)
+                  xs[k] = 0.15 * ((k % ng_e == ng_e - 1) ? -1.0 : 1.0);
+              try_start(xs, iters / 4); }
+            for (int r = 0; r < 3; ++r) {
+                std::vector<double> x0(ng_e * p);
+                for (int k = 0; k < ng_e * p; ++k) x0[k] = uni(rng);
+                try_start(x0, iters / 12);
+            }
+            carry = best_x;
+            int st = std::max(60, iters / (12 * p));
+            adam_min(energy_of, carry, st, 0.05);
+            double E = adam_min(energy_of, carry, st, 0.01);
+            HVAResult rb = run_hva_lattice(mpo_e, hop_e, Lx_e, W_e, yp,
+                                           to_layers_e(carry), chi_e, 1e-12,
+                                           target_e, &cfg_e, psi0, true);
+            double w = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() - t0).count();
+            double frac = (E_psi0 - E_exact) != 0.0
+                        ? (E_psi0 - E) / (E_psi0 - E_exact) : 0.0;
+            std::printf("%d %d %d %d %d %d %d %.10f %.10f %.4f %.6f %.6f %d %.1e %d %.1f\n",
+                        W_e, Lx_e, 2 * n_e, nb_e, ng_e - 1, ng_e * p, p, E, E_exact,
+                        frac, rb.S_mid, rb.S_max, rb.max_bond, rb.trunc_err, nfev, w);
+            std::fflush(stdout);
+            if (fe) {
+                std::fprintf(fe, "%d,%d,%d,%d,%d,%d,%d,%.10f,%.10f,%.4f,%.6f,%.6f,%d,%.3e,%d,%.1f\n",
+                             W_e, Lx_e, 2 * n_e, nb_e, ng_e - 1, ng_e * p, p, E, E_exact,
+                             frac, rb.S_mid, rb.S_max, rb.max_bond, rb.trunc_err, nfev, w);
+                std::fflush(fe);
+            }
+        }
+    }
+    if (fe) std::fclose(fe);
+    }   // end of part E
     return 0;
 }

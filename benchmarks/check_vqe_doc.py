@@ -162,6 +162,112 @@ for d, lo_hi in ((q[0], "12 qubits"), (q[1], "16 qubits")):
            if lo_hi == "12 qubits" else f"×{min(rr):.1f}–{max(rr):.1f} at 16")
 expect("ln 16 cap", f"ln 16 = {math.log(16):.4f}")
 
+# ---- part E: the width scan, all three geometries in one representation ----
+Wd = load("vqe_width.csv", ("W", "p"))
+ws = sorted({w for (w, _) in Wd})
+ps = sorted({p for (_, p) in Wd})
+pw = max(ps)
+# Part E writes its CSV row-by-row over a ~45-minute run, so a truncated file is the
+# normal failure mode, not an exotic one. Report the hole as a mismatch like any other
+# rather than dying in a traceback -- the caller cannot tell a stale doc from a partial
+# scan if the script crashes.
+_missing = set()
+def row(w, p):
+    r = Wd.get((w, p))
+    if r is None and (w, p) not in _missing:
+        _missing.add((w, p))
+        fails.append(f"part E: docs/vqe_width.csv has no row for W={w} p={p}; "
+                     f"the doc quotes the full {len(ws)}x{len(ps)} scan")
+    return r
+def wcells(fmt):
+    return " | ".join(fmt(row(w, pw)) for w in ws if row(w, pw))
+
+def pct2(r): return format(rel_err(r), ".2%").replace("%", " %")
+def pct1(r): return format(float(r["frac"]), ".1%").replace("%", " %")
+def smid3(r): return format(float(r["S_mid"]), ".3f")
+def nang(r): return str(int(r["nangle"]) // pw)
+
+expect("width error row", f"| relative energy error | {wcells(pct2)} |")
+expect("width frac row", f"| correlation energy captured | {wcells(pct1)} |")
+expect("width S_mid row", f"| entropy across the balanced cut | {wcells(smid3)} |")
+expect("width angle row", f"| angles per layer | {wcells(nang)} |")
+b1, bw = row(ws[0], pw), row(ws[-1], pw)
+if b1 and bw:
+    expect("width headline ratio", f"×{rel_err(bw)/rel_err(b1):.1f} the chain's error")
+expect("width bond row", f"| bonds | {wcells(lambda r: r['nbond'])} |")
+# The entropy claim is that the balanced-cut ordering is NOT the width ordering, so
+# check the shape of the data, not a ratio: the peak must be at the ladder and it must
+# hold at every depth, or the prose is wrong and must be rewritten rather than retuned.
+for p_ in ps:
+    have = [w for w in ws if row(w, p_)]
+    if have and max(have, key=lambda w: float(row(w, p_)["S_mid"])) != 2:
+        fails.append(f"part E: S_mid does not peak at the ladder at p={p_}; "
+                     f"the doc claims it does at every depth")
+if row(2, pw) and row(3, pw):
+    expect("width entropy peak",
+           f"peaks at the *ladder* ({float(row(2, pw)['S_mid']):.3f}), "
+           f"not the cylinder ({float(row(3, pw)['S_mid']):.3f})")
+    expect("cylinder smax vs smid",
+           f"its S_max ({float(row(3, pw)['S_max']):.3f}) is well above its S_mid "
+           f"({float(row(3, pw)['S_mid']):.3f})")
+# the energy ordering is the surviving claim -- assert it at every depth the doc claims
+for p_ in ps:
+    if p_ < 2 or not all(row(w, p_) for w in ws):
+        continue
+    fr = [float(row(w, p_)["frac"]) for w in ws]
+    if not all(fr[i] > fr[i+1] for i in range(len(fr)-1)):
+        fails.append(f"part E: frac is not monotone in W at p={p_} ({fr}); "
+                     f"the doc claims the ordering holds at every depth p>=2")
+# The p=1 claim is the one that already went wrong once: the prose said the optimiser
+# returns the identity at all three widths, but the cylinder lands slightly below it.
+# Quote both numbers from the data so the distinction cannot rot back.
+if all(row(w, 1) for w in ws):
+    id_w = [w for w in ws if float(row(w, 1)["frac"]) == 0.0]
+    nz_w = [w for w in ws if float(row(w, 1)["frac"]) != 0.0]
+    if id_w != [1, 2] or nz_w != [3]:
+        fails.append(f"part E: at p=1 the exact-identity widths are {id_w} and the "
+                     f"non-identity {nz_w}; the doc says chain+ladder and cylinder")
+    else:
+        expect("p=1 identity", f"the identity exactly\n  (frac = {float(row(1,1)['frac']):.4f})")
+        expect("p=1 cylinder", f"the cylinder reaches frac = {float(row(3,1)['frac']):.4f}")
+# ratio ranges and the seeding-scatter figures the prose quotes
+for w, lbl in ((2, "ladder-to-chain"), (3, "cylinder-to-chain")):
+    rr = [rel_err(row(w, p_)) / rel_err(row(1, p_))
+          for p_ in ps if p_ >= 2 and row(w, p_) and row(1, p_)]
+    if rr:
+        expect(f"part E {lbl} ratio range", f"×{min(rr):.1f}–{max(rr):.1f}")
+# The seeding-scatter claim compares this scan's chain point against part A's at the
+# same size and depth. vqe_hubbard.csv stores no frac, so recover the shared |psi0>
+# energy from the width row (which has both frac and the energies) and apply it to part
+# A. That the two runs agree on E_exact bit-for-bit is itself the check that they are
+# the same system -- without it, comparing their fracs would be meaningless.
+scan_chain, partA_chain = row(1, pw), A.get((6, 8))
+if scan_chain and partA_chain:
+    f_scan, e_scan, x_scan = (float(scan_chain[k]) for k in ("frac", "E_vqe", "E_exact"))
+    e_a, x_a = float(partA_chain["E_vqe"]), float(partA_chain["E_exact"])
+    if abs(x_a - x_scan) > 1e-12:
+        fails.append(f"part E: the scan's chain E_exact ({x_scan}) and part A's ({x_a}) "
+                     f"differ, so the doc's seeding-scatter comparison is not like-for-like")
+    else:
+        e0 = (e_scan - f_scan * x_scan) / (1 - f_scan)
+        f_a = (e_a - e0) / (x_a - e0)
+        expect("part E scan chain frac", f"({f_scan:.1%} at p=8)".replace("%", " %"))
+        expect("part E part-A chain frac", f"({f_a:.1%})".replace("%", " %"))
+        expect("part E seeding scatter", f"differ by {abs(f_scan - f_a) * 100:.1f} pp")
+nfevs = [int(r["nfev"]) for r in Wd.values()]
+expect("part E nfev range", f"spent {min(nfevs)}–{max(nfevs)} circuit evaluations")
+# the whole point of part E is that nothing but the graph differs -- pin the
+# invariants the comparison rests on, so a re-run with a changed size fails loudly
+for w in ws:
+    r = row(w, pw)
+    if not r:
+        continue
+    # trunc is exact zero or denormal-small here; 1e-14 is "no state was discarded",
+    # not a tolerance on the result
+    if int(r["qubits"]) != 12 or int(r["chi"]) > 64 or float(r["trunc"]) > 1e-14:
+        fails.append(f"part E W={w}: not the matched lossless setup "
+                     f"(qubits={r['qubits']} chi={r['chi']} trunc={r['trunc']})")
+
 if fails:
     print(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")
     for f in fails:

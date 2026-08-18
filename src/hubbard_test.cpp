@@ -963,6 +963,216 @@ int main() {
         fails += !okl;
     }
 
+    // (q) FERMIONIC SWAP NETWORK -- the primitive the width-W lattice circuits need.
+    // Jordan-Wigner puts the lattice on a chain, so a width-W cylinder's x-hops are
+    // range-W and cannot be applied as a two-site gate. The cure is to fswap the two
+    // MODES adjacent, apply the plain nearest-neighbour gate, and fswap back; the JW
+    // string's signs are absorbed by the swaps. A long-range fermionic rotation is
+    // exactly where a sign error hides, so it is validated on its own here, before
+    // any circuit is built on it: apply exp(-i th (c^dag_i c_j + h.c.)) through the
+    // network and compare <probe> against the same rotation applied densely.
+    {
+        const double t = 1.0, U = 4.0;
+        const int n = 6;
+        int dimq = 1; for (int k = 0; k < n; ++k) dimq *= 4;
+        auto hop = build_hubbard_mpo(n, t, 0.0, /*two_u1*/true);   // hopping only
+        auto probe = build_hubbard_mpo(n, t, U, /*two_u1*/true);   // the observable
+        std::vector<int> cfg(n);
+        for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        Eigen::VectorXcd v0 = Eigen::VectorXcd::Zero(dimq);
+        { int idx = 0; for (int i = 0; i < n; ++i) idx = idx * 4 + cfg[i]; v0(idx) = 1.0; }
+        const MatC& Hpr = hubbard_ed_H(n, t, U);
+        double worst = 0;
+        const int prs[4][2] = {{0,4},{1,5},{0,3},{2,5}};
+        for (auto& pr : prs) {
+            const int i0 = pr[0], j0 = pr[1];
+            const double th = 0.37;
+            MatC h = ferm(n,i0,MatC(Cup.adjoint()))*ferm(n,j0,Cup)
+                   + ferm(n,i0,MatC(Cdn.adjoint()))*ferm(n,j0,Cdn);
+            MatC hb = -t * (h + MatC(h.adjoint()));
+            Eigen::SelfAdjointEigenSolver<MatC> es(hb);
+            Eigen::ArrayXcd ph = (Cxd(0,-th) * es.eigenvalues().array().cast<Cxd>()).exp();
+            Eigen::VectorXcd v = es.eigenvectors() *
+                                 (ph * (es.eigenvectors().adjoint() * v0).array()).matrix();
+            double E_ed = (v.adjoint() * Hpr * v).real()(0,0) / v.squaredNorm();
+            double E_blk = hva_swap_probe(hop, probe, n, i0, j0, th, 4096,
+                                          pack_q2(n, 0), cfg);
+            worst = std::max(worst, std::abs(E_blk - E_ed));
+        }
+        bool oksw = worst < 1e-10;
+        std::printf("  FSWAP NETWORK: max |<probe>_blk - <probe>_ED| over 4 long-range "
+                    "bonds = %.1e  %s\n", worst, oksw ? "OK" : "FAIL");
+        fails += !oksw;
+    }
+
+    // (r) LATTICE HVA CIRCUIT on a width-3 cylinder, through the swap network, vs a
+    // dense state-vector reference. This is the whole circuit -- bond grouping, gate
+    // ordering, swap networks for the range-3 x-hops and range-2 y-wrap, and the
+    // on-site layer -- not just the primitive. The reference drives the SAME groups in
+    // the SAME order (groups do not commute), but builds each group's Hamiltonian from
+    // explicit JW operators, so the physics is constructed independently.
+    // Run it at all three widths of the part-E scan, not just the cylinder: W=1 (every
+    // bond adjacent, no swaps), W=2 (range-2 x-hops) and W=3 (range-3 x-hops plus the
+    // range-2 y-wrap) take visibly different paths through apply_pair_gate, and the
+    // width scan's whole claim is that only the graph differs between them.
+    for (int wsel = 1; wsel <= 3; ++wsel) {
+        const double t = 1.0, U = 4.0;
+        const int W3c = wsel, L2c = 6 / wsel, nc = W3c * L2c;
+        const bool yp = (W3c > 2);          // no wrap below W=3 (W=2 would double the rung)
+        int dimc = 1; for (int k = 0; k < nc; ++k) dimc *= 4;
+        auto lat = build_hubbard_lattice_split_mpo(L2c, W3c, t, U, 0.0, yp);
+        auto hop = build_hubbard_mpo(nc, t, 0.0, /*two_u1*/true);
+        auto groups = hva_lattice_group_bonds(L2c, W3c, yp);
+        std::vector<int> cfg(nc);
+        for (int i = 0; i < nc; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        // dense: one Hamiltonian per group, plus the on-site term
+        std::vector<MatC> Hg;
+        for (auto& g : groups) {
+            MatC Hx = MatC::Zero(dimc, dimc);
+            for (auto& e : g) {
+                MatC h = ferm(nc,e.first,MatC(Cup.adjoint()))*ferm(nc,e.second,Cup)
+                       + ferm(nc,e.first,MatC(Cdn.adjoint()))*ferm(nc,e.second,Cdn);
+                Hx += -t * (h + MatC(h.adjoint()));
+            }
+            Hg.push_back(Hx);
+        }
+        MatC Hu = MatC::Zero(dimc, dimc);
+        for (int i = 0; i < nc; ++i) Hu += U * (ferm(nc,i,Nu) * ferm(nc,i,Nd));
+        struct EigL { MatC V; Eigen::VectorXd w; };
+        std::vector<EigL> eg;
+        for (auto& Hx : Hg) {
+            Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
+            eg.push_back({es.eigenvectors(), es.eigenvalues()});
+        }
+        auto applyL = [&](const EigL& e, double th, Eigen::VectorXcd v) {
+            Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
+            return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
+        };
+        Eigen::VectorXcd v = Eigen::VectorXcd::Zero(dimc);
+        { int ix = 0; for (int i = 0; i < nc; ++i) ix = ix * 4 + cfg[i]; v(ix) = 1.0; }
+        const int ng = (int)groups.size();
+        std::vector<std::vector<double>> ang;
+        for (int l = 0; l < 2; ++l) {
+            std::vector<double> a;
+            for (int g = 0; g <= ng; ++g) a.push_back(0.13 * (g + 1) * (l ? -1.0 : 1.0)
+                                                      + 0.07 * l);
+            ang.push_back(a);
+        }
+        // Two more layers whose only job is to SKIP a group. run_hva_lattice drops any
+        // group with a zero angle, and the gauge bug this gate was widened to catch was
+        // exactly that: the outgoing orthogonality centre had been derived from the last
+        // group's last bond, which is wrong the moment that group never ran. With every
+        // angle non-zero the formula happens to land on the right site, so a circuit
+        // that never skips cannot see the bug. The ED side needs no special case --
+        // exp(-i*0*H) is the identity, so a zero angle is a no-op on both sides.
+        for (int g0 : {ng / 2, ng - 1}) {
+            std::vector<double> a;
+            for (int g = 0; g <= ng; ++g) a.push_back(g == g0 ? 0.0 : 0.11 * (g + 2));
+            ang.push_back(a);
+        }
+        for (auto& a : ang) {
+            for (int g = 0; g < ng; ++g) v = applyL(eg[g], a[g], v);
+            Eigen::ArrayXcd phu = (Cxd(0,-a[ng]) * Hu.diagonal().real().array().cast<Cxd>()).exp();
+            v = Eigen::VectorXcd(phu * v.array());
+        }
+        MatC Hfull = Hu; for (auto& Hx : Hg) Hfull += Hx;
+        double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
+        HVAResult lr = run_hva_lattice(lat, hop, L2c, W3c, yp, ang, 4096, 1e-14,
+                                       pack_q2(nc, 0), &cfg);
+        double err = std::abs(lr.energy - E_ed);
+        bool okl = err < 1e-9;
+        std::printf("  LATTICE HVA W=%d Lx=%d (%d qubits, %d bond groups): <H> block=%.10f  "
+                    "statevector=%.10f  err=%.1e  chi=%d  %s\n",
+                    W3c, L2c, 2*nc, ng, lr.energy, E_ed, err, lr.max_bond,
+                    okl ? "OK" : "FAIL");
+        fails += !okl;
+    }
+
+    // (s) GEOMETRY GATE for the width scan. Part E compares W=1/2/3 in one common
+    // site-split representation, so the claim rests entirely on those MPOs really
+    // being the chain and the ladder. Pin each against the independent builder that
+    // already has its own ED gate: W=1 Lx=6 must reproduce build_hubbard_mpo(6), and
+    // W=2 Lx=3 must reproduce the rung-fused build_hubbard_ladder_mpo(3) -- a
+    // different local dimension (16 vs 4) and a different site ordering, so agreement
+    // is a real check on the bond list and not a tautology. It also pins the W=2
+    // y-wrap: emitting one would double the rung and visibly lower the energy.
+    {
+        const double tg = 1.0, Ug = 4.0;
+        struct { int W, Lx; const char* name; } geo[2] = {{1, 6, "chain"}, {2, 3, "ladder"}};
+        for (auto& g : geo) {
+            const int ng2 = g.W * g.Lx;
+            std::vector<int> cfg(ng2);
+            for (int i = 0; i < ng2; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+            double E_split = run_dmrg_blocks(
+                // no y-wrap below W=3: at W=2 it would duplicate the rung
+                build_hubbard_lattice_split_mpo(g.Lx, g.W, tg, Ug, 0.0, g.W > 2),
+                ng2, 256, 1e-12, 80, 1e-12, pack_q2(ng2, 0), &cfg).energy;
+            double E_ref;
+            if (g.W == 1) {
+                E_ref = run_dmrg_blocks(build_hubbard_mpo(ng2, tg, Ug, true), ng2, 256,
+                                        1e-12, 80, 1e-12, pack_q2(ng2, 0), &cfg).energy;
+            } else {
+                std::vector<int> rcfg(g.Lx, 6);          // one up + one dn per rung
+                E_ref = run_dmrg_blocks(build_hubbard_ladder_mpo(g.Lx, tg, tg, Ug, 0.0),
+                                        g.Lx, 256, 1e-12, 80, 1e-12,
+                                        pack_q2(ng2, 0), &rcfg).energy;
+            }
+            double err = std::abs(E_split - E_ref);
+            bool okg = err < 1e-8;
+            std::printf("  GEOMETRY W=%d Lx=%d (%s): split=%.10f  reference=%.10f  "
+                        "err=%.1e  %s\n",
+                        g.W, g.Lx, g.name, E_split, E_ref, err, okg ? "OK" : "FAIL");
+            fails += !okg;
+        }
+    }
+
+    // (t) GUARD GATE. run_hva_lattice reads ONE bulk site for the on-site phases and
+    // applies them everywhere, and takes its local dimension from lattice_mpo while the
+    // gate comes from hop_mpo. Both assumptions fail silently when broken -- a pinned
+    // edge or a charge bias is still diagonal, and a mismatched hop_mpo still produces
+    // a gate of some size -- so the failure mode is a confident number for a different
+    // Hamiltonian, exactly like the gauge bug. Assert the guards actually fire.
+    {
+        std::printf("\n(t) input guards on the lattice circuit\n");
+        const int Lg = 3, Wg = 2, ngt = Lg * Wg;
+        std::vector<int> cfg(ngt);
+        for (int i = 0; i < ngt; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
+        auto hop_ok = build_hubbard_mpo(ngt, 1.0, 0.0, true);
+        std::vector<std::vector<double>> ang1 = {{0.11, 0.22, 0.33, 0.44}};
+        auto throws = [&](const char* what, const std::vector<MPOSite>& lat,
+                          const std::vector<MPOSite>& hop) {
+            bool threw = false;
+            try {
+                run_hva_lattice(lat, hop, Lg, Wg, false, ang1, 512, 1e-12,
+                                pack_q2(ngt, 0), &cfg);
+            } catch (const std::exception&) { threw = true; }
+            std::printf("  GUARD %-28s %s\n", what, threw ? "throws  OK" : "SILENT  FAIL");
+            fails += !threw;
+        };
+        // edge pinning: on sites 0..W-1 only, and diagonal, so the old "is it diagonal?"
+        // check saw nothing wrong while the circuit applied the UNPINNED phase everywhere
+        throws("hpin != 0 (non-uniform)",
+               build_hubbard_lattice_split_mpo(Lg, Wg, 1.0, 4.0, 0.0, false, 0.5), hop_ok);
+        // hop_mpo from a d=16 rung-fused builder against a d=4 split lattice: every index
+        // stays in range but the gate is read at the wrong stride
+        throws("hop_mpo local dim mismatch",
+               build_hubbard_lattice_split_mpo(Lg, Wg, 1.0, 4.0, 0.0, false),
+               build_hubbard_ladder_mpo(Lg, 1.0, 1.0, 0.0, 0.0));
+        // and the uniform case must still be accepted, or the guard is just a wall
+        {
+            bool ok = true;
+            try {
+                run_hva_lattice(build_hubbard_lattice_split_mpo(Lg, Wg, 1.0, 4.0, 0.0, false),
+                                hop_ok, Lg, Wg, false, ang1, 512, 1e-12,
+                                pack_q2(ngt, 0), &cfg);
+            } catch (const std::exception& e) { ok = false;
+                std::printf("    unexpected: %s\n", e.what()); }
+            std::printf("  GUARD %-28s %s\n", "uniform MPO still accepted",
+                        ok ? "runs    OK" : "THREW   FAIL");
+            fails += !ok;
+        }
+    }
+
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }
