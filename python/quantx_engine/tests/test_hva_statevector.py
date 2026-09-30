@@ -2,7 +2,9 @@
 
 Every circuit (chain, ladder, strip, cylinder; product and U = 0 starts) runs on the
 block-sparse engine and on a Fock-space simulator written here, independently of the
-engine. The two must agree to 1e-10 on the energy and on the entanglement entropies.
+engine. From product starts the two must agree to 1e-10 on the energy and on the
+entanglement entropies. From U = 0 starts, the prepared energy must match the exact
+U = 0 energy to 1e-10, and the circuit to 1e-6 (see FREE_TOL).
 
 The simulator uses the canonical site-major mode order, mode = 2*site + spin (0 up,
 1 down). A basis state is the ascending product of creation operators on the vacuum,
@@ -154,6 +156,11 @@ def _angles(n_layers, per_layer, seed):
 CASES = [
     # model, (n_up, n_dn), init, layers
     (HubbardLattice(Lx=6, W=1, U=4.0), (3, 3), "product", 3),                  # chain
+    # Spin-imbalanced. With n_up = n_dn, start-state labels that disagreed with the
+    # engine's charge convention would still land in the right sector; here they cannot.
+    # (A consistent global up/down swap would still pass: H is spin-flip symmetric, and
+    # energies and entropies cannot tell a state from its spin flip.)
+    (HubbardLattice(Lx=3, W=2, U=4.0), (4, 2), "product", 3),                  # ladder, 4 up 2 dn
     (HubbardLattice(Lx=3, W=2, U=4.0), (3, 3), "product", 3),                  # ladder
     (HubbardLattice(Lx=2, W=3, U=2.0), (3, 3), "product", 2),                  # open strip
     (HubbardLattice(Lx=2, W=3, U=4.0, y_periodic=True), (3, 3), "product", 3), # cylinder
@@ -164,7 +171,7 @@ CASES = [
 
 
 @pytest.mark.parametrize("model, sector, init, layers", CASES,
-                         ids=["chain", "ladder", "strip", "cylinder",
+                         ids=["chain", "ladder-imbalanced", "ladder", "strip", "cylinder",
                               "free-odd-chain", "free-ladder", "free-cylinder"])
 def test_circuit_matches_statevector(engine, model, sector, init, layers):
     from quantx_engine import hva
@@ -175,7 +182,7 @@ def test_circuit_matches_statevector(engine, model, sector, init, layers):
         # exactly there (circuits that never skip could not see it).
         angles[-1][len(angles[-1]) // 2] = 0.0
     r = hva.circuit(model, angles, n_up=sector[0], n_dn=sector[1], init=init,
-                    max_bond=4096, cutoff=1e-14, engine=engine)
+                    max_bond=256, cutoff=1e-14, engine=engine)
     lat = model if isinstance(model, HubbardLattice) else HubbardLattice(
         Lx=model.L, W=1, t=model.t, U=model.U, mu=model.mu)
     energy, cuts = _reference(lat, lay.groups, angles, *sector, init, r.init_config)
@@ -186,6 +193,8 @@ def test_circuit_matches_statevector(engine, model, sector, init, layers):
         H0 = fock.hop(sorted(_lattice_bonds(lat.Lx, lat.W, lat.y_periodic)), lat.t)
         e0 = float(np.linalg.eigvalsh(H0)[0])   # prepared at U = 0 AND mu = 0
         assert abs(r.init_energy - e0) < TOL, (r.init_energy, e0)
+        assert abs(r.init_energy_exact - e0) < TOL, (r.init_energy_exact, e0)
+        assert abs(r.init_energy_error - (r.init_energy - r.init_energy_exact)) < 1e-12
         tol = FREE_TOL
     assert abs(r.energy - energy) < tol, (r.energy, energy)
     assert abs(r.entropy_max - max(cuts)) < tol, (r.entropy_max, cuts)
@@ -221,6 +230,19 @@ def test_degenerate_free_start_is_refused(engine):
         hva.circuit(cyl, angles, n_up=3, n_dn=3, init="free", engine=engine)
     r = hva.circuit(cyl, angles, n_up=3, n_dn=3, init="product", engine=engine)
     assert np.isfinite(r.energy)
+
+
+def test_rank_deficient_moves_do_not_crash(engine):
+    # A review's reproducer: routing the centre moves through Eigen 3.4.0's BDCSVD hit an
+    # out-of-bounds read on their exactly rank-deficient blocks and killed the process
+    # on about 1 in 20-40 cylinder circuits. BDCSVD engages only for blocks of 16+
+    # columns, which is why the six-site gates above could not see it.
+    from quantx_engine import hva
+    cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
+    lay = hva.layout(cyl, engine=engine)
+    angles = np.random.default_rng(11).uniform(-0.6, 0.6, size=(3, lay.angles_per_layer)).tolist()
+    r = hva.circuit(cyl, angles, init="product", max_bond=512, engine=engine)
+    assert np.isfinite(r.energy) and r.max_bond <= 512
 
 
 def test_truncation_is_reported(engine):

@@ -58,6 +58,9 @@ static Lattice read_lattice(const nlj& prob) {
     g.y_periodic = prob.value("y_periodic", false);
     if (g.Lx < 1 || g.W < 1)
         throw std::runtime_error("hubbard_lattice: need Lx >= 1 and W >= 1");
+    // In 64 bits: Lx = 2^30 + 1 with W = 4 used to wrap W*Lx round to 4 and run.
+    if ((long long)g.Lx * g.W > 200)
+        throw std::runtime_error("hubbard_lattice: W*Lx exceeds max (200)");
     if (g.y_periodic && g.W < 3)
         throw std::runtime_error("hubbard_lattice: y_periodic needs W >= 3 (at W = 2 the "
                                  "wrap would double every rung bond)");
@@ -258,8 +261,14 @@ static nlj groups_json(const std::vector<std::vector<std::pair<int,int>>>& group
 // At U = 0 the ground state of a sector is one Slater determinant per species, unique
 // unless a species' Fermi level falls inside a degenerate single-particle shell (the
 // +-k_y pairs of a cylinder, say). DMRG would then return an arbitrary member of the
-// degenerate space, and a circuit started from it would not be reproducible.
-static void require_unique_free_ground_state(
+// degenerate space, and a circuit started from it would not be reproducible, so refuse.
+// Otherwise return the exact U = 0 (and mu = 0) ground-state energy of the sector, the
+// sum of the lowest n_up and n_dn single-particle levels, so the prepared state's
+// error can be REPORTED: a DMRG start stops when its energy stops changing, which on a
+// long chain with a small gap left it 7.7e-7 off -- and a circuit on it 2e-4 off --
+// with both truncation fields at 0. The degeneracy test scales with t itself (t = 0 is
+// all-degenerate and refused; t = 1e-12 has gaps of that size and is not).
+static double free_ground_energy(
         int n, double t, const std::vector<std::vector<std::pair<int,int>>>& groups,
         int n_up, int n_dn) {
     Eigen::MatrixXd h = Eigen::MatrixXd::Zero(n, n);
@@ -267,11 +276,15 @@ static void require_unique_free_ground_state(
         for (const auto& e : g) { h(e.first, e.second) -= t; h(e.second, e.first) -= t; }
     Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(h);
     const Eigen::VectorXd& eps = es.eigenvalues();   // ascending
-    for (int k : {n_up, n_dn})
-        if (k > 0 && k < n && std::abs(eps(k) - eps(k - 1)) < 1e-9 * std::max(1.0, std::abs(t)))
+    double e0 = 0;
+    for (int k : {n_up, n_dn}) {
+        if (k > 0 && k < n && std::abs(eps(k) - eps(k - 1)) <= 1e-9 * std::abs(t))
             throw std::runtime_error("init 'free': the U = 0 ground state is degenerate at this "
                 "filling (a Fermi level inside a degenerate single-particle shell), so it is no "
                 "unique starting state; choose another filling, or init 'product'");
+        e0 += eps.head(k).sum();
+    }
+    return e0;
 }
 
 }  // namespace
@@ -639,13 +652,22 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
         nlj out;
         std::shared_ptr<HVAInitState> psi0;
         if (init == "free") {
-            require_unique_free_ground_state(n, t, groups, n_up, n_dn);
+            const double e_exact = free_ground_energy(n, t, groups, n_up, n_dn);
+            // Prepare at no more than the largest bond an n-site chain can have (4^(n/2)).
+            // The preparation's bond-space guess fills every bond to its max_bond, so at
+            // the circuit's max_bond it cost O(max_bond^3) at ANY size: 117 s for 6 sites
+            // at max_bond 4096, where 64 is already exact.
+            long long cap = 1;
+            for (int k = 0; k < n / 2 && cap < chi; ++k) cap *= 4;
+            const int chi_prep = (int)std::min<long long>(chi, cap);
             DMRGResult prep;
             psi0 = hva_prepare_init(build_hubbard_lattice_split_mpo(g.Lx, g.W, t, 0.0, 0.0,
                                                                     g.y_periodic),
-                                    n, chi, total, &cfg, &prep);
+                                    n, chi_prep, total, &cfg, &prep);
             out["init_energy"]           = prep.energy;
-            out["init_truncation_error"] = prep.truncation_error;
+            out["init_energy_exact"]     = e_exact;
+            out["init_energy_error"]     = prep.energy - e_exact;
+            out["init_truncation_error"] = prep.truncation_error;   // sum over its last sweep
         } else {
             out["init_config"] = cfg;   // local states: 0 empty, 1 up, 2 down, 3 double
         }

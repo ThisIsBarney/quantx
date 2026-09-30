@@ -135,16 +135,22 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
 //   sector {n_up, n_dn}), plus
 //   angles : [[theta_group_0, ..., theta_group_last, theta_onsite], ...], one list per layer
 // options_json:
-//   max_bond : int    (default 256)
-//   cutoff   : float  (default 1e-12)
+//   max_bond : int    (default 256; also caps the free-state preparation, at no more
+//              than the 4^(n/2) an n-site chain can use)
+//   cutoff   : float  (default 1e-12; the circuit's truncation -- the preparation uses
+//              its own 1e-12)
 //   init     : "free" (default: the U = 0 ground state, prepared by DMRG; refused where it
 //              is degenerate) | "product" (a product state in the sector)
 //   entropy  : bool   (default true; the entropies cost one extra lossless sweep)
 // Returns thread-local JSON: {ok, energy, entropy_max, entropy_mid (null for odd W*Lx),
-//   truncation_error (largest single discarded weight), max_bond, layer_bonds[],
-//   wall_time_s, sector, init, init_energy and init_truncation_error (init "free"),
-//   init_config (init "product": the local state per site, 0 empty, 1 up, 2 down,
-//   3 double, with |up dn> = c+_up c+_dn |0>)}.
+//   truncation_error (the circuit's LARGEST single discarded weight), max_bond,
+//   layer_bonds[], wall_time_s, sector, init,
+//   init "free": init_energy, init_energy_exact (the U = 0 ground-state energy from the
+//     single-particle levels), init_energy_error (their difference: how far the DMRG
+//     preparation stopped short -- check it, a circuit inherits the start's error), and
+//     init_truncation_error (the SUM over the preparation's last sweep),
+//   init "product": init_config, the local state per site, 0 empty, 1 up, 2 down,
+//     3 double, with |up dn> = c+_up c+_dn |0>}.
 QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_json);
 
 // The bond groups of the lattice circuit in application order:

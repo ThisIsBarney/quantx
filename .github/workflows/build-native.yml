@@ -114,10 +114,11 @@ jobs:
 
       - name: Symmetric models vs exact diagonalisation, HVA vs state vector (M4/M5 gates)
         # Solves every quantx_engine.models model on this build's engine against an
-        # independent ED, and runs HVA circuits (chain, ladder, strip, cylinder) against an
-        # independent state vector, both to 1e-10. The only job that runs Python tests
-        # against the native library; QX_REQUIRE_NATIVE=1 makes a load failure fail the
-        # gate instead of skipping it.
+        # independent ED (1e-10), and runs HVA circuits (chain, ladder, strip, cylinder)
+        # against an independent state vector (1e-10 from product starts; 1e-6 from U = 0
+        # starts, which carry their DMRG preparation's residual). The only job that runs
+        # Python tests against the native library; QX_REQUIRE_NATIVE=1 makes a load
+        # failure fail the gate instead of skipping it.
         env:
           QX_REQUIRE_NATIVE: "1"
         run: |

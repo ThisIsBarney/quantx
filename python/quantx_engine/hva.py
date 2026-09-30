@@ -9,11 +9,15 @@ it simulates the circuit exactly, up to ``max_bond``, far beyond state-vector si
     from quantx_engine.models import HubbardLattice
     from quantx_engine import hva
 
-    cyl = HubbardLattice(Lx=8, W=4, U=4.0, y_periodic=True)
+    cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
     lay = hva.layout(cyl)                          # the bond groups of this geometry
     angles = [[0.1] * lay.angles_per_layer] * 3    # three layers
-    r = hva.circuit(cyl, angles, n_up=15, n_dn=15, max_bond=512)
-    r.energy, r.entropy_max, r.truncation_error
+    r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)    # ~5 s
+    r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
+
+Wider lattices cost fast. The U = 0 start itself is highly entangled in 2-D: a 6x4
+cylinder prepared at max_bond 256 starts 0.05 off in energy (``init_energy_error``) and
+takes minutes.
 
 A :class:`~quantx_engine.models.HubbardChain` runs as the W = 1 lattice. Its two bond
 groups are the even and the odd bonds, so each chain layer takes three angles.
@@ -25,9 +29,11 @@ degenerate, since DMRG would then return an arbitrary member of the degenerate s
 ``init="product"`` starts from a product state in the sector.
 
 Precision: from a product start the circuit is exact up to ``max_bond`` (gated against
-a state vector to 1e-10). A free start is a DMRG ground state whose energy is exact to
-the same level, but the state itself carries the local eigensolver's residual, which the
-circuit propagates: expect agreement with an exact simulation near 1e-8, not 1e-10.
+a state vector to 1e-10). A free start is only as good as its DMRG preparation, which
+stops when its energy stops changing, and a circuit inherits the start's error. On the
+small systems of the gate that meant 1e-8 to 7e-8 in the circuit energy; on a long chain
+with a small single-particle gap it can be far worse. Nothing else signals it:
+``init_energy_error`` (against the exact U = 0 energy) is the number to check.
 """
 from __future__ import annotations
 
@@ -76,12 +82,17 @@ class HVAResult:
         The largest single discarded weight over the circuit's truncations. Their sum
         can be larger by up to the number of truncations.
     max_bond : int
-        Largest bond dimension the circuit reached.
+        Largest bond dimension the circuit reached (never above the ``max_bond`` cap).
     layer_bonds : list[int]
         Largest bond dimension after each layer.
-    init_energy, init_truncation_error : float or None
-        The prepared state's energy and truncation (``init="free"`` only). They are not
-        included in ``truncation_error``.
+    init_energy, init_energy_exact, init_energy_error : float or None
+        ``init="free"`` only: the prepared state's energy, the exact U = 0 ground-state
+        energy of the sector (from the single-particle levels), and their difference,
+        how far the DMRG preparation stopped short. Check it; see the module notes.
+    init_truncation_error : float or None
+        ``init="free"`` only: the preparation's discarded weight, summed over its last
+        sweep (unlike ``truncation_error``, a maximum). Not included in
+        ``truncation_error``.
     init_config : list[int] or None
         ``init="product"`` only: the starting local state per site (0 empty, 1 up,
         2 down, 3 double occupancy).
@@ -96,6 +107,8 @@ class HVAResult:
     sector: dict
     init: str
     init_energy: Optional[float] = None
+    init_energy_exact: Optional[float] = None
+    init_energy_error: Optional[float] = None
     init_truncation_error: Optional[float] = None
     init_config: Optional[list] = None
 
@@ -160,8 +173,11 @@ def circuit(
     init : {"free", "product"}
         Start from the U = 0 ground state (refused where it is degenerate), or from a
         product state in the sector.
-    max_bond, cutoff : int, float
-        Truncation of the circuit's MPS (and of the free-state preparation).
+    max_bond : int
+        Bond-dimension cap of the circuit's MPS. It also caps the free-state
+        preparation, at no more than the 4^(L/2) an L-site chain can use.
+    cutoff : float
+        Truncation cutoff of the circuit (the preparation uses its own 1e-12).
     entropy : bool
         Measure the final state's entanglement entropies (one extra lossless sweep).
 
@@ -204,6 +220,8 @@ def circuit(
         sector=lat.describe_sector(out["sector"]),
         init=str(out["init"]),
         init_energy=out.get("init_energy"),
+        init_energy_exact=out.get("init_energy_exact"),
+        init_energy_error=out.get("init_energy_error"),
         init_truncation_error=out.get("init_truncation_error"),
         init_config=out.get("init_config"),
     )
