@@ -119,6 +119,11 @@ repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
 archs = ["arm64", "x86_64"]
+# engine.cpp uses std::filesystem, which Apple ships only from macOS 10.15; the default
+# x86_64 deployment target is older, so Apple Clang rejects it as "unavailable". CMake
+# reads this variable for CMAKE_OSX_DEPLOYMENT_TARGET and the wheel tag follows it, so
+# delocate sees a library no newer than its tag. (arm64 starts at 11.0 regardless.)
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
 
 [tool.cibuildwheel.windows]
