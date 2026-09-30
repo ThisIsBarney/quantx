@@ -162,7 +162,7 @@ def build_and_install(dest_dir: str) -> None:
     targets = ["qx_capi"]
     if has_pybind11:
         targets.append("_quantx_py")
-        print("[build_native_for_wheel] pybind11 found — also building _quantx_py")
+        print("[build_native_for_wheel] pybind11 found -- also building _quantx_py")
 
     for target in targets:
         build_cmd = [
@@ -181,7 +181,7 @@ def build_and_install(dest_dir: str) -> None:
     src = _find_built_lib(build_dir)
     dst = os.path.join(dest_dir, os.path.basename(src))
     shutil.copy2(src, dst)
-    print(f"[build_native_for_wheel] Installed: {src} → {dst}")
+    print(f"[build_native_for_wheel] Installed: {src} -> {dst}")
 
     # pybind11 extension module (_quantx_py.*.so / _quantx_py.pyd)
     if has_pybind11:
@@ -189,13 +189,23 @@ def build_and_install(dest_dir: str) -> None:
         if ext:
             edst = os.path.join(dest_dir, os.path.basename(ext))
             shutil.copy2(ext, edst)
-            print(f"[build_native_for_wheel] Installed: {ext} → {edst}")
+            print(f"[build_native_for_wheel] Installed: {ext} -> {edst}")
         else:
             print("[build_native_for_wheel] WARNING: _quantx_py extension not found "
-                  "after build — skipping (ctypes path will be used).")
+                  "after build -- skipping (ctypes path will be used).")
 
 
 def main() -> None:
+    # This script prints paths and ran fine on a Chinese-locale dev box (cp936 can encode
+    # the arrow it used to print), then died on the Windows CI runner AFTER a successful
+    # 12-minute build: cp1252 cannot encode U+2192, so print() raised UnicodeEncodeError
+    # and the hook exited 1. Messages are ASCII now, but paths need not be (a non-ASCII
+    # user name), so never let the console encoding fail the build.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     if len(sys.argv) < 2:
         print("Usage: build_native_for_wheel.py <dest_pkg_dir>", file=sys.stderr)
         sys.exit(1)

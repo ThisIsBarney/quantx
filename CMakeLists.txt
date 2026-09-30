@@ -43,7 +43,7 @@ if(NOT spdlog_FOUND)
   include(FetchContent)
   FetchContent_Declare(
     spdlog
-    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.tar.gz
+    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.17.0.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
   FetchContent_MakeAvailable(spdlog)
