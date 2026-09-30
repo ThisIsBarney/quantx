@@ -264,6 +264,12 @@ else()
   target_link_libraries(qx_cli PRIVATE CLI11)
 endif()
 qx_set_config_output_dirs(qx_cli)
+# qx_smoke drives qx_cli end to end. It used to look for it in hard-coded build layouts
+# (build-vs/Debug, build-nmake-local, build/Debug) that no current build produces -- every
+# binary lands in ${CMAKE_BINARY_DIR}/<config> -- so it failed on every CI run with "unable
+# to locate qx_cli". Tell it exactly where CMake put the binary instead of guessing.
+target_compile_definitions(qx_smoke PRIVATE QX_CLI_PATH="$<TARGET_FILE:qx_cli>")
+add_dependencies(qx_smoke qx_cli)
 
 add_executable(qx_dmrg_test
   src/dmrg_test.cpp
