@@ -102,7 +102,13 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         }
 
         auto mpo = parse_ham(prob, n);
-        DMRGResult res = (type == "heisenberg")
+        // The block-sparse engine derives its symmetry data from a bulk MPO site, so it
+        // refuses chains shorter than 3 (derive_mpo_sym's contract, tested in
+        // qx_mpo_sym_test). A 2-site chain is still a valid question: answer it with the
+        // dense solver rather than returning an internal error. And report which solver
+        // actually ran -- this used to say "u1" for every call, dense ones included.
+        const bool use_blocks = (type == "heisenberg" && n >= 3);
+        DMRGResult res = use_blocks
             ? run_dmrg_blocks(mpo, n, max_bond, cutoff, n_sweeps, tol)
             : run_dmrg(mpo, n, max_bond, cutoff, n_sweeps, tol);
 
@@ -113,7 +119,7 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         out["n_sweeps_done"]    = res.n_sweeps_done;
         out["wall_time_s"]      = res.wall_time_s;
         out["sweep_energies"]   = res.sweep_energies;
-        out["method"]           = "u1";
+        out["method"]           = use_blocks ? "u1" : "dense";
 
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
@@ -140,8 +146,10 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         bool   imag     = opts.value("imag", false);
         bool   two_site = opts.value("two_site", true);
         std::string init = opts.value("initial", "neel");
-        // Block-sparse (Sz-symmetric) TDVP2 is the default fast path (Neel init).
-        bool   block    = opts.value("block", true) && two_site && init == "neel";
+        // Block-sparse (Sz-symmetric) TDVP2 is the default fast path (Neel init). It needs
+        // n >= 3 (a bulk MPO site for the symmetry derivation); the non-block TDVP below
+        // handles n = 2 fine, so fall back to it instead of failing.
+        bool   block    = opts.value("block", true) && two_site && init == "neel" && n >= 3;
 
         auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
 
@@ -212,7 +220,9 @@ QX_API const char* qx_spectral(const char* problem_json, const char* options_jso
         double delta = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
         if (type != "heisenberg") return dmrg_error("spectral supports only type 'heisenberg'/'xxz'");
-        if (n < 2) return dmrg_error("n_qubits must be >= 2");
+        // Block-sparse only (no dense fallback here), and the block engine needs a bulk MPO
+        // site. Say so in the caller's terms rather than surfacing derive_mpo_sym's.
+        if (n < 3) return dmrg_error("n_qubits must be >= 3 (block-sparse solver)");
 
         double dt      = opts.value("dt", 0.05);
         int    n_steps = opts.value("n_steps", 200);
@@ -248,7 +258,9 @@ QX_API const char* qx_loschmidt(const char* problem_json, const char* options_js
         double delta = prob.value("delta", 1.0);     // initial XXZ anisotropy
         std::string type = prob.value("type", "heisenberg");
         if (type != "heisenberg") return dmrg_error("loschmidt supports only type 'heisenberg'/'xxz'");
-        if (n < 2) return dmrg_error("n_qubits must be >= 2");
+        // Block-sparse only (no dense fallback here), and the block engine needs a bulk MPO
+        // site. Say so in the caller's terms rather than surfacing derive_mpo_sym's.
+        if (n < 3) return dmrg_error("n_qubits must be >= 3 (block-sparse solver)");
 
         double delta_f = opts.value("delta_f", 1.0);  // quench: evolve under XXZ(J, delta_f)
         double dt      = opts.value("dt", 0.05);
@@ -287,7 +299,9 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
         double delta = prob.value("delta", 1.0);
         std::string type = prob.value("type", "heisenberg");
         if (type != "heisenberg") return dmrg_error("conductivity supports only type 'heisenberg'/'xxz'");
-        if (n < 2) return dmrg_error("n_qubits must be >= 2");
+        // Block-sparse only (no dense fallback here), and the block engine needs a bulk MPO
+        // site. Say so in the caller's terms rather than surfacing derive_mpo_sym's.
+        if (n < 3) return dmrg_error("n_qubits must be >= 3 (block-sparse solver)");
 
         double dt      = opts.value("dt", 0.0125);
         int    n_steps = opts.value("n_steps", 400);
