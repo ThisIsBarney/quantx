@@ -42,7 +42,10 @@ jobs:
           }
 
       - name: Configure
-        run: cmake -S . -B build-vs -G "Visual Studio 17 2022" -A x64
+        # No -G: the runner image picks the installed Visual Studio. Pinning "Visual Studio
+        # 17 2022" failed configure outright once windows-latest moved to VS 2026 ("could
+        # not find any instance of Visual Studio"), which is why this gate had been red.
+        run: cmake -S . -B build-vs -A x64
 
       - name: Build
         run: cmake --build build-vs --config Debug

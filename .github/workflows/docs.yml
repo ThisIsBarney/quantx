@@ -27,8 +27,12 @@ jobs:
       - name: Install docs dependencies
         run: |
           pip install -r docs/source/requirements.txt
-          # Install quantx-engine in pure-Python mode (no C++ build required)
-          pip install -e "python/" --no-build-isolation 2>/dev/null || true
+          # Install quantx-engine in pure-Python mode (no C++ build required).
+          # This used to be `--no-build-isolation 2>/dev/null || true`. Python 3.12+ has no
+          # setuptools by default, so without build isolation there was no build backend;
+          # the install failed, `|| true` hid it, and Sphinx failed later on "No module
+          # named 'numpy'" -- far from the cause. Let an install failure fail here.
+          pip install -e "python/"
 
       - name: Build Sphinx docs
         run: |
