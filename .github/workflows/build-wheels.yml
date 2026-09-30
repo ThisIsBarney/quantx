@@ -114,6 +114,7 @@ jobs:
           print(f"  version : {info['version']}")
           print(f"  solvers : {info['solvers'][:5]}...")
           assert info["native"], "Native engine not loaded from wheel!"
+          assert info["version"] == __version__, (info["version"], __version__)
           print("Smoke test PASSED ✓")
           EOF
 

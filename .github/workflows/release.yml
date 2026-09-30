@@ -21,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish to PyPI and create GitHub Release (requires a version tag)"
+        description: "Create GitHub Release (requires a version tag; PyPI is published by build-wheels.yml)"
         required: true
         default: "false"
         type: choice
@@ -66,32 +66,14 @@ jobs:
           if-no-files-found: error
 
   # ── Publish to PyPI (manual only, publish=true required) ─────────────────
-  publish-pypi:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
-    environment:
-      name: pypi
-      url: https://pypi.org/p/quantx-engine
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI (OIDC trusted publisher)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          verbose: true
+  # PyPI publishing lives ONLY in build-wheels.yml (native platform wheels + smoke test).
+  # This workflow used to be a second path to PyPI; two publishers for one version race,
+  # and PyPI never allows a filename to be uploaded twice.
 
   # ── Create GitHub Release (manual only, publish=true required) ───────────
   github-release:
     name: Create GitHub Release
-    needs: publish-pypi
+    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
     permissions:

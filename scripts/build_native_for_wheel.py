@@ -7,18 +7,21 @@ compiled ``libquantx.so`` / ``libquantx.dylib`` / ``quantx.dll`` ends up inside
 installed, :class:`~quantx_engine.engine.Engine` finds the library automatically
 (no ``QUANTX_LIB_PATH`` environment variable required).
 
-M159 update: also builds the ``_quantx_py`` pybind11 extension module when
-``pybind11`` is available, enabling zero-copy NumPy return paths.
+The ``_quantx_py`` pybind11 extension is built only when ``QX_WHEEL_PYBIND=1``. It is off
+by default because it is the one artifact that depends on the Python version, and
+cibuildwheel calls this hook once per CPython version while the CMake build directory is
+shared between those calls: the cache keeps the first interpreter it saw, so every later
+wheel would ship an extension compiled for the wrong Python. The ctypes library, which is
+what ``backend_info()["native"]`` reports, does not depend on the Python version at all.
 
 Usage::
 
     python scripts/build_native_for_wheel.py <dest_pkg_dir>
 
-Example (cibuildwheel before-build, run from repo root)::
+cibuildwheel before-build (cibuildwheel runs from the repo root, so ``{project}`` is the
+repo root and ``{package}`` is ``python/``)::
 
-    python {project}/../scripts/build_native_for_wheel.py {project}/quantx_engine
-
-where ``{project}`` is the ``python/`` directory containing ``pyproject.toml``.
+    python {project}/scripts/build_native_for_wheel.py {package}/quantx_engine
 """
 from __future__ import annotations
 
@@ -119,11 +122,21 @@ def build_and_install(dest_dir: str) -> None:
     print(f"[build_native_for_wheel] Dest dir  : {dest_dir}")
 
     cmake        = _find_cmake()
-    build_dir    = os.path.join(tempfile.gettempdir(), "qx_wheel_build")
+    # macOS: cibuildwheel builds arm64 and x86_64 wheels on one host and says which through
+    # ARCHFLAGS ("-arch x86_64"), which CMake does not read -- so the x86_64 wheel would carry
+    # an arm64 dylib and fail delocate's --require-archs. Pass the arch through explicitly,
+    # and give each arch its own build dir so one cache never serves the other.
+    osx_archs = []
+    if sys.platform == "darwin":
+        flags = os.environ.get("ARCHFLAGS", "").split()
+        osx_archs = [flags[i + 1] for i, f in enumerate(flags)
+                     if f == "-arch" and i + 1 < len(flags)]
+    suffix    = ("-" + "-".join(osx_archs)) if osx_archs else ""
+    build_dir = os.path.join(tempfile.gettempdir(), "qx_wheel_build" + suffix)
     os.makedirs(build_dir, exist_ok=True)
 
     n_jobs       = str(os.cpu_count() or 4)
-    has_pybind11 = _pybind11_available()
+    has_pybind11 = os.environ.get("QX_WHEEL_PYBIND") == "1" and _pybind11_available()
 
     # ── Configure ────────────────────────────────────────────────────────────
     cfg_cmd = [
@@ -133,6 +146,15 @@ def build_and_install(dest_dir: str) -> None:
         "-DQX_ENABLE_MPI=OFF",
         "-DQX_ENABLE_CUDA=OFF",
     ]
+    # A Visual Studio generator picks its target platform itself, and a 32-bit quantx.dll
+    # cannot be loaded by 64-bit Python. Say x64 explicitly -- unless the caller chose the
+    # generator or platform, where -A would be wrong (Ninja rejects it outright).
+    if (sys.platform == "win32" and sys.maxsize > 2**32
+            and "CMAKE_GENERATOR" not in os.environ
+            and "CMAKE_GENERATOR_PLATFORM" not in os.environ):
+        cfg_cmd += ["-A", "x64"]
+    if osx_archs:
+        cfg_cmd += ["-DCMAKE_OSX_ARCHITECTURES=" + ";".join(osx_archs)]
     print("[build_native_for_wheel] Configure:", " ".join(cfg_cmd))
     subprocess.run(cfg_cmd, check=True)
 
