@@ -15,6 +15,11 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-native.yml"
+      # The Linux job runs the Python-side gates against this build's library, so a
+      # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/models.py"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/tests/test_models_ed.py"
   pull_request:
     branches: ["master", "main"]
     paths:
@@ -22,6 +27,11 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-native.yml"
+      # The Linux job runs the Python-side gates against this build's library, so a
+      # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/models.py"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/tests/test_models_ed.py"
   workflow_dispatch:
 
 concurrency:

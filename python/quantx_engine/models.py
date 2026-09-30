@@ -26,6 +26,7 @@ engine's Pauli convention, J sigma.sigma = 4 J S.S. The conversion happens here,
 """
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass
 
 __all__ = ["XXZChain", "J1J2Chain", "Spin1Chain", "HubbardChain", "ModelError"]
@@ -39,11 +40,22 @@ class ModelError(ValueError):
     """Raised for an invalid model or symmetry sector."""
 
 
-def _check_length(L: int) -> None:
-    if not isinstance(L, int) or isinstance(L, bool):
-        raise ModelError(f"L must be an int, got {type(L).__name__}")
+def _as_int(v, name: str) -> int:
+    """v as a plain int. numpy integers are welcome (np.arange loops); bools and floats
+    are refused. Plain ints are also what the JSON sent to the engine can hold."""
+    if isinstance(v, bool):
+        raise ModelError(f"{name} must be an int, got {v!r}")
+    try:
+        return operator.index(v)
+    except TypeError:
+        raise ModelError(f"{name} must be an int, got {type(v).__name__}") from None
+
+
+def _check_length(L) -> int:
+    L = _as_int(L, "L")
     if not _MIN_SITES <= L <= _MAX_SITES:
         raise ModelError(f"L must be in [{_MIN_SITES}, {_MAX_SITES}], got {L}")
+    return L
 
 
 class _SpinChain:
@@ -82,11 +94,12 @@ class XXZChain(_SpinChain):
     delta: float = 1.0
 
     def __post_init__(self) -> None:
-        _check_length(self.L)
+        object.__setattr__(self, "L", _check_length(self.L))
 
     def problem(self) -> dict:
         """The C API problem (Pauli convention: J sigma.sigma = 4 J S.S)."""
-        return {"type": "xxz", "n_sites": self.L, "J": self.J / 4, "delta": self.delta}
+        return {"type": "xxz", "n_sites": self.L, "J": float(self.J) / 4,
+                "delta": float(self.delta)}
 
 
 @dataclass(frozen=True)
@@ -103,12 +116,12 @@ class J1J2Chain(_SpinChain):
     delta: float = 1.0
 
     def __post_init__(self) -> None:
-        _check_length(self.L)
+        object.__setattr__(self, "L", _check_length(self.L))
 
     def problem(self) -> dict:
         """The C API problem (Pauli convention, so both couplings are sent over 4)."""
-        return {"type": "j1j2", "n_sites": self.L, "J1": self.J1 / 4, "J2": self.J2 / 4,
-                "delta": self.delta}
+        return {"type": "j1j2", "n_sites": self.L, "J1": float(self.J1) / 4,
+                "J2": float(self.J2) / 4, "delta": float(self.delta)}
 
 
 @dataclass(frozen=True)
@@ -119,11 +132,11 @@ class Spin1Chain(_SpinChain):
     two_s = 2
 
     def __post_init__(self) -> None:
-        _check_length(self.L)
+        object.__setattr__(self, "L", _check_length(self.L))
 
     def problem(self) -> dict:
         """The C API problem (the spin-1 builder already uses spin-1 operators)."""
-        return {"type": "spin1_heisenberg", "n_sites": self.L, "J": self.J}
+        return {"type": "spin1_heisenberg", "n_sites": self.L, "J": float(self.J)}
 
 
 @dataclass(frozen=True)
@@ -140,19 +153,21 @@ class HubbardChain:
     mu: float = 0.0
 
     def __post_init__(self) -> None:
-        _check_length(self.L)
+        object.__setattr__(self, "L", _check_length(self.L))
 
     def problem(self) -> dict:
         """The C API problem."""
-        return {"type": "hubbard", "n_sites": self.L, "t": self.t, "U": self.U, "mu": self.mu}
+        return {"type": "hubbard", "n_sites": self.L, "t": float(self.t), "U": float(self.U),
+                "mu": float(self.mu)}
 
     def sector(self, n_up: int | None = None, n_dn: int | None = None) -> dict:
         """C API sector; default half filling with n_up = ceil(L/2), n_dn = floor(L/2)."""
         n_up = (self.L + 1) // 2 if n_up is None else n_up
         n_dn = self.L // 2 if n_dn is None else n_dn
+        n_up, n_dn = _as_int(n_up, "n_up"), _as_int(n_dn, "n_dn")
         for name, v in (("n_up", n_up), ("n_dn", n_dn)):
-            if not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= self.L:
-                raise ModelError(f"{name} must be an int in [0, L={self.L}], got {v!r}")
+            if not 0 <= v <= self.L:
+                raise ModelError(f"{name} must be in [0, L={self.L}], got {v}")
         return {"n_up": n_up, "n_dn": n_dn}
 
     @staticmethod

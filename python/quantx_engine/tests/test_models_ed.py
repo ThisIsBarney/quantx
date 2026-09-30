@@ -7,9 +7,11 @@ holds the whole sector, so DMRG is exact up to convergence: the gate is 1e-10.
 
 The Hubbard ED orders the fermion modes spin-block-wise (all up modes, then all down),
 where open-chain nearest-neighbour hopping carries no Jordan-Wigner sign at all. The
-engine's MPO orders them site by site and carries the parity strings explicitly. The
-two are unitarily equivalent, so a sign slip in the MPO changes the spectrum and
-fails here.
+engine's MPO orders them site by site and carries the parity strings explicitly. What
+this does NOT test: on an open chain with nearest-neighbour hopping those signs are a
+pure gauge, so an MPO with the strings consistently dropped has the same spectrum and
+would pass. Only an inconsistent slip fails here. The fermionic sign conventions need
+geometries where the signs are physical, ladders and cylinders.
 """
 from __future__ import annotations
 
@@ -202,7 +204,28 @@ def test_default_sectors(engine):
     assert _gs(HubbardChain(L=5, U=1.0), engine).sector == {"n_up": 3, "n_dn": 2}
 
 
+def test_imbalanced_hubbard_sector_runs_at_moderate_bond(engine):
+    # The start state used to alternate spins "while both remain", piling a spin
+    # imbalance's excess at the right end: a path the engine's bond-space guess pruned, so
+    # this sector failed below max_bond 91.
+    from quantx_engine.dmrg import ground_state
+    r = ground_state(HubbardChain(L=32, U=4.0), n_up=23, n_dn=9, max_bond=64,
+                     n_sweeps=2, tol=1e-6, engine=engine)
+    assert r.sector == {"n_up": 23, "n_dn": 9} and math.isfinite(r.energy)
+
+
 # ── Validation (pure Python, no native library needed) ───────────────────────
+
+def test_numpy_integers_are_accepted():
+    # np.arange loops hand over numpy integers; they must work, and reach the engine's
+    # JSON as plain numbers (json.dumps rejects numpy scalars).
+    import json
+    m = XXZChain(L=np.int64(8))
+    assert type(m.L) is int and m.problem()["n_sites"] == 8
+    assert HubbardChain(L=np.int32(6)).sector(np.int64(3), np.int64(2)) == {"n_up": 3, "n_dn": 2}
+    json.dumps(dict(HubbardChain(L=np.int64(6), U=np.float32(4.0)).problem(),
+                    sector=HubbardChain(L=6).sector(np.int64(3), np.int64(3))))
+
 
 def test_spin_convention_is_s_not_pauli():
     # The engine's spin-1/2 builders take Pauli couplings: J sigma.sigma = 4 J S.S.

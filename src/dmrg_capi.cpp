@@ -91,8 +91,11 @@ static std::vector<int> spin_config(int n, int d, int level_sum) {
 }
 
 // Hubbard product state with n_up up and n_dn down electrons (local states 0 empty,
-// 1 up, 2 dn, 3 double): doubly occupied sites only when N > n, singles spread evenly,
-// spins alternating while both remain. Half filling gives |up dn up dn ...>.
+// 1 up, 2 dn, 3 double): doubly occupied sites only when N > n, singly occupied ones
+// spread evenly, and the up spins spread evenly among those. Half filling gives
+// |dn up dn up ...>. The spins used to alternate "while both remain", which piled a
+// spin imbalance's excess at the right end: an atypical path that the bond-space guess
+// pruned, so e.g. L = 32 with (23 up, 9 dn) failed below max_bond 91.
 static std::vector<int> hubbard_config(int n, int n_up, int n_dn) {
     const int D = std::max(0, n_up + n_dn - n);        // doubly occupied sites
     const int S = n_up + n_dn - 2 * D;                 // singly occupied sites
@@ -101,16 +104,31 @@ static std::vector<int> hubbard_config(int n, int n_up, int n_dn) {
     std::vector<int> free_sites;
     for (int i = 0; i < n; ++i) if (occ[i] == 0) free_sites.push_back(i);
     for (int j : spread(S, (int)free_sites.size())) occ[free_sites[j]] = 1;
-    std::vector<int> cfg(n, 0);
-    int ups = n_up - D, dns = n_dn - D;
-    bool want_up = true;
+    std::vector<int> cfg(n, 0), singles;
     for (int i = 0; i < n; ++i) {
-        if (occ[i] == 2) { cfg[i] = 3; continue; }
-        if (occ[i] == 0) continue;
-        if ((want_up && ups > 0) || dns == 0) { cfg[i] = 1; --ups; want_up = false; }
-        else                                  { cfg[i] = 2; --dns; want_up = true; }
+        if (occ[i] == 2) cfg[i] = 3;
+        if (occ[i] == 1) { cfg[i] = 2; singles.push_back(i); }   // down unless chosen below
     }
+    for (int j : spread(n_up - D, (int)singles.size())) cfg[singles[j]] = 1;
     return cfg;
+}
+
+// A sector names exactly the model's conserved charges, as integers. Anything else is an
+// error: a misspelled key ({"sz": 1}) used to leave the default sector in force, silently,
+// and {"sz2": 2.7} was truncated to 2.
+static void check_sector_keys(const nlj& sec, const std::vector<std::string>& allowed,
+                              const std::string& type) {
+    if (!sec.is_object()) throw std::runtime_error("sector must be an object");
+    for (auto it = sec.begin(); it != sec.end(); ++it) {
+        if (std::find(allowed.begin(), allowed.end(), it.key()) == allowed.end()) {
+            std::string names;
+            for (const auto& a : allowed) names += (names.empty() ? "" : ", ") + a;
+            throw std::runtime_error("unknown sector key '" + it.key() + "' for type '" +
+                                     type + "' (expected " + names + ")");
+        }
+        if (!it.value().is_number_integer())
+            throw std::runtime_error("sector." + it.key() + " must be an integer");
+    }
 }
 
 struct BlockModel {
@@ -126,6 +144,7 @@ static BlockModel resolve_block_model(const nlj& prob, const std::string& type, 
     m.mpo = build_block_model_mpo(prob, type, n);
     const nlj sec = prob.contains("sector") ? prob["sector"] : nlj::object();
     if (type == "hubbard") {
+        check_sector_keys(sec, {"n_up", "n_dn"}, type);
         const int n_up = sec.value("n_up", (n + 1) / 2);   // default: half filling,
         const int n_dn = sec.value("n_dn", n / 2);         // lowest |Sz|
         if (n_up < 0 || n_up > n || n_dn < 0 || n_dn > n)
@@ -137,6 +156,7 @@ static BlockModel resolve_block_model(const nlj& prob, const std::string& type, 
         m.method       = "u1xu1";
         return m;
     }
+    check_sector_keys(sec, {"sz2"}, type);
     const int two_s = (type == "spin1_heisenberg") ? 2 : 1;   // 2S per site
     const int d = two_s + 1;
     const int sz2 = sec.value("sz2", (two_s * n) % 2);        // default: lowest |Sz|
@@ -277,7 +297,7 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
         nlj opts = nlj::parse(options_json ? options_json : "{}");
-        int    n        = prob.value("n_qubits", 8);
+        int    n        = read_n(prob);
         double J        = prob.value("J", 1.0);
         double delta    = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
@@ -359,7 +379,7 @@ QX_API const char* qx_spectral(const char* problem_json, const char* options_jso
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
         nlj opts = nlj::parse(options_json ? options_json : "{}");
-        int    n  = prob.value("n_qubits", 8);
+        int    n  = read_n(prob);
         double J  = prob.value("J", 1.0);
         double delta = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
@@ -397,7 +417,7 @@ QX_API const char* qx_loschmidt(const char* problem_json, const char* options_js
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
         nlj opts = nlj::parse(options_json ? options_json : "{}");
-        int    n  = prob.value("n_qubits", 8);
+        int    n  = read_n(prob);
         double J  = prob.value("J", 1.0);
         double delta = prob.value("delta", 1.0);     // initial XXZ anisotropy
         std::string type = prob.value("type", "heisenberg");
@@ -438,7 +458,7 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
         nlj opts = nlj::parse(options_json ? options_json : "{}");
-        int    n  = prob.value("n_qubits", 8);
+        int    n  = read_n(prob);
         double J  = prob.value("J", 1.0);
         double delta = prob.value("delta", 1.0);
         std::string type = prob.value("type", "heisenberg");

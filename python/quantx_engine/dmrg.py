@@ -54,6 +54,7 @@ References
 from __future__ import annotations
 
 import json
+import operator
 from ctypes import c_char_p
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -194,9 +195,16 @@ def ground_state(
         sector = model.sector(sz)
     else:
         raise DMRGError(f"not a quantx_engine.models model: {model!r}")
+    try:
+        if isinstance(max_bond, bool) or isinstance(n_sweeps, bool):
+            raise TypeError
+        max_bond, n_sweeps = operator.index(max_bond), operator.index(n_sweeps)
+    except TypeError:
+        raise DMRGError(f"max_bond and n_sweeps must be ints, got {max_bond!r}, "
+                        f"{n_sweeps!r}") from None
     for name, v in (("max_bond", max_bond), ("n_sweeps", n_sweeps)):
-        if not isinstance(v, int) or isinstance(v, bool) or v < 1:
-            raise DMRGError(f"{name} must be an int >= 1, got {v!r}")
+        if v < 1:
+            raise DMRGError(f"{name} must be >= 1, got {v}")
 
     global _default_engine
     if engine is None:

@@ -145,6 +145,27 @@ int main() {
     }
     expect_error({{"type", "ising"}, {"n_sites", 6}}, tight, "unknown type",
                  "an unknown type is an error (it used to run as an empty pauli_sum)");
+    // A misspelled or fractional sector key used to leave the default sector in force.
+    expect_error({{"type", "xxz"}, {"n_sites", 8}, {"sector", {{"sz", 1}}}}, tight,
+                 "unknown sector key 'sz'", "a misspelled sector key is refused");
+    expect_error({{"type", "xxz"}, {"n_sites", 8}, {"sector", {{"sz2", 2.5}}}}, tight,
+                 "must be an integer", "a fractional sector value is refused");
+    {
+        // The start state used to alternate spins "while both remain", piling a spin
+        // imbalance's excess at the right end: a path the bond-space guess pruned, so
+        // this sector failed below max_bond 91.
+        json r = call(qx_dmrg_sweep,
+                      {{"type", "hubbard"}, {"n_sites", 32}, {"U", 4.0},
+                       {"sector", {{"n_up", 23}, {"n_dn", 9}}}},
+                      {{"max_bond", 64}, {"n_sweeps", 2}, {"tol", 1e-6}});
+        check(r.value("ok", false), "hubbard L=32 (23 up, 9 dn) runs at max_bond 64", r);
+    }
+    {
+        // The other entry points read n_sites too (they used to read only n_qubits, so a
+        // 2-site request silently ran the default 8 sites).
+        json r = call(qx_spectral, {{"type", "heisenberg"}, {"n_sites", 2}}, json::object());
+        check(says_needs_3(r), "qx_spectral reads n_sites (n_sites=2 is refused)", r);
+    }
 
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");
     return failures ? 1 : 0;
