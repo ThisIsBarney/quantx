@@ -30,6 +30,22 @@ doc = open(os.path.join(DOCS, "universal_mpo.md"), encoding="utf-8",
            errors="surrogateescape").read()
 
 fails = []
+
+
+def fit_loglin_f(xs, ys):
+    """log(y) = c - a x by least squares; returns (a, stderr_a) -- part F only quotes
+    this to say it is NOT a legitimate measurement, so the checker has to reproduce the
+    same number the prose disowns."""
+    m = len(xs)
+    if m < 3:
+        return None
+    ly = [math.log(y) for y in ys]
+    mx, my = sum(xs) / m, sum(ly) / m
+    sxx = sum((x - mx) ** 2 for x in xs)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ly)) / sxx
+    resid = [y - (my + slope * (x - mx)) for x, y in zip(xs, ly)]
+    return -slope, math.sqrt(sum(r * r for r in resid) / (m - 2) / sxx)
+
 def expect(label, text):
     if text not in doc:
         fails.append(f"{label}\n    expected in doc: {text}")
@@ -71,6 +87,24 @@ def sci(v):                    # doc convention: 1.1e-2, not python's 1.1e-02
 
 def num(v, nd):                # minus sign, not hyphen
     return f"{v:.{nd}f}".replace("-", MINUS)
+def row_in_table(header_marker, prefix):
+    """Cells of the row starting with `prefix`, searched only inside the markdown table
+    whose header line contains `header_marker`. Part F reuses the same row labels in
+    three different tables (variance vs depth, variance vs size, local decay rate), so a
+    whole-document search would silently read the wrong one."""
+    lines = doc.split(chr(10))
+    for i, line in enumerate(lines):
+        if header_marker not in line or not line.lstrip().startswith("|"):
+            continue
+        for row in lines[i + 1:]:
+            if not row.lstrip().startswith("|"):
+                break
+            if row.startswith(prefix):
+                return [c.strip().replace("*", "")
+                        for c in row.strip().strip("|").split("|")]
+    return None
+
+
 def row_cells(prefix):
     """The doc's table cells for the row starting with `prefix`, bold markers and
     whitespace stripped -- comparing cell by cell survives **bolding** of whichever
@@ -267,6 +301,112 @@ for w in ws:
     if int(r["qubits"]) != 12 or int(r["chi"]) > 64 or float(r["trunc"]) > 1e-14:
         fails.append(f"part E W={w}: not the matched lossless setup "
                      f"(qubits={r['qubits']} chi={r['chi']} trunc={r['trunc']})")
+
+# ---- part F: the barren-plateau diagnostic ----------------------------------
+# Part E's own new prose slipped a claim past this script once (p=1 "frac = 0.0000 at
+# all three widths" while the CSV said 0.0002 for the cylinder). The lesson was not
+# "write a checker" -- it was "extend it to every new claim" -- so part F's table, its
+# ratios, its calibration row, its local decay rates and the exponent it REFUSES to
+# quote are all asserted here.
+F = load("vqe_barren.csv", ("W", "p"))
+FS = load("vqe_barren_size.csv", ("W", "n"))
+fws = sorted({w for (w, _) in F})
+fps = sorted({p for (_, p) in F})
+
+
+def fcells(fmt, p_):
+    return " | ".join(fmt(F[(w, p_)]) for w in fws if (w, p_) in F)
+
+
+def frow(label, w, fmt):
+    want = [fmt(F[(w, p_)]) for p_ in fps if (w, p_) in F]
+    got = row_in_table("Var[&#8706;frac", f"| {label} |") or           row_in_table("Var[∂frac", f"| {label} |")
+    if got is None:
+        fails.append(f"part F {label} row: row not found in the depth table")
+    elif got[1:] != want:
+        fails.append(f"part F {label} row: doc {got[1:]} vs csv {want}")
+
+
+frow("W=1 chain", 1, lambda r: format(float(r["var_frac"]), ".3f"))
+frow("W=2 ladder", 2, lambda r: format(float(r["var_frac"]), ".3f"))
+frow("W=3 cylinder", 3, lambda r: format(float(r["var_frac"]), ".3f"))
+ratios = " | ".join(
+    format(float(F[(3, p_)]["var_frac"]) / float(F[(1, p_)]["var_frac"]), ".2f")
+    for p_ in fps if (3, p_) in F and (1, p_) in F)
+expect("part F ratio row", f"| ratio W3/W1 | {ratios} |")
+
+# the instrument: floor, worst signal-to-noise, and the group-size confound
+floor = float(F[(fws[0], fps[0])]["floor"])
+expect("part F noise floor", f"and **{floor:.1e}** is the floor".replace("e-0", "e-"))
+snr_min = min(float(r["snr"]) for r in F.values())
+expect("part F worst snr", f"at least **{snr_min:.1e} ×**".replace("e+0", "e"))
+g0 = {int(r["nb_g0"]) for r in F.values()}
+if len(g0) != 1:
+    fails.append(f"part F: group-0 bond counts differ across widths ({sorted(g0)}), so "
+                 f"the doc's claim that the generator norm is identical is false")
+else:
+    expect("part F group size", f"holds **{g0.pop()} bonds at every width**")
+
+# the cylinder's suppression must be significant at EVERY depth, or the prose is wrong
+for p_ in fps:
+    if (3, p_) not in F or (1, p_) not in F:
+        continue
+    v3, v1 = float(F[(3, p_)]["var_frac"]), float(F[(1, p_)]["var_frac"])
+    e3, e1 = float(F[(3, p_)]["se_frac"]), float(F[(1, p_)]["se_frac"])
+    r = v3 / v1
+    rse = r * math.sqrt((e3 / v3) ** 2 + (e1 / v1) ** 2)
+    if abs(r - 1.0) <= 2 * rse:
+        fails.append(f"part F: the cylinder/chain ratio at p={p_} is {r:.2f}+/-{rse:.2f}, "
+                     f"not significant; the doc claims six independent confirmations")
+    if not (0.28 <= r <= 0.37):
+        fails.append(f"part F: the cylinder/chain ratio at p={p_} is {r:.2f}, outside the "
+                     f"0.30-0.35 band the doc quotes")
+
+# the size axis: the local rates the doc tabulates, and the exponent it refuses to quote
+def rates_of(w, parity):
+    pts = sorted((n, float(r["var_frac"])) for (ww, n), r in FS.items()
+                 if ww == w and n % 2 == parity)
+    return pts, [math.log(pts[i][1] / pts[i + 1][1]) / (pts[i + 1][0] - pts[i][0])
+                 for i in range(len(pts) - 1)]
+
+
+for lbl, w, par in (("W=1 chain", 1, 0), ("W=1 chain (odd n, 2Sz=1)", 1, 1),
+                    ("W=2 ladder", 2, 0)):
+    pts, lr = rates_of(w, par)
+    if len(lr) != 3:
+        fails.append(f"part F: {lbl} has {len(pts)} size points, the doc tabulates 4")
+        continue
+    # compare cell by cell with bold markers stripped: which cell an author emphasises
+    # is a presentation choice, and asserting it would make the checker enforce prose
+    # style instead of data
+    got = row_in_table("local rate a", f"| {lbl} |")
+    want = [f"{x:+.2f}" for x in lr]
+    if got is None:
+        fails.append(f"part F local rates {lbl}: row not found in the doc")
+    elif got[1:] != want:
+        fails.append(f"part F local rates {lbl}: doc {got[1:]} vs csv {want}")
+
+pts0, lr0 = rates_of(1, 0)
+if lr0:
+    expect("part F rate collapse", f"falls by **×{max(lr0)/min(lr0):.1f}**")
+    f = fit_loglin_f([n for n, _ in pts0], [v for _, v in pts0])
+    if f:
+        expect("part F refused exponent", f"`a = {f[0]:+.3f} ± {f[1]:.3f}` per site")
+# the even-n variance table
+for lbl, w in (("W=1 chain", 1), ("W=2 ladder", 2)):
+    want = [format(float(FS[(w, n)]["var_frac"]), ".3f")
+            for n in sorted(n for (ww, n) in FS if ww == w and n % 2 == 0)]
+    got = row_in_table("n (even, 2Sz=0)", f"| {lbl} |")
+    if got is None:
+        fails.append(f"part F size row {lbl}: row not found in the size table")
+    elif got[1:] != want:
+        fails.append(f"part F size row {lbl}: doc {got[1:]} vs csv {want}")
+# and the cylinder must still have exactly one even-n point, or the "unanswered" stands wrong
+cyl_even = [n for (w, n) in FS if w == 3 and n % 2 == 0]
+if len(cyl_even) != 1:
+    fails.append(f"part F: the cylinder now has {len(cyl_even)} even-n size points "
+                 f"({sorted(cyl_even)}); the doc says one, so the 'unanswered' framing "
+                 f"and the 'what would settle it' paragraph need rewriting")
 
 if fails:
     print(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")

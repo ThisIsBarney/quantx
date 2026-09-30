@@ -940,3 +940,107 @@ these 24 points spent 744–10303 circuit evaluations each. An optimised scan at
 qubits is tens of hours per point on this box, so the honest choice was 12 qubits where
 all three widths are also exactly simulable — not a wider lattice simulated with
 truncation, where the optimiser would be optimising something other than the ansatz.
+
+### Is the width penalty a barren plateau?
+
+![Gradient variance vs width](vqe_barren.svg)
+
+Part E measured that a wider lattice reaches a worse energy at equal depth. That is
+consistent with two stories that have **opposite** prescriptions. Either the ansatz
+cannot *represent* the state at that depth — add layers — or it can but the landscape is
+too flat to *find* it, in which case adding layers will not help. Part E cannot tell them
+apart. The standard trainability diagnostic separates them: the variance of a cost
+gradient over random parameter draws, whose exponential decay in system size is what
+"barren plateau" denotes.
+
+**The instrument comes first.** A barren plateau *is* a vanishing gradient, so a study
+that cannot distinguish a small gradient from its own numerical noise measures nothing.
+There is no parameter-shift rule here (the HVA generators are not single Paulis), so the
+gradient is a central difference, carrying an h² truncation error plus an O(ε/h) roundoff
+error. Richardson extrapolation measures that error directly — `(4g(h/2) − g(h))/3`
+cancels the h² term, so `|g(h) − g_rich|` estimates the error in `g(h)` while assuming
+nothing about the function:
+
+| h | 10⁻² | 10⁻³ | 10⁻⁴ | **10⁻⁵** | 10⁻⁶ | 10⁻⁷ |
+|---|---|---|---|---|---|---|
+| error estimate | 1.3e-3 | 1.3e-5 | 1.3e-7 | **1.7e-9** | 8.3e-9 | 4.1e-8 |
+
+Three decades of clean h² scaling and then a turnaround as roundoff takes over: h = 10⁻⁵
+is the optimum and **1.7e-9** is the floor. Every row below sits at least **5.4e8 ×**
+above it, so nothing here is noise. The energy needs no separate validation — the circuit
+is already pinned against a dense state-vector reference at 1e-12 for all three widths
+(`qx_hubbard_test` section r), and the gradient is a finite difference *of* that energy.
+
+**The normalisation confound is excluded, not assumed away.** θ_g generates
+`exp(−iθ_g H_g)` with H_g the sum over the bonds in group g, so a geometry whose group 0
+held more bonds would show a larger gradient for reasons having nothing to do with the
+landscape — the same trap as comparing entropies across different kinds of cut. Group 0
+holds **3 bonds at every width**, and a colouring group is by construction a *matching*,
+so H_g is a sum of three disjoint commuting two-site terms with an identical spectrum in
+all three geometries. Everything is reported for the dimensionless cost
+frac = (E₀ − E)/(E₀ − E_exact), the same quantity part E ranks the widths by.
+
+| Var[∂frac/∂θ] | p=2 | p=4 | p=6 | p=8 | p=10 | p=12 |
+|---|---|---|---|---|---|---|
+| W=1 chain | 5.678 | 2.528 | 1.778 | 1.505 | 1.132 | 1.099 |
+| W=2 ladder | 1.988 | 1.632 | 1.876 | 1.383 | 1.444 | 1.372 |
+| W=3 cylinder | 1.920 | 0.887 | 0.569 | 0.454 | 0.388 | 0.390 |
+| ratio W3/W1 | 0.34 | 0.35 | 0.32 | 0.30 | 0.34 | 0.35 |
+
+**The cylinder's landscape is genuinely flatter, by a depth-independent factor of ~3.**
+The ratio sits at 0.30–0.35 with a measured 2σ of ±0.03 at every depth — six independent
+confirmations of the same constant. So part E's width penalty does have a real
+trainability component.
+
+**The ladder has no such suppression.** Its ratio runs 0.35 → 0.65 → 1.06 → 0.92 → 1.28
+→ 1.25: below the chain when shallow, *above* it when deep, and statistically
+indistinguishable from it at p=6 and p=8. The width ordering fails in gradient variance
+exactly as it failed in entropy, and with W=2 the outlier both times.
+
+#### But it is not a barren plateau, and the size axis is what says so
+
+At a single size a constant factor and `e^{−an}` evaluated there are the same number, so
+only a size scan can use the term. Holding p=8 and growing n:
+
+| n (even, 2Sz=0) | 4 | 6 | 8 | 10 |
+|---|---|---|---|---|
+| W=1 chain | 9.308 | 1.559 | 0.578 | 0.443 |
+| W=2 ladder | 7.987 | 1.649 | 0.968 | 0.099 |
+
+The variance does fall with n. But the **local** decay rate — `ln(v_i/v_{i+1})/Δn`, which
+an exponential holds constant — collapses along the series:
+
+| local rate a | n 4→6 | n 6→8 | n 8→10 |
+|---|---|---|---|
+| W=1 chain | +0.89 | +0.50 | **+0.13** |
+| W=1 chain (odd n, 2Sz=1) | +0.59 | +0.28 | **+0.10** |
+| W=2 ladder | +0.79 | +0.27 | +1.14 |
+
+The chain's rate falls by **×6.7**, and the odd-n series — a different charge sector,
+separately sampled — reproduces the same collapse independently. This is a finite-size
+crossover, not exponential decay. A straight line through it would return
+`a = +0.506 ± 0.120` per site, an entirely respectable-looking exponent with a
+respectable-looking error bar, and it would be a fabricated measurement;
+`analyze_vqe_barren.py` refuses to quote it and says why.
+
+**Three limits, stated rather than absorbed:**
+
+* **The cylinder has no size axis here.** W=3 needs n divisible by 3, which leaves n=6
+  and n=9 — and n=9 is odd, so it sits in the 2Sz=1 sector. One even-n point supports no
+  rate at all. Whether the cylinder's ×3 *grows* with n — the only thing that would make
+  it a barren plateau — is therefore **unanswered**, not answered negatively. n=12 needs
+  χ = 4⁶ = 4096 at d=4, where state preparation alone is ~1 GB per tensor and out of
+  reach on this box; the scan records the skip with that reason rather than omitting the
+  row.
+* **The W=2 n=10 point breaks its own trend** (local rate 1.14 after 0.27). χ=1024 is
+  lossless at n=10, so it is not truncation. It is flagged, not smoothed.
+* **Error bars are measured, not assumed.** `Var[s²] = (μ₄ − μ₂²)/N`; the familiar
+  `s²√(2/N)` is that formula with a Gaussian substituted in, and understating the error is
+  the direction that promotes noise to significance. Measured here: 4.5–6.8 % relative,
+  against 4.7 % for the Gaussian — close, but checked rather than hoped.
+
+*What would settle it.* The cylinder at n=12 (24 qubits, χ=4096) plus n=15, giving three
+even-n points, is the minimum for a rate. One circuit evaluation at W=3 n=9 χ=256 already
+costs 0.34 s and 300 samples need 600 of them; n=12 is roughly two orders of magnitude
+worse per evaluation. That is a GPU-resident or truncated study, and a truncated one
+changes what is being measured — which is the same reason part E stopped at 12 qubits.
