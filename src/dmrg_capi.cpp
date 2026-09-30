@@ -3,7 +3,9 @@
 #include "dmrg_su2_run.hpp"      // SU(2)-symmetric Heisenberg DMRG (header-only)
 #include "tdvp.hpp"              // TDVP MPS time evolution (header-only)
 
+#include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -25,14 +27,137 @@ static const char* dmrg_error(const std::string& msg) {
     return tl_dmrg_buf.c_str();
 }
 
+// Chain length: "n_sites", or the legacy "n_qubits" (default 8).
+static int read_n(const nlj& prob) {
+    if (prob.contains("n_sites")) return prob["n_sites"].get<int>();
+    return prob.value("n_qubits", 8);
+}
+
+// ---- Models the block-sparse engine runs -----------------------------------
+// Each resolves to its MPO, the U(1) sector to target, and a product state in that
+// sector to start from. Conventions are the MPO builders' own:
+//   heisenberg, xxz   J sum_i [X_i X_{i+1} + Y_i Y_{i+1} + delta Z_i Z_{i+1}]        (Pauli)
+//   j1j2              sum_i [J1 h_{i,i+1} + J2 h_{i,i+2}],  h = XX + YY + delta ZZ   (Pauli)
+//   spin1_heisenberg  J sum_i S_i . S_{i+1}                                  (spin-1 S)
+//   hubbard           -t sum_{i,s} (c+_{i s} c_{i+1 s} + h.c.) + U sum_i n_up n_dn - mu sum_i n_i
+// Spin sectors are "sz2" = 2 Sz_total; hubbard's are "n_up" and "n_dn".
+static bool is_block_model(const std::string& type) {
+    return type == "heisenberg" || type == "xxz" || type == "j1j2" ||
+           type == "spin1_heisenberg" || type == "hubbard";
+}
+
+static std::vector<MPOSite> build_block_model_mpo(const nlj& prob, const std::string& type, int n) {
+    if (type == "heisenberg" || type == "xxz")
+        return build_xxz_mpo(n, prob.value("J", 1.0), prob.value("delta", 1.0));
+    if (type == "j1j2")
+        return build_j1j2_mpo(n, prob.value("J1", 1.0), prob.value("J2", 0.0),
+                              prob.value("delta", 1.0));
+    if (type == "spin1_heisenberg")
+        return build_spin1_heisenberg_mpo(n, prob.value("J", 1.0));
+    // hubbard: always the packed two-U(1) charge (N and 2Sz), the fine-block path.
+    return build_hubbard_mpo(n, prob.value("t", 1.0), prob.value("U", 0.0),
+                             /*two_u1=*/true, prob.value("mu", 0.0));
+}
+
+// Pick k of the m slots [0, m), spread evenly (k <= m).
+static std::vector<int> spread(int k, int m) {
+    std::vector<int> out;
+    for (int j = 0; j < k; ++j) out.push_back((int)((j + 0.5) * m / k));
+    return out;
+}
+
+// Product state of a spin-S chain (local state l has 2Sz = 2S - 2l) whose levels sum
+// to level_sum, i.e. whose 2 Sz_total is 2S n - 2 level_sum. Starts from the Neel
+// alternation of the extreme states (the engine's own default start) and moves evenly
+// spread sites one level at a time until the sum is right. Staying close to Neel keeps
+// every bond's accumulated charge typical; the engine's bond-space guess needs that
+// ("sector missing from the bond-space guess" otherwise).
+static std::vector<int> spin_config(int n, int d, int level_sum) {
+    std::vector<int> cfg(n);
+    int cur = 0;
+    for (int i = 0; i < n; ++i) { cfg[i] = (i % 2 == 0) ? 0 : d - 1; cur += cfg[i]; }
+    int need = level_sum - cur;
+    while (need != 0) {
+        const int dir = need > 0 ? +1 : -1;
+        std::vector<int> cand;
+        for (int i = 0; i < n; ++i)
+            if (dir > 0 ? cfg[i] < d - 1 : cfg[i] > 0) cand.push_back(i);
+        if (cand.empty()) throw std::runtime_error("spin_config: sector unreachable");
+        const int k = std::min(std::abs(need), (int)cand.size());
+        for (int j : spread(k, (int)cand.size())) cfg[cand[j]] += dir;
+        need -= dir * k;
+    }
+    return cfg;
+}
+
+// Hubbard product state with n_up up and n_dn down electrons (local states 0 empty,
+// 1 up, 2 dn, 3 double): doubly occupied sites only when N > n, singles spread evenly,
+// spins alternating while both remain. Half filling gives |up dn up dn ...>.
+static std::vector<int> hubbard_config(int n, int n_up, int n_dn) {
+    const int D = std::max(0, n_up + n_dn - n);        // doubly occupied sites
+    const int S = n_up + n_dn - 2 * D;                 // singly occupied sites
+    std::vector<int> occ(n, 0);
+    for (int i : spread(D, n)) occ[i] = 2;
+    std::vector<int> free_sites;
+    for (int i = 0; i < n; ++i) if (occ[i] == 0) free_sites.push_back(i);
+    for (int j : spread(S, (int)free_sites.size())) occ[free_sites[j]] = 1;
+    std::vector<int> cfg(n, 0);
+    int ups = n_up - D, dns = n_dn - D;
+    bool want_up = true;
+    for (int i = 0; i < n; ++i) {
+        if (occ[i] == 2) { cfg[i] = 3; continue; }
+        if (occ[i] == 0) continue;
+        if ((want_up && ups > 0) || dns == 0) { cfg[i] = 1; --ups; want_up = false; }
+        else                                  { cfg[i] = 2; --dns; want_up = true; }
+    }
+    return cfg;
+}
+
+struct BlockModel {
+    std::vector<MPOSite> mpo;
+    int total_charge = 0;
+    std::vector<int> init_config;
+    nlj sector;
+    const char* method = "u1";
+};
+
+static BlockModel resolve_block_model(const nlj& prob, const std::string& type, int n) {
+    BlockModel m;
+    m.mpo = build_block_model_mpo(prob, type, n);
+    const nlj sec = prob.contains("sector") ? prob["sector"] : nlj::object();
+    if (type == "hubbard") {
+        const int n_up = sec.value("n_up", (n + 1) / 2);   // default: half filling,
+        const int n_dn = sec.value("n_dn", n / 2);         // lowest |Sz|
+        if (n_up < 0 || n_up > n || n_dn < 0 || n_dn > n)
+            throw std::runtime_error("hubbard sector: need 0 <= n_up, n_dn <= n_sites (got n_up=" +
+                std::to_string(n_up) + ", n_dn=" + std::to_string(n_dn) + ")");
+        m.total_charge = pack_q2(n_up + n_dn, n_up - n_dn);
+        m.init_config  = hubbard_config(n, n_up, n_dn);
+        m.sector       = {{"n_up", n_up}, {"n_dn", n_dn}};
+        m.method       = "u1xu1";
+        return m;
+    }
+    const int two_s = (type == "spin1_heisenberg") ? 2 : 1;   // 2S per site
+    const int d = two_s + 1;
+    const int sz2 = sec.value("sz2", (two_s * n) % 2);        // default: lowest |Sz|
+    if (std::abs(sz2) > two_s * n || (two_s * n - sz2) % 2 != 0)
+        throw std::runtime_error("sector sz2=" + std::to_string(sz2) + " (2 Sz_total) is not "
+            "reachable on " + std::to_string(n) + " spin-" + (two_s == 1 ? "1/2" : "1") +
+            " sites: need |sz2| <= " + std::to_string(two_s * n) +
+            (two_s == 1 ? " with the parity of n_sites" : " and even"));
+    m.total_charge = sz2;
+    m.init_config  = spin_config(n, d, (two_s * n - sz2) / 2);
+    m.sector       = {{"sz2", sz2}};
+    return m;
+}
+
 // Parse Hamiltonian from JSON into MPO
 static std::vector<MPOSite> parse_ham(const nlj& prob, int n) {
     std::string type = prob.value("type", "pauli_sum");
-    if (type == "heisenberg") {
-        double J     = prob.value("J", 1.0);
-        double delta = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
-        return build_xxz_mpo(n, J, delta);
-    }
+    if (is_block_model(type)) return build_block_model_mpo(prob, type, n);
+    if (type != "pauli_sum")
+        throw std::runtime_error("unknown type '" + type + "' (expected heisenberg, xxz, j1j2, "
+                                 "spin1_heisenberg, hubbard, or pauli_sum)");
     // pauli_sum
     std::vector<std::pair<double, std::string>> terms;
     if (prob.contains("terms")) {
@@ -61,7 +186,7 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         nlj prob  = nlj::parse(problem_json  ? problem_json  : "{}");
         nlj opts  = nlj::parse(options_json  ? options_json  : "{}");
 
-        int  n        = prob.value("n_qubits",  8);
+        int  n        = read_n(prob);
         int  max_bond = opts.value("max_bond",  64);
         double cutoff = opts.value("cutoff",    1e-10);
         int  n_sweeps = opts.value("n_sweeps",  10);
@@ -70,12 +195,20 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         if (n < 2)        return dmrg_error("n_qubits must be >= 2");
         if (n > 200)      return dmrg_error("n_qubits exceeds max (200)");
         if (n_sweeps < 1) return dmrg_error("n_sweeps must be >= 1");
+        if (max_bond < 1) return dmrg_error("max_bond must be >= 1");
 
         std::string type   = prob.value("type", "pauli_sum");
         std::string method = opts.value("method", "u1");  // "u1" (Sz blocks) | "su2"
 
         // SU(2)-symmetric path: Heisenberg only. max_bond is the multiplet cap;
         // the energy is in the same J*sum sigma.sigma convention as the U(1) path.
+        // Neither the SU(2) path nor the dense fallback can target a sector; refuse one
+        // rather than silently return the ground state of some other sector.
+        const bool sector_capable = method != "su2" && is_block_model(type) && n >= 3;
+        if (prob.contains("sector") && !sector_capable)
+            return dmrg_error("a sector needs the block-sparse U(1) solver: a symmetric "
+                              "model type, method 'u1', and n_sites >= 3");
+
         if (method == "su2") {
             if (type != "heisenberg")
                 return dmrg_error("method 'su2' supports only type 'heisenberg'");
@@ -97,29 +230,40 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
             out["sweep_energies"]   = nlj::array();
             out["method"]           = "su2";
             out["spin"]             = S;
+            out["n_sites"]          = n;
             tl_dmrg_buf = out.dump();
             return tl_dmrg_buf.c_str();
         }
 
-        auto mpo = parse_ham(prob, n);
         // The block-sparse engine derives its symmetry data from a bulk MPO site, so it
         // refuses chains shorter than 3 (derive_mpo_sym's contract, tested in
-        // qx_mpo_sym_test). A 2-site chain is still a valid question: answer it with the
-        // dense solver rather than returning an internal error. And report which solver
-        // actually ran -- this used to say "u1" for every call, dense ones included.
-        const bool use_blocks = (type == "heisenberg" && n >= 3);
-        DMRGResult res = use_blocks
-            ? run_dmrg_blocks(mpo, n, max_bond, cutoff, n_sweeps, tol)
-            : run_dmrg(mpo, n, max_bond, cutoff, n_sweeps, tol);
-
+        // qx_mpo_sym_test). A 2-site Heisenberg chain is still a valid question: answer
+        // it with the dense solver rather than returning an internal error. The other
+        // models target a symmetry sector, which the dense solver cannot, so they refuse.
+        // Report which solver actually ran -- this used to say "u1" for every call.
         nlj out;
+        DMRGResult res;
+        if (is_block_model(type) && !(type == "heisenberg" && n < 3)) {
+            if (n < 3)
+                return dmrg_error("n_sites must be >= 3 for type '" + type +
+                                  "' (block-sparse solver)");
+            BlockModel m = resolve_block_model(prob, type, n);
+            res = run_dmrg_blocks(m.mpo, n, max_bond, cutoff, n_sweeps, tol,
+                                  m.total_charge, &m.init_config);
+            out["method"] = m.method;
+            out["sector"] = m.sector;
+        } else {
+            res = run_dmrg(parse_ham(prob, n), n, max_bond, cutoff, n_sweeps, tol);
+            out["method"] = "dense";
+        }
+
         out["ok"]               = true;
         out["energy"]           = res.energy;
         out["truncation_error"] = res.truncation_error;
         out["n_sweeps_done"]    = res.n_sweeps_done;
         out["wall_time_s"]      = res.wall_time_s;
         out["sweep_energies"]   = res.sweep_energies;
-        out["method"]           = use_blocks ? "u1" : "dense";
+        out["n_sites"]          = n;
 
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
@@ -332,7 +476,7 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
 QX_API const char* qx_mps_energy(const char* problem_json) {
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
-        int n    = prob.value("n_qubits", 8);
+        int n    = read_n(prob);
         auto mpo = parse_ham(prob, n);
         MPS mps  = init_zero_state(n, mpo[0].d);
         double E = compute_energy(mps, mpo);

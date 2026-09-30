@@ -7,12 +7,19 @@ with a clean Python API.  Falls back to a pure-Python reference DMRG (via
 
 Supported Hamiltonians
 ----------------------
-* Heisenberg XXX chain:
-  ``{"type": "heisenberg", "J": 1.0}``
-* General sum of Pauli strings (nearest-neighbour or longer range):
-  Passed as ``hamiltonian_terms=[(coeff, "X0X1"), ...]``
+* The symmetric models of :mod:`quantx_engine.models` (XXZ, J1-J2, spin-1 Heisenberg,
+  Fermi-Hubbard) through :func:`ground_state`, in a chosen symmetry sector, on the
+  block-sparse engine. Spin couplings there use S = sigma/2::
 
-Maximum system size: 200 qubits (C++ backend limit).
+      from quantx_engine.models import HubbardChain
+      from quantx_engine.dmrg import ground_state
+      gs = ground_state(HubbardChain(L=16, U=4.0), n_up=8, n_dn=8, max_bond=512)
+
+* Through :class:`DMRGSolver`: the Heisenberg XXZ chain in the Pauli convention
+  (``J sigma.sigma``), ``{"type": "heisenberg", "J": 1.0}``, and general sums of
+  Pauli strings, passed as ``hamiltonian_terms=[(coeff, "X0X1"), ...]``.
+
+Maximum system size: 200 sites (C++ backend limit).
 
 Quick-start example::
 
@@ -51,7 +58,7 @@ from ctypes import c_char_p
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-__all__ = ["DMRGSolver", "DMRGResult", "DMRGError"]
+__all__ = ["DMRGSolver", "DMRGResult", "DMRGError", "ground_state"]
 
 _MAX_DMRG_QUBITS = 200
 
@@ -82,6 +89,12 @@ class DMRGResult:
         Wall-clock time in seconds for the full solver run.
     backend : str
         ``"cpp"`` when the native library ran; ``"python"`` for the fallback.
+    method : str
+        The solver that ran: ``"u1"``, ``"u1xu1"`` (Hubbard: N and 2Sz), ``"su2"``,
+        or ``"dense"``.
+    sector : dict or None
+        The symmetry sector of the result, for :func:`ground_state`: ``{"sz": ...}``
+        for the spin models, ``{"n_up": ..., "n_dn": ...}`` for Hubbard.
     """
     energy: float
     truncation_error: float
@@ -90,6 +103,7 @@ class DMRGResult:
     wall_time_s: float
     backend: str = "cpp"
     method: str = "u1"
+    sector: Optional[dict] = None
 
 
 # ── ctypes helpers ────────────────────────────────────────────────────────────
@@ -109,6 +123,112 @@ def _get_dmrg_lib(engine) -> Any | None:
         return lib
     except AttributeError:
         return None
+
+
+# ── Symmetric models (quantx_engine.models) ──────────────────────────────────
+
+_default_engine = None
+
+
+def ground_state(
+    model,
+    *,
+    sz: Optional[float] = None,
+    n_up: Optional[int] = None,
+    n_dn: Optional[int] = None,
+    max_bond: int = 256,
+    cutoff: float = 1e-10,
+    n_sweeps: int = 20,
+    tol: float = 1e-10,
+    engine=None,
+) -> DMRGResult:
+    """Ground state of a :mod:`quantx_engine.models` chain in one symmetry sector.
+
+    Runs two-site DMRG on the native block-sparse engine, which conserves the model's
+    U(1) charges exactly, so the result lies in the requested sector.
+
+    Parameters
+    ----------
+    model : XXZChain, J1J2Chain, Spin1Chain or HubbardChain
+        The Hamiltonian; see :mod:`quantx_engine.models` for the conventions.
+    sz : float, optional
+        Spin models: total S^z (a multiple of 1/2). Default: the lowest |S^z| the
+        chain allows (0, or 1/2 for an odd spin-1/2 chain).
+    n_up, n_dn : int, optional
+        Hubbard: the numbers of up and down electrons. Default: half filling,
+        n_up = ceil(L/2) and n_dn = floor(L/2).
+    max_bond : int
+        Maximum MPS bond dimension (states kept per bond, summed over sectors).
+    cutoff : float
+        SVD truncation weight cutoff.
+    n_sweeps : int
+        Maximum number of sweeps; stops early once the energy changes by less than
+        ``tol``.
+    tol : float
+        Energy convergence tolerance.
+    engine : quantx_engine.Engine, optional
+        Engine to run on; by default one is created (and reused) on first use.
+
+    Returns
+    -------
+    DMRGResult
+        ``energy`` in the model's convention, with ``sector`` set.
+
+    Raises
+    ------
+    ModelError
+        The sector is not valid for the model.
+    DMRGError
+        No native library, a sector argument the model does not take, or a solver
+        failure.
+    """
+    from quantx_engine.models import HubbardChain, _SpinChain
+
+    if isinstance(model, HubbardChain):
+        if sz is not None:
+            raise DMRGError("HubbardChain's sector is n_up / n_dn, not sz")
+        sector = model.sector(n_up, n_dn)
+    elif isinstance(model, _SpinChain):
+        if n_up is not None or n_dn is not None:
+            raise DMRGError(f"{type(model).__name__}'s sector is sz, not n_up / n_dn")
+        sector = model.sector(sz)
+    else:
+        raise DMRGError(f"not a quantx_engine.models model: {model!r}")
+    for name, v in (("max_bond", max_bond), ("n_sweeps", n_sweeps)):
+        if not isinstance(v, int) or isinstance(v, bool) or v < 1:
+            raise DMRGError(f"{name} must be an int >= 1, got {v!r}")
+
+    global _default_engine
+    if engine is None:
+        if _default_engine is None:
+            from quantx_engine.engine import Engine, QuantXNativeUnavailable
+            try:
+                _default_engine = Engine()
+            except QuantXNativeUnavailable as exc:
+                raise DMRGError(
+                    "ground_state runs on the native QuantX library, which is not "
+                    "available (install a platform wheel, or set QUANTX_LIB_PATH)"
+                ) from exc
+        engine = _default_engine
+    lib = _get_dmrg_lib(engine)
+    if lib is None:
+        raise DMRGError("the loaded native library does not export qx_dmrg_sweep")
+
+    prob = dict(model.problem(), sector=sector)
+    opts = {"max_bond": max_bond, "cutoff": cutoff, "n_sweeps": n_sweeps, "tol": tol}
+    out = json.loads(lib.qx_dmrg_sweep(json.dumps(prob).encode(), json.dumps(opts).encode()))
+    if not out.get("ok", False):
+        raise DMRGError(out.get("error", "Unknown error from qx_dmrg_sweep"))
+    return DMRGResult(
+        energy=float(out["energy"]),
+        truncation_error=float(out.get("truncation_error", 0.0)),
+        n_sweeps_done=int(out.get("n_sweeps_done", n_sweeps)),
+        sweep_energies=[float(e) for e in out.get("sweep_energies", [])],
+        wall_time_s=float(out.get("wall_time_s", 0.0)),
+        backend="cpp",
+        method=str(out.get("method", "")),
+        sector=model.describe_sector(out["sector"]),
+    )
 
 
 # ── Pure-Python fallback: exact diagonalisation ───────────────────────────────
