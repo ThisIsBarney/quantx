@@ -8,6 +8,10 @@ string(REGEX REPLACE "^__version__ = \"([^\"]+)\".*" "\\1" QX_VERSION "${_qx_ver
 if(NOT QX_VERSION)
   message(FATAL_ERROR "could not read __version__ from python/quantx_engine/__init__.py")
 endif()
+# Re-configure when the version changes; an incremental build would otherwise keep
+# compiling the old one into the engine.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/python/quantx_engine/__init__.py")
 # project(VERSION) takes digits only; a pre-release suffix (1.1.0rc1) stays in QX_VERSION
 string(REGEX MATCH "^[0-9]+(\\.[0-9]+)*" _qx_ver_numeric "${QX_VERSION}")
 project(quantx_engine VERSION ${_qx_ver_numeric} LANGUAGES CXX)

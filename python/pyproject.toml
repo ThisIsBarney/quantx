@@ -82,7 +82,9 @@ quantx_engine = [
 # ── cibuildwheel configuration (M158 / M159) ──────────────────────────────────
 # Run:  cibuildwheel --output-dir wheelhouse python/
 [tool.cibuildwheel]
-# Build CPython 3.10–3.13; skip 32-bit and musl libc.
+# The wheel is py3-none-<platform> (python/setup.py): cibuildwheel builds it for the first
+# identifier, then reuses that same wheel for the others and runs test-command on each.
+# So this list is the set of Pythons the one wheel is TESTED on; skip 32-bit and musl.
 build = "cp310-* cp311-* cp312-* cp313-*"
 skip  = "*-win32 *-manylinux_i686 *-musllinux*"
 

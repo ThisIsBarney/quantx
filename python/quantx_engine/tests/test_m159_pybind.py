@@ -448,15 +448,24 @@ class TestBuildScriptPybind:
             "build script must search for and install the _quantx_py extension"
         )
 
-    def test_pyproject_before_build_installs_pybind11(self):
+    def test_wheel_pybind_module_is_opt_in(self):
+        # The wheel ships the ctypes library, which serves every Python version; a pybind11
+        # module would tie the wheel to one CPython ABI (python/setup.py). So before-build
+        # must not install pybind11, and the build script adds the module only when
+        # QX_WHEEL_PYBIND=1. (This test used to assert the opposite, and passed only
+        # because the comment explaining the change contains the word "pybind11".)
         import pathlib
+        tomllib = pytest.importorskip("tomllib")
         here = pathlib.Path(__file__).resolve()
-        for parent in here.parents:
-            candidate = parent / "pyproject.toml"
-            if candidate.exists():
-                content = candidate.read_text(encoding="utf-8")
-                assert "pybind11" in content, (
-                    "pyproject.toml before-build must install pybind11"
-                )
-                return
-        pytest.skip("pyproject.toml not found")
+        pyproject = next((p / "pyproject.toml" for p in here.parents
+                          if (p / "pyproject.toml").exists()), None)
+        if pyproject is None:
+            pytest.skip("pyproject.toml not found")
+        cfg = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        before = cfg["tool"]["cibuildwheel"]["before-build"]
+        commands = " ".join(before) if isinstance(before, list) else before
+        assert "pybind11" not in commands, commands
+        script = self._script_path()
+        if script is None:
+            pytest.skip("build script not found")
+        assert 'os.environ.get("QX_WHEEL_PYBIND") == "1"' in script.read_text(encoding="utf-8")

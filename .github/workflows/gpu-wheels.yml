@@ -1,6 +1,6 @@
 name: GPU Wheels (M168)
 
-# Builds and publishes CUDA 12-accelerated wheels for quantx-engine[gpu].
+# Checks the [gpu] extra of quantx-engine. Publishes nothing.
 #
 # The wheel content itself is identical to the CPU wheel; GPU acceleration
 # is provided at runtime by CuPy (cupy-cuda12x), which is declared as the
@@ -8,10 +8,11 @@ name: GPU Wheels (M168)
 #
 #   1. Builds the standard manylinux wheel with cibuildwheel.
 #   2. Runs GPU-capability unit tests (mock-based, no CUDA hardware needed).
-#   3. On version tags: publishes to PyPI so that
-#        pip install "quantx-engine[gpu]"
-#      installs the wheel + cupy-cuda12x automatically.
+#   3. Smoke-tests `pip install "quantx-engine[gpu]"` from the built wheel.
 #   4. On NVIDIA self-hosted runner (optional): runs a real CuPy smoke test.
+#
+# PyPI publishing lives only in build-wheels.yml (see RELEASING.md), which uploads the
+# same wheel; pip install "quantx-engine[gpu]" adds cupy-cuda12x from its metadata.
 
 on:
   push:
@@ -31,13 +32,6 @@ on:
       - "python/quantx_engine/tests/test_gpu_wheel.py"
       - ".github/workflows/gpu-wheels.yml"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: "Publish to PyPI (only works on a version tag)"
-        required: false
-        default: "false"
-        type: choice
-        options: ["true", "false"]
 
 concurrency:
   group: gpu-wheels-${{ github.ref }}

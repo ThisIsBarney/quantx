@@ -155,6 +155,14 @@ def build_and_install(dest_dir: str) -> None:
         cfg_cmd += ["-A", "x64"]
     if osx_archs:
         cfg_cmd += ["-DCMAKE_OSX_ARCHITECTURES=" + ";".join(osx_archs)]
+    # Link the MSVC C++ runtime statically. Otherwise delvewheel vendors whatever
+    # msvcp140.dll it finds, and on the CI image that is OLDER (14.40) than the toolset
+    # that built quantx.dll (14.51): Microsoft supports only runtime >= toolset, and the
+    # vendored copy is renamed, so it wins even where a newer runtime is installed. The
+    # OpenMP runtime (vcomp140.dll) has no static form and is still vendored.
+    if sys.platform == "win32":
+        cfg_cmd += ["-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                    "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW"]
     print("[build_native_for_wheel] Configure:", " ".join(cfg_cmd))
     subprocess.run(cfg_cmd, check=True)
 
