@@ -29,7 +29,8 @@ from __future__ import annotations
 import operator
 from dataclasses import dataclass
 
-__all__ = ["XXZChain", "J1J2Chain", "Spin1Chain", "HubbardChain", "ModelError"]
+__all__ = ["XXZChain", "J1J2Chain", "Spin1Chain", "HubbardChain", "HubbardLattice",
+           "ModelError"]
 
 # The C API refuses longer chains; the block engine derives its symmetry data from a
 # bulk MPO site, so it needs at least three.
@@ -51,10 +52,10 @@ def _as_int(v, name: str) -> int:
         raise ModelError(f"{name} must be an int, got {type(v).__name__}") from None
 
 
-def _check_length(L) -> int:
-    L = _as_int(L, "L")
+def _check_length(L, name: str = "L") -> int:
+    L = _as_int(L, name)
     if not _MIN_SITES <= L <= _MAX_SITES:
-        raise ModelError(f"L must be in [{_MIN_SITES}, {_MAX_SITES}], got {L}")
+        raise ModelError(f"{name} must be in [{_MIN_SITES}, {_MAX_SITES}], got {L}")
     return L
 
 
@@ -139,8 +140,28 @@ class Spin1Chain(_SpinChain):
         return {"type": "spin1_heisenberg", "n_sites": self.L, "J": float(self.J)}
 
 
+class _Hubbard:
+    """Sector handling shared by the Hubbard models: electron numbers per spin."""
+
+    L: int
+
+    def sector(self, n_up: int | None = None, n_dn: int | None = None) -> dict:
+        """C API sector; default half filling with n_up = ceil(L/2), n_dn = floor(L/2)."""
+        n_up = (self.L + 1) // 2 if n_up is None else n_up
+        n_dn = self.L // 2 if n_dn is None else n_dn
+        n_up, n_dn = _as_int(n_up, "n_up"), _as_int(n_dn, "n_dn")
+        for name, v in (("n_up", n_up), ("n_dn", n_dn)):
+            if not 0 <= v <= self.L:
+                raise ModelError(f"{name} must be in [0, L={self.L}], got {v}")
+        return {"n_up": n_up, "n_dn": n_dn}
+
+    @staticmethod
+    def describe_sector(sector: dict) -> dict:
+        return {"n_up": sector["n_up"], "n_dn": sector["n_dn"]}
+
+
 @dataclass(frozen=True)
-class HubbardChain:
+class HubbardChain(_Hubbard):
     """Fermi-Hubbard chain,
     H = -t sum_{i,s} (c+_{i s} c_{i+1 s} + h.c.) + U sum_i n_{i up} n_{i dn} - mu sum_i n_i.
 
@@ -160,16 +181,46 @@ class HubbardChain:
         return {"type": "hubbard", "n_sites": self.L, "t": float(self.t), "U": float(self.U),
                 "mu": float(self.mu)}
 
-    def sector(self, n_up: int | None = None, n_dn: int | None = None) -> dict:
-        """C API sector; default half filling with n_up = ceil(L/2), n_dn = floor(L/2)."""
-        n_up = (self.L + 1) // 2 if n_up is None else n_up
-        n_dn = self.L // 2 if n_dn is None else n_dn
-        n_up, n_dn = _as_int(n_up, "n_up"), _as_int(n_dn, "n_dn")
-        for name, v in (("n_up", n_up), ("n_dn", n_dn)):
-            if not 0 <= v <= self.L:
-                raise ModelError(f"{name} must be in [0, L={self.L}], got {v}")
-        return {"n_up": n_up, "n_dn": n_dn}
 
-    @staticmethod
-    def describe_sector(sector: dict) -> dict:
-        return {"n_up": sector["n_up"], "n_dn": sector["n_dn"]}
+@dataclass(frozen=True)
+class HubbardLattice(_Hubbard):
+    """The Hubbard Hamiltonian of :class:`HubbardChain` on a width-W lattice of Lx columns,
+    open along x: W = 1 is the chain, W = 2 the two-leg ladder, and W >= 3 a strip, or a
+    cylinder with ``y_periodic``.
+
+    Sites are numbered column by column, ``site = W*x + y`` (see :meth:`site`), and the
+    engine runs them as one chain, so a hop along x has range W. Hopping is isotropic
+    (``t`` on every bond).
+    """
+    Lx: int
+    W: int = 1
+    t: float = 1.0
+    U: float = 0.0
+    mu: float = 0.0
+    y_periodic: bool = False
+
+    def __post_init__(self) -> None:
+        for name in ("Lx", "W"):
+            v = _as_int(getattr(self, name), name)
+            if v < 1:
+                raise ModelError(f"{name} must be >= 1, got {v}")
+            object.__setattr__(self, name, v)
+        if self.y_periodic and self.W < 3:
+            raise ModelError("y_periodic needs W >= 3: at W = 2 the wrap would double every "
+                             "rung bond")
+        _check_length(self.W * self.Lx, "W*Lx")
+
+    @property
+    def L(self) -> int:
+        """Number of sites, W*Lx."""
+        return self.W * self.Lx
+
+    def site(self, x: int, y: int) -> int:
+        """Chain index of the site in column x, row y."""
+        return self.W * x + y
+
+    def problem(self) -> dict:
+        """The C API problem."""
+        return {"type": "hubbard_lattice", "Lx": self.Lx, "W": self.W,
+                "y_periodic": bool(self.y_periodic), "t": float(self.t), "U": float(self.U),
+                "mu": float(self.mu)}

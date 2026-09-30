@@ -3115,6 +3115,15 @@ static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cu
 }
 
 // Move the orthogonality centre from site `from` to site `to` losslessly (no gate).
+// A move re-factorises a two-site block whose rank is already the bond's, but the SVD
+// returns min(m, n) singular values, and the surplus are numerical zeros. Two things
+// kept them: cutoff 0 dropped nothing, and the default Gram-trick SVD squares the
+// condition number, putting those zeros near sqrt(eps) ~ 1e-8 relative, above any safe
+// floor. Every bond the centre crossed filled up with zero-weight states. Reported bond
+// dimensions ran to 2.5x the cap (10 at chi_max 4, 58 at 16), and every later gate paid
+// for the padding. Moves now use the direct SVD (zeros at ~1e-16) and drop values below
+// 1e-14 of the block's norm; the state changes by less than that.
+static constexpr double kLosslessCutoff = 1e-14;
 static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys) {
     const std::map<int,RVec> no_sv;
     while (from < to) {                       // rightward
@@ -3122,7 +3131,7 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
                              s.bond[from+1], s.bond[from+2], true, qphys);
         bt_expand_theta(th, s.bond[from], s.bond[from+2], qphys);
         auto svd = block_svd_truncate(th, s.bond[from], s.bond[from+2],
-                                      1 << 30, 0.0, false, false, qphys);
+                                      1 << 30, kLosslessCutoff, false, /*stable=*/true, qphys);
         s.bond[from+1] = svd.new_mid_bs;
         s.A[from]   = bt_A_from_U(svd, s.bond[from], s.bond[from+1], qphys);
         s.A[from+1] = bt_center_LR(svd);
@@ -3133,7 +3142,7 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
                              s.bond[from], s.bond[from+1], true, qphys);
         bt_expand_theta(th, s.bond[from-1], s.bond[from+1], qphys);
         auto svd = block_svd_truncate(th, s.bond[from-1], s.bond[from+1],
-                                      1 << 30, 0.0, false, false, qphys);
+                                      1 << 30, kLosslessCutoff, false, /*stable=*/true, qphys);
         s.bond[from] = svd.new_mid_bs;
         s.A[from]   = svd.Vt;
         s.A[from-1] = bt_center_RL(svd, s.bond[from-1], s.bond[from], qphys);

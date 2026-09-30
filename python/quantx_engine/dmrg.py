@@ -131,6 +131,23 @@ def _get_dmrg_lib(engine) -> Any | None:
 _default_engine = None
 
 
+def _resolve_engine(engine, what: str, error: type):
+    """The given engine, else a default one created (and kept) on first use."""
+    global _default_engine
+    if engine is not None:
+        return engine
+    if _default_engine is None:
+        from quantx_engine.engine import Engine, QuantXNativeUnavailable
+        try:
+            _default_engine = Engine()
+        except QuantXNativeUnavailable as exc:
+            raise error(
+                f"{what} runs on the native QuantX library, which is not available "
+                "(install a platform wheel, or set QUANTX_LIB_PATH)"
+            ) from exc
+    return _default_engine
+
+
 def ground_state(
     model,
     *,
@@ -150,14 +167,14 @@ def ground_state(
 
     Parameters
     ----------
-    model : XXZChain, J1J2Chain, Spin1Chain or HubbardChain
+    model : XXZChain, J1J2Chain, Spin1Chain, HubbardChain or HubbardLattice
         The Hamiltonian; see :mod:`quantx_engine.models` for the conventions.
     sz : float, optional
         Spin models: total S^z (a multiple of 1/2). Default: the lowest |S^z| the
         chain allows (0, or 1/2 for an odd spin-1/2 chain).
     n_up, n_dn : int, optional
-        Hubbard: the numbers of up and down electrons. Default: half filling,
-        n_up = ceil(L/2) and n_dn = floor(L/2).
+        Hubbard models: the numbers of up and down electrons. Default: half
+        filling, n_up = ceil(L/2) and n_dn = floor(L/2).
     max_bond : int
         Maximum MPS bond dimension (states kept per bond, summed over sectors).
     cutoff : float
@@ -183,11 +200,11 @@ def ground_state(
         No native library, a sector argument the model does not take, or a solver
         failure.
     """
-    from quantx_engine.models import HubbardChain, _SpinChain
+    from quantx_engine.models import _Hubbard, _SpinChain
 
-    if isinstance(model, HubbardChain):
+    if isinstance(model, _Hubbard):
         if sz is not None:
-            raise DMRGError("HubbardChain's sector is n_up / n_dn, not sz")
+            raise DMRGError(f"{type(model).__name__}'s sector is n_up / n_dn, not sz")
         sector = model.sector(n_up, n_dn)
     elif isinstance(model, _SpinChain):
         if n_up is not None or n_dn is not None:
@@ -206,19 +223,7 @@ def ground_state(
         if v < 1:
             raise DMRGError(f"{name} must be >= 1, got {v}")
 
-    global _default_engine
-    if engine is None:
-        if _default_engine is None:
-            from quantx_engine.engine import Engine, QuantXNativeUnavailable
-            try:
-                _default_engine = Engine()
-            except QuantXNativeUnavailable as exc:
-                raise DMRGError(
-                    "ground_state runs on the native QuantX library, which is not "
-                    "available (install a platform wheel, or set QUANTX_LIB_PATH)"
-                ) from exc
-        engine = _default_engine
-    lib = _get_dmrg_lib(engine)
+    lib = _get_dmrg_lib(_resolve_engine(engine, "ground_state", DMRGError))
     if lib is None:
         raise DMRGError("the loaded native library does not export qx_dmrg_sweep")
 

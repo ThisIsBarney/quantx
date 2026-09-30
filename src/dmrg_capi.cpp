@@ -40,13 +40,63 @@ static int read_n(const nlj& prob) {
 //   j1j2              sum_i [J1 h_{i,i+1} + J2 h_{i,i+2}],  h = XX + YY + delta ZZ   (Pauli)
 //   spin1_heisenberg  J sum_i S_i . S_{i+1}                                  (spin-1 S)
 //   hubbard           -t sum_{i,s} (c+_{i s} c_{i+1 s} + h.c.) + U sum_i n_up n_dn - mu sum_i n_i
-// Spin sectors are "sz2" = 2 Sz_total; hubbard's are "n_up" and "n_dn".
+//   hubbard_lattice   the same on a width-W lattice: Lx columns of W sites, site-split
+//                     (one site per orbital), column-major i = W*x + y; W = 1 is the
+//                     chain, W = 2 the ladder, y_periodic (W >= 3) makes it a cylinder
+// Spin sectors are "sz2" = 2 Sz_total; the Hubbard ones are "n_up" and "n_dn".
 static bool is_block_model(const std::string& type) {
     return type == "heisenberg" || type == "xxz" || type == "j1j2" ||
-           type == "spin1_heisenberg" || type == "hubbard";
+           type == "spin1_heisenberg" || type == "hubbard" || type == "hubbard_lattice";
+}
+
+struct Lattice { int Lx = 0, W = 1; bool y_periodic = false; };
+
+static Lattice read_lattice(const nlj& prob) {
+    Lattice g;
+    g.Lx = prob.value("Lx", 0);
+    g.W = prob.value("W", 1);
+    g.y_periodic = prob.value("y_periodic", false);
+    if (g.Lx < 1 || g.W < 1)
+        throw std::runtime_error("hubbard_lattice: need Lx >= 1 and W >= 1");
+    if (g.y_periodic && g.W < 3)
+        throw std::runtime_error("hubbard_lattice: y_periodic needs W >= 3 (at W = 2 the "
+                                 "wrap would double every rung bond)");
+    return g;
+}
+
+// Chain length of a problem: W*Lx for the lattice (checked against n_sites if given),
+// otherwise "n_sites" / the legacy "n_qubits".
+static int problem_n(const nlj& prob) {
+    if (prob.value("type", std::string()) != "hubbard_lattice") return read_n(prob);
+    const Lattice g = read_lattice(prob);
+    const int n = g.W * g.Lx;
+    if (prob.contains("n_sites") && prob["n_sites"].get<int>() != n)
+        throw std::runtime_error("hubbard_lattice: n_sites must equal W*Lx (" +
+                                 std::to_string(n) + ")");
+    return n;
+}
+
+// The (n_up, n_dn) sector of a Hubbard problem; default half filling, lowest |Sz|.
+static void check_sector_keys(const nlj& sec, const std::vector<std::string>& allowed,
+                              const std::string& type);
+
+static void hubbard_sector(const nlj& prob, int n, int& n_up, int& n_dn) {
+    const nlj sec = prob.contains("sector") ? prob["sector"] : nlj::object();
+    check_sector_keys(sec, {"n_up", "n_dn"}, prob.value("type", std::string("hubbard")));
+    n_up = sec.value("n_up", (n + 1) / 2);
+    n_dn = sec.value("n_dn", n / 2);
+    if (n_up < 0 || n_up > n || n_dn < 0 || n_dn > n)
+        throw std::runtime_error("hubbard sector: need 0 <= n_up, n_dn <= n_sites (got n_up=" +
+            std::to_string(n_up) + ", n_dn=" + std::to_string(n_dn) + ")");
 }
 
 static std::vector<MPOSite> build_block_model_mpo(const nlj& prob, const std::string& type, int n) {
+    if (type == "hubbard_lattice") {
+        const Lattice g = read_lattice(prob);
+        return build_hubbard_lattice_split_mpo(g.Lx, g.W, prob.value("t", 1.0),
+                                               prob.value("U", 0.0), prob.value("mu", 0.0),
+                                               g.y_periodic);
+    }
     if (type == "heisenberg" || type == "xxz")
         return build_xxz_mpo(n, prob.value("J", 1.0), prob.value("delta", 1.0));
     if (type == "j1j2")
@@ -143,13 +193,9 @@ static BlockModel resolve_block_model(const nlj& prob, const std::string& type, 
     BlockModel m;
     m.mpo = build_block_model_mpo(prob, type, n);
     const nlj sec = prob.contains("sector") ? prob["sector"] : nlj::object();
-    if (type == "hubbard") {
-        check_sector_keys(sec, {"n_up", "n_dn"}, type);
-        const int n_up = sec.value("n_up", (n + 1) / 2);   // default: half filling,
-        const int n_dn = sec.value("n_dn", n / 2);         // lowest |Sz|
-        if (n_up < 0 || n_up > n || n_dn < 0 || n_dn > n)
-            throw std::runtime_error("hubbard sector: need 0 <= n_up, n_dn <= n_sites (got n_up=" +
-                std::to_string(n_up) + ", n_dn=" + std::to_string(n_dn) + ")");
+    if (type == "hubbard" || type == "hubbard_lattice") {
+        int n_up, n_dn;
+        hubbard_sector(prob, n, n_up, n_dn);
         m.total_charge = pack_q2(n_up + n_dn, n_up - n_dn);
         m.init_config  = hubbard_config(n, n_up, n_dn);
         m.sector       = {{"n_up", n_up}, {"n_dn", n_dn}};
@@ -177,7 +223,7 @@ static std::vector<MPOSite> parse_ham(const nlj& prob, int n) {
     if (is_block_model(type)) return build_block_model_mpo(prob, type, n);
     if (type != "pauli_sum")
         throw std::runtime_error("unknown type '" + type + "' (expected heisenberg, xxz, j1j2, "
-                                 "spin1_heisenberg, hubbard, or pauli_sum)");
+                                 "spin1_heisenberg, hubbard, hubbard_lattice, or pauli_sum)");
     // pauli_sum
     std::vector<std::pair<double, std::string>> terms;
     if (prob.contains("terms")) {
@@ -196,6 +242,38 @@ static std::vector<MPOSite> parse_ham(const nlj& prob, int n) {
     return build_pauli_sum_mpo(n, terms);
 }
 
+// ---- HVA circuits on the Hubbard lattice (M5) ---------------------------------
+
+// The circuit's bond groups as JSON, [[[i, j], ...], ...], in the order it applies them.
+static nlj groups_json(const std::vector<std::vector<std::pair<int,int>>>& groups) {
+    nlj out = nlj::array();
+    for (const auto& g : groups) {
+        nlj gj = nlj::array();
+        for (const auto& e : g) gj.push_back({e.first, e.second});
+        out.push_back(gj);
+    }
+    return out;
+}
+
+// At U = 0 the ground state of a sector is one Slater determinant per species, unique
+// unless a species' Fermi level falls inside a degenerate single-particle shell (the
+// +-k_y pairs of a cylinder, say). DMRG would then return an arbitrary member of the
+// degenerate space, and a circuit started from it would not be reproducible.
+static void require_unique_free_ground_state(
+        int n, double t, const std::vector<std::vector<std::pair<int,int>>>& groups,
+        int n_up, int n_dn) {
+    Eigen::MatrixXd h = Eigen::MatrixXd::Zero(n, n);
+    for (const auto& g : groups)
+        for (const auto& e : g) { h(e.first, e.second) -= t; h(e.second, e.first) -= t; }
+    Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> es(h);
+    const Eigen::VectorXd& eps = es.eigenvalues();   // ascending
+    for (int k : {n_up, n_dn})
+        if (k > 0 && k < n && std::abs(eps(k) - eps(k - 1)) < 1e-9 * std::max(1.0, std::abs(t)))
+            throw std::runtime_error("init 'free': the U = 0 ground state is degenerate at this "
+                "filling (a Fermi level inside a degenerate single-particle shell), so it is no "
+                "unique starting state; choose another filling, or init 'product'");
+}
+
 }  // namespace
 
 extern "C" {
@@ -206,7 +284,7 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
         nlj prob  = nlj::parse(problem_json  ? problem_json  : "{}");
         nlj opts  = nlj::parse(options_json  ? options_json  : "{}");
 
-        int  n        = read_n(prob);
+        int  n        = problem_n(prob);
         int  max_bond = opts.value("max_bond",  64);
         double cutoff = opts.value("cutoff",    1e-10);
         int  n_sweeps = opts.value("n_sweeps",  10);
@@ -496,13 +574,95 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
 QX_API const char* qx_mps_energy(const char* problem_json) {
     try {
         nlj prob = nlj::parse(problem_json ? problem_json : "{}");
-        int n    = read_n(prob);
+        int n    = problem_n(prob);
         auto mpo = parse_ham(prob, n);
         MPS mps  = init_zero_state(n, mpo[0].d);
         double E = compute_energy(mps, mpo);
         nlj out;
         out["ok"]     = true;
         out["energy"] = E;
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_hva_layout(const char* problem_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        const Lattice g = read_lattice(prob);
+        auto groups = hva_lattice_group_bonds(g.Lx, g.W, g.y_periodic);
+        nlj out;
+        out["ok"]               = true;
+        out["n_sites"]          = g.W * g.Lx;
+        out["groups"]           = groups_json(groups);
+        out["angles_per_layer"] = (int)groups.size() + 1;
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        nlj opts = nlj::parse(options_json ? options_json : "{}");
+        const Lattice g = read_lattice(prob);
+        const int n = g.W * g.Lx;
+        if (n < 3)   return dmrg_error("hva: need W*Lx >= 3 (block-sparse solver)");
+        if (n > 200) return dmrg_error("hva: W*Lx exceeds max (200)");
+        const double t = prob.value("t", 1.0), U = prob.value("U", 0.0),
+                     mu = prob.value("mu", 0.0);
+        int n_up, n_dn;
+        hubbard_sector(prob, n, n_up, n_dn);
+        const int total = pack_q2(n_up + n_dn, n_up - n_dn);
+        const int chi = opts.value("max_bond", 256);
+        const double cutoff = opts.value("cutoff", 1e-12);
+        const std::string init = opts.value("init", std::string("free"));
+        const bool want_entropy = opts.value("entropy", true);
+        if (chi < 1) return dmrg_error("max_bond must be >= 1");
+        if (init != "free" && init != "product")
+            return dmrg_error("init must be 'free' (the U = 0 ground state) or 'product'");
+        if (!prob.contains("angles") || !prob["angles"].is_array())
+            return dmrg_error("hva: 'angles' must be a list of layers, each a list of "
+                              "angles (one per bond group, then one for the on-site term)");
+        std::vector<std::vector<double>> angles;
+        for (const auto& lay : prob["angles"]) angles.push_back(lay.get<std::vector<double>>());
+
+        auto groups = hva_lattice_group_bonds(g.Lx, g.W, g.y_periodic);
+        auto lat = build_hubbard_lattice_split_mpo(g.Lx, g.W, t, U, mu, g.y_periodic);
+        auto hop = build_hubbard_mpo(n, t, 0.0, /*two_u1=*/true);   // the bond generator
+        std::vector<int> cfg = hubbard_config(n, n_up, n_dn);
+
+        nlj out;
+        std::shared_ptr<HVAInitState> psi0;
+        if (init == "free") {
+            require_unique_free_ground_state(n, t, groups, n_up, n_dn);
+            DMRGResult prep;
+            psi0 = hva_prepare_init(build_hubbard_lattice_split_mpo(g.Lx, g.W, t, 0.0, 0.0,
+                                                                    g.y_periodic),
+                                    n, chi, total, &cfg, &prep);
+            out["init_energy"]           = prep.energy;
+            out["init_truncation_error"] = prep.truncation_error;
+        } else {
+            out["init_config"] = cfg;   // local states: 0 empty, 1 up, 2 down, 3 double
+        }
+        HVAResult r = run_hva_lattice(lat, hop, g.Lx, g.W, g.y_periodic, angles, chi,
+                                      cutoff, total, &cfg, psi0, want_entropy);
+        out["ok"]               = true;
+        out["energy"]           = r.energy;
+        // Entropies of the final state (natural log), from a lossless centre walk: the
+        // largest over all cuts, and the balanced cut's (none when W*Lx is odd).
+        out["entropy_max"]      = want_entropy ? nlj(r.S_max) : nlj(nullptr);
+        out["entropy_mid"]      = (want_entropy && n % 2 == 0) ? nlj(r.S_mid) : nlj(nullptr);
+        out["truncation_error"] = r.trunc_err;    // largest single discarded weight
+        out["max_bond"]         = r.max_bond;
+        out["layer_bonds"]      = r.layer_bond;
+        out["wall_time_s"]      = r.wall_s;
+        out["sector"]           = {{"n_up", n_up}, {"n_dn", n_dn}};
+        out["init"]             = init;
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
     } catch (const std::exception& e) {
