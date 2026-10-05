@@ -776,7 +776,17 @@ int main(int argc, char** argv) {
     int chi_f = 1; for (int k = 0; k < n_f / 2; ++k) chi_f *= 4;      // 64, lossless
     int nsamp = quick ? 24 : 400;
     if (const char* s = std::getenv("QX_VQE_BP")) {
-        int v = 0; std::sscanf(s, "%d", &v); if (v > 0) nsamp = v;
+        int v = 0; std::sscanf(s, "%d", &v);
+        // A variance needs two samples, and its fourth-moment error estimate several.
+        // QX_VQE_BP=1 used to be accepted: stage 2 then wrote zero for every variance
+        // and standard error, analyze_vqe_barren.py divided by them -- and the run had
+        // already overwritten the committed CSVs. Refuse before writing anything.
+        if (v < 10) {
+            std::fprintf(stderr, "QX_VQE_BP=%s: need at least 10 samples per point for a "
+                                 "variance and its fourth-moment error; nothing written\n", s);
+            std::exit(2);
+        }
+        nsamp = v;
     }
     std::vector<int> cfg_f(n_f);
     for (int i = 0; i < n_f; ++i) cfg_f[i] = (i % 2 == 0) ? 1 : 2;

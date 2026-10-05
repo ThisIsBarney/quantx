@@ -997,7 +997,7 @@ trainability component.
 indistinguishable from it at p=6 and p=8. The width ordering fails in gradient variance
 exactly as it failed in entropy, and with W=2 the outlier both times.
 
-#### But it is not a barren plateau, and the size axis is what says so
+#### Is it a barren plateau? What the size axis can and cannot say
 
 At a single size a constant factor and `e^{−an}` evaluated there are the same number, so
 only a size scan can use the term. Holding p=8 and growing n:
@@ -1017,8 +1017,31 @@ an exponential holds constant — collapses along the series:
 | W=2 ladder | +0.79 | +0.27 | +1.14 |
 
 The chain's rate falls by **×6.7**, and the odd-n series — a different charge sector,
-separately sampled — reproduces the same collapse independently. This is a finite-size
-crossover, not exponential decay. A straight line through it would return
+separately sampled — reproduces the same collapse independently.
+
+Part of that collapse is the instrument, not the landscape. The derivative is taken with
+respect to group 0's angle, and group 0 drives 2, 3, 4, 5 bonds at n = 4–10: the
+generator grows with n, so the variance carries a size-dependent generator-norm factor,
+and a polynomial factor makes exactly this kind of collapsing local rate. Dividing it
+out, by the generator's Hilbert-Schmidt norm squared (∝ bonds, nb) or its operator norm
+squared (∝ nb²):
+
+| normalised local rate | n 4→6 | n 6→8 | n 8→10 |
+|---|---|---|---|
+| W=1 chain ÷ nb | +1.10 | +0.64 | +0.24 |
+| W=1 chain ÷ nb² | +1.30 | +0.78 | +0.36 |
+| W=1 chain (odd n) ÷ nb | +0.79 | +0.42 | +0.21 |
+| W=1 chain (odd n) ÷ nb² | +1.00 | +0.56 | +0.32 |
+| W=2 ladder ÷ nb | +0.99 | +0.41 | +1.25 |
+| W=2 ladder ÷ nb² | +1.19 | +0.55 | +1.36 |
+
+The chain's rate still falls by **×4.5** and **×3.6** (odd n: ×3.8 and ×3.1), so over
+n = 4–10 its decay is not a single exponential under any of the three, which is
+consistent with a finite-size crossover, by a smaller margin than the raw ×6.7
+suggested. The ladder's normalised rates spread by only ×2.5, so it neither supports nor
+rules out an exponential. A derivative with respect to one fixed bond would remove the
+confound entirely; that was not run. A straight line through the raw chain series would
+return
 `a = +0.506 ± 0.120` per site, an entirely respectable-looking exponent with a
 respectable-looking error bar, and it would be a fabricated measurement;
 `analyze_vqe_barren.py` refuses to quote it and says why.

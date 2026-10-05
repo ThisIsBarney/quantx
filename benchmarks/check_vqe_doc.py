@@ -386,6 +386,34 @@ for lbl, w, par in (("W=1 chain", 1, 0), ("W=1 chain (odd n, 2Sz=1)", 1, 1),
     elif got[1:] != want:
         fails.append(f"part F local rates {lbl}: doc {got[1:]} vs csv {want}")
 
+# The same rates with the differentiated generator's norm divided out. Group 0's bond
+# count grows with n, so the raw collapse partly measures the instrument (a review's
+# point); the doc's verdict rests on these, so they are asserted like the raw ones.
+def nrates_of(w, parity, k):
+    pts = sorted((n, float(r["var_frac"]) / int(r["nb_g0"]) ** k)
+                 for (ww, n), r in FS.items() if ww == w and n % 2 == parity)
+    return [math.log(pts[i][1] / pts[i + 1][1]) / (pts[i + 1][0] - pts[i][0])
+            for i in range(len(pts) - 1)]
+
+
+for lbl, w, par in (("W=1 chain", 1, 0), ("W=1 chain (odd n)", 1, 1),
+                    ("W=2 ladder", 2, 0)):
+    for k, sym in ((1, "÷ nb"), (2, "÷ nb²")):
+        want = [f"{x:+.2f}" for x in nrates_of(w, par, k)]
+        got = row_in_table("normalised local rate", f"| {lbl} {sym} |")
+        if got is None:
+            fails.append(f"part F normalised rates {lbl} {sym}: row not found in the doc")
+        elif got[1:] != want:
+            fails.append(f"part F normalised rates {lbl} {sym}: doc {got[1:]} vs csv {want}")
+c1, c2 = nrates_of(1, 0, 1), nrates_of(1, 0, 2)
+expect("part F normalised collapse",
+       f"still falls by **×{max(c1)/min(c1):.1f}** and **×{max(c2)/min(c2):.1f}**")
+o1, o2 = nrates_of(1, 1, 1), nrates_of(1, 1, 2)
+expect("part F normalised collapse, odd n",
+       f"(odd n: ×{max(o1)/min(o1):.1f} and ×{max(o2)/min(o2):.1f})")
+l2 = nrates_of(2, 0, 2)
+expect("part F ladder spread", f"spread by only ×{max(l2)/min(l2):.1f}")
+
 pts0, lr0 = rates_of(1, 0)
 if lr0:
     expect("part F rate collapse", f"falls by **×{max(lr0)/min(lr0):.1f}**")
