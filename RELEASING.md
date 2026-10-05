@@ -13,6 +13,14 @@ accepts the same version twice.
 2. On GitHub, create the environment `pypi` (Settings → Environments). With required
    reviewers set there, every upload waits for an explicit approval.
 
+## A stale tag to know about
+
+The repository has an old tag `v0.2.0` from an internal milestone. It corresponds to no
+published package (nothing was on PyPI before 0.1.0, and `CHANGELOG.md` lists the
+internal milestones as history). It does not affect 0.1.0. Before releasing 0.2.0,
+delete it (`git push --delete origin v0.2.0` and `git tag -d v0.2.0`) or skip to 0.3.0:
+a tag push publishes, so the release tag must be new.
+
 ## Cutting a release
 
 1. **Set the version** in `python/quantx_engine/__init__.py` (`__version__ = "X.Y.Z"`). It
