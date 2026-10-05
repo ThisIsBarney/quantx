@@ -19,6 +19,24 @@ def load_json(path: Path) -> dict[str, Any]:
     return json.load(f)
 
 
+def engine_library_path(root: Path) -> str:
+  """Path of the native library the benchmark runners load.
+
+  QUANTX_LIB_PATH when set; otherwise the Release build in build-vs, then the Debug one.
+  Both runners used to hard-code build-vs/Debug, so when the benchmark gate moved to a
+  Release build every suite failed to load the engine. If neither build exists, the
+  Release path is returned and Engine() reports it as missing.
+  """
+  explicit = os.environ.get("QUANTX_LIB_PATH")
+  if explicit:
+    return explicit
+  for config in ("Release", "Debug"):
+    candidate = root / "build-vs" / config / "quantx.dll"
+    if candidate.exists():
+      return str(candidate)
+  return str(root / "build-vs" / "Release" / "quantx.dll")
+
+
 def detect_platform_profile(env: dict[str, str] | None = None) -> str:
   """Detect the current benchmark platform profile.
 

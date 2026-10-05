@@ -74,6 +74,8 @@ jobs:
         shell: pwsh
         env:
           QX_BENCHMARK_PLATFORM_PROFILE: github-windows
+          # The Release library built above; the runners used to hard-code build-vs\Debug.
+          QUANTX_LIB_PATH: ${{ github.workspace }}\build-vs\Release\quantx.dll
         run: .\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild
 
       - name: Upload Benchmark Reports
