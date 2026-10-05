@@ -126,10 +126,15 @@ jobs:
           .\build\Release\qx_fft_smoke.exe
 
       - name: Verify DLL exports
+        # This used to pipe dumpbin into Select-String. dumpbin exists only inside a Visual
+        # Studio developer prompt, so the step died on "not recognized" the first time a
+        # build got this far; and Select-String would not have failed on a missing export.
+        # Load the DLL instead, and require the entry points the Python SDK binds.
+        shell: pwsh
         run: |
           $dll = Get-ChildItem build -Recurse -Filter "quantx.dll" | Select-Object -First 1
           Write-Host "Found DLL: $($dll.FullName)"
-          dumpbin /exports $dll.FullName | Select-String "qx_run|qx_version|qx_list"
+          python -c "import ctypes, sys; lib = ctypes.CDLL(sys.argv[1]); need = ('qx_run', 'qx_version', 'qx_list_solvers', 'qx_free_string', 'qx_dmrg_sweep', 'qx_mps_energy'); missing = [s for s in need if not hasattr(lib, s)]; print('exports OK:', ', '.join(need)) if not missing else sys.exit('missing exports: ' + ', '.join(missing))" "$($dll.FullName)"
 
       - name: Upload library artifact
         uses: actions/upload-artifact@v4

@@ -110,7 +110,10 @@ class TestDeprecatedFunction:
             result = fn()
 
         assert result == 42
-        assert "removed" not in str(caught[0].message)
+        # Check for the clause warn() appends when removed_in is set, not the bare word:
+        # the message quotes fn's qualified name, which contains THIS test's name --
+        # "test_deprecated_without_removed_in.<locals>.fn" -- so "removed" is always there.
+        assert "will be removed" not in str(caught[0].message)
 
 
 # ---------------------------------------------------------------------------

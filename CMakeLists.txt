@@ -281,6 +281,12 @@ else()
   target_link_libraries(qx_cli PRIVATE CLI11)
 endif()
 qx_set_config_output_dirs(qx_cli)
+# qx_smoke drives qx_cli end to end. It used to look for it in hard-coded build layouts
+# (build-vs/Debug, build-nmake-local, build/Debug) that no current build produces -- every
+# binary lands in ${CMAKE_BINARY_DIR}/<config> -- so it failed on every CI run with "unable
+# to locate qx_cli". Tell it exactly where CMake put the binary instead of guessing.
+target_compile_definitions(qx_smoke PRIVATE QX_CLI_PATH="$<TARGET_FILE:qx_cli>")
+add_dependencies(qx_smoke qx_cli)
 
 add_executable(qx_dmrg_test
   src/dmrg_test.cpp
@@ -297,6 +303,14 @@ target_include_directories(qx_dmrg_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 qx_set_config_output_dirs(qx_dmrg_test)
+
+# Contract test for the exported DMRG/dynamics entry points, linked against the shared
+# library the way a consumer links it (not by compiling the sources in). Same output dir as
+# qx_capi so the loader finds quantx.dll next to the executable.
+add_executable(qx_capi_dmrg_test src/capi_dmrg_test.cpp)
+target_link_libraries(qx_capi_dmrg_test PRIVATE qx_capi nlohmann_json::nlohmann_json)
+target_include_directories(qx_capi_dmrg_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+qx_set_config_output_dirs(qx_capi_dmrg_test)
 
 # Large-block SVD-backend regression test: exercises the >=96-block CPU eigensolve
 # (Eigen vs LAPACK) that the ED suite (tiny blocks) never reaches. Links qx_blas so the
@@ -712,6 +726,7 @@ add_test(NAME qx_thermal_spectral_test COMMAND qx_thermal_spectral_test)
 add_test(NAME qx_thermal_transport_test COMMAND qx_thermal_transport_test)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
+add_test(NAME qx_capi_dmrg_test COMMAND qx_capi_dmrg_test)
 
 if(QX_ENABLE_PYBIND)
   find_package(pybind11 CONFIG REQUIRED)

@@ -40,6 +40,11 @@ def _make_frame_dict(step, time, purity, entropy, coherence, populations):
 def _mock_engine_for(lindblad_frames, entanglement_frames=None, observables=None):
     """Return an Engine mock whose run() returns the given frame data."""
     engine = MagicMock()
+    # A dense-only engine. A bare MagicMock grows any attribute it is asked for, so
+    # _get_sparse_lib() found a "native sparse library" on it and routed n > 6 to a mock
+    # whose calls return MagicMocks (json.loads: "not MagicMock"). Tests that want the
+    # sparse backend should say so explicitly.
+    engine._lib = None
     engine.run.return_value = {
         "ok": True,
         "lindblad_frames": lindblad_frames,
@@ -136,6 +141,9 @@ class TestLindbladSolverValidation:
                                  total_time=1.0)
 
     def test_n_qubits_too_large_raises(self):
+        """11 qubits is past the dense backend's limit; with no sparse backend in the
+        build (this mock has none) that must be a clear error, not a request the dense
+        backend cannot serve. The absolute limit (sparse available) is 16."""
         with pytest.raises(LindbladError, match="at most 10 qubits"):
             self._solver().solve(n_qubits=11, hamiltonian_terms=[], jump_operators=[],
                                  total_time=1.0)

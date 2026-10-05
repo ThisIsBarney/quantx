@@ -86,6 +86,23 @@ QX_API const char* qx_dmrg_sweep(const char* problem_json,
 // Returns thread-local JSON: {ok, energy}
 QX_API const char* qx_mps_energy(const char* problem_json);
 
+// The four entries below were exported from the library but missing from this header, so a
+// C caller could only reach them by declaring the symbols itself. All take
+// (problem_json, options_json), return thread-local JSON with "ok", and support the
+// Heisenberg/XXZ chain (problem type "heisenberg", fields n_qubits, J, delta).
+
+// Real- or imaginary-time evolution from a Neel state (block TEBD/TDVP2 by default; falls
+// back to non-block TDVP for n_qubits < 3). Options: dt, n_steps, chi_max, imag, block.
+QX_API const char* qx_tdvp_evolve(const char* problem_json, const char* options_json);
+// Ground-state dynamical structure factor data. Block-sparse only: n_qubits >= 3.
+QX_API const char* qx_spectral(const char* problem_json, const char* options_json);
+// Loschmidt echo after a quench to delta_f. Block-sparse only: n_qubits >= 3.
+QX_API const char* qx_loschmidt(const char* problem_json, const char* options_json);
+// Ground-state current-current correlator C(t) = <psi0|J e^{-i(H-E0)t} J|psi0>, whose FFT
+// is the zero-temperature spin conductivity. (The finite-temperature sigma(omega,T) of the
+// purification track is not exposed yet.) Block-sparse only: n_qubits >= 3.
+QX_API const char* qx_conductivity(const char* problem_json, const char* options_json);
+
 #ifdef __cplusplus
 }
 #endif

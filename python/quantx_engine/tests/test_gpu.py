@@ -97,6 +97,18 @@ def test_sv_cnot_entangles():
     np.testing.assert_allclose(probs[[1, 2]], [0.0, 0.0], atol=1e-10)
 
 
+def test_sv_cx_is_cnot():
+    # Circuit emits "CX"; make_sv_executor hands op names straight to apply_gate.
+    states = []
+    for name in ("CNOT", "CX"):
+        sv = GpuStatevector(n_qubits=3, backend="numpy")
+        sv.apply_gate("H", 0)
+        sv.apply_gate("RY", 2, params=[0.4])
+        sv.apply_gate(name, [0, 2])
+        states.append(sv.state())
+    np.testing.assert_allclose(states[1], states[0], atol=1e-12)
+
+
 def test_sv_rx_expectation():
     sv = GpuStatevector(n_qubits=1, backend="numpy")
     theta = 0.7

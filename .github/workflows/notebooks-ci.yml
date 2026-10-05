@@ -44,8 +44,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r notebooks/requirements.txt
+          # The package from THIS checkout first. notebooks/requirements.txt asks for
+          # quantx-engine from PyPI (right for Binder/Colab users); installed the other
+          # way round, pip went looking for it there and the job died on "No matching
+          # distribution found" -- the package was never published. With the local
+          # install already satisfying it, CI tests the notebooks against this commit.
           pip install -e "python/[dev]"
+          pip install -r notebooks/requirements.txt
           pip install "nbmake>=1.4" "nbformat>=5.9" ipykernel
           python -m ipykernel install --user
 

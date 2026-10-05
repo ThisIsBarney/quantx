@@ -173,6 +173,13 @@ int run_command(const std::string& command) {
 
 // Locate the qx_cli executable across supported build layouts.
 std::filesystem::path resolve_qx_cli_executable(const std::filesystem::path& repo_root) {
+#ifdef QX_CLI_PATH
+  // CMake's own record of where it built qx_cli ($<TARGET_FILE:qx_cli>, CMakeLists.txt).
+  // The layouts below are legacy fallbacks; none of them matches a current build.
+  if (std::filesystem::exists(QX_CLI_PATH)) {
+    return std::filesystem::path(QX_CLI_PATH);
+  }
+#endif
 #ifdef _WIN32
   const std::filesystem::path candidates[] = {
       repo_root / "build-nmake-local" / "qx_cli.exe",
