@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
-project(quantx_engine VERSION 0.1.0 LANGUAGES CXX)
+# The version is written in exactly one place, python/quantx_engine/__init__.py, and read
+# here. There used to be three: pyproject said 1.0.0, the package reported 0.4.0 and the
+# engine reported 0.1.0-dev -- so backend_info() contradicted pip about the same install.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/python/quantx_engine/__init__.py" _qx_ver_line
+     REGEX "^__version__ = \"[^\"]+\"")
+string(REGEX REPLACE "^__version__ = \"([^\"]+)\".*" "\\1" QX_VERSION "${_qx_ver_line}")
+if(NOT QX_VERSION)
+  message(FATAL_ERROR "could not read __version__ from python/quantx_engine/__init__.py")
+endif()
+# Re-configure when the version changes; an incremental build would otherwise keep
+# compiling the old one into the engine.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/python/quantx_engine/__init__.py")
+# project(VERSION) takes digits only; a pre-release suffix (1.1.0rc1) stays in QX_VERSION
+string(REGEX MATCH "^[0-9]+(\\.[0-9]+)*" _qx_ver_numeric "${QX_VERSION}")
+project(quantx_engine VERSION ${_qx_ver_numeric} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,7 +47,7 @@ if(NOT spdlog_FOUND)
   include(FetchContent)
   FetchContent_Declare(
     spdlog
-    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.tar.gz
+    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.17.0.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
   FetchContent_MakeAvailable(spdlog)
@@ -167,6 +182,8 @@ add_library(qx_core
   src/entanglement.cpp
   src/json_utils.cpp
 )
+target_compile_definitions(qx_core PRIVATE QX_VERSION_STRING="${QX_VERSION}")
+message(STATUS "QuantX version: ${QX_VERSION}")
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(qx_core

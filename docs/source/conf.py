@@ -14,8 +14,14 @@ sys.path.insert(0, os.path.abspath("../../python"))
 project = "QuantX Engine"
 copyright = "2026, QuantX Contributors"
 author = "QuantX Contributors"
-release = "0.4.0"
-version = "0.4.0"
+# The version is written once, in python/quantx_engine/__init__.py (see RELEASING.md). Read
+# it rather than import the package, which would pull in every SDK module.
+import re as _re
+
+with open(os.path.join(os.path.dirname(__file__), "..", "..", "python", "quantx_engine",
+                       "__init__.py"), encoding="utf-8") as _f:
+    release = _re.search(r'^__version__ = "([^"]+)"', _f.read(), _re.M).group(1)
+version = ".".join(release.split(".")[:2])
 
 # ── General configuration ─────────────────────────────────────────────────────
 
@@ -38,7 +44,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 html_theme = "furo"
 html_static_path = ["_static"]
-html_title = "QuantX Engine 0.4.0"
+html_title = f"QuantX Engine {release}"
 
 html_theme_options = {
     "sidebar_hide_name": False,

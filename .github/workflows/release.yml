@@ -1,27 +1,25 @@
-name: Release (build + optional publish)
+name: Release (GitHub Release notes)
 
-# Build job runs on every version tag push and on manual dispatch — useful for
-# verifying the wheel builds cleanly before you decide to publish.
+# What publishes what -- read this before pushing a tag:
 #
-# PyPI publishing and GitHub Release creation are INTENTIONALLY gated behind
-# a manual workflow_dispatch with publish=true.  Tag pushes alone do NOT
-# trigger publishing.
+#   * PyPI: build-wheels.yml. A pushed v* tag builds the platform wheels and the sdist,
+#     smoke-tests them, and uploads them to PyPI through its `publish` job (trusted
+#     publishing, gated by the `pypi` environment). A tag push IS a PyPI release: an upload
+#     cannot be undone, and PyPI never accepts the same version twice.
+#   * GitHub Release: this workflow, by hand only (Actions -> Release -> Run workflow,
+#     publish=true, tag=vX.Y.Z). It attaches the sdist; the wheels are on PyPI.
 #
-# To release when you are ready:
-#   1. Merge all changes to master
-#   2. git tag v1.0.0 && git push origin v1.0.0   (triggers the build job only)
-#   3. Verify the build artefacts look correct in the Actions summary
-#   4. Go to Actions → Release → Run workflow → set publish=true → Run
-#      (this downloads the artefacts from step 2 and publishes them)
+# The build job below also runs on every tag push, but only builds the sdist and runs
+# twine check on it. It publishes nothing. See RELEASING.md for the whole procedure.
 
 on:
   push:
     tags:
-      - "v*"    # triggers the build job only — no publish
+      - "v*"    # this workflow only builds the sdist; build-wheels.yml publishes to PyPI
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish to PyPI and create GitHub Release (requires a version tag)"
+        description: "Create GitHub Release (requires a version tag; PyPI is published by build-wheels.yml)"
         required: true
         default: "false"
         type: choice
@@ -36,7 +34,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ── Build wheel + sdist (always runs) ────────────────────────────────────
+  # ── Build + check the sdist (always runs; publishes nothing) ─────────────
   build:
     name: Build distribution
     runs-on: ubuntu-latest
@@ -52,8 +50,11 @@ jobs:
       - name: Install build tools
         run: pip install build twine
 
-      - name: Build wheel and sdist
-        run: python -m build python/
+      # sdist only. A wheel from plain `python -m build` carries no native library (the
+      # platform wheels come from cibuildwheel in build-wheels.yml), so it is no release
+      # asset.
+      - name: Build sdist
+        run: python -m build --sdist python/
 
       - name: Verify distributions with twine check
         run: twine check python/dist/*
@@ -66,32 +67,14 @@ jobs:
           if-no-files-found: error
 
   # ── Publish to PyPI (manual only, publish=true required) ─────────────────
-  publish-pypi:
-    name: Publish to PyPI
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
-    environment:
-      name: pypi
-      url: https://pypi.org/p/quantx-engine
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist
-          path: dist/
-
-      - name: Publish to PyPI (OIDC trusted publisher)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          verbose: true
+  # PyPI publishing lives ONLY in build-wheels.yml (native platform wheels + smoke test).
+  # This workflow used to be a second path to PyPI; two publishers for one version race,
+  # and PyPI never allows a filename to be uploaded twice.
 
   # ── Create GitHub Release (manual only, publish=true required) ───────────
   github-release:
     name: Create GitHub Release
-    needs: publish-pypi
+    needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
     permissions:

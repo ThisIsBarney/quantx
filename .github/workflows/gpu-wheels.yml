@@ -1,6 +1,6 @@
 name: GPU Wheels (M168)
 
-# Builds and publishes CUDA 12-accelerated wheels for quantx-engine[gpu].
+# Checks the [gpu] extra of quantx-engine. Publishes nothing.
 #
 # The wheel content itself is identical to the CPU wheel; GPU acceleration
 # is provided at runtime by CuPy (cupy-cuda12x), which is declared as the
@@ -8,10 +8,11 @@ name: GPU Wheels (M168)
 #
 #   1. Builds the standard manylinux wheel with cibuildwheel.
 #   2. Runs GPU-capability unit tests (mock-based, no CUDA hardware needed).
-#   3. On version tags: publishes to PyPI so that
-#        pip install "quantx-engine[gpu]"
-#      installs the wheel + cupy-cuda12x automatically.
+#   3. Smoke-tests `pip install "quantx-engine[gpu]"` from the built wheel.
 #   4. On NVIDIA self-hosted runner (optional): runs a real CuPy smoke test.
+#
+# PyPI publishing lives only in build-wheels.yml (see RELEASING.md), which uploads the
+# same wheel; pip install "quantx-engine[gpu]" adds cupy-cuda12x from its metadata.
 
 on:
   push:
@@ -31,13 +32,6 @@ on:
       - "python/quantx_engine/tests/test_gpu_wheel.py"
       - ".github/workflows/gpu-wheels.yml"
   workflow_dispatch:
-    inputs:
-      publish:
-        description: "Publish to PyPI (only works on a version tag)"
-        required: false
-        default: "false"
-        type: choice
-        options: ["true", "false"]
 
 concurrency:
   group: gpu-wheels-${{ github.ref }}
@@ -158,30 +152,11 @@ jobs:
           print("GPU smoke test PASSED (numpy fallback path)")
           EOF
 
-  # ── Publish to PyPI on version tags ─────────────────────────────────────────
-
-  publish-gpu:
-    name: Publish GPU wheel to PyPI
-    needs: [gpu-unit-tests, build-gpu-wheel, smoke-test-gpu-extra]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    environment:
-      name: pypi
-      url: https://pypi.org/p/quantx-engine
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: gpu-wheel-linux
-          path: dist/
-        continue-on-error: true
-
-      - name: Publish GPU wheel to PyPI (OIDC trusted publisher)
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: dist/
-          verbose: true
+  # No PyPI publish here. This job used to upload a Linux wheel to the SAME project and
+  # version as build-wheels.yml on every v* tag -- same filename, so whichever finished
+  # first won and the other failed, and which Linux wheel users got was a race. PyPI never
+  # lets a filename be re-uploaded, so a lost race is permanent. build-wheels.yml is the
+  # only publisher; a GPU build needs its own distribution name or a separate index.
 
   # ── Real CUDA hardware test (self-hosted NVIDIA runner, optional) ────────────
 

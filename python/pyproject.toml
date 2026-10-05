@@ -1,14 +1,16 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=77", "wheel"]  # >=77: SPDX string for project.license
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantx-engine"
-version = "1.0.0"
+dynamic = ["version"]
 description = "QuantX quantum simulation SDK — 130+ physics modules covering VQE, MBQC, LDPC codes, bosonic qubits, QSVT, dynamical decoupling, and more"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+# SPDX string: the {text = ...} table form is deprecated and setuptools stops accepting it
+# after 2027-02-18.
+license = "MIT"
 authors = [
   {name = "QuantX Contributors"},
 ]
@@ -19,7 +21,6 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
-  "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: Physics",
   "Intended Audience :: Science/Research",
@@ -63,6 +64,11 @@ all = [
 [tool.setuptools]
 packages = ["quantx_engine"]
 
+[tool.setuptools.dynamic]
+# One version, in quantx_engine/__init__.py. pyproject used to say 1.0.0 while the package
+# reported 0.4.0 at runtime.
+version = {attr = "quantx_engine.__version__"}
+
 [tool.setuptools.package-data]
 # Include wheel-bundled native shared libraries so pip-installed packages
 # can load the C++ engine without requiring QUANTX_LIB_PATH to be set.
@@ -76,26 +82,37 @@ quantx_engine = [
 # ── cibuildwheel configuration (M158 / M159) ──────────────────────────────────
 # Run:  cibuildwheel --output-dir wheelhouse python/
 [tool.cibuildwheel]
-# Build CPython 3.10–3.13; skip 32-bit and musl libc.
+# The wheel is py3-none-<platform> (python/setup.py): cibuildwheel builds it for the first
+# identifier, then reuses that same wheel for the others and runs test-command on each.
+# So this list is the set of Pythons the one wheel is TESTED on; skip 32-bit and musl.
 build = "cp310-* cp311-* cp312-* cp313-*"
 skip  = "*-win32 *-manylinux_i686 *-musllinux*"
 
-# Install pybind11 before build so the script can detect and use it.
-# M159: enables zero-copy NumPy paths in _quantx_py extension.
+# cibuildwheel runs from the REPO ROOT with the package dir as its argument, so
+# {project} is the repo root and {package} is python/. The hook used to say
+# {project}/../scripts and {project}/quantx_engine -- one level too high for both, which is
+# why every wheel job failed within a minute ("can't open file .../scripts/...").
+# cmake comes from PyPI so the manylinux image's version does not matter; delvewheel is
+# only used by the Windows repair step below, but installing it everywhere is harmless.
+# pybind11 is deliberately NOT installed: see build_native_for_wheel.py (QX_WHEEL_PYBIND).
 before-build = [
-  "pip install pybind11",
-  "python {project}/../scripts/build_native_for_wheel.py {project}/quantx_engine",
+  "pip install cmake delvewheel",
+  "python {project}/scripts/build_native_for_wheel.py {package}/quantx_engine",
 ]
 
-# Smoke-test the installed wheel: verify native engine + pybind11 fast path.
+# Smoke-test the installed wheel: the native engine must load from the wheel alone, and it
+# must report the same version pip installed (the engine once said 0.1.0-dev inside a
+# package that said 0.4.0, inside a distribution that said 1.0.0).
 test-command = """python -c "
+import quantx_engine
 from quantx_engine import backend_info
 from quantx_engine.engine import Engine
 info = backend_info()
 print('native:', info['native'], '| version:', info['version'])
 print('pybind11:', Engine.pybind11_available())
 assert info['native'], 'Native engine not found in wheel'
-print('M159 smoke test PASSED')
+assert info['version'] == quantx_engine.__version__, (info['version'], quantx_engine.__version__)
+print('wheel smoke test PASSED')
 " """
 
 [tool.cibuildwheel.linux]
@@ -104,10 +121,20 @@ repair-wheel-command = "auditwheel repair -w {dest_dir} {wheel}"
 
 [tool.cibuildwheel.macos]
 archs = ["arm64", "x86_64"]
+# engine.cpp uses std::filesystem, which Apple ships only from macOS 10.15; the default
+# x86_64 deployment target is older, so Apple Clang rejects it as "unavailable". CMake
+# reads this variable for CMAKE_OSX_DEPLOYMENT_TARGET and the wheel tag follows it, so
+# delocate sees a library no newer than its tag. (arm64 starts at 11.0 regardless.)
+environment = { MACOSX_DEPLOYMENT_TARGET = "10.15" }
 repair-wheel-command = "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} -v {wheel}"
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
+# The native library is built with OpenMP, so quantx.dll imports the MSVC OpenMP runtime
+# (vcomp140.dll), which a machine without the VC++ redistributable does not have. CI never
+# notices: its runners have the redistributable. --analyze-existing makes delvewheel vendor
+# the dependencies of DLLs already in the wheel, not only of extension modules.
+repair-wheel-command = "delvewheel repair --analyze-existing -w {dest_dir} {wheel}"
 
 # ── GPU / CUDA 12 wheel overrides (M168) ─────────────────────────────────────
 # When QUANTX_BUILD_CUDA=1 is set in the environment (e.g. by the gpu-wheels
