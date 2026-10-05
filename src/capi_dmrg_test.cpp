@@ -80,6 +80,93 @@ int main() {
         check(r.value("ok", false), "n=4: runs", r);
     }
 
+    // ---- symmetric models and sectors (M4) ------------------------------------
+    // Each model runs in a U(1) sector the caller names, from a product state in that
+    // sector. Every odd Heisenberg chain used to fail: the Neel start sits at 2Sz = +1
+    // while the engine targeted 0 ("sector missing from the bond-space guess").
+    std::printf("\nqx_dmrg_sweep: symmetric models and sectors\n");
+    const json tight = {{"max_bond", 128}, {"n_sweeps", 40}, {"tol", 1e-13}, {"cutoff", 1e-14}};
+    auto energy_of = [&](const json& prob) { return call(qx_dmrg_sweep, prob, tight); };
+    {
+        // Open 5-site chain, Pauli convention: 4 x the S.S ground energy -1.92788625... (ED).
+        json r = energy_of(heis(5));
+        check(r.value("ok", false) && r["sector"] == json{{"sz2", 1}} &&
+              std::abs(r.value("energy", 0.0) - (-7.711545013271978)) < 1e-9,
+              "heisenberg n=5: runs in 2Sz=+1, E matches ED", r);
+        json down = heis(5); down["sector"] = {{"sz2", -1}};
+        json rd = energy_of(down);
+        check(rd.value("ok", false) &&
+              std::abs(rd.value("energy", 0.0) - r.value("energy", 1.0)) < 1e-9,
+              "heisenberg n=5: E(2Sz=-1) == E(2Sz=+1)", rd);
+    }
+    {
+        // Majumdar-Ghosh, J2 = J1/2: exact dimer product, E = -3L/8 in S.S = -12 at L=8
+        // in the Pauli convention.
+        json r = energy_of({{"type", "j1j2"}, {"n_sites", 8}, {"J1", 1.0}, {"J2", 0.5}});
+        check(r.value("ok", false) && std::abs(r.value("energy", 0.0) + 12.0) < 1e-9,
+              "j1j2 Majumdar-Ghosh n=8: E = -12", r);
+    }
+    {
+        // Free fermions: 4 up (the full band, sum 0) + the 3 lowest down levels of
+        // -2 cos(k pi/5), which sum to -(1 + sqrt 5)/2.
+        json r = energy_of({{"type", "hubbard"}, {"n_sites", 4}, {"U", 0.0},
+                            {"sector", {{"n_up", 4}, {"n_dn", 3}}}});
+        check(r.value("ok", false) && r.value("method", "") == std::string("u1xu1") &&
+              std::abs(r.value("energy", 0.0) + (1.0 + std::sqrt(5.0)) / 2.0) < 1e-9,
+              "hubbard U=0 (4 up, 3 dn) on 4 sites: E = -(1+sqrt5)/2", r);
+        json a = energy_of({{"type", "hubbard"}, {"n_sites", 5}, {"U", 2.0},
+                            {"sector", {{"n_up", 2}, {"n_dn", 1}}}});
+        json b = energy_of({{"type", "hubbard"}, {"n_sites", 5}, {"U", 2.0},
+                            {"sector", {{"n_up", 1}, {"n_dn", 2}}}});
+        check(a.value("ok", false) && b.value("ok", false) &&
+              std::abs(a.value("energy", 0.0) - b.value("energy", 1.0)) < 1e-9,
+              "hubbard: E(n_up, n_dn) == E(n_dn, n_up)", b);
+    }
+    {
+        json r = energy_of({{"type", "spin1_heisenberg"}, {"n_sites", 6}});
+        check(r.value("ok", false) && r["sector"] == json{{"sz2", 0}} &&
+              r.value("energy", 0.0) < -7.0, "spin1_heisenberg n=6: runs in 2Sz=0", r);
+    }
+    auto expect_error = [&](const json& prob, const json& opts, const char* text,
+                            const char* what) {
+        json r = call(qx_dmrg_sweep, prob, opts);
+        check(!r.value("ok", true) &&
+              r.value("error", std::string()).find(text) != std::string::npos, what, r);
+    };
+    expect_error({{"type", "xxz"}, {"n_sites", 8}, {"sector", {{"sz2", 1}}}}, tight,
+                 "not reachable", "xxz: an unreachable sector is refused");
+    expect_error({{"type", "hubbard"}, {"n_sites", 2}}, tight, "n_sites must be >= 3",
+                 "hubbard n=2: refused (no dense fallback for a sector)");
+    {
+        json p = heis(6); p["sector"] = {{"sz2", 2}};
+        json o = tight; o["method"] = "su2";
+        expect_error(p, o, "a sector needs the block-sparse",
+                     "a sector with method su2 is refused, not ignored");
+    }
+    expect_error({{"type", "ising"}, {"n_sites", 6}}, tight, "unknown type",
+                 "an unknown type is an error (it used to run as an empty pauli_sum)");
+    // A misspelled or fractional sector key used to leave the default sector in force.
+    expect_error({{"type", "xxz"}, {"n_sites", 8}, {"sector", {{"sz", 1}}}}, tight,
+                 "unknown sector key 'sz'", "a misspelled sector key is refused");
+    expect_error({{"type", "xxz"}, {"n_sites", 8}, {"sector", {{"sz2", 2.5}}}}, tight,
+                 "must be an integer", "a fractional sector value is refused");
+    {
+        // The start state used to alternate spins "while both remain", piling a spin
+        // imbalance's excess at the right end: a path the bond-space guess pruned, so
+        // this sector failed below max_bond 91.
+        json r = call(qx_dmrg_sweep,
+                      {{"type", "hubbard"}, {"n_sites", 32}, {"U", 4.0},
+                       {"sector", {{"n_up", 23}, {"n_dn", 9}}}},
+                      {{"max_bond", 64}, {"n_sweeps", 2}, {"tol", 1e-6}});
+        check(r.value("ok", false), "hubbard L=32 (23 up, 9 dn) runs at max_bond 64", r);
+    }
+    {
+        // The other entry points read n_sites too (they used to read only n_qubits, so a
+        // 2-site request silently ran the default 8 sites).
+        json r = call(qx_spectral, {{"type", "heisenberg"}, {"n_sites", 2}}, json::object());
+        check(says_needs_3(r), "qx_spectral reads n_sites (n_sites=2 is refused)", r);
+    }
+
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");
     return failures ? 1 : 0;
 }

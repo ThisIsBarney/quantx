@@ -62,12 +62,26 @@ QX_API const char* qx_lindblad_sparse_evolve(const char* problem_json,
 QX_API const char* qx_lindblad_sparse_steady(const char* problem_json);
 
 // ── M176: C++ MPS tensor contractions + two-site DMRG ────────────────────────
-// Finds the ground state of a 1D spin-1/2 Hamiltonian via two-site DMRG.
+// Finds the ground state of a 1D open chain via two-site DMRG. The symmetric models
+// run on the block-sparse engine in a fixed U(1) sector; pauli_sum runs dense.
 //
 // problem_json fields:
-//   n_qubits          : int
-//   type              : "heisenberg" | "pauli_sum"
-//   J                 : float   (heisenberg only, default 1.0)
+//   n_sites           : int     (chain length; the legacy key n_qubits is also read)
+//   type              : "heisenberg" | "xxz" | "j1j2" | "spin1_heisenberg" | "hubbard"
+//                       | "pauli_sum" (the default); any other type is an error
+//   Hamiltonians, open boundaries, in each builder's own convention:
+//     heisenberg, xxz   J sum_i [X_i X_{i+1} + Y_i Y_{i+1} + delta Z_i Z_{i+1}]   (Pauli
+//                       matrices, so 4x the S = sigma/2 convention); J, delta default 1
+//     j1j2              sum_i [J1 h_{i,i+1} + J2 h_{i,i+2}], h = XX + YY + delta ZZ
+//                       (Pauli); J1 = 1, J2 = 0, delta = 1
+//     spin1_heisenberg  J sum_i S_i . S_{i+1} with spin-1 operators; J = 1
+//     hubbard           -t sum_{i,s} (c+_{i s} c_{i+1 s} + h.c.) + U sum_i n_{i up} n_{i dn}
+//                       - mu sum_i n_i; t = 1, U = 0, mu = 0
+//   sector            : object, symmetric models only. Spin models: {sz2: 2 Sz_total},
+//                       default the lowest |Sz| (0, or 1 for an odd spin-1/2 chain).
+//                       hubbard: {n_up, n_dn}, default half filling, n_up = ceil(n/2).
+//                       The symmetric models need n_sites >= 3 (heisenberg at n = 2
+//                       falls back to the dense solver, which has no sector).
 //   terms             : [{coeff: float, pauli: "X0X1"}]  (pauli_sum)
 //   hamiltonian_terms : [[coeff, "pauli"]]               (alternative key)
 //
@@ -76,9 +90,13 @@ QX_API const char* qx_lindblad_sparse_steady(const char* problem_json);
 //   cutoff    : float  (SVD truncation weight cutoff, default 1e-10)
 //   n_sweeps  : int    (max sweeps, default 10)
 //   tol       : float  (energy convergence tolerance, default 1e-10)
+//   method    : "u1" (default) | "su2" (heisenberg only; field spin = 0.5, 1, ...)
 //
 // Returns thread-local JSON: {ok, energy, truncation_error, n_sweeps_done,
-//                             wall_time_s, sweep_energies[]}
+//                             wall_time_s, sweep_energies[], n_sites, method,
+//                             sector (symmetric models)}. method names the solver
+//                             that ran: "u1", "u1xu1" (hubbard: N and 2Sz), "su2",
+//                             or "dense".
 QX_API const char* qx_dmrg_sweep(const char* problem_json,
                                   const char* options_json);
 

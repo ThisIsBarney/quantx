@@ -15,6 +15,11 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-native.yml"
+      # The Linux job runs the Python-side gates against this build's library, so a
+      # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/models.py"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/tests/test_models_ed.py"
   pull_request:
     branches: ["master", "main"]
     paths:
@@ -22,6 +27,11 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-native.yml"
+      # The Linux job runs the Python-side gates against this build's library, so a
+      # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/models.py"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/tests/test_models_ed.py"
   workflow_dispatch:
 
 concurrency:
@@ -36,6 +46,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install build tools
         run: |
@@ -92,6 +107,18 @@ jobs:
           assert v, 'version string must be non-empty'
           print('ctypes load test PASSED')
           "
+
+      - name: Symmetric models vs exact diagonalisation (M4 gate)
+        # Solves every quantx_engine.models chain on this build's engine and compares with
+        # an independent ED to 1e-10. The only job that runs Python tests against the
+        # native library; QX_REQUIRE_NATIVE=1 makes a load failure fail the gate
+        # instead of skipping it.
+        env:
+          QX_REQUIRE_NATIVE: "1"
+        run: |
+          python -m pip install -e "python/[dev]"
+          export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
+          python -m pytest python/quantx_engine/tests/test_models_ed.py -v
 
       - name: Upload library artifact
         uses: actions/upload-artifact@v4
