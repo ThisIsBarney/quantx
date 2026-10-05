@@ -11,7 +11,15 @@ PATCH increments are bug-fixes and packaging corrections only.
 
 ## [Unreleased]
 
-*(No changes yet)*
+### Fixed
+
+- `CompositeNoise` no longer drops a channel silently. `to_dict()` merged its models
+  with `dict.update`, so a second `noise`-kind model replaced the first:
+  `CompositeNoise([DepolarizingNoise(...), ThermalRelaxationNoise(...), ReadoutNoise(...)])`
+  ran depolarizing + bit-flip with no T1 channel. Two models that emit the same key
+  (`noise`, `depolarizing_prob`, `amplitude_damping_gamma`, `noise_metadata`, ...) now
+  raise `NoiseModelError` when the composite is built, including through `+`.
+  Depolarizing and amplitude damping still combine with one `noise`-kind model.
 
 ---
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import pytest
 from quantx_engine.noise import (
+    NoiseModel,
     DepolarizingNoise,
     AmplitudeDampingNoise,
     ThermalRelaxationNoise,
@@ -134,7 +135,60 @@ def test_composite_chaining():
     d = n.to_dict()
     assert "depolarizing_prob" in d
     assert "amplitude_damping_gamma" in d
-    assert "noise" in d  # ReadoutNoise wins (last one)
+    assert "noise" in d  # ReadoutNoise is the only noise-kind model
+
+
+def test_composite_depolarizing_plus_thermal_keeps_both_channels():
+    """depolarizing_prob + one noise kind is what the native backend can execute."""
+    import json
+    depol = DepolarizingNoise(0.005)
+    thermal = ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50.0)
+    d = CompositeNoise([depol, thermal]).to_dict()
+    assert d["depolarizing_prob"] == 0.005
+    assert d["noise"] == {"kind": "t1_decay", "T1": 1e5, "dt": 50.0}
+    assert d["noise_metadata"] == thermal.to_dict()["noise_metadata"]
+    assert len(d) == 3
+    assert json.loads(json.dumps(d)) == d  # unchanged through the JSON hop
+    assert (depol + thermal).to_dict() == d
+
+
+def test_composite_second_noise_kind_raises():
+    """ReadoutNoise's bit_flip used to replace the T1 channel without a word."""
+    with pytest.raises(NoiseModelError, match="both emit 'noise'") as excinfo:
+        CompositeNoise([
+            DepolarizingNoise(0.005),
+            ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50.0),
+            ReadoutNoise(0.02),
+        ])
+    assert "'t1_decay' and 'bit_flip'" in str(excinfo.value)
+
+
+def test_composite_plus_operator_refuses_second_noise_kind():
+    thermal = ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50.0)
+    with pytest.raises(NoiseModelError, match="both emit 'noise'"):
+        thermal + ReadoutNoise(0.02)
+    with pytest.raises(NoiseModelError, match="both emit 'noise'"):
+        (DepolarizingNoise(0.005) + thermal) + ReadoutNoise(0.02)
+    with pytest.raises(NoiseModelError, match="both emit 'noise'"):
+        ReadoutNoise(0.02) + (DepolarizingNoise(0.005) + thermal)
+
+
+class _MetadataOnlyNoise(NoiseModel):
+    """Emits only noise_metadata, which no shipped model does on its own."""
+
+    def to_dict(self):
+        return {"noise_metadata": {"note": "custom"}}
+
+
+@pytest.mark.parametrize("models, key", [
+    ([ReadoutNoise(0.01), ReadoutNoise(0.02)], "noise"),
+    ([DepolarizingNoise(0.01), DepolarizingNoise(0.02)], "depolarizing_prob"),
+    ([AmplitudeDampingNoise(0.01), AmplitudeDampingNoise(0.02)], "amplitude_damping_gamma"),
+    ([ThermalRelaxationNoise(1e5, 6e4, 50.0), _MetadataOnlyNoise()], "noise_metadata"),
+])
+def test_composite_refuses_any_shared_key(models, key):
+    with pytest.raises(NoiseModelError, match=f"both emit '{key}'"):
+        CompositeNoise(models)
 
 
 def test_composite_empty_raises():

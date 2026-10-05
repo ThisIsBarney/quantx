@@ -19,7 +19,8 @@ Supported noise models and their native backend mapping:
                           backend does not yet apply T2 dephasing)
 - ReadoutNoise          — emits ``noise={kind:bit_flip,prob:p}`` (supported as
                           bit-flip channel, not measurement-specific readout)
-- CompositeNoise        — combine multiple noise models (fields merged)
+- CompositeNoise        — combine models whose fields are disjoint: at most one
+                          ``noise``-kind model, and any shared key raises
 
 References
 ----------
@@ -244,13 +245,45 @@ class ReadoutNoise(NoiseModel):
 class CompositeNoise(NoiseModel):
     """Combination of multiple noise models applied simultaneously.
 
-    All noise models are merged into a single dict. Later models override
-    earlier ones if they share the same key.
+    ``to_dict()`` is the union of the models' payloads, so the models must
+    emit disjoint keys.  If two models emit the same key, building the
+    composite (constructor or ``+``) raises :class:`NoiseModelError`; no entry
+    is ever silently replaced.
+
+    In practice this allows **at most one** ``noise``-kind model per
+    composite.  :class:`ThermalRelaxationNoise` (``t1_decay``) and
+    :class:`ReadoutNoise` (``bit_flip``) both put their channel under the
+    single key ``noise``, because the native backend parses exactly one
+    ``noise`` object per circuit (``parse_noise_config`` in
+    ``src/json_utils.cpp``).  A second one has no slot to go to: merging the
+    two would drop a channel.  :class:`DepolarizingNoise` and
+    :class:`AmplitudeDampingNoise` emit the top-level fields
+    ``depolarizing_prob`` and ``amplitude_damping_gamma``, which the backend
+    applies alongside the ``noise`` channel, so they combine with each other
+    and with one ``noise``-kind model::
+
+        CompositeNoise([DepolarizingNoise(0.005),
+                        ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50)])  # ok
+        CompositeNoise([ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50),
+                        ReadoutNoise(0.02)])     # NoiseModelError: both emit "noise"
+
+    Every key is checked, not only ``noise``.  Each top-level field holds one
+    value per circuit, so two :class:`DepolarizingNoise` models collide on
+    ``depolarizing_prob`` (build one model instead).  ``noise_metadata`` is
+    checked as well: the native backend ignores it, but the density-matrix
+    simulator in :mod:`quantx_engine.primitives` falls back to its ``gamma``
+    as the amplitude-damping rate.
 
     Parameters
     ----------
     models:
         List of NoiseModel instances to combine.
+
+    Raises
+    ------
+    NoiseModelError
+        If ``models`` is empty, holds a non-NoiseModel, or two models emit
+        the same key.
     """
 
     def __init__(self, models: list[NoiseModel]):
@@ -260,19 +293,48 @@ class CompositeNoise(NoiseModel):
             if not isinstance(m, NoiseModel):
                 raise NoiseModelError(f"expected NoiseModel, got {type(m).__name__}")
         self._models = list(models)
+        self._merged()  # refuse colliding models here, not when the circuit is run
 
     @property
     def models(self) -> list[NoiseModel]:
         return list(self._models)
 
     def to_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for m in self._models:
-            result.update(m.to_dict())
-        return result
+        return self._merged()
 
     def __add__(self, other: NoiseModel) -> "CompositeNoise":
         return CompositeNoise(self._models + [other])
+
+    def _merged(self) -> dict[str, Any]:
+        """Union of the models' payloads; NoiseModelError if two share a key."""
+        merged: dict[str, Any] = {}
+        owner: dict[str, int] = {}
+        for i, m in enumerate(self._models):
+            for key, value in m.to_dict().items():
+                if key not in merged:
+                    merged[key] = value
+                    owner[key] = i
+                    continue
+                j = owner[key]
+                pair = (
+                    f"{type(self._models[j]).__name__} (models[{j}]) and "
+                    f"{type(m).__name__} (models[{i}]) both emit {key!r}"
+                )
+                if key == "noise":
+                    kinds = [v.get("kind") if isinstance(v, dict) else None
+                             for v in (merged[key], value)]
+                    raise NoiseModelError(
+                        f"{pair} (kinds {kinds[0]!r} and {kinds[1]!r}); the native "
+                        "backend executes one 'noise' channel per circuit, so one would "
+                        "be silently dropped. Use at most one noise-kind model per "
+                        "CompositeNoise; DepolarizingNoise and AmplitudeDampingNoise "
+                        "use their own fields and combine with it."
+                    )
+                raise NoiseModelError(
+                    f"{pair}; a circuit holds one value per key, so one would be "
+                    "silently dropped. Use a single model instead."
+                )
+        return merged
 
 
 # ---------------------------------------------------------------------------
