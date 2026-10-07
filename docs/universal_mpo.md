@@ -963,11 +963,16 @@ nothing about the function:
 
 | h | 10⁻² | 10⁻³ | 10⁻⁴ | **10⁻⁵** | 10⁻⁶ | 10⁻⁷ |
 |---|---|---|---|---|---|---|
-| error estimate | 1.3e-3 | 1.3e-5 | 1.3e-7 | **1.7e-9** | 8.3e-9 | 4.1e-8 |
+| W=1 chain | 1.3e-3 | 1.3e-5 | 1.3e-7 | **1.2e-9** | 8.3e-9 | 4.1e-8 |
+| W=3 cylinder | 2.3e-4 | 2.3e-6 | 2.3e-8 | **1.7e-9** | 5.3e-9 | 7.7e-8 |
 
 Three decades of clean h² scaling and then a turnaround as roundoff takes over: h = 10⁻⁵
-is the optimum and **1.7e-9** is the floor. Every row below sits at least **5.4e8 ×**
-above it, so nothing here is noise. The energy needs no separate validation — the circuit
+is the optimum, and the worst floor over the three widths — **1.7e-9** — is the one every
+row is measured against. (An earlier version of this table printed one row that was five
+cells of the chain and one of the cylinder; the series are separate because the floor is
+a max over widths while the h-scaling is per width.) The least favourable row of the
+**depth** scan sits **5.4e8 ×** above the floor and the least favourable row of the
+**size** scan **1.8e8 ×**, so nothing here is noise. The energy needs no separate validation — the circuit
 is already pinned against a dense state-vector reference at 1e-12 for all three widths
 (`qx_hubbard_test` section r), and the gradient is a finite difference *of* that energy.
 
@@ -986,9 +991,14 @@ frac = (E₀ − E)/(E₀ − E_exact), the same quantity part E ranks the width
 | W=2 ladder | 1.988 | 1.632 | 1.876 | 1.383 | 1.444 | 1.372 |
 | W=3 cylinder | 1.920 | 0.887 | 0.569 | 0.454 | 0.388 | 0.390 |
 | ratio W3/W1 | 0.34 | 0.35 | 0.32 | 0.30 | 0.34 | 0.35 |
+| ratio W3/W1, raw ∂E/∂θ | 0.17 | 0.17 | 0.16 | 0.15 | 0.17 | 0.18 |
 
-**The cylinder's landscape is genuinely flatter, by a depth-independent factor of ~3.**
-The ratio sits at 0.30–0.35 with a measured 2σ of ±0.03 at every depth — six independent
+**The cylinder's landscape is genuinely flatter, by a depth-independent factor.** The
+suppression is there in *both* normalisations — ×0.30–0.35 on the dimensionless cost and
+×0.15–0.18 on the raw ∂E/∂θ — so it is not an artefact of either. (Raw is the stronger
+reading because the cylinder's correlation energy is the largest of the three; the
+dimensionless figure is the conservative one and is what the text quotes.)
+The ratio sits at 0.30–0.35 with a measured 2σ of ±0.05–0.06 at every depth — six independent
 confirmations of the same constant. So part E's width penalty does have a real
 trainability component.
 
@@ -997,73 +1007,64 @@ trainability component.
 indistinguishable from it at p=6 and p=8. The width ordering fails in gradient variance
 exactly as it failed in entropy, and with W=2 the outlier both times.
 
-#### Is it a barren plateau? What the size axis can and cannot say
+#### The size axis cannot answer it — and the first version of this section thought it had
 
-At a single size a constant factor and `e^{−an}` evaluated there are the same number, so
-only a size scan can use the term. Holding p=8 and growing n:
+A barren plateau is `Var ~ e^{−an}`, so only a size scan can use the term. This study ran
+one, read a decay off it, and was wrong: **the decay was a normalisation it had put there
+itself.**
 
-| n (even, 2Sz=0) | 4 | 6 | 8 | 10 |
+`var_frac = var_raw / corr²` with `corr = E₀ − E_exact`, the correlation energy — an
+**extensive** quantity. Measured: `corr/n` = 0.370, 0.351, 0.340, 0.333 at n = 4, 6, 8,
+10, i.e. flat, so `corr²` grows like n² and `var_frac` carries a built-in **1/n²**. That
+normalisation is exactly what makes the three *widths* comparable at fixed n — each
+geometry against its own correlation energy — and it is exactly what must not be carried
+across n. The raw quantity is in the same CSV:
+
+| W=1 chain, even n | n=4 | n=6 | n=8 | n=10 |
 |---|---|---|---|---|
-| W=1 chain | 9.308 | 1.559 | 0.578 | 0.443 |
-| W=2 ladder | 7.987 | 1.649 | 0.968 | 0.099 |
+| raw Var[∂E/∂θ] | 20.415 | 6.906 | 4.271 | **4.902** |
+| local rate (raw) | | +0.54 | +0.24 | **−0.07** |
+| Var[∂frac/∂θ] | 9.308 | 1.559 | 0.578 | 0.443 |
+| local rate (frac) | | +0.89 | +0.50 | +0.13 |
 
-The variance does fall with n. But the **local** decay rate — `ln(v_i/v_{i+1})/Δn`, which
-an exponential holds constant — collapses along the series:
+**The raw gradient variance is flat from n=6 and rises at n=10.** The odd-n series, a
+different charge sector sampled separately, agrees: raw local rates +0.25, +0.03, −0.10.
+So over the sizes this box can reach there is **no decay to characterise**, and the
+"finite-size crossover" this section previously reported was an artefact of dividing by an
+extensive cost. A straight line through the `frac` series returns `a = +0.506 ± 0.120` per
+site; it is not an exponent, because the series it fits carries the cost's own 1/n².
 
-| local rate a | n 4→6 | n 6→8 | n 8→10 |
-|---|---|---|---|
-| W=1 chain | +0.89 | +0.50 | **+0.13** |
-| W=1 chain (odd n, 2Sz=1) | +0.59 | +0.28 | **+0.10** |
-| W=2 ladder | +0.79 | +0.27 | +1.14 |
+A second, smaller size-dependence sits on top: θ_g drives group 0, which holds
+**2, 3, 4, 5 bonds at n = 4…10**, so ‖H_g‖ grows like n/2. The previous version of this section
+divided *that* out — three ways — while leaving the n² factor it had introduced itself,
+which is the harder mistake to notice: the correction that was made was real, and it
+made the undetected one look handled. `analyze_vqe_barren.py` now reports the raw series
+first, bases its verdict on it, and prints `NO DECAY TO CHARACTERISE` where that is what
+the data says.
 
-The chain's rate falls by **×6.7**, and the odd-n series — a different charge sector,
-separately sampled — reproduces the same collapse independently.
+**What the size axis does and does not license:**
 
-Part of that collapse is the instrument, not the landscape. The derivative is taken with
-respect to group 0's angle, and group 0 drives 2, 3, 4, 5 bonds at n = 4–10: the
-generator grows with n, so the variance carries a size-dependent generator-norm factor,
-and a polynomial factor makes exactly this kind of collapsing local rate. Dividing it
-out, by the generator's Hilbert-Schmidt norm squared (∝ bonds, nb) or its operator norm
-squared (∝ nb²):
+* It does **not** show a barren plateau, and it does **not** rule one out. Neither
+  direction is available from a series that is not monotone.
+* The depth-scan result above is untouched by this. It compares three geometries at a
+  *single* n, where `corr²` is a per-geometry constant rather than a function of the
+  variable being scanned — and it holds in raw units too.
+* The cylinder, the only geometry with the suppression, has **one** even-n point (n=6;
+  n=9 is odd, hence the 2Sz=1 sector). It never had a size axis at all.
 
-| normalised local rate | n 4→6 | n 6→8 | n 8→10 |
-|---|---|---|---|
-| W=1 chain ÷ nb | +1.10 | +0.64 | +0.24 |
-| W=1 chain ÷ nb² | +1.30 | +0.78 | +0.36 |
-| W=1 chain (odd n) ÷ nb | +0.79 | +0.42 | +0.21 |
-| W=1 chain (odd n) ÷ nb² | +1.00 | +0.56 | +0.32 |
-| W=2 ladder ÷ nb | +0.99 | +0.41 | +1.25 |
-| W=2 ladder ÷ nb² | +1.19 | +0.55 | +1.36 |
+*What would settle it.* Differentiate a **fixed single bond**, which removes the
+generator factor, and report raw ∂E/∂θ per bond, which removes the cost factor. Then the
+quantity being compared across n is the same operator throughout. Sizes are limited to
+where a lossless χ = 4^(n/2) still fits — n ≤ 10 here, since n=12 needs χ=4096 at d=4 and
+~1 GB per tensor for state preparation alone. That is a re-run, not a reanalysis, and it
+is not in this PR.
 
-The chain's rate still falls by **×4.5** and **×3.6** (odd n: ×3.8 and ×3.1), so over
-n = 4–10 its decay is not a single exponential under any of the three, which is
-consistent with a finite-size crossover, by a smaller margin than the raw ×6.7
-suggested. The ladder's normalised rates spread by only ×2.5, so it neither supports nor
-rules out an exponential. A derivative with respect to one fixed bond would remove the
-confound entirely; that was not run. A straight line through the raw chain series would
-return
-`a = +0.506 ± 0.120` per site, an entirely respectable-looking exponent with a
-respectable-looking error bar, and it would be a fabricated measurement;
-`analyze_vqe_barren.py` refuses to quote it and says why.
-
-**Three limits, stated rather than absorbed:**
-
-* **The cylinder has no size axis here.** W=3 needs n divisible by 3, which leaves n=6
-  and n=9 — and n=9 is odd, so it sits in the 2Sz=1 sector. One even-n point supports no
-  rate at all. Whether the cylinder's ×3 *grows* with n — the only thing that would make
-  it a barren plateau — is therefore **unanswered**, not answered negatively. n=12 needs
-  χ = 4⁶ = 4096 at d=4, where state preparation alone is ~1 GB per tensor and out of
-  reach on this box; the scan records the skip with that reason rather than omitting the
-  row.
-* **The W=2 n=10 point breaks its own trend** (local rate 1.14 after 0.27). χ=1024 is
-  lossless at n=10, so it is not truncation. It is flagged, not smoothed.
-* **Error bars are measured, not assumed.** `Var[s²] = (μ₄ − μ₂²)/N`; the familiar
-  `s²√(2/N)` is that formula with a Gaussian substituted in, and understating the error is
-  the direction that promotes noise to significance. Measured here: 4.5–6.8 % relative,
-  against 4.7 % for the Gaussian — close, but checked rather than hoped.
-
-*What would settle it.* The cylinder at n=12 (24 qubits, χ=4096) plus n=15, giving three
-even-n points, is the minimum for a rate. One circuit evaluation at W=3 n=9 χ=256 already
-costs 0.34 s and 300 samples need 600 of them; n=12 is roughly two orders of magnitude
-worse per evaluation. That is a GPU-resident or truncated study, and a truncated one
-changes what is being measured — which is the same reason part E stopped at 12 qubits.
+*Instrument notes.* Error bars are measured, not assumed: `Var[s²] = (μ₄ − μ₂²)/N`, where
+the familiar `s²√(2/N)` is that formula with a Gaussian substituted in, and understating
+the error promotes noise to significance. Measured 4.5–6.8 % relative on the depth scan
+against 4.7 % for the Gaussian; on the size scan 7.8–17.2 % against 8.2 %, i.e. up to
+2.1× the Gaussian claim — the heavy-tailed case the Gaussian form hides. The size axis
+also measures cost before spending it: each point times one circuit evaluation and skips
+itself, printing the projected cost, if the sample would not finish in budget, with the χ
+gate ahead of the timing probe because reaching the probe means preparing a state at that
+χ first.

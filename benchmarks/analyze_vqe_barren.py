@@ -107,27 +107,43 @@ snr_min = min(float(r["snr"]) for r in D)
 print(f"\n  worst signal-to-noise over all rows: {snr_min:.3g}x the finite-difference floor")
 
 # ---- size axis --------------------------------------------------------------
-print("\n\nSIZE AXIS  (the only thing that can distinguish a plateau from a factor)")
+print("\n\nSIZE AXIS  (and why it settles nothing -- read the normalisation note)")
 S = load("vqe_barren_size.csv")
 Ns = int(S[0]["nsamp"])
-print(f"  {Ns} samples/point, {math.sqrt(2.0/Ns):.1%} SE per variance\n")
+smeas = [float(r["se_frac"]) / float(r["var_frac"]) for r in S]
+print(f"  {Ns} samples/point, measured SE {min(smeas):.1%}-{max(smeas):.1%} per "
+      f"variance (a Gaussian would claim {math.sqrt(2.0/Ns):.1%})")
+print()
 print("    W    n  qubits   chi    Var[dfrac/dtheta]   sector")
 for r in sorted(S, key=lambda r: (int(r["W"]), int(r["n"]))):
     n = int(r["n"])
     print(f"  {int(r['W']):3d} {n:4d} {int(r['qubits']):7d} {int(r['chi']):5d}   "
           f"{float(r['var_frac']):16.5f}   2Sz={n % 2}")
 
-# The derivative is taken with respect to group 0's angle, and group 0 drives nb_g0
-# bonds -- 2, 3, 4, 5 at n = 4..10 on the chain. So the generator grows with n, and the
-# variance carries a size-dependent generator-norm factor that a polynomial can turn
-# into exactly the collapsing local rates this test looks for (a review's point). Every
-# series is therefore checked three ways: raw, with the generator's Hilbert-Schmidt
-# norm squared divided out (/ nb_g0), and with its operator norm squared (/ nb_g0^2).
-NORMS = ((0, "raw"), (1, "/ nb_g0"), (2, "/ nb_g0^2"))
+# TWO size-dependent factors sit between var_frac and anything a reader would call
+# "the gradient variance of this ansatz at size n", and BOTH have to come out before a
+# decay rate means anything.
+#
+#  (a) The cost. var_frac = var_raw / corr^2 with corr = E_psi0 - E_exact, the
+#      correlation energy -- an EXTENSIVE quantity. corr/n is 0.370, 0.351, 0.340, 0.333
+#      at n = 4, 6, 8, 10, i.e. flat, so corr^2 grows like n^2 and var_frac carries a
+#      built-in 1/n^2. That normalisation is what makes the three WIDTHS comparable at
+#      fixed n -- each geometry's own correlation energy -- and it is exactly what must
+#      not be carried ACROSS n. Using it there manufactures a decay.
+#  (b) The generator. theta_g drives group 0, which holds nb_g0 bonds: 2, 3, 4, 5 at
+#      n = 4..10. So ||H_g|| grows like n/2 on top of (a).
+#
+# var_raw is the un-normalised quantity and it is in the same CSV. Reported first, and
+# it does not decay: the chain is flat from n=6 and RISES at n=10. Everything downstream
+# of that is a statement about the normalisation, not about trainability.
+NORMS = ((None, 0, "raw dE/dtheta"), (None, 1, "raw / nb_g0"),
+         ("frac", 0, "frac (1/n^2 in it)"), ("frac", 1, "frac / nb_g0"),
+         ("frac", 2, "frac / nb_g0^2"))
 
 
-def size_series(w, parity, k):
-    return sorted((int(r["n"]), float(r["var_frac"]) / int(r["nb_g0"]) ** k) for r in S
+def size_series(w, parity, k, cost=None):
+    col = "var_frac" if cost == "frac" else "var_raw"
+    return sorted((int(r["n"]), float(r[col]) / int(r["nb_g0"]) ** k) for r in S
                   if int(r["W"]) == w and int(r["n"]) % 2 == parity)
 
 
@@ -140,21 +156,32 @@ def judge(w, parity):
         print(f"    {label:28s}: NOT FITTABLE -- {len(pts0)} point(s) (n = {have}); "
               f"a rate needs at least 3")
         return None
-    spreads = []
-    for k, name in NORMS:
-        lr = local_rates(size_series(w, parity, k))
-        spread = max(lr) / min(lr) if min(lr) > 0 else float("inf")
-        spreads.append(spread)
-        print(f"    {label:28s} {name:9s}: local rates "
-              f"{' '.join(f'{r:+.2f}' for r in lr)}   (spread x{spread:.1f})")
-    if all(sp > 3.0 for sp in spreads):
-        print(f"      -> NOT a single exponential under any normalisation: the rate "
-              f"varies by x{min(spreads):.1f} even at best.")
-        return False
-    print(f"      -> INCONCLUSIVE: under at least one normalisation the rates vary by "
-          f"only x{min(spreads):.1f}, so this series neither supports nor rules out an "
-          f"exponential.")
-    return True
+    raw_rates = None
+    for cost, k, name in NORMS:
+        lr = local_rates(size_series(w, parity, k, cost))
+        if cost is None and k == 0:
+            raw_rates = lr
+        spread = (max(lr) / min(lr)) if min(lr) > 0 else float("inf")
+        tag = "" if min(lr) > 0 else "   <-- NOT monotone: a rate <= 0 means the variance RISES"
+        print(f"    {label:28s} {name:19s}: local rates "
+              f"{' '.join(f'{r:+.2f}' for r in lr)}   (spread x{spread:.1f}){tag}")
+    # The verdict rests on the RAW series. A decay that only appears after dividing by an
+    # extensive cost is a property of the divisor.
+    if min(raw_rates) <= 0:
+        print(f"      -> NO DECAY TO CHARACTERISE: the raw gradient variance does not "
+              f"fall monotonically with n (a local rate is {min(raw_rates):+.2f}), so "
+              f"this series")
+        print(f"         supports no statement about exponential decay in either "
+              f"direction. The fall seen in `frac` is the 1/n^2 the cost carries.")
+        return "no-decay"
+    spread = max(raw_rates) / min(raw_rates)
+    if spread > 3.0:
+        print(f"      -> raw variance falls, but NOT as a single exponential: the rate "
+              f"varies by x{spread:.1f}.")
+        return "not-exponential"
+    print(f"      -> raw variance falls with a roughly constant rate (spread "
+          f"x{spread:.1f}); an exponent would be defensible here.")
+    return "exponential"
 
 
 print("\n  decay rate a in Var ~ exp(-a n), per width and charge sector:")
@@ -164,18 +191,35 @@ for w in ws:
         v = judge(w, parity)
         if v is not None:
             verdicts[(w, parity)] = v
-pts0 = size_series(1, 0, 0)
+pts0 = size_series(1, 0, 0, "frac")
 if len(pts0) >= 3:
     f = fit_loglin([n for n, _ in pts0], [v for _, v in pts0])
     if f:
-        print(f"\n  A straight-line fit through the raw chain series would return "
-              f"a = {f[0]:+.3f} +/- {f[1]:.3f} per site.")
-        print("  It is not quoted as an exponent: the local rates above are not constant.")
+        print(f"\n  A straight-line fit through the frac-normalised chain series would "
+              f"return a = {f[0]:+.3f} +/- {f[1]:.3f} per site. It is not an exponent:")
+        print(f"  the series it fits carries the cost's own 1/n^2.")
+
+# The summary is DERIVED. An earlier version ended in eight hard-coded sentences
+# asserting the study's conclusions while the computed verdicts went unread -- the exact
+# stale-claim failure mode check_vqe_doc.py exists to prevent, reintroduced in the
+# script whose stated purpose is that the distinction be drawn by arithmetic.
 print()
-print("  The variance falls with n at every width that has a size axis. For the chain,")
-print("  the local rate collapses under every normalisation, so its decay over n <= 10 is")
-print("  not a single exponential -- consistent with a finite-size crossover. A")
-print("  derivative with respect to a fixed single bond would remove the generator-norm")
-print("  confound entirely; it was not run. The cylinder -- the only width with the")
-print("  persistent suppression -- has one even-n point, so for it the question stays")
-print("  open. n <= 10 is where this box stops (chi = 4^(n/2) lossless).")
+tally = {}
+for v in verdicts.values():
+    tally[v] = tally.get(v, 0) + 1
+print(f"  SIZE-AXIS VERDICT over {len(verdicts)} fittable series: " +
+      ", ".join(f"{k} x{v}" for k, v in sorted(tally.items())))
+if tally.get("no-decay"):
+    print(f"  {tally['no-decay']} of them show NO monotone decay in the raw gradient")
+    print("  variance, so this size axis cannot be used to claim a barren plateau OR to")
+    print("  rule one out. Any decay quoted from `frac` is the extensive cost's 1/n^2.")
+nofit = [f"W={w}" + ("" if par == 0 else " odd") for w in ws for par in (0, 1)
+         if (w, par) not in verdicts and
+         any(int(r["W"]) == w and int(r["n"]) % 2 == par for r in S)]
+if nofit:
+    print(f"  Series with too few points to fit at all: {', '.join(nofit)}.")
+print("  What would fix it: differentiate a FIXED single bond (removes the generator "
+      "factor)")
+print("  and report dE/dtheta per bond (removes the cost factor), at sizes a lossless "
+      "chi = 4^(n/2)")
+print("  can still reach -- n <= 10 on this box.")

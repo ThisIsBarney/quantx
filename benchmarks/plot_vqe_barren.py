@@ -58,7 +58,12 @@ s = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
 
 vals = [v for w in widths for p in depths if (v := var(w, p))]
 vals = [v for v in vals if v > 0]
-lo = 10 ** math.floor(math.log10(min(vals + [floor_var]) if floor_var > 0 else min(vals)))
+# The axis is set by the DATA. floor_var is the squared noise floor -- snr ~ 5e8 means it
+# sits ~3e17 below the points -- so including it gave a 19-decade axis in which all 18
+# points occupied ~17 px of a 280 px panel, the x3 cylinder suppression read as a 10 px
+# offset, and the 2-sigma bars were thinner than the polyline. The floor line is drawn
+# only when it is actually on the plot; otherwise the caption states the snr instead.
+lo = 10 ** math.floor(math.log10(min(vals)))
 hi = 10 ** math.ceil(math.log10(max(vals)))
 lo_clip = lo
 

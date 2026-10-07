@@ -303,51 +303,77 @@ for w in ws:
                      f"(qubits={r['qubits']} chi={r['chi']} trunc={r['trunc']})")
 
 # ---- part F: the barren-plateau diagnostic ----------------------------------
-# Part E's own new prose slipped a claim past this script once (p=1 "frac = 0.0000 at
-# all three widths" while the CSV said 0.0002 for the cylinder). The lesson was not
-# "write a checker" -- it was "extend it to every new claim" -- so part F's table, its
-# ratios, its calibration row, its local decay rates and the exponent it REFUSES to
-# quote are all asserted here.
+# Part E's prose once slipped a claim past this script, and part F then slipped a bigger
+# one past a first review: the size-axis "decay" was the 1/n^2 of an extensive cost
+# normalisation. So the assertions below pin the things that went wrong, not only the
+# things that looked checkable -- the raw series next to the normalised one, the cost
+# denominator's extensivity, both CSVs' signal-to-noise, and the 2-sigma the prose quotes.
 F = load("vqe_barren.csv", ("W", "p"))
 FS = load("vqe_barren_size.csv", ("W", "n"))
 fws = sorted({w for (w, _) in F})
 fps = sorted({p for (_, p) in F})
 
 
-def fcells(fmt, p_):
-    return " | ".join(fmt(F[(w, p_)]) for w in fws if (w, p_) in F)
-
-
-def frow(label, w, fmt):
+def frow(label, w, fmt, table):
     want = [fmt(F[(w, p_)]) for p_ in fps if (w, p_) in F]
-    got = row_in_table("Var[&#8706;frac", f"| {label} |") or           row_in_table("Var[∂frac", f"| {label} |")
+    got = row_in_table(table, f"| {label} |")
     if got is None:
-        fails.append(f"part F {label} row: row not found in the depth table")
-    elif got[1:] != want:
+        fails.append(f"part F {label} row: not found in the table matching {table!r}")
+    elif [norm(c) for c in got[1:]] != [norm(c) for c in want]:
         fails.append(f"part F {label} row: doc {got[1:]} vs csv {want}")
 
 
-frow("W=1 chain", 1, lambda r: format(float(r["var_frac"]), ".3f"))
-frow("W=2 ladder", 2, lambda r: format(float(r["var_frac"]), ".3f"))
-frow("W=3 cylinder", 3, lambda r: format(float(r["var_frac"]), ".3f"))
-ratios = " | ".join(
-    format(float(F[(3, p_)]["var_frac"]) / float(F[(1, p_)]["var_frac"]), ".2f")
-    for p_ in fps if (3, p_) in F and (1, p_) in F)
-expect("part F ratio row", f"| ratio W3/W1 | {ratios} |")
+DEPTH_TBL = "Var[\u2202frac/\u2202\u03b8] | p=2"
 
-# the instrument: floor, worst signal-to-noise, and the group-size confound
+
+def norm(c):
+    """The doc sets minus as U+2212 while we format with an ASCII hyphen, and bold
+    markers are presentation. Normalise both before comparing cells, or the checker
+    enforces typography instead of numbers."""
+    return c.replace("\u2212", "-").replace("*", "").strip()
+
+frow("W=1 chain", 1, lambda r: format(float(r["var_frac"]), ".3f"), DEPTH_TBL)
+frow("W=2 ladder", 2, lambda r: format(float(r["var_frac"]), ".3f"), DEPTH_TBL)
+frow("W=3 cylinder", 3, lambda r: format(float(r["var_frac"]), ".3f"), DEPTH_TBL)
+for lbl, col in (("ratio W3/W1", "var_frac"),
+                 ("ratio W3/W1, raw \u2202E/\u2202\u03b8", "var_raw")):
+    cells = " | ".join(format(float(F[(3, p_)][col]) / float(F[(1, p_)][col]), ".2f")
+                       for p_ in fps if (3, p_) in F and (1, p_) in F)
+    expect(f"part F {lbl} row", f"| {lbl} | {cells} |")
+
+# the instrument -- floor, and the worst SNR of EACH csv (the old check used the depth
+# csv only, and certified a "5.4e8" bound that a committed size row violated at 1.8e8)
 floor = float(F[(fws[0], fps[0])]["floor"])
-expect("part F noise floor", f"and **{floor:.1e}** is the floor".replace("e-0", "e-"))
-snr_min = min(float(r["snr"]) for r in F.values())
-expect("part F worst snr", f"at least **{snr_min:.1e} ×**".replace("e+0", "e"))
-g0 = {int(r["nb_g0"]) for r in F.values()}
-if len(g0) != 1:
-    fails.append(f"part F: group-0 bond counts differ across widths ({sorted(g0)}), so "
-                 f"the doc's claim that the generator norm is identical is false")
-else:
-    expect("part F group size", f"holds **{g0.pop()} bonds at every width**")
+expect("part F noise floor", f"**{floor:.1e}** \u2014 is the one".replace("e-0", "e-"))
+for lbl, tbl in (("depth", F), ("size", FS)):
+    m = min(float(r["snr"]) for r in tbl.values())
+    expect(f"part F worst snr ({lbl})", f"**{m:.1e} \u00d7**".replace("e+0", "e"))
 
-# the cylinder's suppression must be significant at EVERY depth, or the prose is wrong
+# the Richardson calibration rows are stdout-only, so parse the committed log rather
+# than leaving the one table in this section that nothing verified
+cal = {}
+log = os.path.join(HERE, "vqe_barren.log")
+if os.path.exists(log):
+    for line in open(log, encoding="utf-8", errors="replace"):
+        if line.startswith("CAL "):
+            _, w_, h_, _g, err = line.split()
+            cal.setdefault(int(w_), []).append((float(h_), float(err)))
+    for w_, name in ((1, "W=1 chain"), (3, "W=3 cylinder")):
+        if w_ not in cal:
+            continue
+        want = [f"{e:.1e}".replace("e-0", "e-") for _h, e in cal[w_]]
+        got = row_in_table("| h |", f"| {name} |")
+        if got is None:
+            fails.append(f"part F calibration row {name}: not found")
+        elif got[1:] != want:
+            fails.append(f"part F calibration row {name}: doc {got[1:]} vs log {want}")
+else:
+    fails.append("part F: benchmarks/vqe_barren.log is missing, so the calibration "
+                 "table in the doc is unverifiable")
+
+# the cylinder's suppression: significant at every depth, and the 2-SIGMA the doc quotes
+# (the first version printed 1 sigma and labelled it 2)
+sig2 = []
 for p_ in fps:
     if (3, p_) not in F or (1, p_) not in F:
         continue
@@ -355,90 +381,107 @@ for p_ in fps:
     e3, e1 = float(F[(3, p_)]["se_frac"]), float(F[(1, p_)]["se_frac"])
     r = v3 / v1
     rse = r * math.sqrt((e3 / v3) ** 2 + (e1 / v1) ** 2)
+    sig2.append(2 * rse)
     if abs(r - 1.0) <= 2 * rse:
-        fails.append(f"part F: the cylinder/chain ratio at p={p_} is {r:.2f}+/-{rse:.2f}, "
-                     f"not significant; the doc claims six independent confirmations")
-    if not (0.28 <= r <= 0.37):
-        fails.append(f"part F: the cylinder/chain ratio at p={p_} is {r:.2f}, outside the "
-                     f"0.30-0.35 band the doc quotes")
+        fails.append(f"part F: cylinder/chain at p={p_} is {r:.2f}+/-{2*rse:.2f} (2s), "
+                     f"not significant; the doc claims six confirmations")
+    if not (0.30 <= round(r, 2) <= 0.35):
+        fails.append(f"part F: cylinder/chain at p={p_} is {r:.2f}, outside the "
+                     f"0.30-0.35 the doc quotes")
+if sig2:
+    expect("part F 2-sigma", f"measured 2\u03c3 of \u00b1{min(sig2):.2f}\u2013"
+                             f"{max(sig2):.2f} at every depth")
 
-# the size axis: the local rates the doc tabulates, and the exponent it refuses to quote
-def rates_of(w, parity):
-    pts = sorted((n, float(r["var_frac"])) for (ww, n), r in FS.items()
-                 if ww == w and n % 2 == parity)
-    return pts, [math.log(pts[i][1] / pts[i + 1][1]) / (pts[i + 1][0] - pts[i][0])
-                 for i in range(len(pts) - 1)]
+# the group-size confound, stated as a range over the size axis
+g0 = sorted({(int(r["n"]), int(r["nb_g0"])) for r in FS.values() if int(r["W"]) == 1})
+if g0:
+    ev = [b for n, b in g0 if n % 2 == 0]
+    expect("part F generator growth",
+           "**" + ", ".join(str(b) for b in ev) + " bonds at n = 4\u20269**".replace("9", "10"))
 
-
-for lbl, w, par in (("W=1 chain", 1, 0), ("W=1 chain (odd n, 2Sz=1)", 1, 1),
-                    ("W=2 ladder", 2, 0)):
-    pts, lr = rates_of(w, par)
-    if len(lr) != 3:
-        fails.append(f"part F: {lbl} has {len(pts)} size points, the doc tabulates 4")
-        continue
-    # compare cell by cell with bold markers stripped: which cell an author emphasises
-    # is a presentation choice, and asserting it would make the checker enforce prose
-    # style instead of data
-    got = row_in_table("local rate a", f"| {lbl} |")
-    want = [f"{x:+.2f}" for x in lr]
+# THE retraction: corr must be extensive, and the raw series must not be monotone
+chain_even = sorted((n, r) for (w, n), r in FS.items() if w == 1 and n % 2 == 0)
+if len(chain_even) >= 3:
+    corr_over_n = []
+    for n, r in chain_even:
+        c = math.sqrt(float(r["var_raw"]) / float(r["var_frac"]))
+        corr_over_n.append(c / n)
+    expect("part F corr extensive",
+           "`corr/n` = " + ", ".join(f"{c:.3f}" for c in corr_over_n))
+    raw = [float(r["var_raw"]) for _n, r in chain_even]
+    frac = [float(r["var_frac"]) for _n, r in chain_even]
+    got = row_in_table("W=1 chain, even n", "| raw Var")
+    want = [f"{v:.3f}" for v in raw[:-1]] + [f"**{raw[-1]:.3f}**"]
     if got is None:
-        fails.append(f"part F local rates {lbl}: row not found in the doc")
-    elif got[1:] != want:
-        fails.append(f"part F local rates {lbl}: doc {got[1:]} vs csv {want}")
+        fails.append("part F raw size row: not found")
+    elif [norm(c) for c in got[1:]] != [norm(c) for c in want]:
+        fails.append(f"part F raw size row: doc {got[1:]} vs csv {want}")
+    got = row_in_table("W=1 chain, even n", "| Var[\u2202frac")
+    if got and got[1:] != [f"{v:.3f}" for v in frac]:
+        fails.append(f"part F frac size row: doc {got[1:]} vs csv "
+                     f"{[f'{v:.3f}' for v in frac]}")
 
-# The same rates with the differentiated generator's norm divided out. Group 0's bond
-# count grows with n, so the raw collapse partly measures the instrument (a review's
-# point); the doc's verdict rests on these, so they are asserted like the raw ones.
-def nrates_of(w, parity, k):
-    pts = sorted((n, float(r["var_frac"]) / int(r["nb_g0"]) ** k)
-                 for (ww, n), r in FS.items() if ww == w and n % 2 == parity)
-    return [math.log(pts[i][1] / pts[i + 1][1]) / (pts[i + 1][0] - pts[i][0])
-            for i in range(len(pts) - 1)]
+    def lrates(vals):
+        ns = [n for n, _ in chain_even]
+        return [math.log(vals[i] / vals[i + 1]) / (ns[i + 1] - ns[i])
+                for i in range(len(vals) - 1)]
 
-
-for lbl, w, par in (("W=1 chain", 1, 0), ("W=1 chain (odd n)", 1, 1),
-                    ("W=2 ladder", 2, 0)):
-    for k, sym in ((1, "÷ nb"), (2, "÷ nb²")):
-        want = [f"{x:+.2f}" for x in nrates_of(w, par, k)]
-        got = row_in_table("normalised local rate", f"| {lbl} {sym} |")
+    for lbl, vals in (("local rate (raw)", raw), ("local rate (frac)", frac)):
+        got = row_in_table("W=1 chain, even n", f"| {lbl} |")
+        want = [""] + [f"{x:+.2f}" for x in lrates(vals)]
         if got is None:
-            fails.append(f"part F normalised rates {lbl} {sym}: row not found in the doc")
-        elif got[1:] != want:
-            fails.append(f"part F normalised rates {lbl} {sym}: doc {got[1:]} vs csv {want}")
-c1, c2 = nrates_of(1, 0, 1), nrates_of(1, 0, 2)
-expect("part F normalised collapse",
-       f"still falls by **×{max(c1)/min(c1):.1f}** and **×{max(c2)/min(c2):.1f}**")
-o1, o2 = nrates_of(1, 1, 1), nrates_of(1, 1, 2)
-expect("part F normalised collapse, odd n",
-       f"(odd n: ×{max(o1)/min(o1):.1f} and ×{max(o2)/min(o2):.1f})")
-l2 = nrates_of(2, 0, 2)
-expect("part F ladder spread", f"spread by only ×{max(l2)/min(l2):.1f}")
+            fails.append(f"part F {lbl} row: not found")
+        elif [norm(c) for c in got[1:]] != [norm(c) for c in want]:
+            fails.append(f"part F {lbl} row: doc {got[1:]} vs csv {want}")
+    # the claim the whole retraction rests on
+    if min(lrates(raw)) > 0:
+        fails.append("part F: the raw chain series IS monotone decreasing, so the doc's "
+                     "retraction ('flat from n=6 and rises at n=10') is wrong and the "
+                     "section needs rewriting back")
 
-pts0, lr0 = rates_of(1, 0)
-if lr0:
-    expect("part F rate collapse", f"falls by **×{max(lr0)/min(lr0):.1f}**")
-    f = fit_loglin_f([n for n, _ in pts0], [v for _, v in pts0])
-    if f:
-        expect("part F refused exponent", f"`a = {f[0]:+.3f} ± {f[1]:.3f}` per site")
-# the even-n variance table
-for lbl, w in (("W=1 chain", 1), ("W=2 ladder", 2)):
-    want = [format(float(FS[(w, n)]["var_frac"]), ".3f")
-            for n in sorted(n for (ww, n) in FS if ww == w and n % 2 == 0)]
-    got = row_in_table("n (even, 2Sz=0)", f"| {lbl} |")
-    if got is None:
-        fails.append(f"part F size row {lbl}: row not found in the size table")
-    elif got[1:] != want:
-        fails.append(f"part F size row {lbl}: doc {got[1:]} vs csv {want}")
-# and the cylinder must still have exactly one even-n point, or the "unanswered" stands wrong
+chain_odd = sorted((n, r) for (w, n), r in FS.items() if w == 1 and n % 2 == 1)
+if len(chain_odd) >= 4:
+    rv = [float(r["var_raw"]) for _n, r in chain_odd]
+    ns = [n for n, _ in chain_odd]
+    lr = [math.log(rv[i] / rv[i + 1]) / (ns[i + 1] - ns[i]) for i in range(len(rv) - 1)]
+    expect("part F odd raw rates",
+           "raw local rates " + ", ".join(f"{x:+.2f}".replace("-", "\u2212") for x in lr))
+
+# the exponent the prose disowns, and the measured-vs-Gaussian SE on both scans
+if len(chain_even) >= 3:
+    f_ = fit_loglin_f([n for n, _ in chain_even],
+                      [float(r["var_frac"]) for _n, r in chain_even])
+    if f_:
+        expect("part F disowned exponent",
+               f"`a = {f_[0]:+.3f} \u00b1 {f_[1]:.3f}`")
+for lbl, tbl in (("depth", F), ("size", FS)):
+    rel = [float(r["se_frac"]) / float(r["var_frac"]) for r in tbl.values()]
+    n0 = int(next(iter(tbl.values()))["nsamp"])
+    expect(f"part F measured SE ({lbl})",
+           f"{min(rel)*100:.1f}\u2013{max(rel)*100:.1f} %")
+    expect(f"part F gaussian SE ({lbl})", f"{math.sqrt(2.0/n0):.1%}".replace("%", " %"))
+
+# and the cylinder still has exactly one even-n point, or the framing changes
 cyl_even = [n for (w, n) in FS if w == 3 and n % 2 == 0]
 if len(cyl_even) != 1:
     fails.append(f"part F: the cylinder now has {len(cyl_even)} even-n size points "
-                 f"({sorted(cyl_even)}); the doc says one, so the 'unanswered' framing "
-                 f"and the 'what would settle it' paragraph need rewriting")
+                 f"({sorted(cyl_even)}); the doc says one, so its framing needs rewriting")
 
 if fails:
-    print(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")
+    # The doc uses -, x, sigma and superscripts, so the report itself contains non-ASCII.
+    # On a GBK console `print` then raises UnicodeEncodeError and the operator sees a
+    # traceback instead of the mismatches -- a reporter that cannot report its findings.
+    out = sys.stdout
+    enc = (getattr(out, "encoding", None) or "ascii").lower()
+
+    def say(line):
+        try:
+            print(line)
+        except UnicodeEncodeError:
+            print(line.encode(enc, "backslashreplace").decode(enc, "replace"))
+
+    say(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")
     for f in fails:
-        print("  " + f)
+        say("  " + f)
     sys.exit(1)
 print("all quoted VQE figures in docs/universal_mpo.md reproduce from the CSVs")

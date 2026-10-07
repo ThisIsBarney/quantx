@@ -374,6 +374,21 @@ int main(int argc, char** argv) {
         return 1;
     }
     auto want = [&](char c) { return !only || *only == c || *only == (c ^ 32); };
+    // Part F's sample-count guard belongs HERE, beside the QX_VQE_ONLY check, not inside
+    // part F. Its message says "nothing written", and that was false: on a default full
+    // run parts A-E execute first and each opens its CSV with mode "w", so by the time a
+    // guard inside part F fired, five committed CSVs had already been truncated and
+    // rewritten -- hours of optimisation spent to reach an error that refuses the run.
+    // Validate every argument before anything is written.
+    int bp_nsamp = 0;                       // 0 = unset, part F picks its default
+    if (const char* bps = std::getenv("QX_VQE_BP")) {
+        if (std::sscanf(bps, "%d", &bp_nsamp) != 1 || bp_nsamp < 10) {
+            std::fprintf(stderr, "QX_VQE_BP=%s: need at least 10 samples per point for a "
+                                 "variance and its fourth-moment error; nothing written\n",
+                         bps);
+            return 1;
+        }
+    }
     std::map<int, std::vector<double>> angles_ref;   // part A -> part B
     // Part B consumes the per-depth optima part A produces, so asking for B alone
     // would otherwise print headers and no rows. B implies A.
@@ -774,20 +789,8 @@ int main(int argc, char** argv) {
     // normalisation can be checked rather than trusted.
     const int n_f = 6, target_f = pack_q2(n_f, 0);
     int chi_f = 1; for (int k = 0; k < n_f / 2; ++k) chi_f *= 4;      // 64, lossless
-    int nsamp = quick ? 24 : 400;
-    if (const char* s = std::getenv("QX_VQE_BP")) {
-        int v = 0; std::sscanf(s, "%d", &v);
-        // A variance needs two samples, and its fourth-moment error estimate several.
-        // QX_VQE_BP=1 used to be accepted: stage 2 then wrote zero for every variance
-        // and standard error, analyze_vqe_barren.py divided by them -- and the run had
-        // already overwritten the committed CSVs. Refuse before writing anything.
-        if (v < 10) {
-            std::fprintf(stderr, "QX_VQE_BP=%s: need at least 10 samples per point for a "
-                                 "variance and its fourth-moment error; nothing written\n", s);
-            std::exit(2);
-        }
-        nsamp = v;
-    }
+    // bp_nsamp was validated at startup, before any part could truncate a CSV
+    const int nsamp = bp_nsamp > 0 ? bp_nsamp : (quick ? 24 : 400);
     std::vector<int> cfg_f(n_f);
     for (int i = 0; i < n_f; ++i) cfg_f[i] = (i % 2 == 0) ? 1 : 2;
     auto hop_f = build_hubbard_mpo(n_f, 1.0, 0.0, true);
@@ -957,15 +960,25 @@ int main(int argc, char** argv) {
         double v = 0; if (b) std::sscanf(b, "%lf", &v);
         return v > 0 ? v : 900.0;
     }();
-    const int nsamp_n = std::max(50, nsamp / 3);   // ~8% SE on a variance at 300
+    // ~8% SE on a variance at 300. The max() floor must not override quick mode: with
+    // nsamp=24 it used to yield 50, so a smoke test drew MORE samples per size point than
+    // the depth scan it is a smoke test of, and the size loop below had no quick branch
+    // at all -- it ran every width and every n, then overwrote docs/vqe_barren.csv with a
+    // 2-depth 24-sample stub that fails qx_vqe_doc_figures.
+    const int nsamp_n = quick ? nsamp : std::max(50, nsamp / 3);
     const int chi_cap = [&]{
         const char* c = std::getenv("QX_VQE_BPCHI");
         int v = 0; if (c) std::sscanf(c, "%d", &v);
         return v > 0 ? v : 1024;      // n<=10; 4^6=4096 at n=12 is not simulable here
     }();
     const int p_n = 8;
-    std::printf("\n# size axis at p=%d, budget %.0f s/point, %d samples\n",
-                p_n, budget_s, nsamp_n);
+    // the largest n the chi cap actually admits: the biggest even n with 4^(n/2) <= cap.
+    // Its odd successor shares that chi but not its cost, so it is excluded -- see the
+    // gate below for why chi alone was not enough.
+    int n_cap = 2;
+    { int c = 4; while (c <= chi_cap) { n_cap += 2; c *= 4; } n_cap -= 2; }
+    std::printf("\n# size axis at p=%d, budget %.0f s/point, %d samples, n <= %d\n",
+                p_n, budget_s, nsamp_n, n_cap);
     std::printf("# W n Lx qubits chi nb_g0 p var_frac se_frac std_frac var_raw floor snr "
                 "nsamp t_eval wall_s\n");
     std::fflush(stdout);
@@ -973,7 +986,8 @@ int main(int argc, char** argv) {
     if (fn) std::fprintf(fn, "W,n,Lx,qubits,chi,nb_g0,p,var_frac,se_frac,std_frac,var_raw,"
                              "floor,snr,nsamp,t_eval,wall_s\n");
     for (int W_n = 1; W_n <= 3; ++W_n) {
-        for (int n_n = 4; n_n <= 12; ++n_n) {
+        const int n_max = quick ? 6 : 12;      // quick mode is a smoke test, not a run
+        for (int n_n = 4; n_n <= n_max; ++n_n) {
             if (n_n % W_n != 0) continue;              // the lattice must be rectangular
             const int Lx_n = n_n / W_n;
             if (Lx_n < 2) continue;                    // need at least one x-hop
@@ -984,9 +998,19 @@ int main(int argc, char** argv) {
             // hva_prepare_init to converge a DMRG ground state at this chi first.
             // At n=12 that is chi=4096 with d=4 -- ~1 GB per tensor -- so the
             // "measure the cost" step would itself hang before reporting anything.
-            if (chi_n > chi_cap) {
-                std::printf("SKIP W=%d n=%d (%d qubits): lossless chi=%d exceeds the chi cap %d; state preparation alone is out of reach on this box\n",
-                            W_n, n_n, 2 * n_n, chi_n, chi_cap);
+            // The lossless chi is 4^(n/2) with integer division, so n and n+1 SHARE a chi
+            // while n+1 still costs more (more sites, more layers). Gating on chi alone
+            // therefore let n=11 through at exactly 1024 -- the most expensive point in
+            // the study -- while the header promised the default cap means n <= 10. The n
+            // bound is derived from the cap above rather than inferred from chi.
+            if (chi_n > chi_cap || n_n > n_cap) {
+                std::printf("SKIP W=%d n=%d (%d qubits): %s (lossless chi=%d, cap %d, "
+                            "n cap %d); out of reach on this box\n",
+                            W_n, n_n, 2 * n_n,
+                            chi_n > chi_cap ? "chi over the cap"
+                                            : "n over the bound the chi cap implies -- it "
+                                              "shares a chi with n-1 but not its cost",
+                            chi_n, chi_cap, n_cap);
                 std::fflush(stdout);
                 continue;
             }
