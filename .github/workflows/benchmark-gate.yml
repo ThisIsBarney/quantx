@@ -42,17 +42,23 @@ jobs:
           }
 
       - name: Configure
-        run: cmake -S . -B build-vs -G "Visual Studio 17 2022" -A x64
+        # No -G: the runner image picks the installed Visual Studio. Pinning "Visual Studio
+        # 17 2022" failed configure outright once windows-latest moved to VS 2026 ("could
+        # not find any instance of Visual Studio"), which is why this gate had been red.
+        run: cmake -S . -B build-vs -A x64
 
+      # Release, not Debug. In Debug, qx_hubbard_test (4^n-dimensional EDs, DMRG up to
+      # chi=4096) ran past its 90-minute ctest timeout while the other 17 tests passed,
+      # and benchmark numbers from an unoptimised build measure nothing.
       - name: Build
-        run: cmake --build build-vs --config Debug
+        run: cmake --build build-vs --config Release
 
       - name: Test
-        run: ctest --test-dir build-vs -C Debug --output-on-failure
+        run: ctest --test-dir build-vs -C Release --output-on-failure
 
       - name: CLI Argument Contract
         shell: pwsh
-        run: .\scripts\test_cli_args.ps1 -SkipBuild
+        run: .\scripts\test_cli_args.ps1 -SkipBuild -Config Release
 
       - name: Dependency License Policy
         shell: pwsh
@@ -68,6 +74,8 @@ jobs:
         shell: pwsh
         env:
           QX_BENCHMARK_PLATFORM_PROFILE: github-windows
+          # The Release library built above; the runners used to hard-code build-vs\Debug.
+          QUANTX_LIB_PATH: ${{ github.workspace }}\build-vs\Release\quantx.dll
         run: .\scripts\benchmark_all.ps1 -NoiseSweep -RunGates -EnforceGate -SkipBuild
 
       - name: Upload Benchmark Reports

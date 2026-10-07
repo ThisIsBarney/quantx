@@ -7,18 +7,21 @@ compiled ``libquantx.so`` / ``libquantx.dylib`` / ``quantx.dll`` ends up inside
 installed, :class:`~quantx_engine.engine.Engine` finds the library automatically
 (no ``QUANTX_LIB_PATH`` environment variable required).
 
-M159 update: also builds the ``_quantx_py`` pybind11 extension module when
-``pybind11`` is available, enabling zero-copy NumPy return paths.
+The ``_quantx_py`` pybind11 extension is built only when ``QX_WHEEL_PYBIND=1``. It is off
+by default because it is the one artifact that depends on the Python version, and
+cibuildwheel calls this hook once per CPython version while the CMake build directory is
+shared between those calls: the cache keeps the first interpreter it saw, so every later
+wheel would ship an extension compiled for the wrong Python. The ctypes library, which is
+what ``backend_info()["native"]`` reports, does not depend on the Python version at all.
 
 Usage::
 
     python scripts/build_native_for_wheel.py <dest_pkg_dir>
 
-Example (cibuildwheel before-build, run from repo root)::
+cibuildwheel before-build (cibuildwheel runs from the repo root, so ``{project}`` is the
+repo root and ``{package}`` is ``python/``)::
 
-    python {project}/../scripts/build_native_for_wheel.py {project}/quantx_engine
-
-where ``{project}`` is the ``python/`` directory containing ``pyproject.toml``.
+    python {project}/scripts/build_native_for_wheel.py {package}/quantx_engine
 """
 from __future__ import annotations
 
@@ -119,11 +122,21 @@ def build_and_install(dest_dir: str) -> None:
     print(f"[build_native_for_wheel] Dest dir  : {dest_dir}")
 
     cmake        = _find_cmake()
-    build_dir    = os.path.join(tempfile.gettempdir(), "qx_wheel_build")
+    # macOS: cibuildwheel builds arm64 and x86_64 wheels on one host and says which through
+    # ARCHFLAGS ("-arch x86_64"), which CMake does not read -- so the x86_64 wheel would carry
+    # an arm64 dylib and fail delocate's --require-archs. Pass the arch through explicitly,
+    # and give each arch its own build dir so one cache never serves the other.
+    osx_archs = []
+    if sys.platform == "darwin":
+        flags = os.environ.get("ARCHFLAGS", "").split()
+        osx_archs = [flags[i + 1] for i, f in enumerate(flags)
+                     if f == "-arch" and i + 1 < len(flags)]
+    suffix    = ("-" + "-".join(osx_archs)) if osx_archs else ""
+    build_dir = os.path.join(tempfile.gettempdir(), "qx_wheel_build" + suffix)
     os.makedirs(build_dir, exist_ok=True)
 
     n_jobs       = str(os.cpu_count() or 4)
-    has_pybind11 = _pybind11_available()
+    has_pybind11 = os.environ.get("QX_WHEEL_PYBIND") == "1" and _pybind11_available()
 
     # ── Configure ────────────────────────────────────────────────────────────
     cfg_cmd = [
@@ -133,6 +146,23 @@ def build_and_install(dest_dir: str) -> None:
         "-DQX_ENABLE_MPI=OFF",
         "-DQX_ENABLE_CUDA=OFF",
     ]
+    # A Visual Studio generator picks its target platform itself, and a 32-bit quantx.dll
+    # cannot be loaded by 64-bit Python. Say x64 explicitly -- unless the caller chose the
+    # generator or platform, where -A would be wrong (Ninja rejects it outright).
+    if (sys.platform == "win32" and sys.maxsize > 2**32
+            and "CMAKE_GENERATOR" not in os.environ
+            and "CMAKE_GENERATOR_PLATFORM" not in os.environ):
+        cfg_cmd += ["-A", "x64"]
+    if osx_archs:
+        cfg_cmd += ["-DCMAKE_OSX_ARCHITECTURES=" + ";".join(osx_archs)]
+    # Link the MSVC C++ runtime statically. Otherwise delvewheel vendors whatever
+    # msvcp140.dll it finds, and on the CI image that is OLDER (14.40) than the toolset
+    # that built quantx.dll (14.51): Microsoft supports only runtime >= toolset, and the
+    # vendored copy is renamed, so it wins even where a newer runtime is installed. The
+    # OpenMP runtime (vcomp140.dll) has no static form and is still vendored.
+    if sys.platform == "win32":
+        cfg_cmd += ["-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded",
+                    "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW"]
     print("[build_native_for_wheel] Configure:", " ".join(cfg_cmd))
     subprocess.run(cfg_cmd, check=True)
 
@@ -140,7 +170,7 @@ def build_and_install(dest_dir: str) -> None:
     targets = ["qx_capi"]
     if has_pybind11:
         targets.append("_quantx_py")
-        print("[build_native_for_wheel] pybind11 found — also building _quantx_py")
+        print("[build_native_for_wheel] pybind11 found -- also building _quantx_py")
 
     for target in targets:
         build_cmd = [
@@ -159,7 +189,7 @@ def build_and_install(dest_dir: str) -> None:
     src = _find_built_lib(build_dir)
     dst = os.path.join(dest_dir, os.path.basename(src))
     shutil.copy2(src, dst)
-    print(f"[build_native_for_wheel] Installed: {src} → {dst}")
+    print(f"[build_native_for_wheel] Installed: {src} -> {dst}")
 
     # pybind11 extension module (_quantx_py.*.so / _quantx_py.pyd)
     if has_pybind11:
@@ -167,13 +197,23 @@ def build_and_install(dest_dir: str) -> None:
         if ext:
             edst = os.path.join(dest_dir, os.path.basename(ext))
             shutil.copy2(ext, edst)
-            print(f"[build_native_for_wheel] Installed: {ext} → {edst}")
+            print(f"[build_native_for_wheel] Installed: {ext} -> {edst}")
         else:
             print("[build_native_for_wheel] WARNING: _quantx_py extension not found "
-                  "after build — skipping (ctypes path will be used).")
+                  "after build -- skipping (ctypes path will be used).")
 
 
 def main() -> None:
+    # This script prints paths and ran fine on a Chinese-locale dev box (cp936 can encode
+    # the arrow it used to print), then died on the Windows CI runner AFTER a successful
+    # 12-minute build: cp1252 cannot encode U+2192, so print() raised UnicodeEncodeError
+    # and the hook exited 1. Messages are ASCII now, but paths need not be (a non-ASCII
+    # user name), so never let the console encoding fail the build.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            pass
     if len(sys.argv) < 2:
         print("Usage: build_native_for_wheel.py <dest_pkg_dir>", file=sys.stderr)
         sys.exit(1)

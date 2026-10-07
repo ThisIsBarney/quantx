@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 from benchmarks.report_utils import (
     circuit_capability_diagnostics,
     detect_platform_profile,
+    engine_library_path,
     suite_policy,
 )
 
@@ -188,7 +189,7 @@ def main() -> None:
   profile = detect_platform_profile()
   policy = suite_policy(suite.get("name", "unnamed_suite"), profile, suite, root)
 
-  engine = Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
+  engine = Engine(engine_library_path(root))
   try:
     circuit_capabilities = engine.circuit_capabilities()
   except Exception as exc:

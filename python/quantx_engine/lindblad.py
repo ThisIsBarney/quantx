@@ -567,6 +567,15 @@ class LindbladSolver:
 
         # Dense C++ backend (n ≤ 10, via engine.run JSON RPC).
         # Supports entanglement_cut and is used when n ≤ 6 or entanglement requested.
+        # The validation above allows up to the SPARSE limit, so a build without the
+        # sparse backend used to hand 11-16 qubits to a dense backend that cannot hold
+        # them. Say so instead.
+        if n_qubits > _MAX_LINDBLAD_QUBITS_DENSE:
+            raise LindbladError(
+                f"n_qubits={n_qubits} needs the sparse Lindblad backend, which this "
+                f"build does not provide; the dense backend supports at most "
+                f"{_MAX_LINDBLAD_QUBITS_DENSE} qubits."
+            )
         raw = self._engine.run(problem, options)
         return _parse_result(raw, n_qubits, total_time, dt)
 

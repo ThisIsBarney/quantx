@@ -76,6 +76,14 @@ jobs:
       - name: Build sdist
         working-directory: python
         run: python -m build --sdist --outdir ../wheelhouse
+      - name: A wheel built from the sdist is pure Python
+        # Where no platform wheel exists, pip builds the sdist, with no native library in
+        # it. That wheel must say so (py3-none-any) instead of carrying a platform tag for
+        # an engine it does not contain.
+        run: |
+          pip wheel --no-deps --wheel-dir sdist_wheel wheelhouse/*.tar.gz
+          ls sdist_wheel
+          ls sdist_wheel | grep -q -- '-py3-none-any\.whl$'
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -84,9 +92,15 @@ jobs:
 
   # ── Smoke-test the Linux wheel in a clean venv ──────────────────────────────
   smoke_test:
-    name: Wheel smoke test
+    name: Wheel smoke test · Python ${{ matrix.python-version }}
     needs: [build_wheels]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # One py3-none wheel per platform serves every CPython 3 (python/setup.py).
+        # cibuildwheel tests it on 3.10-3.13; this adds a version it cannot build for.
+        python-version: ["3.10", "3.14"]
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -94,7 +108,7 @@ jobs:
           path: wheelhouse/
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Install wheel in fresh venv
         run: |
           python -m venv smoke_venv
@@ -114,6 +128,7 @@ jobs:
           print(f"  version : {info['version']}")
           print(f"  solvers : {info['solvers'][:5]}...")
           assert info["native"], "Native engine not loaded from wheel!"
+          assert info["version"] == __version__, (info["version"], __version__)
           print("Smoke test PASSED ✓")
           EOF
 

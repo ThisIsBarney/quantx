@@ -183,7 +183,9 @@ class GpuStatevector:
             raise GpuError(f"Unknown single-qubit gate: {name!r}")
 
     def _gate_matrix_2q(self, name: str) -> "np.ndarray":
-        if name == "CNOT":
+        # "CX" is Circuit's canonical name for this gate and one mitigation.py's folding
+        # already treats as self-inverse, so ops built there must run here too.
+        if name in ("CNOT", "CX"):
             return np.array([[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 0, 1], [0, 0, 1, 0]], dtype=complex)
         elif name == "CZ":
             return np.diag([1.0 + 0j, 1, 1, -1])

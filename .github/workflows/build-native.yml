@@ -15,6 +15,11 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-native.yml"
+      # The Linux job runs the Python-side gates against this build's library, so a
+      # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/models.py"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/tests/test_models_ed.py"
   pull_request:
     branches: ["master", "main"]
     paths:
@@ -22,6 +27,11 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - ".github/workflows/build-native.yml"
+      # The Linux job runs the Python-side gates against this build's library, so a
+      # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/models.py"
+      - "python/quantx_engine/dmrg.py"
+      - "python/quantx_engine/tests/test_models_ed.py"
   workflow_dispatch:
 
 concurrency:
@@ -36,6 +46,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
 
       - name: Install build tools
         run: |
@@ -93,6 +108,18 @@ jobs:
           print('ctypes load test PASSED')
           "
 
+      - name: Symmetric models vs exact diagonalisation (M4 gate)
+        # Solves every quantx_engine.models chain on this build's engine and compares with
+        # an independent ED to 1e-10. The only job that runs Python tests against the
+        # native library; QX_REQUIRE_NATIVE=1 makes a load failure fail the gate
+        # instead of skipping it.
+        env:
+          QX_REQUIRE_NATIVE: "1"
+        run: |
+          python -m pip install -e "python/[dev]"
+          export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
+          python -m pytest python/quantx_engine/tests/test_models_ed.py -v
+
       - name: Upload library artifact
         uses: actions/upload-artifact@v4
         with:
@@ -126,10 +153,15 @@ jobs:
           .\build\Release\qx_fft_smoke.exe
 
       - name: Verify DLL exports
+        # This used to pipe dumpbin into Select-String. dumpbin exists only inside a Visual
+        # Studio developer prompt, so the step died on "not recognized" the first time a
+        # build got this far; and Select-String would not have failed on a missing export.
+        # Load the DLL instead, and require the entry points the Python SDK binds.
+        shell: pwsh
         run: |
           $dll = Get-ChildItem build -Recurse -Filter "quantx.dll" | Select-Object -First 1
           Write-Host "Found DLL: $($dll.FullName)"
-          dumpbin /exports $dll.FullName | Select-String "qx_run|qx_version|qx_list"
+          python -c "import ctypes, sys; lib = ctypes.CDLL(sys.argv[1]); need = ('qx_run', 'qx_version', 'qx_list_solvers', 'qx_free_string', 'qx_dmrg_sweep', 'qx_mps_energy'); missing = [s for s in need if not hasattr(lib, s)]; print('exports OK:', ', '.join(need)) if not missing else sys.exit('missing exports: ' + ', '.join(missing))" "$($dll.FullName)"
 
       - name: Upload library artifact
         uses: actions/upload-artifact@v4

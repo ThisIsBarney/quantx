@@ -1,5 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
-project(quantx_engine VERSION 0.1.0 LANGUAGES CXX)
+# The version is written in exactly one place, python/quantx_engine/__init__.py, and read
+# here. There used to be three: pyproject said 1.0.0, the package reported 0.4.0 and the
+# engine reported 0.1.0-dev -- so backend_info() contradicted pip about the same install.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/python/quantx_engine/__init__.py" _qx_ver_line
+     REGEX "^__version__ = \"[^\"]+\"")
+string(REGEX REPLACE "^__version__ = \"([^\"]+)\".*" "\\1" QX_VERSION "${_qx_ver_line}")
+if(NOT QX_VERSION)
+  message(FATAL_ERROR "could not read __version__ from python/quantx_engine/__init__.py")
+endif()
+# Re-configure when the version changes; an incremental build would otherwise keep
+# compiling the old one into the engine.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/python/quantx_engine/__init__.py")
+# project(VERSION) takes digits only; a pre-release suffix (1.1.0rc1) stays in QX_VERSION
+string(REGEX MATCH "^[0-9]+(\\.[0-9]+)*" _qx_ver_numeric "${QX_VERSION}")
+project(quantx_engine VERSION ${_qx_ver_numeric} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,7 +47,7 @@ if(NOT spdlog_FOUND)
   include(FetchContent)
   FetchContent_Declare(
     spdlog
-    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.14.1.tar.gz
+    URL https://github.com/gabime/spdlog/archive/refs/tags/v1.17.0.tar.gz
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
   )
   FetchContent_MakeAvailable(spdlog)
@@ -167,6 +182,8 @@ add_library(qx_core
   src/entanglement.cpp
   src/json_utils.cpp
 )
+target_compile_definitions(qx_core PRIVATE QX_VERSION_STRING="${QX_VERSION}")
+message(STATUS "QuantX version: ${QX_VERSION}")
 set_target_properties(qx_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_include_directories(qx_core
@@ -264,6 +281,12 @@ else()
   target_link_libraries(qx_cli PRIVATE CLI11)
 endif()
 qx_set_config_output_dirs(qx_cli)
+# qx_smoke drives qx_cli end to end. It used to look for it in hard-coded build layouts
+# (build-vs/Debug, build-nmake-local, build/Debug) that no current build produces -- every
+# binary lands in ${CMAKE_BINARY_DIR}/<config> -- so it failed on every CI run with "unable
+# to locate qx_cli". Tell it exactly where CMake put the binary instead of guessing.
+target_compile_definitions(qx_smoke PRIVATE QX_CLI_PATH="$<TARGET_FILE:qx_cli>")
+add_dependencies(qx_smoke qx_cli)
 
 add_executable(qx_dmrg_test
   src/dmrg_test.cpp
@@ -280,6 +303,14 @@ target_include_directories(qx_dmrg_test PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 qx_set_config_output_dirs(qx_dmrg_test)
+
+# Contract test for the exported DMRG/dynamics entry points, linked against the shared
+# library the way a consumer links it (not by compiling the sources in). Same output dir as
+# qx_capi so the loader finds quantx.dll next to the executable.
+add_executable(qx_capi_dmrg_test src/capi_dmrg_test.cpp)
+target_link_libraries(qx_capi_dmrg_test PRIVATE qx_capi nlohmann_json::nlohmann_json)
+target_include_directories(qx_capi_dmrg_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+qx_set_config_output_dirs(qx_capi_dmrg_test)
 
 # Large-block SVD-backend regression test: exercises the >=96-block CPU eigensolve
 # (Eigen vs LAPACK) that the ED suite (tiny blocks) never reaches. Links qx_blas so the
@@ -695,6 +726,7 @@ add_test(NAME qx_thermal_spectral_test COMMAND qx_thermal_spectral_test)
 add_test(NAME qx_thermal_transport_test COMMAND qx_thermal_transport_test)
 add_test(NAME qx_fft_smoke COMMAND qx_fft_smoke)
 add_test(NAME qx_dmrg_test COMMAND qx_dmrg_test)
+add_test(NAME qx_capi_dmrg_test COMMAND qx_capi_dmrg_test)
 
 if(QX_ENABLE_PYBIND)
   find_package(pybind11 CONFIG REQUIRED)

@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 from benchmarks.report_utils import (
     continuous_export_volume,
     detect_platform_profile,
+    engine_library_path,
     extract_continuous_frames,
     get_continuous_config,
     infer_fft_provider,
@@ -301,7 +302,7 @@ def main() -> None:
   profile = detect_platform_profile()
   policy = suite_policy(suite.get("name", "unnamed_suite"), profile, suite, root)
 
-  engine = Engine(str(root / "build-vs" / "Debug" / "quantx.dll"))
+  engine = Engine(engine_library_path(root))
 
   repeats = int(suite.get("repeats", 1))
   options = dict(suite.get("options", {}))

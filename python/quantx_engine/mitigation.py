@@ -626,8 +626,9 @@ class PECResult:
     n_samples:
         Number of Monte Carlo samples used.
     gamma:
-        One-norm of the single-gate QPD.  The total sampling overhead
-        scales as γ^{2m} for an m-gate circuit.
+        One-norm of the whole circuit's QPD, γ_gate^m for m single-qubit
+        gates (two-qubit gates are not twirled).  The sampling overhead is
+        gamma², i.e. γ_gate^{2m}.
     raw_estimates:
         Individual weighted estimates (length = n_samples).  Useful for
         computing confidence intervals or diagnosing convergence.
