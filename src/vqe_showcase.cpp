@@ -19,6 +19,22 @@
 //
 // Usage: qx_vqe_showcase          -> the (n, p) scan, writes docs/vqe_hubbard.csv
 //        QX_VQE="n p chi U iters" -> a single point (used by the scan driver/tests)
+//        QX_VQE_ONLY=A|B|D|E|F    -> run just that part (C runs with B)
+//        QX_VQE_QUICK=1           -> shrink every part to a smoke test
+//        QX_VQE_BP=N              -> part F: N random-angle samples per point (default
+//                                    900 -- the value the committed CSVs were made
+//                                    with, so a default run reproduces them; the size
+//                                    axis uses max(50, N/3) = 300)
+//        QX_VQE_BPBUDGET=SEC      -> part F size axis: skip a point whose projected
+//                                    sample cost exceeds SEC (default 900), printing
+//                                    the measured per-evaluation time and the reason
+//        QX_VQE_BPCHI=CHI         -> part F size axis: skip a point whose LOSSLESS chi
+//                                    exceeds CHI (default 1024, i.e. n <= 10). Checked
+//                                    before the timing probe, because reaching the probe
+//                                    means preparing a state at that chi first
+//        QX_SWAPCOST="W Lx chi"   -> time one x-hop layer of the swap network
+//        QX_LATCHK=1              -> cross-check the W=1 lattice driver against the
+//                                    ED-validated chain driver
 #include "dmrg_internal.hpp"
 #include <algorithm>
 #include <array>
@@ -130,6 +146,20 @@ static double adam_min(const std::function<double(const std::vector<double>&)>& 
     }
     x = best_x;
     return best_f;
+}
+
+// Standard error of a variance estimate, from the sample's OWN fourth moment:
+//   Var[s^2] = (mu4 - mu2^2) / N.
+// The familiar s^2*sqrt(2/N) is this formula with mu4 = 3 mu2^2 substituted in -- i.e.
+// it ASSUMES a Gaussian. Gradient distributions in this setting need not be, and the
+// Gaussian form then UNDERSTATES the error, which is the direction that promotes noise
+// to a "significant" difference. Measure the moments instead of assuming them.
+static double var_stderr(double s1, double s2, double s3, double s4, int N) {
+    const double m1 = s1 / N, m2 = s2 / N, m3 = s3 / N, m4 = s4 / N;
+    const double mu2 = m2 - m1 * m1;
+    const double mu4 = m4 - 4 * m1 * m3 + 6 * m1 * m1 * m2 - 3 * m1 * m1 * m1 * m1;
+    const double v = (mu4 - mu2 * mu2) / N;
+    return v > 0 ? std::sqrt(v) : 0.0;
 }
 
 static std::vector<std::array<double,3>> to_layers(const std::vector<double>& x) {
@@ -341,11 +371,26 @@ int main(int argc, char** argv) {
     // NOTE strchr(set, NUL) returns a pointer to the terminator, so an EMPTY value
     // would pass validation and then match no part -- the exact silent no-op this
     // check exists to prevent. Only the first character is examined; C runs with B.
-    if (only && (*only == char(0) || !std::strchr("AaBbDdEe", *only))) {
-        std::fprintf(stderr, "QX_VQE_ONLY must be A, B, D or E (got '%s')\n", only);
+    if (only && (*only == char(0) || !std::strchr("AaBbDdEeFf", *only))) {
+        std::fprintf(stderr, "QX_VQE_ONLY must be A, B, D, E or F (got '%s')\n", only);
         return 1;
     }
     auto want = [&](char c) { return !only || *only == c || *only == (c ^ 32); };
+    // Part F's sample-count guard belongs HERE, beside the QX_VQE_ONLY check, not inside
+    // part F. Its message says "nothing written", and that was false: on a default full
+    // run parts A-E execute first and each opens its CSV with mode "w", so by the time a
+    // guard inside part F fired, five committed CSVs had already been truncated and
+    // rewritten -- hours of optimisation spent to reach an error that refuses the run.
+    // Validate every argument before anything is written.
+    int bp_nsamp = 0;                       // 0 = unset, part F picks its default
+    if (const char* bps = std::getenv("QX_VQE_BP")) {
+        if (std::sscanf(bps, "%d", &bp_nsamp) != 1 || bp_nsamp < 10) {
+            std::fprintf(stderr, "QX_VQE_BP=%s: need at least 10 samples per point for a "
+                                 "variance and its fourth-moment error; nothing written\n",
+                         bps);
+            return 1;
+        }
+    }
     std::map<int, std::vector<double>> angles_ref;   // part A -> part B
     // Part B consumes the per-depth optima part A produces, so asking for B alone
     // would otherwise print headers and no rows. B implies A.
@@ -710,5 +755,353 @@ int main(int argc, char** argv) {
     }
     if (fe) std::fclose(fe);
     }   // end of part E
+
+    if (want('F')) {
+    // ================================================================= PART F ====
+    // Barren plateaus vs WIDTH -- the question part E's result actually raises.
+    //
+    // Part E measured that a wider lattice reaches a worse energy at equal depth. That
+    // is consistent with two different stories: the ansatz cannot REPRESENT the state
+    // (expressibility), or it can but the landscape is too flat to FIND it
+    // (trainability). They have opposite implications -- the first says add layers, the
+    // second says adding layers will not help -- and part E cannot tell them apart. The
+    // standard trainability diagnostic is the variance of a cost gradient over random
+    // parameter draws: a barren plateau is Var[dE/dtheta] decaying exponentially.
+    //
+    // THE INSTRUMENT COMES FIRST. A barren plateau IS a vanishing gradient, so a study
+    // that cannot separate a small gradient from its own numerical noise measures
+    // nothing. There is no parameter-shift rule here (the HVA generators are not single
+    // Paulis), so the gradient is a central difference carrying an h^2 truncation error
+    // plus an O(eps/h) roundoff error. Stage 1 measures that error directly by
+    // Richardson extrapolation: g_rich = (4 g(h/2) - g(h))/3 cancels the h^2 term, so
+    // |g(h) - g_rich| estimates the error in g(h) while assuming nothing about the
+    // function. Stage 2 reports every row's spread as a multiple of that floor, and a
+    // row that is not well clear of it is measuring the difference engine, not physics.
+    //
+    // The energy itself needs no new validation: the circuit is already pinned against
+    // a dense state-vector reference at 1e-12 for all three widths (qx_hubbard_test
+    // section r), and the gradient is a finite difference OF that energy.
+    //
+    // NORMALISATION. The three geometries have 5, 7 and 9 bonds, so dE/dtheta is not
+    // comparable across them -- a wider lattice has a bigger H and would show a bigger
+    // gradient for reasons that have nothing to do with the landscape. Everything is
+    // therefore reported for the DIMENSIONLESS cost frac = (E0 - E)/(E0 - E_exact),
+    // the same correlation-energy fraction part E ranks the widths by, whose gradient
+    // is (dE/dtheta)/(E0 - E_exact). The raw dE/dtheta is emitted alongside it so the
+    // normalisation can be checked rather than trusted.
+    const int n_f = 6, target_f = pack_q2(n_f, 0);
+    int chi_f = 1; for (int k = 0; k < n_f / 2; ++k) chi_f *= 4;      // 64, lossless
+    // bp_nsamp was validated at startup, before any part could truncate a CSV
+    // 900, not 400: the committed docs/vqe_barren*.csv were produced at 900 (and 300 on
+    // the size axis), so a default run has to reproduce them. With 400 the documented
+    // command "QX_VQE_ONLY=F qx_vqe_showcase" would overwrite both artifacts with a
+    // different sample prefix -- different variances, different error bars, possibly a
+    // different size-axis verdict -- while the doc kept quoting the old numbers.
+    const int nsamp = bp_nsamp > 0 ? bp_nsamp : (quick ? 24 : 900);
+    std::vector<int> cfg_f(n_f);
+    for (int i = 0; i < n_f; ++i) cfg_f[i] = (i % 2 == 0) ? 1 : 2;
+    auto hop_f = build_hubbard_mpo(n_f, 1.0, 0.0, true);
+
+    std::printf("\n# PART F -- gradient variance vs width (barren-plateau diagnostic)\n");
+    std::fflush(stdout);
+
+    // ---- stage 1: what is this instrument's noise floor? ----------------------
+    // One representative point per width, angles from the same distribution the scan
+    // uses. Report g(h) and the Richardson error estimate across five decades of h;
+    // the useful h is where the error estimate bottoms out.
+    std::printf("# calibration: central-difference error vs step size (Richardson)\n");
+    std::printf("# CAL W h grad err_est\n");
+    double floor_abs = 0.0;
+    const double h_f = 1e-5;
+    for (int W_f = 1; W_f <= 3; ++W_f) {
+        const int Lx_f = n_f / W_f;
+        const bool yp = (W_f > 2);
+        auto mpo_f  = build_hubbard_lattice_split_mpo(Lx_f, W_f, 1.0, U, 0.0, yp);
+        auto mpo0_f = build_hubbard_lattice_split_mpo(Lx_f, W_f, 1.0, 0.0, 0.0, yp);
+        const int ng_f = hva_lattice_groups(Lx_f, W_f, yp);
+        auto psi0_f = hva_prepare_init(mpo0_f, n_f, chi_f, target_f, &cfg_f);
+        const int p_cal = 4, dim = ng_f * p_cal, kmid = (p_cal / 2) * ng_f;
+        // THE CONFOUND CHECK. theta_g generates exp(-i theta_g H_g) with H_g the SUM
+        // over the bonds in group g, so ||H_g|| grows with the group's SIZE. If group
+        // 0 holds a different number of bonds at different widths, a gradient gap
+        // between geometries is partly that and nothing to do with the landscape --
+        // the same trap as comparing entropies across different kinds of cut. Emit
+        // the group sizes so the normalisation can be checked rather than assumed.
+        {
+            auto gb = hva_lattice_group_bonds(Lx_f, W_f, yp);
+            std::printf("GRP %d groups=%d sizes=", W_f, (int)gb.size());
+            for (size_t gi = 0; gi < gb.size(); ++gi)
+                std::printf("%s%d", gi ? "/" : "", (int)gb[gi].size());
+            std::printf(" differentiated=group0(%d bonds)\n", (int)gb[0].size());
+        }
+        auto energy_of = [&](const std::vector<double>& x) {
+            std::vector<std::vector<double>> a(x.size() / ng_f);
+            for (size_t l = 0; l < a.size(); ++l)
+                a[l].assign(x.begin() + l * ng_f, x.begin() + (l + 1) * ng_f);
+            return run_hva_lattice(mpo_f, hop_f, Lx_f, W_f, yp, a, chi_f, 1e-12,
+                                   target_f, &cfg_f, psi0_f, false).energy;
+        };
+        std::mt19937 rng(20260818u + (unsigned)W_f);
+        std::uniform_real_distribution<double> UU(-3.14159265358979323846,
+                                                   3.14159265358979323846);
+        std::vector<double> x(dim);
+        for (int k = 0; k < dim; ++k) x[k] = UU(rng);
+        auto grad_at = [&](double h) {
+            double x0 = x[kmid];
+            x[kmid] = x0 + h; double fp = energy_of(x);
+            x[kmid] = x0 - h; double fm = energy_of(x);
+            x[kmid] = x0;
+            return (fp - fm) / (2 * h);
+        };
+        const double hs[6] = {1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7};
+        for (int hi = 0; hi < 6; ++hi) {
+            double h = hs[hi];
+            double g1 = grad_at(h), g2 = grad_at(h / 2);
+            double err = std::abs(g1 - (4 * g2 - g1) / 3.0);   // |g(h) - g_richardson|
+            std::printf("CAL %d %.0e %+.12f %.2e\n", W_f, h, g1, err);
+            if (h == h_f) floor_abs = std::max(floor_abs, err);
+        }
+        std::fflush(stdout);
+    }
+    std::printf("# noise floor (worst |g(h) - g_rich| at h=%.0e over widths) = %.2e\n",
+                h_f, floor_abs);
+    std::fflush(stdout);
+
+    // ---- stage 2: the scan ----------------------------------------------------
+    // theta ~ U(-pi, pi) independently per angle -- the standard barren-plateau setup,
+    // and the honest one here: it is the distribution a VQE with no warm start actually
+    // initialises from. The differentiated parameter is the FIRST BOND-GROUP angle of
+    // the MIDDLE layer, which exists at every width (the widths differ in how many
+    // groups they have, not in whether they have a group 0) and sits where the circuit
+    // is deepest on both sides.
+    std::printf("# W Lx qubits nbond ngroup nb_g0 p nangle var_frac se_frac std_frac var_raw "
+                "mean_frac floor snr nsamp wall_s\n");
+    std::fflush(stdout);
+    FILE* ff = std::fopen("docs/vqe_barren.csv", "w");
+    if (ff) std::fprintf(ff, "W,Lx,qubits,nbond,ngroup,nb_g0,p,nangle,var_frac,se_frac,std_frac,"
+                             "var_raw,mean_frac,floor,snr,nsamp,wall_s\n");
+    std::vector<int> bp_depths;
+    if (quick) { bp_depths = {2, 4}; }
+    else       { bp_depths = {2, 4, 6, 8, 10, 12}; }
+    for (int W_f = 1; W_f <= 3; ++W_f) {
+        const int Lx_f = n_f / W_f;
+        const bool yp = (W_f > 2);
+        auto mpo_f  = build_hubbard_lattice_split_mpo(Lx_f, W_f, 1.0, U, 0.0, yp);
+        auto mpo0_f = build_hubbard_lattice_split_mpo(Lx_f, W_f, 1.0, 0.0, 0.0, yp);
+        const int ng_f = hva_lattice_groups(Lx_f, W_f, yp);
+        const int nb_f = hva_lattice_nbonds(Lx_f, W_f, yp);
+        const int nb_g0 = (int)hva_lattice_group_bonds(Lx_f, W_f, yp)[0].size();
+        auto psi0_f = hva_prepare_init(mpo0_f, n_f, chi_f, target_f, &cfg_f);
+        double E_exact = run_dmrg_blocks(mpo_f, n_f, 512, 1e-12, 60, 1e-11,
+                                         target_f, &cfg_f).energy;
+        double E_psi0 = run_hva_lattice(mpo_f, hop_f, Lx_f, W_f, yp, {}, chi_f,
+                                        1e-12, target_f, &cfg_f, psi0_f, false).energy;
+        const double corr = E_psi0 - E_exact;          // the frac denominator
+        auto energy_of = [&](const std::vector<double>& x) {
+            std::vector<std::vector<double>> a(x.size() / ng_f);
+            for (size_t l = 0; l < a.size(); ++l)
+                a[l].assign(x.begin() + l * ng_f, x.begin() + (l + 1) * ng_f);
+            return run_hva_lattice(mpo_f, hop_f, Lx_f, W_f, yp, a, chi_f, 1e-12,
+                                   target_f, &cfg_f, psi0_f, false).energy;
+        };
+        for (size_t pi_ = 0; pi_ < bp_depths.size(); ++pi_) {
+            const int p = bp_depths[pi_];
+            auto t0 = std::chrono::steady_clock::now();
+            const int dim = ng_f * p, kmid = (p / 2) * ng_f;
+            // fixed seed per (W,p): the comparison is between geometries, so sampling
+            // noise should not be an extra uncontrolled difference between them
+            std::mt19937 rng(20260818u + 1000u * (unsigned)W_f + (unsigned)p);
+            std::uniform_real_distribution<double> UU(-3.14159265358979323846,
+                                                       3.14159265358979323846);
+            double s1 = 0, s2 = 0, s3 = 0, s4 = 0;   // raw moments -> real error bar
+            std::vector<double> x(dim);
+            for (int t = 0; t < nsamp; ++t) {
+                for (int k = 0; k < dim; ++k) x[k] = UU(rng);
+                double x0 = x[kmid];
+                x[kmid] = x0 + h_f; double fp = energy_of(x);
+                x[kmid] = x0 - h_f; double fm = energy_of(x);
+                double g = (fp - fm) / (2 * h_f);
+                s1 += g; s2 += g * g; s3 += g * g * g; s4 += g * g * g * g;
+            }
+            const double mean_raw = s1 / nsamp;
+            const double var_raw  = std::max(0.0, s2 / nsamp - mean_raw * mean_raw);
+            const double var_frac = var_raw / (corr * corr);
+            const double std_frac = std::sqrt(var_frac);
+            // frac = (E_psi0 - E)/corr, so d(frac)/dtheta = -(dE/dtheta)/corr. The
+            // variance is sign-blind and was right; the reported MEAN was not -- it
+            // carried the opposite sign from the column that names it.
+            const double frac_mean = -mean_raw / corr;
+            const double se_frac = var_stderr(s1, s2, s3, s4, nsamp) / (corr * corr);
+            // how far the measured gradient SPREAD sits above the instrument's own
+            // error -- the number that decides whether a row is physics or noise
+            const double snr = floor_abs > 0 ? std::sqrt(var_raw) / floor_abs : 0.0;
+            double w = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() - t0).count();
+            std::printf("%d %d %d %d %d %d %d %d %.6e %.6e %.6e %.6e %+.6e %.2e %.1f %d %.1f\n",
+                        W_f, Lx_f, 2 * n_f, nb_f, ng_f - 1, nb_g0, p, dim,
+                        var_frac, se_frac, std_frac, var_raw, frac_mean, floor_abs,
+                        snr, nsamp, w);
+            std::fflush(stdout);
+            if (ff) {
+                std::fprintf(ff, "%d,%d,%d,%d,%d,%d,%d,%d,%.6e,%.6e,%.6e,%.6e,%.6e,%.3e,%.1f,%d,%.1f\n",
+                             W_f, Lx_f, 2 * n_f, nb_f, ng_f - 1, nb_g0, p, dim,
+                             var_frac, se_frac, std_frac, var_raw, frac_mean,
+                             floor_abs, snr, nsamp, w);
+                std::fflush(ff);
+            }
+        }
+    }
+    if (ff) std::fclose(ff);
+
+    // ---- stage 3: the SIZE axis ------------------------------------------------
+    // Stage 2 compares geometries at ONE size, and that is not enough to say "barren
+    // plateau": a barren plateau is defined by the variance decaying EXPONENTIALLY in
+    // system size, and at fixed n a constant factor and e^{-cn} evaluated at that n are
+    // the same number. So this stage holds the depth fixed and grows n, per width, and
+    // reports the decay rate -- which is the quantity the comparison is actually about.
+    //
+    // COST IS MEASURED, NOT ASSUMED. chi for a lossless simulation is 4^(n/2), so the
+    // cost per circuit evaluation grows steeply and the affordable n differs per width
+    // (the cylinder pays for range-W swaps on top). Each point therefore TIMES one
+    // evaluation first and skips itself, loudly and with the projected cost, if the
+    // sample would not finish inside the budget. A point missing from the CSV should be
+    // a recorded decision, not a silent hole.
+    const double budget_s = [&]{
+        const char* b = std::getenv("QX_VQE_BPBUDGET");
+        double v = 0; if (b) std::sscanf(b, "%lf", &v);
+        return v > 0 ? v : 900.0;
+    }();
+    // ~8% SE on a variance at 300. The max() floor must not override quick mode: with
+    // nsamp=24 it used to yield 50, so a smoke test drew MORE samples per size point than
+    // the depth scan it is a smoke test of, and the size loop below had no quick branch
+    // at all -- it ran every width and every n, then overwrote docs/vqe_barren.csv with a
+    // 2-depth 24-sample stub that fails qx_vqe_doc_figures.
+    const int nsamp_n = quick ? nsamp : std::max(50, nsamp / 3);
+    const int chi_cap = [&]{
+        const char* c = std::getenv("QX_VQE_BPCHI");
+        int v = 0; if (c) std::sscanf(c, "%d", &v);
+        return v > 0 ? v : 1024;      // n<=10; 4^6=4096 at n=12 is not simulable here
+    }();
+    const int p_n = 8;
+    // the largest n the chi cap actually admits: the biggest even n with 4^(n/2) <= cap.
+    // Its odd successor shares that chi but not its cost, so it is excluded -- see the
+    // gate below for why chi alone was not enough.
+    int n_cap = 2;
+    { int c = 4; while (c <= chi_cap) { n_cap += 2; c *= 4; } n_cap -= 2; }
+    std::printf("\n# size axis at p=%d, budget %.0f s/point, %d samples, n <= %d\n",
+                p_n, budget_s, nsamp_n, n_cap);
+    std::printf("# W n Lx qubits chi nb_g0 p var_frac se_frac std_frac var_raw floor snr "
+                "nsamp t_eval wall_s\n");
+    std::fflush(stdout);
+    FILE* fn = std::fopen("docs/vqe_barren_size.csv", "w");
+    if (fn) std::fprintf(fn, "W,n,Lx,qubits,chi,nb_g0,p,var_frac,se_frac,std_frac,var_raw,"
+                             "floor,snr,nsamp,t_eval,wall_s\n");
+    for (int W_n = 1; W_n <= 3; ++W_n) {
+        const int n_max = quick ? 6 : 12;      // quick mode is a smoke test, not a run
+        for (int n_n = 4; n_n <= n_max; ++n_n) {
+            if (n_n % W_n != 0) continue;              // the lattice must be rectangular
+            const int Lx_n = n_n / W_n;
+            if (Lx_n < 2) continue;                    // need at least one x-hop
+            const bool yp = (W_n > 2);
+            int chi_n = 1; for (int k = 0; k < n_n / 2; ++k) chi_n *= 4;   // lossless
+            // The chi gate has to come BEFORE the timing probe, not after it: the
+            // probe measures one circuit evaluation, but reaching it requires
+            // hva_prepare_init to converge a DMRG ground state at this chi first.
+            // At n=12 that is chi=4096 with d=4 -- ~1 GB per tensor -- so the
+            // "measure the cost" step would itself hang before reporting anything.
+            // The lossless chi is 4^(n/2) with integer division, so n and n+1 SHARE a chi
+            // while n+1 still costs more (more sites, more layers). Gating on chi alone
+            // therefore let n=11 through at exactly 1024 -- the most expensive point in
+            // the study -- while the header promised the default cap means n <= 10. The n
+            // bound is derived from the cap above rather than inferred from chi.
+            if (chi_n > chi_cap || n_n > n_cap) {
+                std::printf("SKIP W=%d n=%d (%d qubits): %s (lossless chi=%d, cap %d, "
+                            "n cap %d); out of reach on this box\n",
+                            W_n, n_n, 2 * n_n,
+                            chi_n > chi_cap ? "chi over the cap"
+                                            : "n over the bound the chi cap implies -- it "
+                                              "shares a chi with n-1 but not its cost",
+                            chi_n, chi_cap, n_cap);
+                std::fflush(stdout);
+                continue;
+            }
+            std::vector<int> cfg_n(n_n);
+            for (int i = 0; i < n_n; ++i) cfg_n[i] = (i % 2 == 0) ? 1 : 2;
+            // half filling at ODD n carries 2Sz = 1, not 0 -- take the target from the
+            // configuration rather than assuming a balanced sector, or n=9 (the only
+            // size between 6 and 12 the cylinder admits) would be unreachable
+            auto mpo_n  = build_hubbard_lattice_split_mpo(Lx_n, W_n, 1.0, U, 0.0, yp);
+            auto mpo0_n = build_hubbard_lattice_split_mpo(Lx_n, W_n, 1.0, 0.0, 0.0, yp);
+            auto hop_n  = build_hubbard_mpo(n_n, 1.0, 0.0, true);
+            const std::vector<int>& qp = mpo_n[0].phys_charge;
+            int target_n = 0;
+            for (int i = 0; i < n_n; ++i) target_n += qp[cfg_n[i]];
+            const int ng_n = hva_lattice_groups(Lx_n, W_n, yp);
+            const int nb_g0n = (int)hva_lattice_group_bonds(Lx_n, W_n, yp)[0].size();
+            auto psi0_n = hva_prepare_init(mpo0_n, n_n, chi_n, target_n, &cfg_n);
+            auto energy_of = [&](const std::vector<double>& x) {
+                std::vector<std::vector<double>> a(x.size() / ng_n);
+                for (size_t l = 0; l < a.size(); ++l)
+                    a[l].assign(x.begin() + l * ng_n, x.begin() + (l + 1) * ng_n);
+                return run_hva_lattice(mpo_n, hop_n, Lx_n, W_n, yp, a, chi_n, 1e-12,
+                                       target_n, &cfg_n, psi0_n, false).energy;
+            };
+            const int dim = ng_n * p_n, kmid = (p_n / 2) * ng_n;
+            std::mt19937 rng(20260818u + 7000u * (unsigned)W_n + (unsigned)n_n);
+            std::uniform_real_distribution<double> UU(-3.14159265358979323846,
+                                                       3.14159265358979323846);
+            std::vector<double> x(dim);
+            for (int k = 0; k < dim; ++k) x[k] = UU(rng);
+            auto tc = std::chrono::steady_clock::now();
+            volatile double e_probe = energy_of(x);
+            (void)e_probe;
+            double t_eval = std::chrono::duration<double>(
+                                std::chrono::steady_clock::now() - tc).count();
+            double projected = 2.0 * nsamp_n * t_eval;
+            if (projected > budget_s) {
+                std::printf("SKIP W=%d n=%d (%d qubits, chi=%d): one evaluation %.2f s "
+                            "-> %.0f s projected, over the %.0f s budget\n",
+                            W_n, n_n, 2 * n_n, chi_n, t_eval, projected, budget_s);
+                std::fflush(stdout);
+                continue;
+            }
+            double E_exact = run_dmrg_blocks(mpo_n, n_n, 512, 1e-12, 60, 1e-11,
+                                             target_n, &cfg_n).energy;
+            double E_psi0 = run_hva_lattice(mpo_n, hop_n, Lx_n, W_n, yp, {}, chi_n,
+                                            1e-12, target_n, &cfg_n, psi0_n, false).energy;
+            const double corr = E_psi0 - E_exact;
+            auto t0 = std::chrono::steady_clock::now();
+            double s1 = 0, s2 = 0, s3 = 0, s4 = 0;
+            for (int t = 0; t < nsamp_n; ++t) {
+                for (int k = 0; k < dim; ++k) x[k] = UU(rng);
+                double x0 = x[kmid];
+                x[kmid] = x0 + h_f; double fp = energy_of(x);
+                x[kmid] = x0 - h_f; double fm = energy_of(x);
+                double g = (fp - fm) / (2 * h_f);
+                s1 += g; s2 += g * g; s3 += g * g * g; s4 += g * g * g * g;
+            }
+            const double mean_raw = s1 / nsamp_n;
+            const double var_raw  = std::max(0.0, s2 / nsamp_n - mean_raw * mean_raw);
+            const double var_frac = var_raw / (corr * corr);
+            const double se_frac = var_stderr(s1, s2, s3, s4, nsamp_n) / (corr * corr);
+            const double snr = floor_abs > 0 ? std::sqrt(var_raw) / floor_abs : 0.0;
+            double w = std::chrono::duration<double>(
+                           std::chrono::steady_clock::now() - t0).count();
+            std::printf("%d %d %d %d %d %d %d %.6e %.6e %.6e %.6e %.2e %.1f %d %.3f %.1f\n",
+                        W_n, n_n, Lx_n, 2 * n_n, chi_n, nb_g0n, p_n, var_frac, se_frac,
+                        std::sqrt(var_frac), var_raw, floor_abs, snr, nsamp_n,
+                        t_eval, w);
+            std::fflush(stdout);
+            if (fn) {
+                std::fprintf(fn, "%d,%d,%d,%d,%d,%d,%d,%.6e,%.6e,%.6e,%.6e,%.3e,%.1f,%d,%.4f,%.1f\n",
+                             W_n, n_n, Lx_n, 2 * n_n, chi_n, nb_g0n, p_n, var_frac, se_frac,
+                             std::sqrt(var_frac), var_raw, floor_abs, snr, nsamp_n,
+                             t_eval, w);
+                std::fflush(fn);
+            }
+        }
+    }
+    if (fn) std::fclose(fn);
+    }   // end of part F
     return 0;
 }
