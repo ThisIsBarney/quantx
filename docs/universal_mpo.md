@@ -1027,12 +1027,21 @@ across n. The raw quantity is in the same CSV:
 | Var[∂frac/∂θ] | 9.308 | 1.559 | 0.578 | 0.443 |
 | local rate (frac) | | +0.89 | +0.50 | +0.13 |
 
-**The raw gradient variance is flat from n=6 and rises at n=10.** The odd-n series, a
-different charge sector sampled separately, agrees: raw local rates +0.25, +0.03, −0.10.
-So over the sizes this box can reach there is **no decay to characterise**, and the
+**The raw gradient variance is flat from n=6 and rises at n=10.** So over the sizes
+this box can reach there is **no decay to characterise**, and the
 "finite-size crossover" this section previously reported was an artefact of dividing by an
 extensive cost. A straight line through the `frac` series returns `a = +0.506 ± 0.120` per
 site; it is not an exponent, because the series it fits carries the cost's own 1/n².
+
+The odd-n sector, a different charge sector sampled separately, no longer corroborates
+the rise. Under the committed protocol it has three points (n = 5, 7, 9) with
+raw local rates +0.25, +0.03 — still falling, but flattening by ×8.3 across one step. An earlier
+draft of this section quoted a fourth rate of −0.10 from n=11 and read the odd sector as
+independently confirming the rise. That point is real but **outside the committed
+protocol**: the default χ cap admits n ≤ 10, and n=11 shares n=10's lossless χ while
+costing more, so the scan now excludes it. A conclusion resting on a point the
+documented command cannot reproduce is not reproducible, so the claim is withdrawn to
+what the even series alone supports — which is where its weight always was.
 
 A second, smaller size-dependence sits on top: θ_g drives group 0, which holds
 **2, 3, 4, 5 bonds at n = 4…10**, so ‖H_g‖ grows like n/2. The previous version of this section

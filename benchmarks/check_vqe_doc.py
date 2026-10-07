@@ -439,13 +439,34 @@ if len(chain_even) >= 3:
                      "retraction ('flat from n=6 and rises at n=10') is wrong and the "
                      "section needs rewriting back")
 
+# EVERY committed row must be reproducible by the documented default command. The n cap
+# the default chi cap implies is 10 (4^5 = 1024); a row above it can only have come from
+# a non-default invocation, and one such row -- n=11 -- had been supplying the final
+# negative odd-sector rate behind a claim in the prose. Data the committed protocol
+# cannot regenerate is not data the doc may lean on.
+DEFAULT_N_CAP = 10
+stray = sorted(n for (w, n) in FS if n > DEFAULT_N_CAP)
+if stray:
+    fails.append(f"part F: docs/vqe_barren_size.csv has rows at n = {stray}, above the "
+                 f"n <= {DEFAULT_N_CAP} the default QX_VQE_BPCHI admits; the committed "
+                 f"scan cannot reproduce them")
+
 chain_odd = sorted((n, r) for (w, n), r in FS.items() if w == 1 and n % 2 == 1)
-if len(chain_odd) >= 4:
+# ...and the rates are asserted for HOWEVER many points there are. Gating this on
+# len >= 4 meant that dropping n=11 silently skipped the check instead of flagging the
+# prose that still quoted its rate -- the third time in this PR that the checker stepped
+# over precisely the thing that had gone wrong.
+if len(chain_odd) >= 3:
     rv = [float(r["var_raw"]) for _n, r in chain_odd]
     ns = [n for n, _ in chain_odd]
     lr = [math.log(rv[i] / rv[i + 1]) / (ns[i + 1] - ns[i]) for i in range(len(rv) - 1)]
     expect("part F odd raw rates",
            "raw local rates " + ", ".join(f"{x:+.2f}".replace("-", "\u2212") for x in lr))
+    expect("part F odd point count",
+           f"it has three points (n = {', '.join(str(n) for n in ns)})")
+elif chain_odd:
+    fails.append(f"part F: the odd-n chain series has only {len(chain_odd)} point(s), too "
+                 f"few for the local rates the doc tabulates")
 
 # the exponent the prose disowns, and the measured-vs-Gaussian SE on both scans
 if len(chain_even) >= 3:

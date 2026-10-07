@@ -920,6 +920,10 @@ int main(int argc, char** argv) {
             const double var_raw  = std::max(0.0, s2 / nsamp - mean_raw * mean_raw);
             const double var_frac = var_raw / (corr * corr);
             const double std_frac = std::sqrt(var_frac);
+            // frac = (E_psi0 - E)/corr, so d(frac)/dtheta = -(dE/dtheta)/corr. The
+            // variance is sign-blind and was right; the reported MEAN was not -- it
+            // carried the opposite sign from the column that names it.
+            const double frac_mean = -mean_raw / corr;
             const double se_frac = var_stderr(s1, s2, s3, s4, nsamp) / (corr * corr);
             // how far the measured gradient SPREAD sits above the instrument's own
             // error -- the number that decides whether a row is physics or noise
@@ -928,13 +932,13 @@ int main(int argc, char** argv) {
                            std::chrono::steady_clock::now() - t0).count();
             std::printf("%d %d %d %d %d %d %d %d %.6e %.6e %.6e %.6e %+.6e %.2e %.1f %d %.1f\n",
                         W_f, Lx_f, 2 * n_f, nb_f, ng_f - 1, nb_g0, p, dim,
-                        var_frac, se_frac, std_frac, var_raw, mean_raw / corr, floor_abs,
+                        var_frac, se_frac, std_frac, var_raw, frac_mean, floor_abs,
                         snr, nsamp, w);
             std::fflush(stdout);
             if (ff) {
                 std::fprintf(ff, "%d,%d,%d,%d,%d,%d,%d,%d,%.6e,%.6e,%.6e,%.6e,%.6e,%.3e,%.1f,%d,%.1f\n",
                              W_f, Lx_f, 2 * n_f, nb_f, ng_f - 1, nb_g0, p, dim,
-                             var_frac, se_frac, std_frac, var_raw, mean_raw / corr,
+                             var_frac, se_frac, std_frac, var_raw, frac_mean,
                              floor_abs, snr, nsamp, w);
                 std::fflush(ff);
             }
