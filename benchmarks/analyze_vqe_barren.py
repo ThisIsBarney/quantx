@@ -42,6 +42,22 @@ def local_rates(pts):
             for i in range(len(pts) - 1)]
 
 
+def local_rates_err(pts, errs):
+    """Standard error of each local rate, from the two variances' own standard errors.
+
+    d/dv of ln(v) is 1/v, so the relative errors add in quadrature and divide by dn. This
+    exists because a verdict was once read off the SIGN of a point estimate: the raw
+    n=8->10 rate is -0.069 +/- 0.106 -- 0.65 sigma from zero -- and calling that "the
+    variance rises" asserted a direction the data does not resolve.
+    """
+    out = []
+    for i in range(len(pts) - 1):
+        dn = pts[i + 1][0] - pts[i][0]
+        r0, r1 = errs[i] / pts[i][1], errs[i + 1] / pts[i + 1][1]
+        out.append(math.sqrt(r0 * r0 + r1 * r1) / dn)
+    return out
+
+
 def fit_loglin(xs, ys):
     """least squares log(y) = c - a x; returns (a, stderr_a, n) or None if under-determined"""
     m = len(xs)
@@ -147,6 +163,16 @@ def size_series(w, parity, k, cost=None):
                   if int(r["W"]) == w and int(r["n"]) % 2 == parity)
 
 
+def size_errs(w, parity, k, cost=None):
+    """se_frac is quoted on var_frac; the same RELATIVE error applies to var_raw, since
+    the two differ only by the constant corr^2 at a given n."""
+    col = "var_frac" if cost == "frac" else "var_raw"
+    rows = sorted((int(r["n"]), r) for r in S
+                  if int(r["W"]) == w and int(r["n"]) % 2 == parity)
+    return [float(r["se_frac"]) / float(r["var_frac"]) * float(r[col])
+            / int(r["nb_g0"]) ** k for _n, r in rows]
+
+
 def judge(w, parity):
     """Local rates under each normalisation, and the verdict they support together."""
     label = f"W={w} {NAME[w]}" + ("" if parity == 0 else " (odd n, 2Sz=1)")
@@ -156,31 +182,46 @@ def judge(w, parity):
         print(f"    {label:28s}: NOT FITTABLE -- {len(pts0)} point(s) (n = {have}); "
               f"a rate needs at least 3")
         return None
-    raw_rates = None
+    raw_rates = raw_errs = None
     for cost, k, name in NORMS:
-        lr = local_rates(size_series(w, parity, k, cost))
+        pts = size_series(w, parity, k, cost)
+        lr = local_rates(pts)
+        er = local_rates_err(pts, size_errs(w, parity, k, cost))
         if cost is None and k == 0:
-            raw_rates = lr
-        spread = (max(lr) / min(lr)) if min(lr) > 0 else float("inf")
-        tag = "" if min(lr) > 0 else "   <-- NOT monotone: a rate <= 0 means the variance RISES"
-        print(f"    {label:28s} {name:19s}: local rates "
-              f"{' '.join(f'{r:+.2f}' for r in lr)}   (spread x{spread:.1f}){tag}")
-    # The verdict rests on the RAW series. A decay that only appears after dividing by an
-    # extensive cost is a property of the divisor.
-    if min(raw_rates) <= 0:
-        print(f"      -> NO DECAY TO CHARACTERISE: the raw gradient variance does not "
-              f"fall monotonically with n (a local rate is {min(raw_rates):+.2f}), so "
-              f"this series")
-        print(f"         supports no statement about exponential decay in either "
-              f"direction. The fall seen in `frac` is the 1/n^2 the cost carries.")
-        return "no-decay"
-    spread = max(raw_rates) / min(raw_rates)
-    if spread > 3.0:
+            raw_rates, raw_errs = lr, er
+        cells = " ".join(f"{r:+.2f}+-{e:.2f}" for r, e in zip(lr, er))
+        unres = sum(1 for r, e in zip(lr, er) if abs(r) <= 2 * e)
+        tag = f"   <-- {unres} rate(s) within 2 sigma of zero" if unres else ""
+        print(f"    {label:28s} {name:19s}: {cells}{tag}")
+    # The verdict rests on the RAW series, and only on rates the errors RESOLVE. A decay
+    # that appears only after dividing by an extensive cost is a property of the divisor;
+    # a rise that is 0.65 sigma from zero is not a rise.
+    res = [(r, e) for r, e in zip(raw_rates, raw_errs) if abs(r) > 2 * e]
+    if not res:
+        print("      -> UNRESOLVED: no raw local rate is 2 sigma from zero, so this "
+              "series says nothing about decay.")
+        return "unresolved"
+    first, last = (raw_rates[0], raw_errs[0]), (raw_rates[-1], raw_errs[-1])
+    drop = first[0] - last[0]
+    drop_se = math.sqrt(first[1] ** 2 + last[1] ** 2)
+    neg = [(r, e) for r, e in zip(raw_rates, raw_errs) if r < 0 and abs(r) > 2 * e]
+    if neg:
+        print(f"      -> RISES: a raw local rate is {neg[0][0]:+.2f}+-{neg[0][1]:.2f}, "
+              f"resolved below zero, so the variance increases with n.")
+        return "rises"
+    # abs(): a rate that changes significantly in EITHER direction is not a single
+    # exponential. A signed test called the ladder (0.26 -> 0.83, a 5.7 sigma RISE in
+    # the rate) "constant within errors".
+    if abs(drop) > 2 * drop_se:
+        tail = "".join(f" (the last rate, {last[0]:+.2f}+-{last[1]:.2f}, is itself "
+                       f"{abs(last[0])/last[1]:.1f} sigma from zero)" )
+        verb = "drops" if drop > 0 else "RISES"
         print(f"      -> raw variance falls, but NOT as a single exponential: the rate "
-              f"varies by x{spread:.1f}.")
+              f"{verb} by {abs(drop):.2f}+-{drop_se:.2f} along the series, "
+              f"{abs(drop)/drop_se:.1f} sigma.{tail}")
         return "not-exponential"
-    print(f"      -> raw variance falls with a roughly constant rate (spread "
-          f"x{spread:.1f}); an exponent would be defensible here.")
+    print(f"      -> raw rate is constant within errors (change {drop:+.2f}+-"
+          f"{drop_se:.2f}); an exponent would be defensible here.")
     return "exponential"
 
 
@@ -209,10 +250,13 @@ for v in verdicts.values():
     tally[v] = tally.get(v, 0) + 1
 print(f"  SIZE-AXIS VERDICT over {len(verdicts)} fittable series: " +
       ", ".join(f"{k} x{v}" for k, v in sorted(tally.items())))
-if tally.get("no-decay"):
-    print(f"  {tally['no-decay']} of them show NO monotone decay in the raw gradient")
-    print("  variance, so this size axis cannot be used to claim a barren plateau OR to")
-    print("  rule one out. Any decay quoted from `frac` is the extensive cost's 1/n^2.")
+if tally.get("not-exponential") or tally.get("unresolved"):
+    print("  The raw gradient variance does fall, but its rate drops significantly along")
+    print("  the series and the final step is not resolved from zero, so these sizes")
+    print("  support no single exponential -- and therefore no barren-plateau rate. The")
+    print("  larger rates quoted from `frac` include the extensive cost's own 1/n^2.")
+if tally.get("rises"):
+    print(f"  {tally['rises']} series has a raw rate resolved BELOW zero.")
 nofit = [f"W={w}" + ("" if par == 0 else " odd") for w in ws for par in (0, 1)
          if (w, par) not in verdicts and
          any(int(r["W"]) == w and int(r["n"]) % 2 == par for r in S)]

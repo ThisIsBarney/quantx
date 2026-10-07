@@ -22,7 +22,9 @@
 //        QX_VQE_ONLY=A|B|D|E|F    -> run just that part (C runs with B)
 //        QX_VQE_QUICK=1           -> shrink every part to a smoke test
 //        QX_VQE_BP=N              -> part F: N random-angle samples per point (default
-//                                    400; the size axis uses max(50, N/3))
+//                                    900 -- the value the committed CSVs were made
+//                                    with, so a default run reproduces them; the size
+//                                    axis uses max(50, N/3) = 300)
 //        QX_VQE_BPBUDGET=SEC      -> part F size axis: skip a point whose projected
 //                                    sample cost exceeds SEC (default 900), printing
 //                                    the measured per-evaluation time and the reason
@@ -790,7 +792,12 @@ int main(int argc, char** argv) {
     const int n_f = 6, target_f = pack_q2(n_f, 0);
     int chi_f = 1; for (int k = 0; k < n_f / 2; ++k) chi_f *= 4;      // 64, lossless
     // bp_nsamp was validated at startup, before any part could truncate a CSV
-    const int nsamp = bp_nsamp > 0 ? bp_nsamp : (quick ? 24 : 400);
+    // 900, not 400: the committed docs/vqe_barren*.csv were produced at 900 (and 300 on
+    // the size axis), so a default run has to reproduce them. With 400 the documented
+    // command "QX_VQE_ONLY=F qx_vqe_showcase" would overwrite both artifacts with a
+    // different sample prefix -- different variances, different error bars, possibly a
+    // different size-axis verdict -- while the doc kept quoting the old numbers.
+    const int nsamp = bp_nsamp > 0 ? bp_nsamp : (quick ? 24 : 900);
     std::vector<int> cfg_f(n_f);
     for (int i = 0; i < n_f; ++i) cfg_f[i] = (i % 2 == 0) ? 1 : 2;
     auto hop_f = build_hubbard_mpo(n_f, 1.0, 0.0, true);

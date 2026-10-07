@@ -1007,7 +1007,7 @@ trainability component.
 indistinguishable from it at p=6 and p=8. The width ordering fails in gradient variance
 exactly as it failed in entropy, and with W=2 the outlier both times.
 
-#### The size axis cannot answer it — and the first version of this section thought it had
+#### The size axis cannot answer it — and two drafts of this section thought it had
 
 A barren plateau is `Var ~ e^{−an}`, so only a size scan can use the term. This study ran
 one, read a decay off it, and was wrong: **the decay was a normalisation it had put there
@@ -1027,11 +1027,23 @@ across n. The raw quantity is in the same CSV:
 | Var[∂frac/∂θ] | 9.308 | 1.559 | 0.578 | 0.443 |
 | local rate (frac) | | +0.89 | +0.50 | +0.13 |
 
-**The raw gradient variance is flat from n=6 and rises at n=10.** So over the sizes
-this box can reach there is **no decay to characterise**, and the
-"finite-size crossover" this section previously reported was an artefact of dividing by an
-extensive cost. A straight line through the `frac` series returns `a = +0.506 ± 0.120` per
-site; it is not an exponent, because the series it fits carries the cost's own 1/n².
+With the measured errors propagated, the raw rates are
+**+0.54 ± 0.06, +0.24 ± 0.09, −0.07 ± 0.11**. Two things follow, and an earlier draft of this section got both wrong
+by reading the signs of the point estimates:
+
+* **The decay is real at small n.** +0.54 is 9.5σ from zero and +0.24 is 2.5σ, so it is
+  not true that there is "no decay to characterise".
+* **The apparent rise at n=10 is not resolved.** −0.07 ± 0.11 is **0.6σ** from zero. The
+  variance has stopped falling; whether it has started rising, these samples cannot say.
+
+What the series *does* establish is that the rate **drops by 0.61 ± 0.12 — 5.1σ —** from
+the first step to the last. A single exponential has a constant rate, so over n ≤ 10 this
+is not one, and no barren-plateau exponent follows from it. The `frac` rates are larger at
+every step by roughly the 1/n² the cost carries (+0.35, +0.26, +0.20), and the
+normalisation does more than inflate them: dividing further by nb_g0 lifts the final rate
+to +0.24 ± 0.11, which *looks* resolved. A straight line through the `frac` series returns
+`a = +0.506 ± 0.120` per site; it is not an exponent, because the series it fits carries
+the cost's own 1/n² and because the rate it averages is not constant.
 
 The odd-n sector, a different charge sector sampled separately, no longer corroborates
 the rise. Under the committed protocol it has three points (n = 5, 7, 9) with
@@ -1053,8 +1065,9 @@ the data says.
 
 **What the size axis does and does not license:**
 
-* It does **not** show a barren plateau, and it does **not** rule one out. Neither
-  direction is available from a series that is not monotone.
+* It does **not** show a barren plateau, and it does **not** rule one out. The raw rate
+  falls significantly along the series, so no single exponential fits it; and the final
+  step is unresolved, so the series cannot be called non-monotone either.
 * The depth-scan result above is untouched by this. It compares three geometries at a
   *single* n, where `corr²` is a per-geometry constant rather than a function of the
   variable being scanned — and it holds in raw units too.

@@ -11,7 +11,7 @@ present in the doc. Run it after regenerating any VQE data, before committing.
 
 Run: python benchmarks/check_vqe_doc.py   (exit 1 on any mismatch)
 """
-import csv, math, os, sys
+import csv, math, os, re, sys
 
 HERE = os.path.dirname(__file__)
 DOCS = os.path.join(HERE, "..", "docs")
@@ -445,11 +445,74 @@ if len(chain_even) >= 3:
 # negative odd-sector rate behind a claim in the prose. Data the committed protocol
 # cannot regenerate is not data the doc may lean on.
 DEFAULT_N_CAP = 10
+# ...and at the default sample counts. The committed artifacts were made at 900 (depth)
+# and max(50, 900/3) = 300 (size); if the source default drifts from these, the
+# documented command silently produces different variances and error bars from the ones
+# the prose quotes. Read the default out of the source rather than restating it here.
+_src = open(os.path.join(HERE, "..", "src", "vqe_showcase.cpp"), encoding="utf-8",
+            errors="replace").read()
+_m = re.search(r"nsamp = bp_nsamp > 0 \? bp_nsamp : \(quick \? \d+ : (\d+)\)", _src)
+if not _m:
+    fails.append("part F: cannot find part F's default sample count in "
+                 "src/vqe_showcase.cpp, so the committed CSVs' reproducibility is "
+                 "unverifiable")
+else:
+    _def = int(_m.group(1))
+    for lbl, tbl, want in (("depth", F, _def), ("size", FS, max(50, _def // 3))):
+        got = {int(r["nsamp"]) for r in tbl.values()}
+        if got != {want}:
+            fails.append(f"part F: the committed {lbl} CSV has nsamp={sorted(got)} but "
+                         f"the source default yields {want}; the documented command "
+                         f"would not reproduce it")
 stray = sorted(n for (w, n) in FS if n > DEFAULT_N_CAP)
 if stray:
     fails.append(f"part F: docs/vqe_barren_size.csv has rows at n = {stray}, above the "
                  f"n <= {DEFAULT_N_CAP} the default QX_VQE_BPCHI admits; the committed "
                  f"scan cannot reproduce them")
+
+# The prose now quotes rates WITH errors, significances, and the drop across the series.
+# Every one of those is derivable, and leaving them unasserted is how three earlier
+# versions of this section kept a wrong number: the checker has to cover the sentence
+# that carries the conclusion, not only the table beside it.
+if len(chain_even) >= 3:
+    ns_e = [n for n, _ in chain_even]
+    vr_e = [float(r["var_raw"]) for _n, r in chain_even]
+    # se_frac is quoted on var_frac; the same RELATIVE error applies to var_raw
+    er_e = [float(r["se_frac"]) / float(r["var_frac"]) * float(r["var_raw"])
+            for _n, r in chain_even]
+    rates, rerrs = [], []
+    for i in range(len(ns_e) - 1):
+        dn = ns_e[i + 1] - ns_e[i]
+        rates.append(math.log(vr_e[i] / vr_e[i + 1]) / dn)
+        rerrs.append(math.sqrt((er_e[i] / vr_e[i]) ** 2 +
+                               (er_e[i + 1] / vr_e[i + 1]) ** 2) / dn)
+    expect("part F raw rates with errors",
+           ", ".join(f"{r:+.2f} \u00b1 {e:.2f}".replace("-", "\u2212", 1)
+                     if r < 0 else f"{r:+.2f} \u00b1 {e:.2f}"
+                     for r, e in zip(rates, rerrs)).replace("+", "+"))
+    # the two significances the first bullet rests on, and the unresolved last step
+    expect("part F first-rate sigma", f"{rates[0]:+.2f} is {rates[0]/rerrs[0]:.1f}\u03c3")
+    expect("part F second-rate sigma", f"{rates[1]:+.2f} is {rates[1]/rerrs[1]:.1f}\u03c3")
+    expect("part F last-rate sigma",
+           f"is **{abs(rates[-1]/rerrs[-1]):.1f}\u03c3** from zero")
+    # and the drop that carries the "not a single exponential" conclusion
+    drop = rates[0] - rates[-1]
+    dse = math.sqrt(rerrs[0] ** 2 + rerrs[-1] ** 2)
+    expect("part F rate drop",
+           f"drops by {drop:.2f} \u00b1 {dse:.2f} \u2014 {drop/dse:.1f}\u03c3")
+    if abs(rates[-1]) > 2 * rerrs[-1]:
+        fails.append(f"part F: the last raw local rate is {rates[-1]:+.3f}+/-"
+                     f"{rerrs[-1]:.3f}, now RESOLVED from zero; the doc says it is not, "
+                     f"so the retraction's wording needs revisiting")
+    if drop <= 2 * dse:
+        fails.append(f"part F: the raw rate drop is {drop:.2f}+/-{dse:.2f}, no longer "
+                     f"significant; the doc's 'not a single exponential' rests on it")
+    # the frac-minus-raw gap the prose attributes to the 1/n^2
+    vf_e = [float(r["var_frac"]) for _n, r in chain_even]
+    fr = [math.log(vf_e[i] / vf_e[i + 1]) / (ns_e[i + 1] - ns_e[i])
+          for i in range(len(ns_e) - 1)]
+    expect("part F frac-minus-raw",
+           "(" + ", ".join(f"{f - r:+.2f}" for f, r in zip(fr, rates)) + ")")
 
 chain_odd = sorted((n, r) for (w, n), r in FS.items() if w == 1 and n % 2 == 1)
 # ...and the rates are asserted for HOWEVER many points there are. Gating this on
