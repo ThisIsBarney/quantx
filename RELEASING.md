@@ -13,6 +13,16 @@ accepts the same version twice.
 2. On GitHub, create the environment `pypi` (Settings → Environments). With required
    reviewers set there, every upload waits for an explicit approval.
 
+## Before the first upload
+
+- **The repository is private.** The PyPI page links to it: `python/README.md` is the
+  page's text, and `[project.urls]` in `python/pyproject.toml` fills its sidebar. For
+  everyone but the owner those links are dead. Make the repository public first, or
+  remove the links.
+- **The upload runs in GitHub Actions.** Both the build and the upload need Actions to
+  be starting jobs on the account. When this was written, jobs were not starting
+  because of a billing problem.
+
 ## A stale tag to know about
 
 The repository has an old tag `v0.2.0` from an internal milestone. It corresponds to no

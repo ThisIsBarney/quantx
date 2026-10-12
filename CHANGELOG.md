@@ -3,29 +3,15 @@
 All notable changes to **quantx-engine** are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
-`MAJOR.MINOR.PATCH` — MINOR increments add new functionality without breaking existing APIs;
-PATCH increments are bug-fixes and packaging corrections only.
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html): `MAJOR.MINOR.PATCH`.
+While the version is 0.x, a MINOR increment may change the API; PATCH increments are
+bug-fixes and packaging corrections only.
 
 ---
 
 ## [Unreleased]
 
-### Fixed
-
-- `CompositeNoise` no longer drops a channel silently. `to_dict()` merged its models
-  with `dict.update`, so a second `noise`-kind model replaced the first:
-  `CompositeNoise([DepolarizingNoise(...), ThermalRelaxationNoise(...), ReadoutNoise(...)])`
-  ran depolarizing + bit-flip with no T1 channel. Two models that emit the same key
-  (`noise`, `depolarizing_prob`, `amplitude_damping_gamma`, `noise_metadata`, ...) now
-  raise `NoiseModelError` when the composite is built, including through `+`. So does
-  a custom model's `noise` selector of kind `depolarizing` or `amplitude_damping` that
-  carries a value, next to `DepolarizingNoise` or `AmplitudeDampingNoise`: the keys
-  differ, but the backend writes the selector's value into the same field.
-  Depolarizing and amplitude damping still combine with one `noise`-kind model.
-- `ReadoutNoise`'s docstring said its bit flip follows each measurement. The backend
-  applies it to every qubit after every gate except measurements, so it is gate noise,
-  not a readout error.
+*(No changes yet)*
 
 ---
 
@@ -33,6 +19,9 @@ PATCH increments are bug-fixes and packaging corrections only.
 
 The first version published to PyPI. The native engine is now installable; what it can
 do from Python is gated against exact references.
+
+Version numbers restart here, so the API stability guarantee of the internal 1.0.0
+(below) does not carry over: as a 0.x release, any minor version may change the API.
 
 ### Added
 
@@ -43,9 +32,30 @@ do from Python is gated against exact references.
 - **`quantx_engine.models` and `dmrg.ground_state`** (#196): ground states of the XXZ,
   J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains in a chosen symmetry sector on the
   block-sparse engine. They are gated against exact diagonalisation to 1e-10.
+- **`models.HubbardLattice` and `quantx_engine.hva`** (#197): Hubbard ground states on
+  ladders, strips and cylinders, and fermionic HVA circuits on the same lattices
+  (`hva.circuit`, `hva.layout`), returning energy, entanglement entropies and
+  truncation. The circuits are gated against an independent state vector to 1e-10;
+  lattice DMRG against exact diagonalisation where the fermion signs are physical.
 
 ### Fixed
 
+- The block engine's lossless centre moves padded every bond they crossed with
+  zero-weight states, so reported bond dimensions were inflated (a circuit capped at
+  `max_bond` 4 reported 10). Energies and entropies were unaffected (#197).
+- `CompositeNoise` no longer drops a channel silently (#198). `to_dict()` merged its
+  models with `dict.update`, so a second `noise`-kind model replaced the first:
+  `CompositeNoise([DepolarizingNoise(...), ThermalRelaxationNoise(...), ReadoutNoise(...)])`
+  ran depolarizing + bit-flip with no T1 channel. Two models that emit the same key
+  (`noise`, `depolarizing_prob`, `amplitude_damping_gamma`, `noise_metadata`, ...) now
+  raise `NoiseModelError` when the composite is built, including through `+`. So does
+  a custom model's `noise` selector of kind `depolarizing` or `amplitude_damping` that
+  carries a value, next to `DepolarizingNoise` or `AmplitudeDampingNoise`: the keys
+  differ, but the backend writes the selector's value into the same field.
+  Depolarizing and amplitude damping still combine with one `noise`-kind model.
+- `ReadoutNoise`'s docstring said its bit flip follows each measurement. The backend
+  applies it to every qubit after every gate except measurements, so it is gate noise,
+  not a readout error (#198).
 - The DMRG C API failed on every odd-length Heisenberg chain, with an error that blamed
   `max_bond` (#196).
 - An unknown model type silently ran as an empty Hamiltonian, and a misspelled sector

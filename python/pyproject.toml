@@ -58,6 +58,13 @@ all = [
     "ray[default]>=2.0",
 ]
 
+# The repository is private as of 0.1.0's preparation: see "Before the first upload" in
+# RELEASING.md.
+[project.urls]
+Homepage = "https://github.com/ThisIsBarney/quantx"
+Changelog = "https://github.com/ThisIsBarney/quantx/blob/master/CHANGELOG.md"
+Issues = "https://github.com/ThisIsBarney/quantx/issues"
+
 [project.entry-points."pennylane.plugins"]
 "quantx.statevector" = "quantx_engine.pennylane_plugin:QuantXDevice"
 
