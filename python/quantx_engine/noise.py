@@ -19,7 +19,8 @@ Supported noise models and their native backend mapping:
                           backend does not yet apply T2 dephasing)
 - ReadoutNoise          — emits ``noise={kind:bit_flip,prob:p}`` (supported as
                           bit-flip channel, not measurement-specific readout)
-- CompositeNoise        — combine multiple noise models (fields merged)
+- CompositeNoise        — combine models whose fields are disjoint: at most one
+                          ``noise``-kind model, and any shared field raises
 
 References
 ----------
@@ -209,18 +210,19 @@ class ThermalRelaxationNoise(NoiseModel):
 
 
 class ReadoutNoise(NoiseModel):
-    """Symmetric bit-flip noise modelling readout errors.
+    """Symmetric bit-flip noise, intended to stand in for readout errors.
 
     The native circuit backend implements this as a ``bit_flip`` channel
-    (``noise = {"kind": "bit_flip", "prob": p}``), which applies a bit-flip
-    with probability p after each measurement gate.  This is an approximation:
-    a true readout error model would be measurement-specific, but ``bit_flip``
-    is the closest currently-supported mechanism.
+    (``noise = {"kind": "bit_flip", "prob": p}``): after every gate except a
+    measurement, each qubit flips with probability p.  So it acts as gate
+    noise, not as a readout error.  A true readout error model would act on
+    the measurement outcomes only; ``bit_flip`` is the closest mechanism the
+    backend supports.
 
     Parameters
     ----------
     prob:
-        Bit-flip (readout error) probability per measurement, in [0, 0.5].
+        Bit-flip probability per qubit per gate, in [0, 0.5].
         Values above 0.5 are anti-correlated and should be modeled differently.
     """
 
@@ -244,13 +246,56 @@ class ReadoutNoise(NoiseModel):
 class CompositeNoise(NoiseModel):
     """Combination of multiple noise models applied simultaneously.
 
-    All noise models are merged into a single dict. Later models override
-    earlier ones if they share the same key.
+    ``to_dict()`` is the union of the models' payloads, so the models must
+    emit disjoint keys.  If two models emit the same key, building the
+    composite (constructor or ``+``) raises :class:`NoiseModelError`; no entry
+    is ever silently replaced.
+
+    In practice this allows **at most one** ``noise``-kind model per
+    composite.  :class:`ThermalRelaxationNoise` (``t1_decay``) and
+    :class:`ReadoutNoise` (``bit_flip``) both put their channel under the
+    single key ``noise``, because the native backend parses exactly one
+    ``noise`` object per circuit (``parse_noise_config`` in
+    ``src/json_utils.cpp``).  A second one has no slot to go to: merging the
+    two would drop a channel.  :class:`DepolarizingNoise` and
+    :class:`AmplitudeDampingNoise` emit the top-level fields
+    ``depolarizing_prob`` and ``amplitude_damping_gamma``, which the backend
+    applies alongside the ``noise`` channel, so they combine with each other
+    and with one ``noise``-kind model::
+
+        CompositeNoise([DepolarizingNoise(0.005),
+                        ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50)])  # ok
+        CompositeNoise([ThermalRelaxationNoise(T1=1e5, T2=6e4, t_gate=50),
+                        ReadoutNoise(0.02)])     # NoiseModelError: both emit "noise"
+
+    Every key is checked, not only ``noise``.  Each top-level field holds one
+    value per circuit, so two :class:`DepolarizingNoise` models collide on
+    ``depolarizing_prob`` (build one model instead).  ``noise_metadata`` is
+    checked as well: the native backend ignores it, but the density-matrix
+    simulator in :mod:`quantx_engine.primitives` falls back to its ``gamma``
+    as the amplitude-damping rate.
+
+    The check is on the fields a payload sets, not only on its keys.  A
+    ``noise`` selector of kind ``depolarizing`` or ``amplitude_damping`` (no
+    shipped model emits one, but the backend accepts both, so a custom model
+    may) is another spelling of ``depolarizing_prob`` or
+    ``amplitude_damping_gamma``: the backend writes its ``prob`` or ``gamma``
+    (at the selector's top level or in its ``params``) into that field.  Such a
+    selector therefore collides with a :class:`DepolarizingNoise` or
+    :class:`AmplitudeDampingNoise` although the keys differ.  A selector that
+    carries no value leaves the field alone, and combines.
 
     Parameters
     ----------
     models:
         List of NoiseModel instances to combine.
+
+    Raises
+    ------
+    NoiseModelError
+        If ``models`` is empty, holds a non-NoiseModel, or two models set the
+        same field: they emit the same key, or one emits a ``noise`` selector
+        that the backend writes into another's field.
     """
 
     def __init__(self, models: list[NoiseModel]):
@@ -260,19 +305,94 @@ class CompositeNoise(NoiseModel):
             if not isinstance(m, NoiseModel):
                 raise NoiseModelError(f"expected NoiseModel, got {type(m).__name__}")
         self._models = list(models)
+        self._merged()  # refuse colliding models here, not when the circuit is run
 
     @property
     def models(self) -> list[NoiseModel]:
         return list(self._models)
 
     def to_dict(self) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        for m in self._models:
-            result.update(m.to_dict())
-        return result
+        return self._merged()
 
     def __add__(self, other: NoiseModel) -> "CompositeNoise":
         return CompositeNoise(self._models + [other])
+
+    def _merged(self) -> dict[str, Any]:
+        """Union of the models' payloads; NoiseModelError if two set the same field."""
+        merged: dict[str, Any] = {}
+        owner: dict[str, tuple[int, str]] = {}  # field -> (model index, key that sets it)
+        for i, m in enumerate(self._models):
+            for key, value in m.to_dict().items():
+                fields = _fields_set(key, value)
+                for field in fields:
+                    if field in owner and owner[field][0] != i:
+                        self._refuse(owner[field], (i, key), field, merged, value)
+                for field in fields:
+                    owner.setdefault(field, (i, key))
+                merged[key] = value
+        return merged
+
+    def _refuse(self, first: tuple[int, str], second: tuple[int, str], field: str,
+                merged: dict[str, Any], value: Any) -> None:
+        """Raise for the second model setting a field the first already set."""
+        (j, key_j), (i, key_i) = first, second
+        name_j = f"{type(self._models[j]).__name__} (models[{j}])"
+        name_i = f"{type(self._models[i]).__name__} (models[{i}])"
+        if key_j == key_i == "noise":
+            kinds = [_kind(v) for v in (merged["noise"], value)]
+            raise NoiseModelError(
+                f"{name_j} and {name_i} both emit 'noise' (kinds {kinds[0]!r} and "
+                f"{kinds[1]!r}); the native backend executes one 'noise' channel per "
+                "circuit, so one would be silently dropped. Use at most one noise-kind "
+                "model per CompositeNoise; DepolarizingNoise and AmplitudeDampingNoise "
+                "use their own fields and combine with it."
+            )
+        if key_j == key_i:
+            raise NoiseModelError(
+                f"{name_j} and {name_i} both emit {key_i!r}; a circuit holds one value "
+                "per key, so one would be silently dropped. Use a single model instead."
+            )
+        # One sets the field directly, the other through a 'noise' selector.
+        def emits(key: str, v: Any) -> str:
+            if key == "noise":
+                return f"emits a 'noise' selector of kind {_kind(v)!r}"
+            return f"emits {key!r}"
+        raise NoiseModelError(
+            f"{name_j} {emits(key_j, merged[key_j])} and {name_i} {emits(key_i, value)}; "
+            f"the native backend writes both into {field!r}, so one would be silently "
+            "dropped. Use a single model instead."
+        )
+
+
+# The native parser (parse_noise_config in src/json_utils.cpp) reads these two 'noise'
+# kinds as another spelling of a top-level field: when the selector carries a value
+# (kind -> field, value key), it writes that value into the field, over whatever a
+# DepolarizingNoise or AmplitudeDampingNoise put there.
+_NOISE_KIND_FIELDS = {"depolarizing": ("depolarizing_prob", "prob"),
+                      "amplitude_damping": ("amplitude_damping_gamma", "gamma")}
+
+
+def _kind(noise: Any) -> Any:
+    return noise.get("kind") if isinstance(noise, dict) else None
+
+
+def _fields_set(key: str, value: Any) -> list[str]:
+    """The circuit fields one payload entry sets: its key, and for a 'noise' selector of
+    an aliasing kind that carries a value, the top-level field the backend writes it into.
+
+    This mirrors parse_noise_config: the value counts if it is non-null at the selector's
+    top level, or present in its ``params``. (A value of the wrong type makes the backend
+    reject the circuit, which is not a silent drop either way.) A selector without a value
+    leaves the field alone, so it combines."""
+    kind = _kind(value) if key == "noise" else None
+    alias = _NOISE_KIND_FIELDS.get(kind) if isinstance(kind, str) else None
+    if alias is None:
+        return [key]
+    field, value_key = alias
+    params = value.get("params")
+    carries = (value.get(value_key) is not None
+               or (isinstance(params, dict) and value_key in params))
+    return [key, field] if carries else [key]
 
 
 # ---------------------------------------------------------------------------

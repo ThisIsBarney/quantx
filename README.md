@@ -78,11 +78,14 @@ result = engine.run_circuit(circuit)
 ### Noise Models
 
 ```python
-from quantx_engine.noise import DepolarizingNoise, ThermalRelaxationNoise, NoiseModel
+from quantx_engine.noise import DepolarizingNoise, ThermalRelaxationNoise, CompositeNoise
 
-model = NoiseModel()
-model.add(DepolarizingNoise(prob=0.01))
-model.add(ThermalRelaxationNoise(T1=50e-6, T2=30e-6, t_gate=50e-9))
+# Depolarizing combines with at most one `noise`-kind model (ThermalRelaxationNoise
+# or ReadoutNoise): the native backend runs one per circuit, so a second raises.
+model = CompositeNoise([
+    DepolarizingNoise(prob=0.01),
+    ThermalRelaxationNoise(T1=50e-6, T2=30e-6, t_gate=50e-9),
+])
 circuit.update(model.to_dict())
 result = engine.run_circuit(circuit)
 ```

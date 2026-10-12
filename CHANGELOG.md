@@ -11,7 +11,21 @@ PATCH increments are bug-fixes and packaging corrections only.
 
 ## [Unreleased]
 
-*(No changes yet)*
+### Fixed
+
+- `CompositeNoise` no longer drops a channel silently. `to_dict()` merged its models
+  with `dict.update`, so a second `noise`-kind model replaced the first:
+  `CompositeNoise([DepolarizingNoise(...), ThermalRelaxationNoise(...), ReadoutNoise(...)])`
+  ran depolarizing + bit-flip with no T1 channel. Two models that emit the same key
+  (`noise`, `depolarizing_prob`, `amplitude_damping_gamma`, `noise_metadata`, ...) now
+  raise `NoiseModelError` when the composite is built, including through `+`. So does
+  a custom model's `noise` selector of kind `depolarizing` or `amplitude_damping` that
+  carries a value, next to `DepolarizingNoise` or `AmplitudeDampingNoise`: the keys
+  differ, but the backend writes the selector's value into the same field.
+  Depolarizing and amplitude damping still combine with one `noise`-kind model.
+- `ReadoutNoise`'s docstring said its bit flip follows each measurement. The backend
+  applies it to every qubit after every gate except measurements, so it is gate noise,
+  not a readout error.
 
 ---
 
