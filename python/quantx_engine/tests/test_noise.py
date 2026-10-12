@@ -191,6 +191,44 @@ def test_composite_refuses_any_shared_key(models, key):
         CompositeNoise(models)
 
 
+class _SelectorNoise(NoiseModel):
+    """A custom model that spells a scalar channel as a named 'noise' selector, which
+    the native backend accepts (parse_noise_config in src/json_utils.cpp)."""
+
+    def __init__(self, kind, **fields):
+        self._noise = {"kind": kind, **fields}
+
+    def to_dict(self):
+        return {"noise": dict(self._noise)}
+
+
+@pytest.mark.parametrize("scalar, selector, field", [
+    (DepolarizingNoise(0.01), _SelectorNoise("depolarizing", prob=0.02),
+     "depolarizing_prob"),
+    (AmplitudeDampingNoise(0.01), _SelectorNoise("amplitude_damping", gamma=0.02),
+     "amplitude_damping_gamma"),
+    # the backend reads the value from params too
+    (DepolarizingNoise(0.01), _SelectorNoise("depolarizing", params={"prob": 0.02}),
+     "depolarizing_prob"),
+])
+def test_composite_refuses_a_selector_aliasing_a_scalar_field(scalar, selector, field):
+    """The keys differ, but the backend writes the selector's prob or gamma into the
+    scalar field, so the composite would have run one of the two values."""
+    for models in ([scalar, selector], [selector, scalar]):
+        with pytest.raises(NoiseModelError, match=f"writes both into '{field}'"):
+            CompositeNoise(models)
+    with pytest.raises(NoiseModelError, match=f"writes both into '{field}'"):
+        scalar + selector
+
+
+def test_composite_selector_combines_with_the_other_scalar_field():
+    """A depolarizing selector sets depolarizing_prob only; amplitude damping combines."""
+    d = CompositeNoise([AmplitudeDampingNoise(0.05),
+                        _SelectorNoise("depolarizing", prob=0.02)]).to_dict()
+    assert d == {"amplitude_damping_gamma": 0.05,
+                 "noise": {"kind": "depolarizing", "prob": 0.02}}
+
+
 def test_composite_empty_raises():
     with pytest.raises(NoiseModelError):
         CompositeNoise([])

@@ -20,7 +20,7 @@ Supported noise models and their native backend mapping:
 - ReadoutNoise          — emits ``noise={kind:bit_flip,prob:p}`` (supported as
                           bit-flip channel, not measurement-specific readout)
 - CompositeNoise        — combine models whose fields are disjoint: at most one
-                          ``noise``-kind model, and any shared key raises
+                          ``noise``-kind model, and any shared field raises
 
 References
 ----------
@@ -274,6 +274,14 @@ class CompositeNoise(NoiseModel):
     simulator in :mod:`quantx_engine.primitives` falls back to its ``gamma``
     as the amplitude-damping rate.
 
+    The check is on the fields a payload sets, not only on its keys.  A
+    ``noise`` selector of kind ``depolarizing`` or ``amplitude_damping`` (no
+    shipped model emits one, but the backend accepts both, so a custom model
+    may) is another spelling of ``depolarizing_prob`` or
+    ``amplitude_damping_gamma``: the backend writes its ``prob`` or ``gamma``
+    into that field.  It therefore collides with a :class:`DepolarizingNoise`
+    or :class:`AmplitudeDampingNoise` although the keys differ.
+
     Parameters
     ----------
     models:
@@ -282,8 +290,9 @@ class CompositeNoise(NoiseModel):
     Raises
     ------
     NoiseModelError
-        If ``models`` is empty, holds a non-NoiseModel, or two models emit
-        the same key.
+        If ``models`` is empty, holds a non-NoiseModel, or two models set the
+        same field: they emit the same key, or one emits a ``noise`` selector
+        that the backend writes into another's field.
     """
 
     def __init__(self, models: list[NoiseModel]):
@@ -306,35 +315,69 @@ class CompositeNoise(NoiseModel):
         return CompositeNoise(self._models + [other])
 
     def _merged(self) -> dict[str, Any]:
-        """Union of the models' payloads; NoiseModelError if two share a key."""
+        """Union of the models' payloads; NoiseModelError if two set the same field."""
         merged: dict[str, Any] = {}
-        owner: dict[str, int] = {}
+        owner: dict[str, tuple[int, str]] = {}  # field -> (model index, key that sets it)
         for i, m in enumerate(self._models):
             for key, value in m.to_dict().items():
-                if key not in merged:
-                    merged[key] = value
-                    owner[key] = i
-                    continue
-                j = owner[key]
-                pair = (
-                    f"{type(self._models[j]).__name__} (models[{j}]) and "
-                    f"{type(m).__name__} (models[{i}]) both emit {key!r}"
-                )
-                if key == "noise":
-                    kinds = [v.get("kind") if isinstance(v, dict) else None
-                             for v in (merged[key], value)]
-                    raise NoiseModelError(
-                        f"{pair} (kinds {kinds[0]!r} and {kinds[1]!r}); the native "
-                        "backend executes one 'noise' channel per circuit, so one would "
-                        "be silently dropped. Use at most one noise-kind model per "
-                        "CompositeNoise; DepolarizingNoise and AmplitudeDampingNoise "
-                        "use their own fields and combine with it."
-                    )
-                raise NoiseModelError(
-                    f"{pair}; a circuit holds one value per key, so one would be "
-                    "silently dropped. Use a single model instead."
-                )
+                fields = _fields_set(key, value)
+                for field in fields:
+                    if field in owner and owner[field][0] != i:
+                        self._refuse(owner[field], (i, key), field, merged, value)
+                for field in fields:
+                    owner.setdefault(field, (i, key))
+                merged[key] = value
         return merged
+
+    def _refuse(self, first: tuple[int, str], second: tuple[int, str], field: str,
+                merged: dict[str, Any], value: Any) -> None:
+        """Raise for the second model setting a field the first already set."""
+        (j, key_j), (i, key_i) = first, second
+        name_j = f"{type(self._models[j]).__name__} (models[{j}])"
+        name_i = f"{type(self._models[i]).__name__} (models[{i}])"
+        if key_j == key_i == "noise":
+            kinds = [_kind(v) for v in (merged["noise"], value)]
+            raise NoiseModelError(
+                f"{name_j} and {name_i} both emit 'noise' (kinds {kinds[0]!r} and "
+                f"{kinds[1]!r}); the native backend executes one 'noise' channel per "
+                "circuit, so one would be silently dropped. Use at most one noise-kind "
+                "model per CompositeNoise; DepolarizingNoise and AmplitudeDampingNoise "
+                "use their own fields and combine with it."
+            )
+        if key_j == key_i:
+            raise NoiseModelError(
+                f"{name_j} and {name_i} both emit {key_i!r}; a circuit holds one value "
+                "per key, so one would be silently dropped. Use a single model instead."
+            )
+        # One sets the field directly, the other through a 'noise' selector.
+        def emits(key: str, v: Any) -> str:
+            if key == "noise":
+                return f"emits a 'noise' selector of kind {_kind(v)!r}"
+            return f"emits {key!r}"
+        raise NoiseModelError(
+            f"{name_j} {emits(key_j, merged[key_j])} and {name_i} {emits(key_i, value)}; "
+            f"the native backend writes both into {field!r}, so one would be silently "
+            "dropped. Use a single model instead."
+        )
+
+
+# The native parser (parse_noise_config in src/json_utils.cpp) reads these two 'noise'
+# kinds as another spelling of a top-level field: it writes the selector's prob or gamma
+# into that field, over whatever a DepolarizingNoise or AmplitudeDampingNoise put there.
+_NOISE_KIND_FIELDS = {"depolarizing": "depolarizing_prob",
+                      "amplitude_damping": "amplitude_damping_gamma"}
+
+
+def _kind(noise: Any) -> Any:
+    return noise.get("kind") if isinstance(noise, dict) else None
+
+
+def _fields_set(key: str, value: Any) -> list[str]:
+    """The circuit fields one payload entry sets: its key, and for a 'noise' selector of
+    an aliasing kind, the top-level field the backend writes it into."""
+    kind = _kind(value) if key == "noise" else None
+    alias = _NOISE_KIND_FIELDS.get(kind) if isinstance(kind, str) else None
+    return [key] if alias is None else [key, alias]
 
 
 # ---------------------------------------------------------------------------
