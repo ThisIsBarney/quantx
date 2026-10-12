@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "quantx-engine"
 dynamic = ["version"]
-description = "QuantX quantum simulation SDK — 130+ physics modules covering VQE, MBQC, LDPC codes, bosonic qubits, QSVT, dynamical decoupling, and more"
+description = "Block-sparse tensor-network engine for quantum many-body physics: symmetric DMRG, TDVP and fermionic HVA circuits, with a Python API"
 readme = "README.md"
 requires-python = ">=3.10"
 # SPDX string: the {text = ...} table form is deprecated and setuptools stops accepting it
@@ -14,7 +14,7 @@ license = "MIT"
 authors = [
   {name = "Marshall WU", email = "wujian.thu@icloud.com"},
 ]
-keywords = ["quantum", "simulation", "physics", "hamiltonian", "topological"]
+keywords = ["quantum", "tensor-network", "dmrg", "mps", "many-body", "hubbard", "physics"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",

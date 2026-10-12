@@ -12,8 +12,11 @@ it simulates the circuit exactly, up to ``max_bond``, far beyond state-vector si
     cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
     lay = hva.layout(cyl)                          # the bond groups of this geometry
     angles = [[0.1] * lay.angles_per_layer] * 3    # three layers
-    r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)    # ~5 s
+    r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)    # ~5-10 s
     r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
+
+This cylinder already truncates at max_bond 256: ``truncation_error`` is about 5e-4,
+and the energy moves by 3e-3 at max_bond 1024. Raise max_bond until it stops moving.
 
 Wider lattices cost fast. The U = 0 start itself is highly entangled in 2-D: a 6x4
 cylinder prepared at max_bond 256 starts 0.05 off in energy (``init_energy_error``) and
