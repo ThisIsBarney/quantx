@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import os
+
 import pytest
 from quantx_engine.noise import (
     NoiseModel,
@@ -210,6 +212,8 @@ class _SelectorNoise(NoiseModel):
     # the backend reads the value from params too
     (DepolarizingNoise(0.01), _SelectorNoise("depolarizing", params={"prob": 0.02}),
      "depolarizing_prob"),
+    (AmplitudeDampingNoise(0.01), _SelectorNoise("amplitude_damping", params={"gamma": 0.0}),
+     "amplitude_damping_gamma"),
 ])
 def test_composite_refuses_a_selector_aliasing_a_scalar_field(scalar, selector, field):
     """The keys differ, but the backend writes the selector's prob or gamma into the
@@ -219,6 +223,8 @@ def test_composite_refuses_a_selector_aliasing_a_scalar_field(scalar, selector, 
             CompositeNoise(models)
     with pytest.raises(NoiseModelError, match=f"writes both into '{field}'"):
         scalar + selector
+    with pytest.raises(NoiseModelError, match=f"writes both into '{field}'"):
+        CompositeNoise([CompositeNoise([scalar]), selector])  # nested
 
 
 def test_composite_selector_combines_with_the_other_scalar_field():
@@ -227,6 +233,82 @@ def test_composite_selector_combines_with_the_other_scalar_field():
                         _SelectorNoise("depolarizing", prob=0.02)]).to_dict()
     assert d == {"amplitude_damping_gamma": 0.05,
                  "noise": {"kind": "depolarizing", "prob": 0.02}}
+
+
+@pytest.mark.parametrize("scalar, selector", [
+    (DepolarizingNoise(0.01), _SelectorNoise("depolarizing")),
+    (DepolarizingNoise(0.01), _SelectorNoise("depolarizing", prob=None)),
+    # the backend reads gamma for this kind, not prob
+    (AmplitudeDampingNoise(0.01), _SelectorNoise("amplitude_damping", prob=0.5)),
+])
+def test_composite_selector_without_a_value_combines(scalar, selector):
+    """A selector that carries no value leaves the scalar field alone (the backend keeps
+    it), so nothing would be dropped and the composite is allowed."""
+    d = CompositeNoise([scalar, selector]).to_dict()
+    assert d == {**scalar.to_dict(), **selector.to_dict()}
+
+
+@pytest.mark.parametrize("noise", ["bit_flip", None, {"kind": ["depolarizing"]}, {"prob": 0.1}])
+def test_composite_odd_noise_values_do_not_crash_the_check(noise):
+    class _Raw(NoiseModel):
+        def to_dict(self):
+            return {"noise": noise}
+
+    d = CompositeNoise([DepolarizingNoise(0.01), _Raw()]).to_dict()
+    assert d == {"depolarizing_prob": 0.01, "noise": noise}
+
+
+# ── The collision rules against the native backend ────────────────────────────
+# The check above mirrors parse_noise_config by hand. These run the circuits, so a
+# backend change that breaks the mirror fails here. Everything is deterministic: one
+# qubit, X (|1>), then channels at rate 0 or 1, read through Z0.
+
+def _native_engine():
+    # CI's native job sets QX_REQUIRE_NATIVE=1: there a load failure must fail.
+    unavailable = pytest.fail if os.environ.get("QX_REQUIRE_NATIVE") == "1" else pytest.skip
+    try:
+        from quantx_engine.engine import Engine
+        return Engine()
+    except Exception as exc:  # QuantXNativeUnavailable, or a missing dependency
+        unavailable(f"native library unavailable: {exc}")
+
+
+def _z_after_x(engine, noise_fields):
+    circuit = {"qubits": 1, "shots": 0, "observables": ["Z0"], "seed": 1,
+               "operations": [{"name": "X", "targets": [0]}], **noise_fields}
+    return engine.run_circuit(circuit)["expectation_exact"]["Z0"]
+
+
+@pytest.mark.parametrize("selector, overwrites", [
+    ({"kind": "amplitude_damping", "gamma": 0.0}, True),
+    ({"kind": "amplitude_damping", "params": {"gamma": 0.0}}, True),
+    ({"kind": "amplitude_damping"}, False),
+    ({"kind": "amplitude_damping", "prob": 0.0}, False),
+])
+def test_native_selector_alias_matches_the_check(selector, overwrites):
+    """Damping at gamma = 1 sends |1> to |0> (Z0 = +1). A selector the check calls an
+    alias must replace it (Z0 = -1); one it lets combine must leave it in place."""
+    engine = _native_engine()
+    assert _z_after_x(engine, {"amplitude_damping_gamma": 1.0}) == pytest.approx(1.0)
+    z = _z_after_x(engine, {"amplitude_damping_gamma": 1.0, "noise": selector})
+    assert z == pytest.approx(-1.0 if overwrites else 1.0)
+    combine = [AmplitudeDampingNoise(1.0), _SelectorNoise(**selector)]
+    if overwrites:
+        with pytest.raises(NoiseModelError):
+            CompositeNoise(combine)
+    else:
+        CompositeNoise(combine)
+
+
+def test_native_scalar_field_and_noise_kind_both_run():
+    """What the composite promises when it combines: damping (gamma = 1) takes |1> to |0>,
+    then a bit flip (p = 1) back to |1>. Z0 = -1 only if both channels ran; either alone
+    ends in |0>."""
+    engine = _native_engine()
+    model = CompositeNoise([AmplitudeDampingNoise(1.0), _SelectorNoise("bit_flip", prob=1.0)])
+    assert _z_after_x(engine, model.to_dict()) == pytest.approx(-1.0)
+    assert _z_after_x(engine, {"noise": {"kind": "bit_flip", "prob": 1.0}}) == pytest.approx(1.0)
+    assert _z_after_x(engine, AmplitudeDampingNoise(1.0).to_dict()) == pytest.approx(1.0)
 
 
 def test_composite_empty_raises():

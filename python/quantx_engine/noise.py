@@ -210,18 +210,19 @@ class ThermalRelaxationNoise(NoiseModel):
 
 
 class ReadoutNoise(NoiseModel):
-    """Symmetric bit-flip noise modelling readout errors.
+    """Symmetric bit-flip noise, intended to stand in for readout errors.
 
     The native circuit backend implements this as a ``bit_flip`` channel
-    (``noise = {"kind": "bit_flip", "prob": p}``), which applies a bit-flip
-    with probability p after each measurement gate.  This is an approximation:
-    a true readout error model would be measurement-specific, but ``bit_flip``
-    is the closest currently-supported mechanism.
+    (``noise = {"kind": "bit_flip", "prob": p}``): after every gate except a
+    measurement, each qubit flips with probability p.  So it acts as gate
+    noise, not as a readout error.  A true readout error model would act on
+    the measurement outcomes only; ``bit_flip`` is the closest mechanism the
+    backend supports.
 
     Parameters
     ----------
     prob:
-        Bit-flip (readout error) probability per measurement, in [0, 0.5].
+        Bit-flip probability per qubit per gate, in [0, 0.5].
         Values above 0.5 are anti-correlated and should be modeled differently.
     """
 
@@ -279,8 +280,10 @@ class CompositeNoise(NoiseModel):
     shipped model emits one, but the backend accepts both, so a custom model
     may) is another spelling of ``depolarizing_prob`` or
     ``amplitude_damping_gamma``: the backend writes its ``prob`` or ``gamma``
-    into that field.  It therefore collides with a :class:`DepolarizingNoise`
-    or :class:`AmplitudeDampingNoise` although the keys differ.
+    (at the selector's top level or in its ``params``) into that field.  Such a
+    selector therefore collides with a :class:`DepolarizingNoise` or
+    :class:`AmplitudeDampingNoise` although the keys differ.  A selector that
+    carries no value leaves the field alone, and combines.
 
     Parameters
     ----------
@@ -362,10 +365,11 @@ class CompositeNoise(NoiseModel):
 
 
 # The native parser (parse_noise_config in src/json_utils.cpp) reads these two 'noise'
-# kinds as another spelling of a top-level field: it writes the selector's prob or gamma
-# into that field, over whatever a DepolarizingNoise or AmplitudeDampingNoise put there.
-_NOISE_KIND_FIELDS = {"depolarizing": "depolarizing_prob",
-                      "amplitude_damping": "amplitude_damping_gamma"}
+# kinds as another spelling of a top-level field: when the selector carries a value
+# (kind -> field, value key), it writes that value into the field, over whatever a
+# DepolarizingNoise or AmplitudeDampingNoise put there.
+_NOISE_KIND_FIELDS = {"depolarizing": ("depolarizing_prob", "prob"),
+                      "amplitude_damping": ("amplitude_damping_gamma", "gamma")}
 
 
 def _kind(noise: Any) -> Any:
@@ -374,10 +378,21 @@ def _kind(noise: Any) -> Any:
 
 def _fields_set(key: str, value: Any) -> list[str]:
     """The circuit fields one payload entry sets: its key, and for a 'noise' selector of
-    an aliasing kind, the top-level field the backend writes it into."""
+    an aliasing kind that carries a value, the top-level field the backend writes it into.
+
+    This mirrors parse_noise_config: the value counts if it is non-null at the selector's
+    top level, or present in its ``params``. (A value of the wrong type makes the backend
+    reject the circuit, which is not a silent drop either way.) A selector without a value
+    leaves the field alone, so it combines."""
     kind = _kind(value) if key == "noise" else None
     alias = _NOISE_KIND_FIELDS.get(kind) if isinstance(kind, str) else None
-    return [key] if alias is None else [key, alias]
+    if alias is None:
+        return [key]
+    field, value_key = alias
+    params = value.get("params")
+    carries = (value.get(value_key) is not None
+               or (isinstance(params, dict) and value_key in params))
+    return [key, field] if carries else [key]
 
 
 # ---------------------------------------------------------------------------
