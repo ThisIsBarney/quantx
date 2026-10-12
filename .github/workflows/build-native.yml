@@ -20,6 +20,8 @@ on:
       - "python/quantx_engine/models.py"
       - "python/quantx_engine/dmrg.py"
       - "python/quantx_engine/tests/test_models_ed.py"
+      - "python/quantx_engine/hva.py"
+      - "python/quantx_engine/tests/test_hva_statevector.py"
   pull_request:
     branches: ["master", "main"]
     paths:
@@ -32,6 +34,8 @@ on:
       - "python/quantx_engine/models.py"
       - "python/quantx_engine/dmrg.py"
       - "python/quantx_engine/tests/test_models_ed.py"
+      - "python/quantx_engine/hva.py"
+      - "python/quantx_engine/tests/test_hva_statevector.py"
   workflow_dispatch:
 
 concurrency:
@@ -108,17 +112,20 @@ jobs:
           print('ctypes load test PASSED')
           "
 
-      - name: Symmetric models vs exact diagonalisation (M4 gate)
-        # Solves every quantx_engine.models chain on this build's engine and compares with
-        # an independent ED to 1e-10. The only job that runs Python tests against the
-        # native library; QX_REQUIRE_NATIVE=1 makes a load failure fail the gate
-        # instead of skipping it.
+      - name: Symmetric models vs exact diagonalisation, HVA vs state vector (M4/M5 gates)
+        # Solves every quantx_engine.models model on this build's engine against an
+        # independent ED (1e-10), and runs HVA circuits (chain, ladder, strip, cylinder)
+        # against an independent state vector (1e-10 from product starts; 1e-6 from U = 0
+        # starts, which carry their DMRG preparation's residual). The only job that runs
+        # Python tests against the native library; QX_REQUIRE_NATIVE=1 makes a load
+        # failure fail the gate instead of skipping it.
         env:
           QX_REQUIRE_NATIVE: "1"
         run: |
           python -m pip install -e "python/[dev]"
           export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
-          python -m pytest python/quantx_engine/tests/test_models_ed.py -v
+          python -m pytest python/quantx_engine/tests/test_models_ed.py \
+                           python/quantx_engine/tests/test_hva_statevector.py -v
 
       - name: Upload library artifact
         uses: actions/upload-artifact@v4

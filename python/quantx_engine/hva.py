@@ -1,0 +1,227 @@
+"""Fermionic HVA circuits on the native block-sparse engine.
+
+The Hamiltonian Variational Ansatz is the standard VQE circuit for the Hubbard model.
+Each layer applies ``exp(-i theta_g H_g)`` for every bond group ``g``, then
+``exp(-i theta_U H_onsite)``. A group's bonds share no site, so its exponential factorises
+into two-site gates with no Trotter error. The engine conserves both electron numbers, so
+it simulates the circuit exactly, up to ``max_bond``, far beyond state-vector sizes::
+
+    from quantx_engine.models import HubbardLattice
+    from quantx_engine import hva
+
+    cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
+    lay = hva.layout(cyl)                          # the bond groups of this geometry
+    angles = [[0.1] * lay.angles_per_layer] * 3    # three layers
+    r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)    # ~5 s
+    r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
+
+Wider lattices cost fast. The U = 0 start itself is highly entangled in 2-D: a 6x4
+cylinder prepared at max_bond 256 starts 0.05 off in energy (``init_energy_error``) and
+takes minutes.
+
+A :class:`~quantx_engine.models.HubbardChain` runs as the W = 1 lattice. Its two bond
+groups are the even and the odd bonds, so each chain layer takes three angles.
+
+Where the circuit starts: ``init="free"`` (the default) is the U = 0 ground state of the
+sector. Every HVA generator commutes with S^2, so a product state can never reach a
+singlet ground state. The free start is refused where the U = 0 ground state is
+degenerate, since DMRG would then return an arbitrary member of the degenerate space.
+``init="product"`` starts from a product state in the sector.
+
+Precision: from a product start the circuit is exact up to ``max_bond`` (gated against
+a state vector to 1e-10). A free start is only as good as its DMRG preparation, which
+stops when its energy stops changing, and a circuit inherits the start's error. On the
+small systems of the gate that meant 1e-8 to 7e-8 in the circuit energy; on a long chain
+with a small single-particle gap it can be far worse. Nothing else signals it:
+``init_energy_error`` (against the exact U = 0 energy) is the number to check.
+"""
+from __future__ import annotations
+
+import json
+import operator
+from ctypes import c_char_p
+from dataclasses import dataclass
+from typing import Optional, Sequence
+
+__all__ = ["HVAError", "HVALayout", "HVAResult", "layout", "circuit"]
+
+
+class HVAError(RuntimeError):
+    """Raised when an HVA circuit cannot be run."""
+
+
+@dataclass(frozen=True)
+class HVALayout:
+    """The bond groups of a lattice circuit, in the order each layer applies them.
+
+    Sites are chain indices, ``site = W*x + y``.
+    """
+    n_sites: int
+    groups: tuple
+
+    @property
+    def angles_per_layer(self) -> int:
+        """One angle per bond group, then one for the on-site term."""
+        return len(self.groups) + 1
+
+
+@dataclass
+class HVAResult:
+    """Outcome of one circuit run.
+
+    Attributes
+    ----------
+    energy : float
+        <psi(theta)| H |psi(theta)> for the model's full Hamiltonian.
+    entropy_max, entropy_mid : float or None
+        Entanglement entropy (natural log) of the final state: the largest over all
+        cuts of the site chain, and the balanced cut's (None for an odd number of sites).
+        Both None when run with ``entropy=False``. They are the entropies of the
+        ``max_bond``-capped state, so trust them only while ``truncation_error`` is small.
+    truncation_error : float
+        The largest single discarded weight over the circuit's truncations. Their sum
+        can be larger by up to the number of truncations.
+    max_bond : int
+        Largest bond dimension the circuit reached (never above the ``max_bond`` cap).
+    layer_bonds : list[int]
+        Largest bond dimension after each layer.
+    init_energy, init_energy_exact, init_energy_error : float or None
+        ``init="free"`` only: the prepared state's energy, the exact U = 0 ground-state
+        energy of the sector (from the single-particle levels), and their difference,
+        how far the DMRG preparation stopped short. Check it; see the module notes.
+    init_truncation_error : float or None
+        ``init="free"`` only: the preparation's discarded weight, summed over its last
+        sweep (unlike ``truncation_error``, a maximum). Not included in
+        ``truncation_error``.
+    init_config : list[int] or None
+        ``init="product"`` only: the starting local state per site (0 empty, 1 up,
+        2 down, 3 double occupancy).
+    """
+    energy: float
+    entropy_max: Optional[float]
+    entropy_mid: Optional[float]
+    truncation_error: float
+    max_bond: int
+    layer_bonds: list
+    wall_time_s: float
+    sector: dict
+    init: str
+    init_energy: Optional[float] = None
+    init_energy_exact: Optional[float] = None
+    init_energy_error: Optional[float] = None
+    init_truncation_error: Optional[float] = None
+    init_config: Optional[list] = None
+
+
+def _as_lattice(model):
+    from quantx_engine.models import HubbardChain, HubbardLattice
+    if isinstance(model, HubbardLattice):
+        return model
+    if isinstance(model, HubbardChain):
+        return HubbardLattice(Lx=model.L, W=1, t=model.t, U=model.U, mu=model.mu)
+    raise HVAError(f"HVA circuits need a HubbardChain or HubbardLattice, got {model!r}")
+
+
+def _lib(engine):
+    from quantx_engine.dmrg import _resolve_engine
+    lib = getattr(_resolve_engine(engine, "hva", HVAError), "_lib", None)
+    if lib is None or not hasattr(lib, "qx_hva_circuit"):
+        raise HVAError("the loaded native library does not export qx_hva_circuit")
+    lib.qx_hva_circuit.argtypes = [c_char_p, c_char_p]
+    lib.qx_hva_circuit.restype = c_char_p
+    lib.qx_hva_layout.argtypes = [c_char_p]
+    lib.qx_hva_layout.restype = c_char_p
+    return lib
+
+
+def _check(out: dict) -> dict:
+    if not out.get("ok", False):
+        raise HVAError(out.get("error", "unknown error from the native engine"))
+    return out
+
+
+def layout(model, *, engine=None) -> HVALayout:
+    """The bond groups of ``model``'s circuit; size each layer's angles from it."""
+    lat = _as_lattice(model)
+    out = _check(json.loads(_lib(engine).qx_hva_layout(json.dumps(lat.problem()).encode())))
+    groups = tuple(tuple((int(i), int(j)) for i, j in g) for g in out["groups"])
+    return HVALayout(n_sites=int(out["n_sites"]), groups=groups)
+
+
+def circuit(
+    model,
+    angles: Sequence[Sequence[float]],
+    *,
+    n_up: Optional[int] = None,
+    n_dn: Optional[int] = None,
+    init: str = "free",
+    max_bond: int = 256,
+    cutoff: float = 1e-12,
+    entropy: bool = True,
+    engine=None,
+) -> HVAResult:
+    """Run an HVA circuit and measure the model's energy on its output.
+
+    Parameters
+    ----------
+    model : HubbardChain or HubbardLattice
+    angles : sequence of layers
+        Each layer lists one angle per bond group (see :func:`layout`), then the
+        on-site angle. A chain layer is ``[theta_even, theta_odd, theta_U]``.
+    n_up, n_dn : int, optional
+        The sector; default half filling, n_up = ceil(L/2), n_dn = floor(L/2).
+    init : {"free", "product"}
+        Start from the U = 0 ground state (refused where it is degenerate), or from a
+        product state in the sector.
+    max_bond : int
+        Bond-dimension cap of the circuit's MPS. It also caps the free-state
+        preparation, at no more than the 4^(L/2) an L-site chain can use.
+    cutoff : float
+        Truncation cutoff of the circuit (the preparation uses its own 1e-12).
+    entropy : bool
+        Measure the final state's entanglement entropies (one extra lossless sweep).
+
+    Raises
+    ------
+    ModelError
+        The sector is not valid for the model.
+    HVAError
+        No native library, a malformed layer, a degenerate free start, or a solver
+        failure.
+    """
+    lat = _as_lattice(model)
+    sector = lat.sector(n_up, n_dn)
+    if init not in ("free", "product"):
+        raise HVAError(f"init must be 'free' or 'product', got {init!r}")
+    try:
+        if isinstance(max_bond, bool):
+            raise TypeError
+        max_bond = operator.index(max_bond)
+    except TypeError:
+        raise HVAError(f"max_bond must be an int, got {max_bond!r}") from None
+    if max_bond < 1:
+        raise HVAError(f"max_bond must be >= 1, got {max_bond}")
+    try:
+        layers = [[float(a) for a in layer] for layer in angles]
+    except TypeError as exc:
+        raise HVAError("angles must be a sequence of layers, each a sequence of numbers") from exc
+    prob = dict(lat.problem(), sector=sector, angles=layers)
+    opts = {"max_bond": max_bond, "cutoff": cutoff, "init": init, "entropy": bool(entropy)}
+    out = _check(json.loads(_lib(engine).qx_hva_circuit(json.dumps(prob).encode(),
+                                                        json.dumps(opts).encode())))
+    return HVAResult(
+        energy=float(out["energy"]),
+        entropy_max=out.get("entropy_max"),
+        entropy_mid=out.get("entropy_mid"),
+        truncation_error=float(out["truncation_error"]),
+        max_bond=int(out["max_bond"]),
+        layer_bonds=[int(b) for b in out.get("layer_bonds", [])],
+        wall_time_s=float(out.get("wall_time_s", 0.0)),
+        sector=lat.describe_sector(out["sector"]),
+        init=str(out["init"]),
+        init_energy=out.get("init_energy"),
+        init_energy_exact=out.get("init_energy_exact"),
+        init_energy_error=out.get("init_energy_error"),
+        init_truncation_error=out.get("init_truncation_error"),
+        init_config=out.get("init_config"),
+    )

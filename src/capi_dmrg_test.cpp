@@ -167,6 +167,51 @@ int main() {
         check(says_needs_3(r), "qx_spectral reads n_sites (n_sites=2 is refused)", r);
     }
 
+    // ---- the Hubbard lattice and HVA circuits (M5) --------------------------------
+    std::printf("\nhubbard_lattice and HVA circuits\n");
+    {
+        // Two independent builders for one Hamiltonian: the W = 1 lattice (site-split,
+        // period-W MPO) must reproduce the chain MPO's ground-state energy.
+        json lat = {{"type", "hubbard_lattice"}, {"Lx", 6}, {"W", 1}, {"U", 4.0},
+                    {"sector", {{"n_up", 3}, {"n_dn", 2}}}};
+        json chn = {{"type", "hubbard"}, {"n_sites", 6}, {"U", 4.0},
+                    {"sector", {{"n_up", 3}, {"n_dn", 2}}}};
+        json a = energy_of(lat), b = energy_of(chn);
+        check(a.value("ok", false) && b.value("ok", false) &&
+              std::abs(a.value("energy", 0.0) - b.value("energy", 1.0)) < 1e-9,
+              "hubbard_lattice W=1 == hubbard chain (two builders)", a);
+    }
+    {
+        json r = json::parse(qx_hva_layout(json({{"Lx", 6}, {"W", 1}}).dump().c_str()));
+        check(r.value("ok", false) && r["groups"].size() == 2 &&
+              r.value("angles_per_layer", 0) == 3,
+              "qx_hva_layout chain: 2 groups (even, odd bonds), 3 angles per layer", r);
+    }
+    auto hva_error = [&](const json& prob, const json& opts, const char* text, const char* what) {
+        json r = call(qx_hva_circuit, prob, opts);
+        check(!r.value("ok", true) &&
+              r.value("error", std::string()).find(text) != std::string::npos, what, r);
+    };
+    {
+        // W = 3 cylinder: transverse levels -2, 1, 1, so at half filling the Fermi level
+        // sits inside the degenerate pair and the U = 0 start is not unique.
+        json cyl = {{"Lx", 2}, {"W", 3}, {"y_periodic", true}, {"U", 4.0},
+                    {"sector", {{"n_up", 3}, {"n_dn", 3}}}};
+        json lay = json::parse(qx_hva_layout(cyl.dump().c_str()));
+        cyl["angles"] = json::array({std::vector<double>(lay.value("angles_per_layer", 1), 0.1)});
+        hva_error(cyl, {{"init", "free"}}, "degenerate",
+                  "hva: a degenerate U=0 start is refused");
+        json r = call(qx_hva_circuit, cyl, {{"init", "product"}});
+        check(r.value("ok", false) && r.contains("init_config"),
+              "hva: the same cylinder runs from a product start", r);
+        cyl["angles"] = json::array({json::array({0.1, 0.2})});
+        hva_error(cyl, {{"init", "product"}}, "one angle per bond group",
+                  "hva: a layer of the wrong length is refused");
+    }
+    hva_error({{"Lx", 3}, {"W", 2}, {"y_periodic", true}, {"angles", json::array()}},
+              json::object(), "y_periodic needs W >= 3",
+              "hva: y_periodic below W=3 is refused");
+
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");
     return failures ? 1 : 0;
 }
