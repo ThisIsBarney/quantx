@@ -88,8 +88,8 @@ class DepolarizingNoise(NoiseModel):
     state with probability p:  ρ → (1-p)ρ + p·I/2, which is
     (1 - 3p/4)ρ + (p/4)(XρX + YρY + ZρZ). The native circuit backend applies it
     to every qubit after every gate (idle qubits included), one trajectory per
-    shot; the density-matrix simulator in :mod:`quantx_engine.primitives`
-    applies the same channel to the qubits the gate acts on.
+    shot. The density-matrix simulator in :mod:`quantx_engine.primitives` and the
+    dynamic-circuit simulator apply it the same way (see :func:`native_channels`).
 
     Parameters
     ----------
@@ -275,9 +275,8 @@ class CompositeNoise(NoiseModel):
     Every key is checked, not only ``noise``.  Each top-level field holds one
     value per circuit, so two :class:`DepolarizingNoise` models collide on
     ``depolarizing_prob`` (build one model instead).  ``noise_metadata`` is
-    checked as well: the native backend ignores it, but the density-matrix
-    simulator in :mod:`quantx_engine.primitives` falls back to its ``gamma``
-    as the amplitude-damping rate.
+    checked as well: no simulator executes it, but a merge would keep only one
+    model's description.
 
     The check is on the fields a payload sets, not only on its keys.  A
     ``noise`` selector of kind ``depolarizing`` or ``amplitude_damping`` (no
@@ -397,6 +396,79 @@ def _fields_set(key: str, value: Any) -> list[str]:
     carries = (value.get(value_key) is not None
                or (isinstance(params, dict) and value_key in params))
     return [key, field] if carries else [key]
+
+
+def native_channels(model: "NoiseModel | dict[str, Any] | None") -> list[tuple[str, float]]:
+    """The single-qubit channels the native circuit backend applies, in its order, to
+    every qubit after every gate (never after a measurement), for a noise model or its
+    ``to_dict()`` payload.
+
+    Each entry is ``(kind, rate)``:
+
+    - ``"depolarizing"``, p: ρ → (1 − p)ρ + p·I/2;
+    - ``"amplitude_damping"``, γ: |1⟩ decays to |0⟩ with probability γ;
+    - ``"bit_flip"`` or ``"phase_flip"``, p: X or Z with probability p.
+
+    This mirrors the backend's parser and noise loop (``parse_noise_config`` in
+    ``src/json_utils.cpp``, ``apply_noise_after_gate`` in ``src/engine.cpp``):
+
+    - ``depolarizing_prob`` and ``amplitude_damping_gamma`` come first;
+    - a ``noise`` selector of kind ``depolarizing`` or ``amplitude_damping`` that carries
+      its value overwrites them;
+    - then the ``noise`` kind runs: ``bit_flip``, ``phase_flip``, ``t1_decay`` (amplitude
+      damping with γ = 1 − exp(−dt/T1)) or ``t2_decay`` (a phase flip with
+      p = (1 − exp(−dt/T2))/2), each reading ``params`` before its own keys;
+    - ``noise_metadata`` is information only, not executed;
+    - every rate is clamped to [0, 1], as the backend clamps it.
+
+    The Python simulators use this, so a model means the same channels everywhere.
+
+    Raises
+    ------
+    NoiseModelError
+        For a ``noise`` kind the backend does not support (it would refuse the circuit).
+    """
+    if model is None:
+        return []
+    payload = model.to_dict() if isinstance(model, NoiseModel) else dict(model)
+    dep = float(payload.get("depolarizing_prob") or 0.0)
+    gamma = float(payload.get("amplitude_damping_gamma") or 0.0)
+    named: list[tuple[str, float]] = []
+    noise = payload.get("noise")
+    if isinstance(noise, dict):
+        kind = noise.get("kind")
+        params = noise.get("params")
+        params = params if isinstance(params, dict) else {}
+
+        def value(key: str, default: Any = None) -> Any:
+            if key in params:
+                return params[key]
+            v = noise.get(key)
+            return default if v is None else v
+
+        if kind == "depolarizing":
+            dep = float(value("prob", dep))
+        elif kind == "amplitude_damping":
+            gamma = float(value("gamma", gamma))
+        elif kind in ("bit_flip", "phase_flip"):
+            named.append((kind, float(value("prob", 0.0))))
+        elif kind in ("t1_decay", "t2_decay"):
+            t = float(value("T1" if kind == "t1_decay" else "T2", 0.0))
+            dt = float(value("dt", 0.0))
+            if t > 0.0 and dt > 0.0:
+                if kind == "t1_decay":
+                    named.append(("amplitude_damping", 1.0 - math.exp(-dt / t)))
+                else:
+                    named.append(("phase_flip", 0.5 * (1.0 - math.exp(-dt / t))))
+        elif kind not in (None, "", "none"):
+            raise NoiseModelError(f"unsupported noise kind: {kind!r}")
+    channels: list[tuple[str, float]] = []
+    if dep > 0.0:
+        channels.append(("depolarizing", min(dep, 1.0)))
+    if gamma > 0.0:
+        channels.append(("amplitude_damping", min(gamma, 1.0)))
+    channels.extend((kind, min(rate, 1.0)) for kind, rate in named if rate > 0.0)
+    return channels
 
 
 # ---------------------------------------------------------------------------

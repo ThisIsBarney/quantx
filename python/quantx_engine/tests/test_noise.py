@@ -337,6 +337,126 @@ def test_native_depolarizing_is_the_documented_channel():
     assert p1 == pytest.approx(rho[1, 1].real, abs=0.02)   # 6.5 sigma; 2/3 is 12 sigma away
 
 
+# ── One meaning of a noise model across the simulators ────────────────────────
+
+def test_native_channels_resolve_like_the_backend_parser():
+    from quantx_engine.noise import native_channels
+    g = 1.0 - math.exp(-10.0 / 100.0)
+    assert native_channels(None) == []
+    assert native_channels(DepolarizingNoise(0.1)) == [("depolarizing", 0.1)]
+    assert native_channels(AmplitudeDampingNoise(0.2)) == [("amplitude_damping", 0.2)]
+    assert native_channels(ReadoutNoise(0.05)) == [("bit_flip", 0.05)]
+    # T1 decay as amplitude damping; noise_metadata is not executed
+    thermal = native_channels(ThermalRelaxationNoise(T1=100.0, T2=60.0, t_gate=10.0))
+    assert thermal == [("amplitude_damping", pytest.approx(g))]
+    composite = native_channels(DepolarizingNoise(0.1) + ThermalRelaxationNoise(100.0, 60.0, 10.0))
+    assert composite == [("depolarizing", 0.1), ("amplitude_damping", pytest.approx(g))]
+    # a selector carrying its value overwrites the scalar field; params beat the key
+    assert native_channels({"depolarizing_prob": 0.1,
+                            "noise": {"kind": "depolarizing", "prob": 0.3}}) == [("depolarizing", 0.3)]
+    assert native_channels({"noise": {"kind": "bit_flip", "prob": 0.1,
+                                      "params": {"prob": 0.2}}}) == [("bit_flip", 0.2)]
+    assert native_channels({"noise": {"kind": "t2_decay", "T2": 50.0, "dt": 5.0}}) == [
+        ("phase_flip", pytest.approx(0.5 * (1.0 - math.exp(-0.1))))]
+    assert native_channels({"noise": {"kind": "none"}}) == []
+    with pytest.raises(NoiseModelError, match="unsupported noise kind"):
+        native_channels({"noise": {"kind": "readout"}})
+
+
+def test_native_channels_clamp_every_rate_like_the_backend():
+    """The backend clamps each rate to [0, 1]. Unclamped, damping 1.5 gave the density
+    matrix a trace of 1.985, and a flip of 1.5 gave |<Z>| > 1."""
+    np = pytest.importorskip("numpy")
+    from quantx_engine.noise import native_channels
+    from quantx_engine.primitives import _dm_simulate
+    assert native_channels({"amplitude_damping_gamma": 1.5}) == [("amplitude_damping", 1.0)]
+    assert native_channels({"depolarizing_prob": 2.0}) == [("depolarizing", 1.0)]
+    for kind in ("bit_flip", "phase_flip"):
+        assert native_channels({"noise": {"kind": kind, "prob": 1.5}}) == [(kind, 1.0)]
+    for payload in ({"amplitude_damping_gamma": 1.5},
+                    {"noise": {"kind": "bit_flip", "prob": 1.5}}):
+        rho = _dm_simulate([{"name": "x", "qubits": [0]}], 2, payload)
+        assert np.trace(rho).real == pytest.approx(1.0)
+        assert np.all(np.linalg.eigvalsh(rho) > -1e-12)
+
+
+def test_density_matrix_channels_match_the_dense_embedding():
+    """The density-matrix simulator applies gates and channels by contracting over the
+    qubits they act on. Check it against the dense 2^n x 2^n embedding, on a random
+    state, for one- and two-qubit operators in either qubit order."""
+    np = pytest.importorskip("numpy")
+    from quantx_engine.primitives import (
+        _amplitude_damp_local, _apply_gate_dm, _depolarize_local, _embed_gate,
+        _gate_matrices, _pauli_flip_local)
+    rng = np.random.default_rng(3)
+    n, d = 3, 8
+    a = rng.normal(size=(d, d)) + 1j * rng.normal(size=(d, d))
+    rho = a @ a.conj().T
+    rho /= np.trace(rho)
+
+    def dense(rho, K, qubits):
+        full = _embed_gate(K, qubits, n)
+        return full @ rho @ full.conj().T
+
+    for qubits in ([1], [2, 0], [0, 2], [1, 2]):
+        m = 1 << len(qubits)
+        u, _ = np.linalg.qr(rng.normal(size=(m, m)) + 1j * rng.normal(size=(m, m)))
+        assert np.allclose(_apply_gate_dm(rho, u, qubits, n), dense(rho, u, qubits), atol=1e-13)
+    mats = _gate_matrices()
+    p, g, q = 0.3, 0.4, [2]
+    dep = (1 - 0.75 * p) * rho + (p / 4) * sum(dense(rho, mats[s], q) for s in "xyz")
+    assert np.allclose(_depolarize_local(rho, p, q, n), dep, atol=1e-13)
+    k0 = np.array([[1, 0], [0, math.sqrt(1 - g)]], dtype=complex)
+    k1 = np.array([[0, math.sqrt(g)], [0, 0]], dtype=complex)
+    assert np.allclose(_amplitude_damp_local(rho, g, q, n),
+                       dense(rho, k0, q) + dense(rho, k1, q), atol=1e-13)
+    assert np.allclose(_pauli_flip_local(rho, "x", p, q, n),
+                       (1 - p) * rho + p * dense(rho, mats["x"], q), atol=1e-13)
+
+
+_CROSS_MODELS = [
+    DepolarizingNoise(0.3),
+    AmplitudeDampingNoise(0.4),
+    ReadoutNoise(0.2),
+    ThermalRelaxationNoise(T1=50.0, T2=40.0, t_gate=10.0),
+    DepolarizingNoise(0.2) + ThermalRelaxationNoise(T1=50.0, T2=40.0, t_gate=10.0),
+]
+
+
+@pytest.mark.parametrize("model", _CROSS_MODELS, ids=lambda m: type(m).__name__)
+def test_density_matrix_and_dynamic_simulators_agree(model):
+    """<Z0>, <Z1> after X on qubit 0 of two: the density-matrix simulator's exact values,
+    and the dynamic simulator's trajectories, must agree. Qubit 1 is idle, so it is noisy
+    only if noise acts on every qubit after every gate, as on the native backend."""
+    pytest.importorskip("numpy")
+    from quantx_engine.dynamic import DynamicCircuit, DynamicSimulator
+    z_dm = _z_density_matrix(model)
+    res = DynamicSimulator(noise_model=model, shots=8000, seed=5).run(
+        DynamicCircuit(2, 2).x(0).measure(0, 0).measure(1, 1))
+    for q in (0, 1):
+        p1 = sum(bits[q] for bits in res.cbits_history) / 8000
+        assert 1.0 - 2.0 * p1 == pytest.approx(z_dm[q], abs=0.06)   # ~5 sigma
+
+
+@pytest.mark.parametrize("model", _CROSS_MODELS, ids=lambda m: type(m).__name__)
+def test_native_backend_matches_the_density_matrix_simulator(model):
+    engine = _native_engine()
+    z_dm = _z_density_matrix(model)
+    circuit = {"qubits": 2, "shots": 20000, "observables": ["Z0", "Z1"], "seed": 7,
+               "operations": [{"name": "X", "targets": [0]}], **model.to_dict()}
+    out = engine.run_circuit(circuit)["expectation_exact"]   # the trajectory average
+    for q in (0, 1):
+        assert out[f"Z{q}"] == pytest.approx(z_dm[q], abs=0.04)   # ~6 sigma
+
+
+def _z_density_matrix(model):
+    np = pytest.importorskip("numpy")
+    from quantx_engine.primitives import _dm_simulate, _embed_gate, _gate_matrices
+    rho = _dm_simulate([{"name": "x", "qubits": [0]}], 2, model)
+    z = _gate_matrices()["z"]
+    return [float(np.real(np.trace(rho @ _embed_gate(z, [q], 2)))) for q in (0, 1)]
+
+
 def test_composite_empty_raises():
     with pytest.raises(NoiseModelError):
         CompositeNoise([])
