@@ -1,8 +1,14 @@
-API Reference
-=============
+Experimental modules
+====================
 
-The QuantX Engine SDK is organised into thematic modules.
-Click a topic to browse its classes and functions.
+.. warning::
+
+   Everything on this page is experimental. Its API may change, the engine's gates do
+   not cover it, and the pure-Python modules may move to a separate
+   ``quantx_engine.contrib`` namespace. Most of these modules do not use the native
+   engine. For the engine, see the :doc:`engine API <engine>`.
+
+The modules are grouped by topic.
 
 .. toctree::
    :maxdepth: 1

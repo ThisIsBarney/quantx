@@ -170,7 +170,7 @@ def ground_state(
     model : XXZChain, J1J2Chain, Spin1Chain, HubbardChain or HubbardLattice
         The Hamiltonian; see :mod:`quantx_engine.models` for the conventions.
     sz : float, optional
-        Spin models: total S^z (a multiple of 1/2). Default: the lowest |S^z| the
+        Spin models: total S^z (a multiple of 1/2). Default: the lowest ``|S^z|`` the
         chain allows (0, or 1/2 for an odd spin-1/2 chain).
     n_up, n_dn : int, optional
         Hubbard models: the numbers of up and down electrons. Default: half
@@ -373,7 +373,7 @@ class DMRGSolver:
         n_sweeps : int
             Maximum number of full left→right→left DMRG sweeps.
         tol : float
-            Energy convergence tolerance.  Stops early when |ΔE| < tol.
+            Energy convergence tolerance.  Stops early when ``|ΔE| < tol``.
         method : str
             ``"u1"`` (default): Sz-conserving block-sparse two-site DMRG.
             ``"su2"``: SU(2) spin-symmetric DMRG (Heisenberg only); tracks spin
