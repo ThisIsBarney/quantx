@@ -1334,11 +1334,35 @@ def calibration_to_noise_model(
 
     max_gate_err = max(calibration.gate_errors.values(), default=0.0)
     if max_gate_err > 0.001:
-        # A gate error is an average gate infidelity r. For the one-qubit depolarizing
-        # channel (1 - p)rho + p I/2 that DepolarizingNoise applies, r = p/2, so p = 2r.
-        depol = DepolarizingNoise(prob=min(2.0 * max_gate_err, 1.0))
+        # One DepolarizingNoise serves every gate, so it takes the largest p any gate needs.
+        prob = max(_depolarizing_prob(g, r) for g, r in calibration.gate_errors.items())
+        depol = DepolarizingNoise(prob=prob)
         return CompositeNoise([depol, thermal])
     return thermal
+
+
+# Calibration names of two-qubit gates. Any other gate is taken to act on one qubit.
+_TWO_QUBIT_GATES = frozenset({
+    "cx", "cnot", "cy", "cz", "ch", "cp", "cphase", "crx", "cry", "crz", "cu",
+    "ecr", "rxx", "ryy", "rzz", "rzx", "swap", "iswap", "sqrt_iswap", "fsim", "syc",
+    "ms", "xx", "zz", "2q",
+})
+
+
+def _depolarizing_prob(gate: str, r: float) -> float:
+    """The ``DepolarizingNoise`` p that gives ``gate`` the average gate infidelity r.
+
+    The model applies (1 - p)rho + p I/2 to each qubit after a gate, a channel of
+    entanglement fidelity 1 - 3p/4 per qubit, and the average infidelity of a channel of
+    entanglement fidelity F on d dimensions is d(1 - F)/(d + 1). So a one-qubit gate has
+    r = p/2, and a two-qubit gate r = (4/5)(1 - (1 - 3p/4)^2), about 6p/5.
+    """
+    r = min(max(float(r), 0.0), 1.0)
+    if gate.strip().lower() in _TWO_QUBIT_GATES:
+        p = (4.0 / 3.0) * (1.0 - math.sqrt(max(0.0, 1.0 - 1.25 * r)))
+    else:
+        p = 2.0 * r
+    return min(p, 1.0)
 
 
 # ---------------------------------------------------------------------------

@@ -266,7 +266,7 @@ class NoiseCharacterizer:
         Uses the relation between process infidelity and the depolarizing
         probability for an n-qubit system (d = 2^n)::
 
-            p_dep = (d + 1) / d * process_infidelity
+            p_dep = d**2 / (d**2 - 1) * process_infidelity
 
         Parameters
         ----------

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <sstream>
 #include <vector>
@@ -1080,6 +1081,20 @@ int main() {
   expect(std::abs(cn.expectation_exact.at("Z0")) < 0.1, "trajectory-averaged <Z0> should be near 0");
   expect(std::abs(cn.expectation_shot.at("X0")) < 0.1, "shot <X0> of the mixed state should be near 0");
 
+  // Amplitude damping 0.3 after X: P(1) = 0.7, so <Z0> averages to -0.4 over the shots'
+  // trajectories (any one trajectory reads +1 or -1).
+  qx::QuantumCircuit damped;
+  damped.qubits = 1;
+  damped.shots = 20000;
+  damped.observables = {"Z0"};
+  damped.operations = {qx::CircuitOp{"X", {0}, {}, {}}};
+  damped.amplitude_damping_gamma = 0.3;
+  const auto cdp = qx::run_circuit(damped, o);
+  const double damped_p0 = cdp.counts.count("0") ? cdp.counts.at("0") / 20000.0 : 0.0;
+  expect(std::abs(damped_p0 - 0.3) < 0.02, "amplitude damping 0.3 after X should read 0 on 30% of the shots");
+  expect(std::abs(cdp.expectation_exact.at("Z0") + 0.4) < 0.03,
+         "trajectory-averaged <Z0> after X and damping 0.3 should be -0.4");
+
   // A MEASURE is random too: H then MEASURE reads 1 on about half the shots, not on all or none.
   qx::QuantumCircuit measured;
   measured.qubits = 1;
@@ -1125,6 +1140,31 @@ int main() {
     refused = ex.code() == "QX_TOO_MANY_SHOTS";
   }
   expect(refused, "more than max_shots should be refused with QX_TOO_MANY_SHOTS");
+
+  // The shot count is read wide: 2^32 + 10 reaches the cap instead of wrapping to 10 shots.
+  const auto wide = qx::circuit_from_json(
+      R"({"qubits":1,"shots":4294967306,"operations":[{"name":"H","targets":[0]}]})");
+  expect(wide.shots == (std::numeric_limits<std::uint32_t>::max)(), "a shot count past 2^32 should saturate");
+  bool refused_wide = false;
+  try {
+    (void)qx::run_circuit(wide, o);
+  } catch (const qx::CircuitError& ex) {
+    refused_wide = ex.code() == "QX_TOO_MANY_SHOTS";
+  }
+  expect(refused_wide, "2^32 + 10 shots should be refused with QX_TOO_MANY_SHOTS, not run as 10");
+  for (const char* bad : {"-1", "2.5", "\"100\"", "true"}) {
+    bool refused_bad = false;
+    try {
+      (void)qx::circuit_from_json(std::string(R"({"qubits":1,"shots":)") + bad +
+                                  R"(,"operations":[{"name":"H","targets":[0]}]})");
+    } catch (const qx::CircuitError& ex) {
+      refused_bad = ex.code() == "QX_INVALID_CIRCUIT";
+    }
+    expect(refused_bad, (std::string("shots ") + bad + " should be refused with QX_INVALID_CIRCUIT").c_str());
+  }
+  expect(qx::circuit_from_json(R"({"qubits":1,"shots":1e3,"operations":[{"name":"H","targets":[0]}]})")
+                 .shots == 1000,
+         "an integral shot count written as a float should be read");
 
   std::cout << "qx_smoke passed\n";
   return 0;

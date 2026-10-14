@@ -218,37 +218,41 @@ void apply_amplitude_damping(
   if (gamma <= 0.0) return;
   gamma = std::clamp(gamma, 0.0, 1.0);
 
+  // In place, in two passes: one for the populations, one to apply the Kraus operator and
+  // renormalize (the new norm follows from the populations). Every shot of a noisy circuit
+  // runs this for every qubit after every gate, so it allocates nothing.
   const std::size_t n = state.size();
   const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
-  const double p1 = qubit_one_population(state, qubit);
-  const double p_jump = gamma * p1;
+  double n0 = 0.0;
+  double n1 = 0.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    ((i & mask) != 0 ? n1 : n0) += std::norm(state[i]);
+  }
+  const double total = n0 + n1;
+  if (!(total > 0.0)) return;
+  const double p_jump = gamma * n1 / total;
 
   std::uniform_real_distribution<double> u01(0.0, 1.0);
   const bool jumped = (p_jump > 0.0) && (u01(rng) < p_jump);
 
-  std::vector<Complex> out(n, Complex{0.0, 0.0});
   if (jumped) {
-    // E1 = sqrt(gamma) |0><1|; after normalization -> divide by sqrt(p1).
-    const double inv = p1 > 0.0 ? 1.0 / std::sqrt(p1) : 1.0;
+    // E1 = sqrt(gamma) |0><1|: |1> moves to |0>, and the norm becomes gamma n1.
+    const double inv = 1.0 / std::sqrt(n1);
     for (std::size_t i = 0; i < n; ++i) {
       if ((i & mask) == 0) {
-        const std::size_t j = i | mask;
-        out[i] = state[j] * inv;
+        state[i] = state[i | mask] * inv;
+        state[i | mask] = Complex{0.0, 0.0};
       }
     }
   } else {
-    // E0 = |0><0| + sqrt(1-gamma)|1><1|
+    // E0 = |0><0| + sqrt(1-gamma)|1><1|: the norm becomes n0 + (1 - gamma) n1.
     const double s = std::sqrt(std::max(0.0, 1.0 - gamma));
-    out = state;
+    const double inv = 1.0 / std::sqrt(n0 + (1.0 - gamma) * n1);
+    const double s1 = s * inv;
     for (std::size_t i = 0; i < n; ++i) {
-      if ((i & mask) != 0) {
-        out[i] *= s;
-      }
+      state[i] *= (i & mask) != 0 ? s1 : inv;
     }
-    renormalize(out);
   }
-
-  state.swap(out);
 }
 
 // Apply one-qubit bit-flip channel: X gate applied with probability p.
