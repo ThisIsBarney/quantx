@@ -73,4 +73,7 @@ class AbstractJobStoreBackend(ABC):
 
     @abstractmethod
     async def delete_expired(self, ttl_seconds: float) -> int:
-        """Remove all jobs at least *ttl_seconds* old (so 0 removes them all).  Return count deleted."""
+        """Remove all jobs at least *ttl_seconds* old (so 0 removes them all).  Return count deleted.
+
+        A backend that expires jobs natively (Redis) may ignore *ttl_seconds* and return 0.
+        """

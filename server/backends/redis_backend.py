@@ -119,7 +119,8 @@ class RedisBackend(AbstractJobStoreBackend):
         await self._client.hset(key, mapping={"status": "failed", "error": error})
 
     async def delete_expired(self, ttl_seconds: float) -> int:
-        """Redis handles TTL natively; this is a no-op for the Redis backend."""
+        """A no-op that returns 0: Redis expires jobs itself, through the TTL set when each
+        job is written, so ``ttl_seconds`` is ignored here (unlike the other backends)."""
         return 0
 
     # ── Helpers ───────────────────────────────────────────────────────────────

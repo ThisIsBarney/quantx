@@ -75,9 +75,10 @@ class InMemoryBackend(AbstractJobStoreBackend):
 
     async def _evict_locked(self) -> None:
         """Must be called with ``self._lock`` held."""
+        now = time.time()
         expired = [
             jid for jid, rec in self._jobs.items()
-            if time.time() - rec.created_at > self.ttl_seconds
+            if now - rec.created_at >= self.ttl_seconds   # inclusive, as delete_expired
         ]
         for jid in expired:
             del self._jobs[jid]
