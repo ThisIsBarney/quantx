@@ -149,6 +149,12 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 - Four tutorial notebooks called APIs that do not exist, and printed claims their own
   outputs contradicted (#195).
 
+### Known issues
+
+- **The VQE showcase's bond dimensions** (`docs/universal_mpo.md` and the `chi` columns
+  of `docs/vqe_*.csv`) were recorded before the #197 fix and overstate the true bond
+  dimensions. Energies, entropies and truncation errors are unaffected.
+
 ---
 
 ## Development history before the first public release

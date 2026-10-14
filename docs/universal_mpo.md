@@ -663,6 +663,14 @@ After the fixes the t'=+0.25 production run completed all 20 sweeps clean
 
 ## Showcase: fermionic VQE — how deep, and is the circuit classically hard?
 
+> **The bond dimensions in this section are overstated** (noted 2026-10). They were
+> recorded before [#197](https://github.com/ThisIsBarney/quantx/pull/197) fixed the
+> circuit's canonical-form moves, which padded every bond they crossed with zero-weight
+> states (a circuit capped at `max_bond` 4 reported 10). The `chi_used` and `chi`
+> columns of `docs/vqe_*.csv`, and every χ quoted below, are upper bounds. Energies,
+> entanglement entropies and truncation errors were unaffected. A re-run with the fixed
+> engine is pending.
+
 ![VQE on the block engine](vqe_hubbard.svg)
 
 The engine turned on quantum computing. The **Hamiltonian Variational Ansatz** (HVA),
@@ -747,7 +755,8 @@ max can sit on a boundary bond, where it is capped by ln(d) of one site.</sub>
 *Three things to read correctly here.* (i) The reported χ hits the 4096 cap at
 n ≥ 16, which does **not** contradict S ≈ 1.5: χ is the total bond dimension summed
 over all charge sectors at a 1e-10 cutoff, so it tracks the Schmidt tail, while S
-does not — which is why S is the primary metric. (ii) S is read from a *lossless*
+does not — which is why S is the primary metric. The reported χ also includes the
+zero-weight padding described at the top of this section. (ii) S is read from a *lossless*
 centre walk, but it is still the entropy of the χ-capped state and is bounded by
 ln χ = 8.3; at S ≈ 1.5 with a discarded weight of 1e-11 that bound is nowhere near
 binding, but the number is not unconditionally cap-free. (iii) The quoted
