@@ -88,8 +88,8 @@ class DepolarizingNoise(NoiseModel):
     state with probability p:  ρ → (1-p)ρ + p·I/2, which is
     (1 - 3p/4)ρ + (p/4)(XρX + YρY + ZρZ). The native circuit backend applies it
     to every qubit after every gate (idle qubits included), one trajectory per
-    shot; the density-matrix simulator in :mod:`quantx_engine.primitives`
-    applies the same channel to the qubits the gate acts on.
+    shot. The density-matrix simulator in :mod:`quantx_engine.primitives` and the
+    dynamic-circuit simulator apply it the same way (see :func:`native_channels`).
 
     Parameters
     ----------
@@ -275,9 +275,8 @@ class CompositeNoise(NoiseModel):
     Every key is checked, not only ``noise``.  Each top-level field holds one
     value per circuit, so two :class:`DepolarizingNoise` models collide on
     ``depolarizing_prob`` (build one model instead).  ``noise_metadata`` is
-    checked as well: the native backend ignores it, but the density-matrix
-    simulator in :mod:`quantx_engine.primitives` falls back to its ``gamma``
-    as the amplitude-damping rate.
+    checked as well: no simulator executes it, but a merge would keep only one
+    model's description.
 
     The check is on the fields a payload sets, not only on its keys.  A
     ``noise`` selector of kind ``depolarizing`` or ``amplitude_damping`` (no
@@ -419,7 +418,8 @@ def native_channels(model: "NoiseModel | dict[str, Any] | None") -> list[tuple[s
     - then the ``noise`` kind runs: ``bit_flip``, ``phase_flip``, ``t1_decay`` (amplitude
       damping with γ = 1 − exp(−dt/T1)) or ``t2_decay`` (a phase flip with
       p = (1 − exp(−dt/T2))/2), each reading ``params`` before its own keys;
-    - ``noise_metadata`` is information only, not executed.
+    - ``noise_metadata`` is information only, not executed;
+    - every rate is clamped to [0, 1], as the backend clamps it.
 
     The Python simulators use this, so a model means the same channels everywhere.
 
@@ -466,8 +466,8 @@ def native_channels(model: "NoiseModel | dict[str, Any] | None") -> list[tuple[s
     if dep > 0.0:
         channels.append(("depolarizing", min(dep, 1.0)))
     if gamma > 0.0:
-        channels.append(("amplitude_damping", gamma))
-    channels.extend((kind, rate) for kind, rate in named if rate > 0.0)
+        channels.append(("amplitude_damping", min(gamma, 1.0)))
+    channels.extend((kind, min(rate, 1.0)) for kind, rate in named if rate > 0.0)
     return channels
 
 

@@ -107,8 +107,12 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
   The dynamic-circuit simulator treated amplitude damping as a depolarizing
   probability and dropped every other channel. Now all three simulators apply the
   same channels, resolved by the new `noise.native_channels`: every qubit after every
-  gate, as on the native backend. For dynamic circuits, `DynamicResult.metadata` reports
-  `noise_channels` in place of the old `p_noise`.
+  gate, as on the native backend, each rate clamped to [0, 1] as the backend clamps it.
+  For dynamic circuits, `DynamicResult.metadata` reports `noise_channels` in place of
+  the old `p_noise`. The density-matrix simulator now applies gates by contracting over
+  their qubits, and one-qubit channels block by block, instead of multiplying
+  2^n x 2^n matrices: a two-layer, 8-qubit circuit with depolarizing and T1 noise
+  takes 0.2 s, from 1.2 s, although every qubit now gets the noise.
 - The block engine's lossless centre moves padded every bond they crossed with
   zero-weight states, so reported bond dimensions were inflated (a circuit capped at
   `max_bond` 4 reported 10). Energies and entropies were unaffected (#197).

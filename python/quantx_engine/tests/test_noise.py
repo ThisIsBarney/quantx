@@ -363,6 +363,57 @@ def test_native_channels_resolve_like_the_backend_parser():
         native_channels({"noise": {"kind": "readout"}})
 
 
+def test_native_channels_clamp_every_rate_like_the_backend():
+    """The backend clamps each rate to [0, 1]. Unclamped, damping 1.5 gave the density
+    matrix a trace of 1.985, and a flip of 1.5 gave |<Z>| > 1."""
+    np = pytest.importorskip("numpy")
+    from quantx_engine.noise import native_channels
+    from quantx_engine.primitives import _dm_simulate
+    assert native_channels({"amplitude_damping_gamma": 1.5}) == [("amplitude_damping", 1.0)]
+    assert native_channels({"depolarizing_prob": 2.0}) == [("depolarizing", 1.0)]
+    for kind in ("bit_flip", "phase_flip"):
+        assert native_channels({"noise": {"kind": kind, "prob": 1.5}}) == [(kind, 1.0)]
+    for payload in ({"amplitude_damping_gamma": 1.5},
+                    {"noise": {"kind": "bit_flip", "prob": 1.5}}):
+        rho = _dm_simulate([{"name": "x", "qubits": [0]}], 2, payload)
+        assert np.trace(rho).real == pytest.approx(1.0)
+        assert np.all(np.linalg.eigvalsh(rho) > -1e-12)
+
+
+def test_density_matrix_channels_match_the_dense_embedding():
+    """The density-matrix simulator applies gates and channels by contracting over the
+    qubits they act on. Check it against the dense 2^n x 2^n embedding, on a random
+    state, for one- and two-qubit operators in either qubit order."""
+    np = pytest.importorskip("numpy")
+    from quantx_engine.primitives import (
+        _amplitude_damp_local, _apply_gate_dm, _depolarize_local, _embed_gate,
+        _gate_matrices, _pauli_flip_local)
+    rng = np.random.default_rng(3)
+    n, d = 3, 8
+    a = rng.normal(size=(d, d)) + 1j * rng.normal(size=(d, d))
+    rho = a @ a.conj().T
+    rho /= np.trace(rho)
+
+    def dense(rho, K, qubits):
+        full = _embed_gate(K, qubits, n)
+        return full @ rho @ full.conj().T
+
+    for qubits in ([1], [2, 0], [0, 2], [1, 2]):
+        m = 1 << len(qubits)
+        u, _ = np.linalg.qr(rng.normal(size=(m, m)) + 1j * rng.normal(size=(m, m)))
+        assert np.allclose(_apply_gate_dm(rho, u, qubits, n), dense(rho, u, qubits), atol=1e-13)
+    mats = _gate_matrices()
+    p, g, q = 0.3, 0.4, [2]
+    dep = (1 - 0.75 * p) * rho + (p / 4) * sum(dense(rho, mats[s], q) for s in "xyz")
+    assert np.allclose(_depolarize_local(rho, p, q, n), dep, atol=1e-13)
+    k0 = np.array([[1, 0], [0, math.sqrt(1 - g)]], dtype=complex)
+    k1 = np.array([[0, math.sqrt(g)], [0, 0]], dtype=complex)
+    assert np.allclose(_amplitude_damp_local(rho, g, q, n),
+                       dense(rho, k0, q) + dense(rho, k1, q), atol=1e-13)
+    assert np.allclose(_pauli_flip_local(rho, "x", p, q, n),
+                       (1 - p) * rho + p * dense(rho, mats["x"], q), atol=1e-13)
+
+
 _CROSS_MODELS = [
     DepolarizingNoise(0.3),
     AmplitudeDampingNoise(0.4),

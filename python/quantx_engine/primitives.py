@@ -389,15 +389,53 @@ def _embed_gate(U: "np.ndarray", qubits: list[int], n: int) -> "np.ndarray":
     return result
 
 
+def _apply_left(
+    mat: "np.ndarray",
+    U: "np.ndarray",
+    qubits: list[int],
+    n: int,
+) -> "np.ndarray":
+    """``U`` on ``qubits`` times ``mat``, a ``(2**n, m)`` array whose rows are indexed
+    by n qubits (qubit 0 = LSB).
+
+    A tensor contraction over the gate's qubits, O(4**len(qubits) 2**n m), where the
+    product with the embedded ``(2**n, 2**n)`` gate would cost O(4**n m).
+    """
+    nq = len(qubits)
+    axes = [n - 1 - q for q in qubits]   # tensor axis of qubit q, as in _apply_gate_sv
+    t = mat.reshape([2] * n + [mat.shape[1]])
+    t = np.tensordot(U.reshape([2] * (2 * nq)), t, axes=(list(range(nq, 2 * nq)), axes))
+    return np.moveaxis(t, list(range(nq)), axes).reshape(mat.shape)
+
+
+def _conjugate_dm(
+    rho: "np.ndarray",
+    K: "np.ndarray",
+    qubits: list[int],
+    n: int,
+) -> "np.ndarray":
+    """``K ρ K†`` for an operator ``K`` on ``qubits``: (K (K ρ)†)†."""
+    half = _apply_left(rho, K, qubits, n)
+    return _apply_left(half.conj().T, K, qubits, n).conj().T
+
+
 def _apply_gate_dm(
     rho: "np.ndarray",
     U: "np.ndarray",
     qubits: list[int],
     n: int,
 ) -> "np.ndarray":
-    """Apply gate U to density matrix: ρ → U_full ρ U_full†."""
-    U_full = _embed_gate(U, qubits, n)
-    return U_full @ rho @ U_full.conj().T
+    """Apply gate U to density matrix: ρ → U ρ U†."""
+    return _conjugate_dm(rho, U, qubits, n)
+
+
+def _qubit_blocks(rho: "np.ndarray", q: int, n: int) -> "np.ndarray":
+    """A view of ρ as ``[hi, a, lo, hi', b, lo']``, where ``a`` and ``b`` are qubit
+    q's row and column bits (qubit 0 = LSB): ``v[:, a, :, :, b, :]`` is the block
+    ρ_ab over the other qubits. The one-qubit channels below act on these blocks,
+    in O(4**n), with no operator embedded in the full space."""
+    hi, lo = 1 << (n - 1 - q), 1 << q
+    return rho.reshape(hi, 2, lo, hi, 2, lo)
 
 
 def _depolarize_local(
@@ -414,14 +452,14 @@ def _depolarize_local(
     """
     if p <= 0.0:
         return rho
-    mats = _gate_matrices()
     for q in qubits:
-        fac = 1.0 - 3.0 * p / 4.0
-        new_rho = fac * rho
-        for P_name in ("x", "y", "z"):
-            P_full = _embed_gate(mats[P_name], [q], n)
-            new_rho = new_rho + (p / 4.0) * (P_full @ rho @ P_full.conj().T)
-        rho = new_rho
+        # (1 - p)ρ + p I/2 ⊗ Tr_q ρ, block by block
+        v = _qubit_blocks(rho, q, n)
+        out = (1.0 - p) * v
+        mixed = (p / 2.0) * (v[:, 0, :, :, 0, :] + v[:, 1, :, :, 1, :])
+        out[:, 0, :, :, 0, :] += mixed
+        out[:, 1, :, :, 1, :] += mixed
+        rho = out.reshape(rho.shape)
     return rho
 
 
@@ -448,14 +486,16 @@ def _amplitude_damp_local(
     """
     if gamma <= 0.0:
         return rho
-    sqrt_gamma = math.sqrt(gamma)
     sqrt_1mg = math.sqrt(max(1.0 - gamma, 0.0))
-    K0_local = np.array([[1.0, 0.0], [0.0, sqrt_1mg]], dtype=complex)
-    K1_local = np.array([[0.0, sqrt_gamma], [0.0, 0.0]], dtype=complex)
     for q in qubits:
-        K0 = _embed_gate(K0_local, [q], n)
-        K1 = _embed_gate(K1_local, [q], n)
-        rho = K0 @ rho @ K0.conj().T + K1 @ rho @ K1.conj().T
+        # K0 scales the blocks by 1, sqrt(1-γ), sqrt(1-γ), 1-γ; K1 moves γ ρ11 into ρ00
+        v = _qubit_blocks(rho, q, n)
+        out = v.copy()
+        out[:, 0, :, :, 0, :] += gamma * v[:, 1, :, :, 1, :]
+        out[:, 0, :, :, 1, :] *= sqrt_1mg
+        out[:, 1, :, :, 0, :] *= sqrt_1mg
+        out[:, 1, :, :, 1, :] *= 1.0 - gamma
+        rho = out.reshape(rho.shape)
     return rho
 
 
@@ -471,7 +511,12 @@ def _dm_simulate(
     the native circuit backend applies them: the channels and their order come
     from :func:`~quantx_engine.noise.native_channels` (depolarizing, amplitude
     damping, then the ``noise`` kind: bit flip, phase flip, T1 or T2 decay).
-    The result is the density matrix the backend's trajectories average to.
+    For a circuit without measurements, the result is the density matrix the
+    backend's trajectories average to. A ``measure`` is skipped, as in the noiseless
+    statevector path, so the result is the state before the measurements: the
+    backend instead collapses a measured qubit, so an observable with X or Y on it
+    differs (the computational-basis distribution after terminal measurements does
+    not).
     """
     from .noise import native_channels
 
@@ -513,10 +558,15 @@ def _pauli_flip_local(
     """Apply the flip channel ``E(ρ) = (1 − p)ρ + p PρP`` (P = X or Z) to each qubit."""
     if p <= 0.0:
         return rho
-    P_local = _gate_matrices()[pauli]
     for q in qubits:
-        P_full = _embed_gate(P_local, [q], n)
-        rho = (1.0 - p) * rho + p * (P_full @ rho @ P_full.conj().T)
+        v = _qubit_blocks(rho, q, n)
+        if pauli == "x":   # XρX swaps ρ_ab with ρ_(1-a)(1-b)
+            out = (1.0 - p) * v + p * v[:, ::-1, :, :, ::-1, :]
+        else:              # ZρZ negates the off-diagonal blocks
+            out = v.copy()
+            out[:, 0, :, :, 1, :] *= 1.0 - 2.0 * p
+            out[:, 1, :, :, 0, :] *= 1.0 - 2.0 * p
+        rho = out.reshape(rho.shape)
     return rho
 
 
