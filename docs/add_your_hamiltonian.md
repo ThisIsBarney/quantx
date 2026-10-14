@@ -189,7 +189,7 @@ Then open a PR on GitHub. The CI pipeline will run your tests automatically.
 ## Optional — C++ acceleration
 
 If your Hamiltonian is performance-critical, you can add a native backend.
-See [CONTRIBUTING.md § C++ backend](../CONTRIBUTING.md#building-the-native-c-engine)
+See [CONTRIBUTING.md § C++ backend](../CONTRIBUTING.md#building-the-native-engine)
 for the full build instructions.  The pattern is:
 
 1. Add a `qx_xx_chain_solve()` function in `src/solvers/xx_chain.cpp`

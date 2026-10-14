@@ -35,7 +35,7 @@ The package has two parts, held to different bars:
 
 | Part | What it is | Bar |
 |---|---|---|
-| The engine | The C++ core in `src/` and `include/qx/`, its C API (`include/qx/c_api.h`), and the Python modules that drive it: `models`, `dmrg`, `hva`, `tdvp`, `structure_factor` | Every capability has a gate (next section). Changes to `c_api.h` keep existing callers working. |
+| The engine | The C++ core in `src/` and `include/qx/`, its C API (`include/qx/c_api.h`), and the Python modules that drive it: `models`, `dmrg`, `hva`, `tdvp`, `structure_factor` | A new capability comes with a gate (next section). Today `dmrg.ground_state` and `hva` are gated; `tdvp`, `structure_factor` and the SU(2) path of `DMRGSolver` are validated in the C++ tests but have no Python gate yet. Changes to `c_api.h` keep existing callers working. |
 | Experimental modules | The pure-Python modules that do not use the engine (VQE, error correction, noise, quantum walks, connectors, ...) | Tests for what they claim. Their API may change, and they may move to a separate `quantx_engine.contrib` namespace. |
 
 ## The verification standard
@@ -43,8 +43,9 @@ The package has two parts, held to different bars:
 This is the rule that matters most. **Every engine capability exposed to Python ships
 with a gate:** a test that compares the engine against a reference computed
 independently of it, at a stated tolerance. The reference can be exact
-diagonalisation, a state vector, or an analytic result. The existing gates show the
-pattern:
+diagonalisation, a state vector, or an analytic result. (The older `tdvp`,
+`structure_factor` and SU(2) entry points predate the rule; giving them gates is open
+work.) The existing gates show the pattern:
 
 - `python/quantx_engine/tests/test_models_ed.py`: every model's ground state against
   an exact diagonalisation written separately from the engine, to 1e-10.
@@ -89,10 +90,15 @@ cmake --build build --parallel
 ```
 
 ```powershell
-# Windows, from a "Developer PowerShell for VS 2022" prompt
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+# Windows (Visual Studio 2022): the Visual Studio generator, 64-bit
+cmake -S . -B build -A x64
+cmake --build build --config Release --parallel
 ```
+
+On Windows, build 64-bit: a 64-bit Python cannot load a 32-bit DLL. The plain
+"Developer PowerShell for VS 2022" shortcut sets up the 32-bit (x86) compiler, so for
+Ninja use the "x64 Native Tools Command Prompt" instead, or run
+`Enter-VsDevShell -Arch amd64 -HostArch amd64` first.
 
 The shared library lands in `build/Release/` (`build/<config>/` for any configuration):
 `libquantx.so`, `libquantx.dylib` or `quantx.dll`. Point Python at it with

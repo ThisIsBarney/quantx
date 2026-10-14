@@ -6,6 +6,9 @@ here as work merges.
 
 **Status:** ✅ done · 🔄 in progress · ⬜ not started
 
+Two items of the internal plan are not engineering work and are not listed here: a market
+study (M10) and a commercial pilot (M22). That is why the numbering skips them.
+
 ## Where QuantX is going
 
 QuantX is a symmetry-conserving many-body engine: block-sparse MPS algorithms that
