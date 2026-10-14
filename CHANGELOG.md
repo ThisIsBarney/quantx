@@ -52,6 +52,12 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 
   Only part of it is reachable from Python so far; the README lists which.
 
+### Changed
+
+- **The README and the PyPI page lead with the engine:** what it does from Python,
+  and what each capability is checked against. Everything else in the package is
+  marked experimental (M7). The package description now says the same thing.
+
 ### Fixed
 
 - The block engine's lossless centre moves padded every bond they crossed with

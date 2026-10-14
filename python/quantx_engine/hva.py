@@ -12,8 +12,11 @@ it simulates the circuit exactly, up to ``max_bond``, far beyond state-vector si
     cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
     lay = hva.layout(cyl)                          # the bond groups of this geometry
     angles = [[0.1] * lay.angles_per_layer] * 3    # three layers
-    r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)    # ~5 s
+    r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)    # ~5-10 s
     r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
+
+This cylinder already truncates at max_bond 256: ``truncation_error`` is about 5e-4,
+and the energy moves by 3e-3 at max_bond 1024. Raise max_bond until it stops moving.
 
 Wider lattices cost fast. The U = 0 start itself is highly entangled in 2-D: a 6x4
 cylinder prepared at max_bond 256 starts 0.05 off in energy (``init_energy_error``) and
@@ -32,8 +35,11 @@ Precision: from a product start the circuit is exact up to ``max_bond`` (gated a
 a state vector to 1e-10). A free start is only as good as its DMRG preparation, which
 stops when its energy stops changing, and a circuit inherits the start's error. On the
 small systems of the gate that meant 1e-8 to 7e-8 in the circuit energy; on a long chain
-with a small single-particle gap it can be far worse. Nothing else signals it:
-``init_energy_error`` (against the exact U = 0 energy) is the number to check.
+with a small single-particle gap it can be far worse. ``init_energy_error`` (the start's
+energy against the exact U = 0 energy) catches a bad start, but a small value does not
+bound the circuit's error: the energy is stationary at the ground state, so the gate's
+starts were right to about 5e-14 in energy while their circuits were 1e-8 off. For the
+full precision, start from ``init="product"``.
 """
 from __future__ import annotations
 

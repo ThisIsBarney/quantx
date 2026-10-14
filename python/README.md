@@ -1,123 +1,54 @@
 # quantx-engine
 
-Python SDK for the [QuantX](https://github.com/ThisIsBarney/quantx) quantum simulation engine — 37 physics solvers exposed via a ctypes C ABI bridge.
-
-## Installation
+QuantX is a tensor-network engine for quantum many-body physics. It runs block-sparse
+MPS algorithms (DMRG, TDVP, and fermionic HVA circuits) that conserve U(1), U(1)×U(1)
+and SU(2) charges exactly. The core is C++20, with a Python API.
 
 ```bash
 pip install quantx-engine
 ```
 
-> **Note:** The package requires the compiled `qx` shared library. On Windows, place `qx.dll` (built from source) alongside the package or in your `PATH`. See the [main repository](https://github.com/ThisIsBarney/quantx) for build instructions.
+Wheels carry the native engine for Linux x86_64, macOS 10.15+ (arm64 and x86_64) and
+Windows AMD64, on any CPython 3.10 or later. On other platforms pip installs a
+pure-Python package without the engine, and `quantx_engine.backend_info()["native"]` is
+`False`.
 
-## Quick Start
+## What is verified
 
-```python
-from quantx_engine import Engine
-
-engine = Engine()
-
-# List all available solvers
-solvers = engine.list_solvers()
-print(f"{len(solvers)} solvers available")
-
-# Run VQE on a custom Hamiltonian
-result = engine.run_vqe({
-    "cost_hamiltonian": [
-        {"label": "Z0", "coefficient": -0.5},
-        {"label": "Z1", "coefficient": -0.5},
-        {"label": "Z0Z1", "coefficient": 0.25},
-    ],
-    "ansatz_type": "uccsd",
-    "max_iterations": 200,
-})
-print(result)
-```
-
-## Quantum Chemistry
+| Capability | Python | Checked against |
+|---|---|---|
+| Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a chosen symmetry sector | `dmrg.ground_state` with `models.XXZChain`, `J1J2Chain`, `Spin1Chain`, `HubbardChain` | exact diagonalisation to 1e-10 |
+| Hubbard on ladders, strips and cylinders | `dmrg.ground_state(models.HubbardLattice(...))` | exact diagonalisation on a ladder and a cylinder, to 1e-10 |
+| Fermionic HVA circuits on chains, ladders, strips and cylinders | `hva.circuit`, `hva.layout` | an independent state vector: energy and entanglement entropies to 1e-10 from a product start; to 1e-6 from the default U = 0 start (about 1e-8 measured) |
 
 ```python
-from quantx_engine.chemistry import MolecularVQE
+from quantx_engine.models import HubbardChain, HubbardLattice
+from quantx_engine.dmrg import ground_state
+from quantx_engine import hva
 
-# Build H₂ at equilibrium geometry
-problem = MolecularVQE.h2(bond_length=0.735)
-print(f"Hamiltonian: {problem.hamiltonian}")
-print(f"FCI reference energy: {problem.fci_energy:.6f} Hartree")
+gs = ground_state(HubbardChain(L=16, U=4.0), n_up=8, n_dn=8, max_bond=256)
+gs.energy, gs.truncation_error
 
-# Get VQE options compatible with Engine.run_vqe()
-opts = problem.to_vqe_options(ansatz="uccsd", max_iterations=300)
-result = engine.run_vqe(opts)
+cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
+angles = [[0.1] * hva.layout(cyl).angles_per_layer] * 3
+r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)
+r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
+# At max_bond 256 this cylinder already truncates (truncation_error ~5e-4; the energy
+# moves by 3e-3 at 1024): raise max_bond until the energy stops moving.
 ```
 
-Supported molecules: **H₂** (4 qubits), **LiH** (10 qubits), **BeH₂** (12 qubits).
+Spin models use S = σ/2, and every chain is open. A solver works in one symmetry sector,
+and an unreachable sector is an error rather than a silent default. The gates run on a
+Linux build in CI; the macOS and Windows wheels are checked for loading the engine.
 
-## OpenQASM 3.0
+## Experimental
 
-```python
-from quantx_engine.qasm import parse_qasm_to_circuit
+Everything else in the package is experimental: its API may change, and the checks above
+do not cover it. That is more than 50 pure-Python modules that do not use the engine (VQE
+and chemistry, error correction, noise and mitigation, quantum walks, bosonic codes,
+hardware connectors and more), plus a few older interfaces to parts of the engine.
 
-circuit = parse_qasm_to_circuit("""
-OPENQASM 3.0;
-qubit[2] q;
-bit[2] c;
-h q[0];
-cx q[0], q[1];
-c = measure q;
-""")
-result = engine.run_circuit(circuit)
-```
+Documentation, benchmarks and the C++ engine are in the
+[repository](https://github.com/ThisIsBarney/quantx).
 
-## Noise Models
-
-```python
-from quantx_engine.noise import DepolarizingNoise, ThermalRelaxationNoise, CompositeNoise
-
-# Depolarizing combines with at most one `noise`-kind model (ThermalRelaxationNoise
-# or ReadoutNoise): the native backend runs one per circuit, so a second raises.
-model = CompositeNoise([
-    DepolarizingNoise(prob=0.01),
-    ThermalRelaxationNoise(T1=50e-6, T2=30e-6, t_gate=50e-9),
-])
-
-circuit = {"gates": [...]}
-circuit.update(model.to_dict())
-result = engine.run_circuit(circuit)
-```
-
-## IBM Quantum Connector
-
-```python
-from quantx_engine.ibm import IBMQuantumBackend
-
-backend = IBMQuantumBackend(token="YOUR_IBM_TOKEN", backend_name="ibm_brisbane")
-result = backend.run(circuit, shots=1024)
-```
-
-## Async API
-
-All 37 solver methods have async variants:
-
-```python
-import asyncio
-from quantx_engine import Engine
-
-async def main():
-    engine = Engine()
-    result = await engine.run_vqe_async({"cost_hamiltonian": [...], "ansatz_type": "uccsd"})
-    print(result)
-
-asyncio.run(main())
-```
-
-## Available Solvers
-
-`vqe`, `qpe`, `qec`, `qfield`, `phi4`, `hubbard`, `floquet`, `heisenberg`,
-`bose_hubbard`, `tfi`, `ssh`, `kitaev`, `anderson`, `chern`, `hofstadter`,
-`mbl`, `spectral`, `tenfold`, `second_chern`, `wilson_loop`, `edge_states`,
-`haldane`, `weyl`, `fu_kane`, `lutchyn_oreg`, `kitaev_honeycomb`, `bbh`,
-`floquet_topo`, `non_herm`, `aah`, `syk`, `kondo`, `luttinger`, `toric`,
-`mipt`, `rg`, `entanglement`
-
-## License
-
-MIT — see [LICENSE](../LICENSE).
+MIT License, © 2026 Marshall WU.
