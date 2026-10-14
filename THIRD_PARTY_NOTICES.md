@@ -83,13 +83,23 @@ notices are in the table above; the license text is:
 | Linux (`manylinux_2_28`) | `libgomp`, the GNU OpenMP runtime, from GCC | GPL-3.0-or-later WITH GCC-exception-3.1 |
 | Windows | `vcomp140.dll`, the Microsoft Visual C++ OpenMP runtime | Microsoft Visual C++ redistributable terms |
 
-`libgomp` is licensed under the GNU General Public License v3 or later
-(https://www.gnu.org/licenses/gpl-3.0.html) with the GCC Runtime Library Exception 3.1
-(https://www.gnu.org/licenses/gcc-exception-3.1.html), which permits distributing it
-with programs under any license. Its source is part of GCC (https://gcc.gnu.org). `vcomp140.dll` is one of
-the files Microsoft licenses for redistribution with applications built by Visual
-Studio. The macOS wheels bundle no runtime library, and the Windows engine links the
-C++ runtime statically.
+`libgomp` is free software, licensed under the GNU General Public License version 3
+or later with the GCC Runtime Library Exception 3.1. Both texts ship in every wheel, in
+the `licenses` folder beside this file (`GPL-3.0.txt`, `GCC-exception-3.1.txt`; in the
+repository, `python/licenses/`). The exception lets the engine, which only links to
+the library, keep its own license; the library itself stays under the GPL.
+
+The Linux wheel's `quantx_engine.libs/libgomp-*.so.1` is the `libgomp.so.1` of the
+`manylinux_2_28` build image (AlmaLinux 8) that cibuildwheel uses. auditwheel copies it
+into the wheel, renaming it and rewriting its `soname`, and changes nothing else. Its
+source is GCC's: in the image, `rpm -qf` on that file names the package that provides
+it, and AlmaLinux publishes the source RPM of each of its packages at
+https://vault.almalinux.org. Upstream, libgomp is in the GCC repository,
+https://gcc.gnu.org/git/?p=gcc.git;a=tree;f=libgomp.
+
+`vcomp140.dll` is one of the files Microsoft licenses for redistribution with
+applications built by Visual Studio. The macOS wheels bundle no runtime library, and
+the Windows engine links the C++ runtime statically.
 
 ## In the repository only (not in the wheels)
 

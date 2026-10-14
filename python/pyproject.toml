@@ -13,7 +13,7 @@ requires-python = ">=3.10"
 license = "MIT"
 # The wheel is built from python/, so both files are copies of the root ones (a test keeps
 # them identical). THIRD_PARTY_NOTICES.md covers the code compiled into the native engine.
-license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt"]
 authors = [
   {name = "Marshall WU", email = "wujian.thu@icloud.com"},
 ]

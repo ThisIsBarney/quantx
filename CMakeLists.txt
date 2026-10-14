@@ -28,6 +28,8 @@ if(MSVC)
   # on a Chinese Windows) and warns C4819 at every non-ASCII character. Worse, a
   # multi-byte character at the end of a // comment can then swallow the line after it.
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
+  # nvcc hands host code to cl.exe, so the CUDA sources (gpu_svd.cu) need it passed on.
+  add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/utf-8>)
 endif()
 
 option(QX_ENABLE_OPENMP "Enable OpenMP parallel backend" ON)
