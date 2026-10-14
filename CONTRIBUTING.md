@@ -101,11 +101,18 @@ Ninja use the "x64 Native Tools Command Prompt" instead, or run
 `Enter-VsDevShell -Arch amd64 -HostArch amd64` first.
 
 The shared library lands in `build/Release/` (`build/<config>/` for any configuration):
-`libquantx.so`, `libquantx.dylib` or `quantx.dll`. Point Python at it with
-`QUANTX_LIB_PATH`:
+`libquantx.so` on Linux, `libquantx.dylib` on macOS, `quantx.dll` on Windows. Point
+Python at it with `QUANTX_LIB_PATH`, on Linux (on macOS, name `libquantx.dylib`):
 
 ```bash
-export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"   # Windows: $env:QUANTX_LIB_PATH = "...\build\Release\quantx.dll"
+export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"
+python -c "import quantx_engine; print(quantx_engine.backend_info())"
+```
+
+and on Windows:
+
+```powershell
+$env:QUANTX_LIB_PATH = "$PWD\build\Release\quantx.dll"
 python -c "import quantx_engine; print(quantx_engine.backend_info())"
 ```
 
@@ -114,7 +121,7 @@ Options worth knowing:
 | Option | Default | What it does |
 |---|---|---|
 | `QX_ENABLE_OPENMP` | ON | Threads the block-sparse kernels |
-| `QX_ENABLE_BLAS` | OFF | Links OpenBLAS/LAPACKE for the large-block SVDs (faster at large bond dimension) |
+| `QX_ENABLE_BLAS` | OFF | Links OpenBLAS/LAPACKE for the large-block SVDs (faster at large bond dimension). Needs `-DQX_BLAS_INCLUDE_DIR=<dir with lapacke.h>` and `-DQX_BLAS_LIB=<OpenBLAS library>`; on Windows the OpenBLAS DLL must be on `PATH` at run time |
 | `QX_USE_CUDA` | OFF | The cuSOLVER GPU path for the block-sparse SVDs (`-DCMAKE_CUDA_ARCHITECTURES=89` etc.) |
 | `QX_ENABLE_CUDA` | OFF | cuFFT for the FFT provider (separate from `QX_USE_CUDA`) |
 
