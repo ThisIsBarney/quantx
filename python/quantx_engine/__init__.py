@@ -1,7 +1,7 @@
 """Public Python SDK exports for QuantX."""
 
 # The only place the version is written: pyproject.toml reads it from here.
-__version__ = "1.0.0"
+__version__ = "0.1.0"
 
 
 def backend_info() -> dict:

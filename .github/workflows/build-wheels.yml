@@ -153,6 +153,19 @@ jobs:
         with:
           name: sdist
           path: dist/
+      - name: The tag names the version being uploaded
+        # A v* tag uploads whatever version __init__.py says. Refuse a tag that disagrees
+        # with the built files (v0.2.0 pushed on a tree still at 0.1.0, say): PyPI would
+        # take them under the wrong number, and an upload cannot be undone.
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ls dist/
+          for f in dist/*; do
+            case "$(basename "$f")" in
+              "quantx_engine-$version-"*.whl | "quantx_engine-$version.tar.gz") ;;
+              *) echo "::error::$(basename "$f") is not version $version (tag $GITHUB_REF_NAME)"; exit 1 ;;
+            esac
+          done
       - name: Publish
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

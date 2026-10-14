@@ -3,18 +3,62 @@
 All notable changes to **quantx-engine** are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project
-adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
-`MAJOR.MINOR.PATCH` — MINOR increments add new functionality without breaking existing APIs;
-PATCH increments are bug-fixes and packaging corrections only.
+adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html): `MAJOR.MINOR.PATCH`.
+While the version is 0.x, a MINOR increment may change the API; PATCH increments are
+bug-fixes and packaging corrections only.
 
 ---
 
 ## [Unreleased]
 
+*(No changes yet)*
+
+---
+
+## [0.1.0] — unreleased  *(first public release, in preparation)*
+
+The first version published to PyPI. The native engine is now installable; what it can
+do from Python is gated against exact references.
+
+Version numbers restart here, so the API stability guarantee of the internal 1.0.0
+(below) does not carry over: as a 0.x release, any minor version may change the API.
+
+### Added
+
+- **Platform wheels that carry the native engine** (#194). There is one
+  `py3-none-<platform>` wheel per platform, which serves every CPython 3: Linux x86_64
+  (manylinux_2_28), macOS arm64 and x86_64 (10.15+), and Windows AMD64. Any other
+  platform installs the sdist, a pure-Python wheel that says so.
+- **`quantx_engine.models` and `dmrg.ground_state`** (#196): ground states of the XXZ,
+  J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains in a chosen symmetry sector on the
+  block-sparse engine. They are gated against exact diagonalisation to 1e-10.
+- **`models.HubbardLattice` and `quantx_engine.hva`** (#197): Hubbard ground states on
+  ladders, strips and cylinders, and fermionic HVA circuits on the same lattices
+  (`hva.circuit`, `hva.layout`), returning energy, entanglement entropies and
+  truncation. The circuits are gated against an independent state vector: to 1e-10
+  from a product start, and to 1e-6 from the default U = 0 start, which carries its
+  DMRG preparation's residual (measured at about 1e-8). Lattice DMRG is gated against
+  exact diagonalisation on the geometries where the fermion signs are physical.
+- **The native engine these sit on**, built since the internal 1.0.0 (the git history
+  has the details):
+  - two-site DMRG on a block-sparse MPS that conserves U(1) or packed U(1)×U(1)
+    charges, for any charge-conserving MPO, with a DMRG3S mixer;
+  - SU(2)-symmetric DMRG for Heisenberg chains of any spin;
+  - TDVP and TEBD;
+  - finite-temperature statics and dynamics by purification;
+  - Hubbard chains, ladders and cylinders, and fermionic HVA circuits;
+  - a matrix-free Lindblad solver;
+  - optional cuSOLVER acceleration in source builds.
+
+  Only part of it is reachable from Python so far; the README lists which.
+
 ### Fixed
 
-- `CompositeNoise` no longer drops a channel silently. `to_dict()` merged its models
-  with `dict.update`, so a second `noise`-kind model replaced the first:
+- The block engine's lossless centre moves padded every bond they crossed with
+  zero-weight states, so reported bond dimensions were inflated (a circuit capped at
+  `max_bond` 4 reported 10). Energies and entropies were unaffected (#197).
+- `CompositeNoise` no longer drops a channel silently (#198). `to_dict()` merged its
+  models with `dict.update`, so a second `noise`-kind model replaced the first:
   `CompositeNoise([DepolarizingNoise(...), ThermalRelaxationNoise(...), ReadoutNoise(...)])`
   ran depolarizing + bit-flip with no T1 channel. Two models that emit the same key
   (`noise`, `depolarizing_prob`, `amplitude_damping_gamma`, `noise_metadata`, ...) now
@@ -25,13 +69,30 @@ PATCH increments are bug-fixes and packaging corrections only.
   Depolarizing and amplitude damping still combine with one `noise`-kind model.
 - `ReadoutNoise`'s docstring said its bit flip follows each measurement. The backend
   applies it to every qubit after every gate except measurements, so it is gate noise,
-  not a readout error.
+  not a readout error (#198).
+- The DMRG C API failed on every odd-length Heisenberg chain, with an error that blamed
+  `max_bond` (#196).
+- An unknown model type in `qx_dmrg_sweep` silently ran as an empty Hamiltonian and
+  returned E = 0; it is now an error (#196).
+- At n = 2 the five DMRG and dynamics entry points of the C API returned an internal
+  error from inside the block engine, which needs n ≥ 3. `qx_dmrg_sweep` and
+  `qx_tdvp_evolve` now answer 2-site chains with their dense and non-block solvers;
+  the other three refuse with a message that says why (#195).
+- Four tutorial notebooks called APIs that do not exist, and printed claims their own
+  outputs contradicted (#195).
 
 ---
 
-## [1.0.0] — 2026-05-25  *(Phase 2 complete — first stable release)*
+## Development history before the first public release
 
-### Added
+The versions below were internal milestones of the project. None was published to PyPI,
+and none has a release tag, apart from an old `v0.2.0` tag that corresponds to no
+published package. They are kept as a record of what was built and when. Version
+numbering restarts at 0.1.0 with the first public release.
+
+### 1.0.0 (internal) — 2026-05-25  *(Phase 2 complete)*
+
+#### Added
 
 - **M167** — Benchmark suite: `benchmarks/compare_backends.py` covering Lanczos,
   Lindblad, DMRG, TEBD, VQE, QEC; JSON result artefacts; `benchmarks-ci.yml` workflow.
@@ -49,7 +110,7 @@ PATCH increments are bug-fixes and packaging corrections only.
 - **M172** — v1.0.0 release: version bump to 1.0.0, `release.yml` automated PyPI +
   GitHub Release workflow, API stability guarantee (see table below).
 
-### API stability guarantee (v1.0+)
+#### API stability guarantee (v1.0+)
 
 The following symbols are **stable** and will not change without a deprecation cycle:
 
@@ -67,9 +128,9 @@ Internal modules (prefixed `_`) and modules noted as experimental are exempt.
 
 ---
 
-## [0.4.0] — 2026-05-25  *(Phase 2 Track M — SDK Usability)*
+### 0.4.0 (internal) — 2026-05-25  *(Phase 2 Track M — SDK Usability)*
 
-### Added
+#### Added
 
 - **M162** — Test coverage hardening: skip rate reduced to < 1.4 % (49 / 3 699).
   Pure-Python Lindblad steady-state solver via Kronecker-product superoperator + SVD
@@ -91,23 +152,23 @@ Internal modules (prefixed `_`) and modules noted as experimental are exempt.
   `CHANGELOG.md` updated, `quantx_engine._deprecation.warn()` helper,
   `@deprecated` decorator, version bumped to **0.4.0**.
 
-### Fixed
+#### Fixed
 
 - `GroverWalk.run()`: AttributeError `_walk._walk_op` → `_walk._W` (Codex P1).
 - `KrylovEvolver.run()`: off-by-one `n_steps+1` → `n_steps` snapshot count (Codex P2).
 - `sphinx-build | tail -20` masked Sphinx exit code; replaced with explicit `if !` guard.
 - `add_notebook_badges.py`: hardcoded `BRANCH = "master"` → dynamic `_default_branch()`.
 
-### Deprecated
+#### Deprecated
 
 - Nothing deprecated in this release.  The deprecation framework (`_deprecation.warn`)
   is in place for future cycles.
 
 ---
 
-## [0.2.0] — 2026-05-20
+### 0.2.0 (internal) — 2026-05-20
 
-### Added
+#### Added
 - `quantx_engine.__version__` attribute (`"0.2.0"`)
 - `QuantXNativeUnavailable` exception — raised by `Engine.__init__` with a helpful message when
   the native C++ shared library cannot be loaded; all pure-Python modules remain functional
@@ -115,13 +176,13 @@ Internal modules (prefixed `_`) and modules noted as experimental are exempt.
   to avoid clash with the earlier `advanced_chemistry.QAOAResult` (M79)
 - **M127** packaging fixes: `pyproject.toml` optional-dependency groups `gpu`, `distributed`, `all`
 
-### Fixed
+#### Fixed
 - `test_advanced_chemistry_importable_from_package` now passes — `quantx_engine.QAOAResult`
   correctly refers to `advanced_chemistry.QAOAResult` (M79), not `qaoa_optim.QAOAResult` (M115)
 - All 16 Codex review findings on PRs #111–#118 fixed (bosonic codes, magic-state distillation,
   bicycle LDPC, McLachlan dynamics, QSP/QSVT, OO-VQE, MBQC, dynamical decoupling)
 
-### Physics modules added in this release cycle (M119–M126)
+#### Physics modules added in this release cycle (M119–M126)
 | Milestone | Module | Key classes |
 |-----------|--------|-------------|
 | M119 | `bosonic.py` | `CatQubit`, `GKPState`, `GKPDecoder`, `CatNoiseModel` |
@@ -135,18 +196,18 @@ Internal modules (prefixed `_`) and modules noted as experimental are exempt.
 
 ---
 
-## [0.1.0] — 2026-04-15
+### 0.1.0 (internal) — 2026-04-15
 
-Initial release covering M1–M118 (133 modules, 2000+ tests).
+First internal milestone, covering M1–M118 (133 modules, 2000+ tests).
 
-### Track A — Core engine (M1–M20)
+#### Track A — Core engine (M1–M20)
 - `Engine` — ctypes bridge to native C++ quantum simulation runtime
 - `CircuitError`, `ParseError`, OpenQASM 3.0 parser (`parse_qasm_to_circuit`)
 - `NoiseModel`, `DepolarizingNoise`, `AmplitudeDampingNoise`, `ThermalRelaxationNoise`,
   `ReadoutNoise`, `CompositeNoise`
 - `IBMQuantumBackend`, `circuit_to_qasm3`
 
-### Track B — Chemistry & VQE (M21–M50)
+#### Track B — Chemistry & VQE (M21–M50)
 - `PauliTerm`, `PauliHamiltonian`, `jordan_wigner`, `MolecularVQE` (`chemistry.py`)
 - `UCCSDSolver`, `ADAPTVQESolver`, `QAOASolver`, `QITESolver` (`advanced_chemistry.py`)
 - `FidelityQuantumKernel`, `QSVM` (`quantum_kernel.py`)
@@ -154,14 +215,14 @@ Initial release covering M1–M118 (133 modules, 2000+ tests).
 - `SPSAOptimizer`, `NoiseAwareVQE` (`noise_vqe.py`)
 - `ExcitedStateVQE`, `detect_conical_intersections` (`excited_state.py`)
 
-### Track C — QEC & Fault tolerance (M51–M70)
+#### Track C — QEC & Fault tolerance (M51–M70)
 - `RepetitionCode`, `SurfaceCode`, `MWPMDecoder`, `LogicalErrorSimulator` (`qec.py`)
 - `LogicalQubit`, `MagicStateDistillery`, `FaultTolerantCircuit` (`fault_tolerant.py`)
 - `GateSequence`, `SolovayKitaev`, `TCountOptimizer` (`clifford_t.py`)
 - `StabilizerState`, `CliffordSimulator` (`clifford_sim.py`)
 - `FTQCPipeline`, `threshold_curve` (`ftqc_pipeline.py`)
 
-### Track D — Simulation backends (M71–M90)
+#### Track D — Simulation backends (M71–M90)
 - `MPS`, `MPO`, `TEBD`, `DMRG` (`tensor_network.py`)
 - `LanczosSolver`, `ArnoldiSolver` (`lanczos.py`)
 - `MPSSimulator`, `CachedDMRG` (`mps_simulator.py`)
@@ -173,7 +234,7 @@ Initial release covering M1–M118 (133 modules, 2000+ tests).
 - `TrotterSimulator` (`trotter.py`)
 - `SYKModel`, `compute_otoc` (`many_body.py`)
 
-### Track E–G — Algorithms & Protocols (M91–M118)
+#### Track E–G — Algorithms & Protocols (M91–M118)
 - Quantum walk algorithms: `DiscreteTimeWalk`, `ContinuousTimeQuantumWalk`, `GroverWalk`
 - Quantum network: `QuantumRepeater`, `EntanglementSwapper`, `BellPairGenerator`
 - Communication protocols: `BB84Protocol`, `E91Protocol`, `TeleportationProtocol`
@@ -204,8 +265,5 @@ Initial release covering M1–M118 (133 modules, 2000+ tests).
 
 ---
 
-[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/ThisIsBarney/quantx/compare/v0.4.0...v1.0.0
-[0.4.0]: https://github.com/ThisIsBarney/quantx/compare/v0.2.0...v0.4.0
-[0.2.0]: https://github.com/ThisIsBarney/quantx/compare/v0.1.0...v0.2.0
+[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0

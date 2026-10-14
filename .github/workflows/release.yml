@@ -108,9 +108,12 @@ jobs:
           changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
           version = os.environ["VERSION"]
 
-          pattern = rf"## \[{re.escape(version)}\].*?\n(.*?)(?=\n## \[|\Z)"
+          # Stop at ANY level-2 heading: the history section below the releases is one,
+          # and stopping only at "## [" would pull it into the release notes.
+          pattern = rf"## \[{re.escape(version)}\].*?\n(.*?)(?=\n## |\Z)"
           m = re.search(pattern, changelog, re.DOTALL)
           body = m.group(1).strip() if m else f"Release {version}"
+          body = re.sub(r"\n-{3,}$", "", body).strip()  # the rule that closes the section
 
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write("body<<EOF_BODY\n")

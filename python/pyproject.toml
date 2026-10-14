@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 # after 2027-02-18.
 license = "MIT"
 authors = [
-  {name = "QuantX Contributors"},
+  {name = "Marshall WU", email = "wujian.thu@icloud.com"},
 ]
 keywords = ["quantum", "simulation", "physics", "hamiltonian", "topological"]
 classifiers = [
@@ -57,6 +57,13 @@ all = [
     "cupy-cuda12x>=13.0",
     "ray[default]>=2.0",
 ]
+
+# The repository is private as of 0.1.0's preparation: see "Before the first upload" in
+# RELEASING.md.
+[project.urls]
+Homepage = "https://github.com/ThisIsBarney/quantx"
+Changelog = "https://github.com/ThisIsBarney/quantx/blob/master/CHANGELOG.md"
+Issues = "https://github.com/ThisIsBarney/quantx/issues"
 
 [project.entry-points."pennylane.plugins"]
 "quantx.statevector" = "quantx_engine.pennylane_plugin:QuantXDevice"
