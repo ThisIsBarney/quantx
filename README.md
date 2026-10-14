@@ -14,10 +14,11 @@ checked. Everything else in the package is marked experimental below.
 |---|---|---|
 | Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a chosen symmetry sector | `dmrg.ground_state` with `models.XXZChain`, `J1J2Chain`, `Spin1Chain`, `HubbardChain` | exact diagonalisation, written independently of the engine, to 1e-10 |
 | Hubbard ground states on ladders, strips and cylinders | `dmrg.ground_state(models.HubbardLattice(...))` | exact diagonalisation on a ladder and a cylinder, where the fermion signs are physical, to 1e-10 |
-| Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy, entanglement entropy, truncation | `hva.circuit`, `hva.layout` | an independent state-vector simulation: energy and entropies to 1e-10 |
+| Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy, entanglement entropy, truncation | `hva.circuit`, `hva.layout` | an independent state-vector simulation: energy and entropies to 1e-10 from a product start (`init="product"`); to 1e-6 from the default U = 0 start, measured at about 1e-8 (see below) |
 
-These checks run in CI against a fresh build of the engine (`test_models_ed.py` and
-`test_hva_statevector.py` in `python/quantx_engine/tests/`).
+These checks run in CI against a fresh Linux build of the engine (`test_models_ed.py`
+and `test_hva_statevector.py` in `python/quantx_engine/tests/`). The macOS and Windows
+wheels are checked only for loading the engine.
 
 ## Install
 
@@ -64,22 +65,29 @@ r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
   default.
 
 **Reading the results.**
-- `truncation_error` reports the weight the bond-dimension cap discarded.
+- `truncation_error` is the weight the bond-dimension cap discarded. For
+  `ground_state` it is summed over the last sweep; for `hva.circuit` it is the largest
+  single truncation.
 - An HVA circuit started from the U = 0 ground state (`init="free"`, the default)
-  inherits that state's DMRG error, reported as `init_energy_error`. Check it on large
-  2D lattices.
+  inherits that state's DMRG error. `init_energy_error` is the start's energy against
+  the exact U = 0 energy. A large value flags a bad start, but a small one does not
+  bound the circuit's error: the energy is stationary at the ground state, so a start
+  right to 1e-14 in energy can still carry ~1e-8 into the circuit. For the full
+  precision, start from `init="product"`.
 
 ## More in the C++ engine, partly exposed
 
 - **Finite-temperature response:** the dynamical structure factor S(k, ω, T) and the
   optical conductivity σ(ω, T), by purification. C++ only for now. Validated against
   exact diagonalisation: [docs/finite_temperature.md](docs/finite_temperature.md).
-- **Real-time evolution** (TDVP and TEBD). From Python, only the XXZ chain is reachable,
-  through `tdvp.TDVPSolver` and `tdvp.LoschmidtSolver`. See
+- **Real-time evolution** (TDVP and TEBD). From Python, only the XXZ chain is reachable:
+  `tdvp.TDVPSolver` and `tdvp.LoschmidtSolver`, and the zero-temperature S(k, ω) and
+  current correlator through `structure_factor.StructureFactorSolver` and
+  `ConductivitySolver`. These keep the engine's Pauli convention, J σ·σ = 4 J S·S. See
   [docs/dmrg_tdvp_report.md](docs/dmrg_tdvp_report.md).
 - **SU(2)-symmetric DMRG.** From Python, only the Heisenberg chain is reachable, through
-  `dmrg.DMRGSolver(engine).solve(..., method="su2")`, which keeps the Pauli convention
-  J σ·σ. See
+  `dmrg.DMRGSolver(engine).solve(..., method="su2")`: J σ·σ for spin 1/2, and J S·S
+  with `phys_spin=1`. See
   [docs/dmrg_su2_benchmark_report.md](docs/dmrg_su2_benchmark_report.md).
 - **GPU acceleration** (cuSOLVER) of the block-sparse kernels, in source builds:
   [docs/gpu_acceleration_report.md](docs/gpu_acceleration_report.md).
@@ -103,7 +111,7 @@ interface (`qx_cli`).
 ## Building from source
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release   # -DQX_ENABLE_CUDA=ON for the GPU path
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release   # -DQX_USE_CUDA=ON for the cuSOLVER path
 cmake --build build --parallel
 ctest --test-dir build
 ```

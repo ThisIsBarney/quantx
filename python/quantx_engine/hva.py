@@ -35,8 +35,11 @@ Precision: from a product start the circuit is exact up to ``max_bond`` (gated a
 a state vector to 1e-10). A free start is only as good as its DMRG preparation, which
 stops when its energy stops changing, and a circuit inherits the start's error. On the
 small systems of the gate that meant 1e-8 to 7e-8 in the circuit energy; on a long chain
-with a small single-particle gap it can be far worse. Nothing else signals it:
-``init_energy_error`` (against the exact U = 0 energy) is the number to check.
+with a small single-particle gap it can be far worse. ``init_energy_error`` (the start's
+energy against the exact U = 0 energy) catches a bad start, but a small value does not
+bound the circuit's error: the energy is stationary at the ground state, so the gate's
+starts were right to about 5e-14 in energy while their circuits were 1e-8 off. For the
+full precision, start from ``init="product"``.
 """
 from __future__ import annotations
 

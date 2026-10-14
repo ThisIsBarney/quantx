@@ -147,7 +147,9 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
 //   layer_bonds[], wall_time_s, sector, init,
 //   init "free": init_energy, init_energy_exact (the U = 0 ground-state energy from the
 //     single-particle levels), init_energy_error (their difference: how far the DMRG
-//     preparation stopped short -- check it, a circuit inherits the start's error), and
+//     preparation stopped short. A large value means a bad start; a small one does not
+//     bound the circuit's error, since the energy is stationary at the ground state
+//     while the circuit inherits the state's error at first order), and
 //     init_truncation_error (the SUM over the preparation's last sweep),
 //   init "product": init_config, the local state per site, 0 empty, 1 up, 2 down,
 //     3 double, with |up dn> = c+_up c+_dn |0>}.
