@@ -63,7 +63,18 @@ The engine builds with CMake 3.20 or later and a C++20 compiler. On Linux and ma
    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
    cmake --build build --parallel
    pip install -e "python/[dev]"
-   export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"   # libquantx.dylib on macOS
+
+Then point Python at the library, on Linux:
+
+.. code-block:: bash
+
+   export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"
+
+and on macOS:
+
+.. code-block:: bash
+
+   export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.dylib"
 
 On Windows, with Visual Studio 2022 (64-bit, which a 64-bit Python needs):
 
@@ -76,7 +87,10 @@ On Windows, with Visual Studio 2022 (64-bit, which a 64-bit Python needs):
    pip install -e "python/[dev]"
    $env:QUANTX_LIB_PATH = "$PWD\build\Release\quantx.dll"
 
-``-DQX_ENABLE_BLAS=ON`` links OpenBLAS/LAPACKE for faster large-block SVDs, and
-``-DQX_USE_CUDA=ON`` builds the cuSOLVER GPU path. The
+``-DQX_ENABLE_BLAS=ON`` links OpenBLAS/LAPACKE for faster large-block SVDs. It also
+needs ``-DQX_BLAS_INCLUDE_DIR=<the directory with lapacke.h>`` and
+``-DQX_BLAS_LIB=<the OpenBLAS library>``; configuring stops with an error without
+them. ``-DQX_USE_CUDA=ON`` builds the cuSOLVER GPU path (it needs the CUDA toolkit;
+``-DCMAKE_CUDA_ARCHITECTURES`` defaults to 89). The
 `contributing guide <https://github.com/ThisIsBarney/quantx/blob/master/CONTRIBUTING.md>`_
 covers the platforms and how to run the tests.
