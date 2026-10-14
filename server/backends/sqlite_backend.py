@@ -33,7 +33,8 @@ _SET_DONE = "UPDATE jobs SET status = 'done', result_json = ? WHERE job_id = ?;"
 
 _SET_FAILED = "UPDATE jobs SET status = 'failed', error = ? WHERE job_id = ?;"
 
-_DELETE_EXPIRED = "DELETE FROM jobs WHERE created_at < ?;"
+# Inclusive (<=), as in the memory backend: ttl_seconds=0 expires every job.
+_DELETE_EXPIRED = "DELETE FROM jobs WHERE created_at <= ?;"
 
 _COUNT_CHANGES = "SELECT changes();"
 

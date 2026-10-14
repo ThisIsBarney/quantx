@@ -60,9 +60,12 @@ class InMemoryBackend(AbstractJobStoreBackend):
 
     async def delete_expired(self, ttl_seconds: float) -> int:
         async with self._lock:
+            # Inclusive (>=): ttl_seconds=0 expires every job, even one created in the
+            # same clock tick (Windows' time.time() can return the same value twice).
+            now = time.time()
             expired = [
                 jid for jid, rec in self._jobs.items()
-                if time.time() - rec.created_at > ttl_seconds
+                if now - rec.created_at >= ttl_seconds
             ]
             for jid in expired:
                 del self._jobs[jid]
