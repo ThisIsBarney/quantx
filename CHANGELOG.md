@@ -60,6 +60,14 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 
 ### Fixed
 
+- Noisy circuits on the native backend sampled every shot from a single noise
+  trajectory, so the counts were unanimous: `|1>` under `DepolarizingNoise(0.5)` read
+  all 0 or all 1, never the mixed state's 3/4. A circuit with noise or a `MEASURE` now
+  runs one trajectory per shot, and its `expectation_exact` is the average over them.
+- The native depolarizing channel applied a random Pauli with probability p, which is
+  (1 − p)ρ + (p/3)(XρX + YρY + ZρZ). `DepolarizingNoise` documents, and the
+  density-matrix simulator in `primitives` runs, (1 − p)ρ + p·I/2. The native backend
+  now runs the documented channel too.
 - The block engine's lossless centre moves padded every bond they crossed with
   zero-weight states, so reported bond dimensions were inflated (a circuit capped at
   `max_bond` 4 reported 10). Energies and entropies were unaffected (#197).

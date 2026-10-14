@@ -311,6 +311,32 @@ def test_native_scalar_field_and_noise_kind_both_run():
     assert _z_after_x(engine, AmplitudeDampingNoise(1.0).to_dict()) == pytest.approx(1.0)
 
 
+def test_native_noisy_shots_average_over_trajectories():
+    """Every shot is its own noise trajectory. DepolarizingNoise(0.5) after X reads 1 with
+    probability 3/4; all the shots used to sample one trajectory, reading all 0 or all 1."""
+    engine = _native_engine()
+    for seed in (1, 2, 3):
+        circuit = {"qubits": 1, "shots": 4000, "observables": ["Z0"], "seed": seed,
+                   "operations": [{"name": "X", "targets": [0]}],
+                   **DepolarizingNoise(0.5).to_dict()}
+        p1 = engine.run_circuit(circuit)["counts"].get("1", 0) / 4000
+        assert p1 == pytest.approx(0.75, abs=0.04)   # about 6 sigma at 4000 shots
+
+
+def test_native_depolarizing_is_the_documented_channel():
+    """DepolarizingNoise(p) is rho -> (1 - p) rho + p I/2 on the native backend and in the
+    density-matrix simulator of primitives alike. (The native backend used to apply a Pauli
+    with probability p, giving P(1) = 2/3 here instead of 3/4.)"""
+    from quantx_engine.primitives import _dm_simulate
+    rho = _dm_simulate([{"name": "x", "qubits": [0]}], 1, DepolarizingNoise(0.5))
+    assert rho[1, 1].real == pytest.approx(0.75)
+    engine = _native_engine()
+    circuit = {"qubits": 1, "shots": 20000, "observables": ["Z0"], "seed": 11,
+               "operations": [{"name": "X", "targets": [0]}], **DepolarizingNoise(0.5).to_dict()}
+    p1 = engine.run_circuit(circuit)["counts"].get("1", 0) / 20000
+    assert p1 == pytest.approx(rho[1, 1].real, abs=0.02)   # 6.5 sigma; 2/3 is 12 sigma away
+
+
 def test_composite_empty_raises():
     with pytest.raises(NoiseModelError):
         CompositeNoise([])

@@ -1051,6 +1051,30 @@ int main() {
   expect(std::abs(cy.expectation_exact.at("Y0") - 1.0) < 2e-2, "|+i> should satisfy <Y>=1");
   expect(std::abs(cy.expectation_shot.at("Y0") - 1.0) < 0.1, "shot <Y> should be near 1");
 
+  // Noisy shots: every shot is its own trajectory. Depolarizing p = 1 after X leaves the
+  // maximally mixed state, so about half the shots read 1. (All of them used to sample one
+  // trajectory's final state, so the counts were unanimous.)
+  qx::QuantumCircuit noisy;
+  noisy.qubits = 1;
+  noisy.shots = 4000;
+  noisy.observables = {"Z0", "X0"};
+  noisy.operations = {qx::CircuitOp{"X", {0}, {}, {}}};
+  noisy.depolarizing_prob = 1.0;
+  const auto cn = qx::run_circuit(noisy, o);
+  const double noisy_p1 = cn.counts.count("1") ? cn.counts.at("1") / 4000.0 : 0.0;
+  expect(std::abs(noisy_p1 - 0.5) < 0.05, "depolarizing 1 after X should read 1 on about half the shots");
+  expect(std::abs(cn.expectation_exact.at("Z0")) < 0.1, "trajectory-averaged <Z0> should be near 0");
+  expect(std::abs(cn.expectation_shot.at("X0")) < 0.1, "shot <X0> of the mixed state should be near 0");
+
+  // A MEASURE is random too: H then MEASURE reads 1 on about half the shots, not on all or none.
+  qx::QuantumCircuit measured;
+  measured.qubits = 1;
+  measured.shots = 2000;
+  measured.operations = {qx::CircuitOp{"H", {0}, {}, {}}, qx::CircuitOp{"MEASURE", {0}, {}, {}}};
+  const auto cm = qx::run_circuit(measured, o);
+  const double measured_p1 = cm.counts.count("1") ? cm.counts.at("1") / 2000.0 : 0.0;
+  expect(std::abs(measured_p1 - 0.5) < 0.05, "H then MEASURE should read 1 on about half the shots");
+
   std::cout << "qx_smoke passed\n";
   return 0;
   } catch (const std::exception& ex) {

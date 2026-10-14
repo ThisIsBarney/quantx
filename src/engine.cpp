@@ -272,11 +272,15 @@ void apply_phase_flip(std::vector<Complex>& state, std::uint32_t qubit, double p
 }
 
 // Apply one-qubit depolarizing channel via random Pauli kick.
+// The depolarizing channel with parameter p: rho -> (1 - p) rho + p I/2, which is
+// (1 - 3p/4) rho + (p/4)(X rho X + Y rho Y + Z rho Z). One trajectory applies a uniformly random
+// Pauli with probability 3p/4. (This used to apply one with probability p, a different channel
+// from the one DepolarizingNoise documents and the density-matrix simulator in primitives runs.)
 void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
   if (p <= 0.0) return;
   p = std::clamp(p, 0.0, 1.0);
   std::uniform_real_distribution<double> u01(0.0, 1.0);
-  if (u01(rng) >= p) return;
+  if (u01(rng) >= 0.75 * p) return;
 
   std::uniform_int_distribution<int> pick(0, 2);
   const int pauli = pick(rng);
@@ -522,6 +526,152 @@ ShotStats shot_stats_rotated_state(
   return out;
 }
 
+// One pass through the circuit from |0...0>, in place. The noise channels and any MEASURE draw
+// from rng, so when either acts the pass is one random trajectory, not the circuit's mixed state.
+void run_trajectory(const QuantumCircuit& circuit, std::mt19937_64& rng, std::vector<Complex>& state,
+                    std::vector<std::uint32_t>& measurement_results) {
+  std::fill(state.begin(), state.end(), Complex{0.0, 0.0});
+  state[0] = Complex{1.0, 0.0};
+
+  // Classical register: pre-sized when clbits > 0, or grown dynamically by unaddressed MEASUREs.
+  measurement_results.assign(circuit.clbits, 0U);
+
+  for (const auto& op : circuit.operations) {
+    std::string g = op.name;
+    std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+
+    if (g == "X" || g == "Y" || g == "Z" || g == "H" || g == "S" || g == "T" || g == "RX" || g == "RY" ||
+        g == "RZ") {
+      if (op.targets.size() != 1) {
+        throw invalid_circuit_error("single-qubit gate " + g + " requires 1 target");
+      }
+      const std::uint32_t t = op.targets[0];
+      require_qubit(t, circuit.qubits, g);
+
+      if (g == "X") {
+        apply_single_qubit(state, t, {0.0, 0.0}, {1.0, 0.0}, {1.0, 0.0}, {0.0, 0.0});
+      } else if (g == "Y") {
+        apply_single_qubit(state, t, {0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.0, 0.0});
+      } else if (g == "Z") {
+        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
+      } else if (g == "H") {
+        apply_h_gate(state, t);
+      } else if (g == "S") {
+        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
+      } else if (g == "T") {
+        const double inv_sqrt2 = 0.7071067811865475244;
+        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {inv_sqrt2, inv_sqrt2});
+      } else if (g == "RX") {
+        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
+        const double c = std::cos(theta * 0.5);
+        const double s = std::sin(theta * 0.5);
+        apply_single_qubit(state, t, {c, 0.0}, {0.0, -s}, {0.0, -s}, {c, 0.0});
+      } else if (g == "RY") {
+        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
+        const double c = std::cos(theta * 0.5);
+        const double s = std::sin(theta * 0.5);
+        apply_single_qubit(state, t, {c, 0.0}, {-s, 0.0}, {s, 0.0}, {c, 0.0});
+      } else if (g == "RZ") {
+        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
+        apply_single_qubit(state, t, std::exp(Complex{0.0, -theta * 0.5}), {0.0, 0.0}, {0.0, 0.0},
+                           std::exp(Complex{0.0, theta * 0.5}));
+      }
+      apply_noise_after_gate(state, circuit, rng);
+      continue;
+    }
+
+    if (g == "CNOT" || g == "CX") {
+      if (op.controls.empty() || op.targets.size() != 1) {
+        throw invalid_circuit_error("CNOT requires 1 control and 1 target");
+      }
+      const std::uint32_t c = op.controls[0];
+      const std::uint32_t t = op.targets[0];
+      require_qubit(c, circuit.qubits, g);
+      require_qubit(t, circuit.qubits, g);
+      apply_cnot(state, c, t);
+      apply_noise_after_gate(state, circuit, rng);
+      continue;
+    }
+
+    if (g == "CZ") {
+      if (op.controls.empty() || op.targets.size() != 1) {
+        throw invalid_circuit_error("CZ requires 1 control and 1 target");
+      }
+      const std::uint32_t c = op.controls[0];
+      const std::uint32_t t = op.targets[0];
+      require_qubit(c, circuit.qubits, g);
+      require_qubit(t, circuit.qubits, g);
+      apply_cz(state, c, t);
+      apply_noise_after_gate(state, circuit, rng);
+      continue;
+    }
+
+    if (g == "SWAP") {
+      if (op.targets.size() != 2) {
+        throw invalid_circuit_error("SWAP requires 2 targets");
+      }
+      const std::uint32_t q0 = op.targets[0];
+      const std::uint32_t q1 = op.targets[1];
+      require_qubit(q0, circuit.qubits, g);
+      require_qubit(q1, circuit.qubits, g);
+      apply_swap(state, q0, q1);
+      apply_noise_after_gate(state, circuit, rng);
+      continue;
+    }
+
+    if (g == "MEASURE") {
+      if (op.targets.size() != 1) {
+        throw invalid_circuit_error("MEASURE requires exactly 1 target qubit");
+      }
+      const std::uint32_t t = op.targets[0];
+      require_qubit(t, circuit.qubits, g);
+
+      // Determine destination classical bit index: controls[0] if present, else append.
+      std::uint32_t clbit = static_cast<std::uint32_t>(measurement_results.size());
+      if (!op.controls.empty()) {
+        clbit = op.controls[0];
+      }
+      if (circuit.clbits > 0 && clbit >= circuit.clbits) {
+        throw CircuitError("QX_INVALID_CLBIT_INDEX",
+                           "MEASURE targets out-of-range classical bit " + std::to_string(clbit));
+      }
+
+      const double p1 = qubit_one_population(state, t);
+      std::uniform_real_distribution<double> u01(0.0, 1.0);
+      const std::uint32_t outcome = (u01(rng) < p1) ? 1U : 0U;
+      collapse_qubit(state, t, outcome);
+
+      if (clbit < measurement_results.size()) {
+        measurement_results[clbit] = outcome;
+      } else {
+        measurement_results.push_back(outcome);
+      }
+      continue;
+    }
+
+    throw unsupported_gate_error(g);
+  }
+}
+
+// True when a pass through the circuit is random: a noise channel acts, or a MEASURE collapses
+// the state. Shots must then come from independent passes.
+bool circuit_is_stochastic(const QuantumCircuit& circuit) {
+  if (circuit.depolarizing_prob > 0.0 || circuit.amplitude_damping_gamma > 0.0) {
+    return true;
+  }
+  if (!circuit.noise_model.empty() && circuit.noise_model != "none") {
+    return true;
+  }
+  for (const auto& op : circuit.operations) {
+    std::string g = op.name;
+    std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    if (g == "MEASURE") {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 // Build a structured circuit execution error.
@@ -646,165 +796,103 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
 
   const std::size_t n = static_cast<std::size_t>(1ULL << circuit.qubits);
   std::vector<Complex> state(n, Complex{0.0, 0.0});
-  state[0] = Complex{1.0, 0.0};
-
-  // Classical register: pre-sized when clbits > 0, or grown dynamically by unaddressed MEASUREs.
-  std::vector<std::uint32_t> measurement_results(circuit.clbits, 0U);
-
-  for (const auto& op : circuit.operations) {
-    std::string g = op.name;
-    std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
-
-    if (g == "X" || g == "Y" || g == "Z" || g == "H" || g == "S" || g == "T" || g == "RX" || g == "RY" ||
-        g == "RZ") {
-      if (op.targets.size() != 1) {
-        throw invalid_circuit_error("single-qubit gate " + g + " requires 1 target");
-      }
-      const std::uint32_t t = op.targets[0];
-      require_qubit(t, circuit.qubits, g);
-
-      if (g == "X") {
-        apply_single_qubit(state, t, {0.0, 0.0}, {1.0, 0.0}, {1.0, 0.0}, {0.0, 0.0});
-      } else if (g == "Y") {
-        apply_single_qubit(state, t, {0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.0, 0.0});
-      } else if (g == "Z") {
-        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
-      } else if (g == "H") {
-        apply_h_gate(state, t);
-      } else if (g == "S") {
-        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
-      } else if (g == "T") {
-        const double inv_sqrt2 = 0.7071067811865475244;
-        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {inv_sqrt2, inv_sqrt2});
-      } else if (g == "RX") {
-        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
-        const double c = std::cos(theta * 0.5);
-        const double s = std::sin(theta * 0.5);
-        apply_single_qubit(state, t, {c, 0.0}, {0.0, -s}, {0.0, -s}, {c, 0.0});
-      } else if (g == "RY") {
-        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
-        const double c = std::cos(theta * 0.5);
-        const double s = std::sin(theta * 0.5);
-        apply_single_qubit(state, t, {c, 0.0}, {-s, 0.0}, {s, 0.0}, {c, 0.0});
-      } else if (g == "RZ") {
-        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
-        apply_single_qubit(state, t, std::exp(Complex{0.0, -theta * 0.5}), {0.0, 0.0}, {0.0, 0.0},
-                           std::exp(Complex{0.0, theta * 0.5}));
-      }
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "CNOT" || g == "CX") {
-      if (op.controls.empty() || op.targets.size() != 1) {
-        throw invalid_circuit_error("CNOT requires 1 control and 1 target");
-      }
-      const std::uint32_t c = op.controls[0];
-      const std::uint32_t t = op.targets[0];
-      require_qubit(c, circuit.qubits, g);
-      require_qubit(t, circuit.qubits, g);
-      apply_cnot(state, c, t);
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "CZ") {
-      if (op.controls.empty() || op.targets.size() != 1) {
-        throw invalid_circuit_error("CZ requires 1 control and 1 target");
-      }
-      const std::uint32_t c = op.controls[0];
-      const std::uint32_t t = op.targets[0];
-      require_qubit(c, circuit.qubits, g);
-      require_qubit(t, circuit.qubits, g);
-      apply_cz(state, c, t);
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "SWAP") {
-      if (op.targets.size() != 2) {
-        throw invalid_circuit_error("SWAP requires 2 targets");
-      }
-      const std::uint32_t q0 = op.targets[0];
-      const std::uint32_t q1 = op.targets[1];
-      require_qubit(q0, circuit.qubits, g);
-      require_qubit(q1, circuit.qubits, g);
-      apply_swap(state, q0, q1);
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "MEASURE") {
-      if (op.targets.size() != 1) {
-        throw invalid_circuit_error("MEASURE requires exactly 1 target qubit");
-      }
-      const std::uint32_t t = op.targets[0];
-      require_qubit(t, circuit.qubits, g);
-
-      // Determine destination classical bit index: controls[0] if present, else append.
-      std::uint32_t clbit = static_cast<std::uint32_t>(measurement_results.size());
-      if (!op.controls.empty()) {
-        clbit = op.controls[0];
-      }
-      if (circuit.clbits > 0 && clbit >= circuit.clbits) {
-        throw CircuitError("QX_INVALID_CLBIT_INDEX",
-                           "MEASURE targets out-of-range classical bit " + std::to_string(clbit));
-      }
-
-      const double p1 = qubit_one_population(state, t);
-      std::uniform_real_distribution<double> u01(0.0, 1.0);
-      const std::uint32_t outcome = (u01(rng) < p1) ? 1U : 0U;
-      collapse_qubit(state, t, outcome);
-
-      if (clbit < measurement_results.size()) {
-        measurement_results[clbit] = outcome;
-      } else {
-        measurement_results.push_back(outcome);
-      }
-      continue;
-    }
-
-    throw unsupported_gate_error(g);
-  }
+  std::vector<std::uint32_t> measurement_results;
+  run_trajectory(circuit, rng, state, measurement_results);
 
   CircuitResult out;
   out.ok = true;
   out.backend = "statevector";
-  out.state = state;
-  out.measurement_results = std::move(measurement_results);
   out.message = "Circuit executed";
 
-  if (circuit.shots > 0) {
-    std::vector<double> probs(state.size(), 0.0);
-    for (std::size_t i = 0; i < state.size(); ++i) {
-      probs[i] = std::norm(state[i]);
-    }
-    std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
-    for (std::uint32_t s = 0; s < circuit.shots; ++s) {
-      const std::size_t idx = dist(rng);
-      out.counts[bitstring(idx, circuit.qubits)] += 1;
-    }
-  }
-
+  std::vector<std::vector<PauliTarget>> parsed_obs;
   for (const auto& obs : circuit.observables) {
-    const auto parsed = parse_pauli_observable(obs, circuit.qubits);
-    const double exact = exact_pauli_expectation(state, parsed).real();
-    out.expectation_exact[obs] = exact;
-    if (circuit.shots > 0) {
-      ShotStats stats;
-      if (observable_all_z(parsed)) {
-        stats = shot_stats_from_counts(out.counts, parsed, circuit.qubits);
-      } else {
-        std::mt19937_64 obs_rng(circuit.seed + static_cast<std::uint64_t>(std::hash<std::string>{}(obs)));
-        stats = shot_stats_rotated_state(state, parsed, circuit.shots, obs_rng);
+    parsed_obs.push_back(parse_pauli_observable(obs, circuit.qubits));
+  }
+  auto record_shots = [&](const std::string& obs, double exact, const ShotStats& stats) {
+    out.expectation_shot[obs] = stats.mean;
+    out.estimation_error[obs] = stats.mean - exact;
+    out.shot_variance[obs] = stats.variance;
+    out.shot_stderr[obs] = stats.std_err;
+  };
+  auto obs_seed = [&](const std::string& obs) {
+    return circuit.seed + static_cast<std::uint64_t>(std::hash<std::string>{}(obs));
+  };
+
+  if (circuit.shots > 0 && circuit_is_stochastic(circuit)) {
+    // With noise or a MEASURE, each pass is one random trajectory, so every shot gets its own
+    // pass. Sampling all the shots from one pass's final state, as this used to, made the counts
+    // unanimous: |1> under depolarizing 0.5 read all-0 or all-1, never the mixed state's split.
+    // "expectation_exact" is then the average over the trajectories, an estimate of the noisy
+    // expectation; the state and classical register returned are the last trajectory's.
+    std::vector<double> exact_sum(parsed_obs.size(), 0.0);
+    std::vector<double> rotated_sum(parsed_obs.size(), 0.0);
+    std::vector<std::mt19937_64> obs_rngs;
+    for (const auto& obs : circuit.observables) {
+      obs_rngs.emplace_back(obs_seed(obs));
+    }
+    for (std::uint32_t s = 0; s < circuit.shots; ++s) {
+      if (s > 0) {
+        run_trajectory(circuit, rng, state, measurement_results);
       }
-      const double shot = stats.mean;
-      out.expectation_shot[obs] = shot;
-      out.estimation_error[obs] = shot - exact;
-      out.shot_variance[obs] = stats.variance;
-      out.shot_stderr[obs] = stats.std_err;
+      std::vector<double> probs(state.size(), 0.0);
+      for (std::size_t i = 0; i < state.size(); ++i) {
+        probs[i] = std::norm(state[i]);
+      }
+      std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
+      out.counts[bitstring(dist(rng), circuit.qubits)] += 1;
+      for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+        exact_sum[k] += exact_pauli_expectation(state, parsed_obs[k]).real();
+        if (!observable_all_z(parsed_obs[k])) {
+          rotated_sum[k] += shot_stats_rotated_state(state, parsed_obs[k], 1, obs_rngs[k]).mean;
+        }
+      }
+    }
+    const double shots = static_cast<double>(circuit.shots);
+    for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+      const auto& obs = circuit.observables[k];
+      const double exact = exact_sum[k] / shots;
+      out.expectation_exact[obs] = exact;
+      ShotStats stats;
+      if (observable_all_z(parsed_obs[k])) {
+        stats = shot_stats_from_counts(out.counts, parsed_obs[k], circuit.qubits);
+      } else {
+        stats.mean = rotated_sum[k] / shots;
+        stats.variance = std::max(0.0, 1.0 - stats.mean * stats.mean);
+        stats.std_err = std::sqrt(stats.variance / shots);
+      }
+      record_shots(obs, exact, stats);
+    }
+  } else {
+    if (circuit.shots > 0) {
+      std::vector<double> probs(state.size(), 0.0);
+      for (std::size_t i = 0; i < state.size(); ++i) {
+        probs[i] = std::norm(state[i]);
+      }
+      std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
+      for (std::uint32_t s = 0; s < circuit.shots; ++s) {
+        const std::size_t idx = dist(rng);
+        out.counts[bitstring(idx, circuit.qubits)] += 1;
+      }
+    }
+
+    for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+      const auto& obs = circuit.observables[k];
+      const double exact = exact_pauli_expectation(state, parsed_obs[k]).real();
+      out.expectation_exact[obs] = exact;
+      if (circuit.shots > 0) {
+        ShotStats stats;
+        if (observable_all_z(parsed_obs[k])) {
+          stats = shot_stats_from_counts(out.counts, parsed_obs[k], circuit.qubits);
+        } else {
+          std::mt19937_64 obs_rng(obs_seed(obs));
+          stats = shot_stats_rotated_state(state, parsed_obs[k], circuit.shots, obs_rng);
+        }
+        record_shots(obs, exact, stats);
+      }
     }
   }
+  out.state = state;
+  out.measurement_results = std::move(measurement_results);
 
   if (!out.estimation_error.empty()) {
     double sum_abs = 0.0;
