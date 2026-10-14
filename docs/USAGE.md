@@ -345,7 +345,7 @@ Or call directly:
 
 ```python
 from quantx_engine import Engine
-e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
+e = Engine()   # QUANTX_LIB_PATH if set, else the library bundled in the wheel
 print("engine version:", e.version())
 res = e.run({"qubits": 1, "method": "krylov", "total_time": 1.57, "dt": 0.01,
              "krylov_dim": 8,
@@ -359,7 +359,7 @@ Circuit call:
 
 ```python
 from quantx_engine import Engine
-e = Engine(r"D:\WUJ\coding\QuantX\build-vs\Debug\quantx.dll")
+e = Engine()   # QUANTX_LIB_PATH if set, else the library bundled in the wheel
 cres = e.run_circuit({
     "qubits": 2,
     "shots": 1000,
@@ -397,7 +397,7 @@ Continuous-space 2D call (same unified `Engine.run(...)` API):
 
 ```python
 from quantx_engine import Engine
-e = Engine(r"D:\\WUJ\\coding\\QuantX\\build-vs\\Debug\\quantx.dll")
+e = Engine()   # QUANTX_LIB_PATH if set, else the library bundled in the wheel
 pres = e.run({
   "kind": "continuous_space_2d",
   "continuous_space_2d": {
@@ -419,7 +419,7 @@ Continuous-space 3D call (same unified `Engine.run(...)` API):
 
 ```python
 from quantx_engine import Engine
-e = Engine(r"D:\\WUJ\\coding\\QuantX\\build-vs\\Debug\\quantx.dll")
+e = Engine()   # QUANTX_LIB_PATH if set, else the library bundled in the wheel
 pres3d = e.run({
   "kind": "continuous_space_3d",
   "continuous_space_3d": {

@@ -24,6 +24,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # more so once the GPU path adds instantiations) it exceeds the COFF section limit.
 if(MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/bigobj>)
+  # The sources are UTF-8. Without /utf-8, MSVC reads them in the system code page (936
+  # on a Chinese Windows) and warns C4819 at every non-ASCII character. Worse, a
+  # multi-byte character at the end of a // comment can then swallow the line after it.
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:/utf-8>)
 endif()
 
 option(QX_ENABLE_OPENMP "Enable OpenMP parallel backend" ON)
@@ -79,6 +83,10 @@ if(NOT eigen_POPULATED)
 endif()
 add_library(qx_eigen INTERFACE)
 target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
+# Eigen is MPL-2.0 apart from a few files under other licenses; the engine is MIT and
+# ships in wheels. EIGEN_MPL2_ONLY makes including any non-MPL2 Eigen code a compile
+# error (see THIRD_PARTY_NOTICES.md).
+target_compile_definitions(qx_eigen INTERFACE EIGEN_MPL2_ONLY)
 
 # Optional: link OpenBLAS/LAPACKE so the large-block SVD uses LAPACK zgesdd
 # instead of Eigen's built-in Gram eigensolve (Phase 0, docs/gpu_acceleration_plan.md).
