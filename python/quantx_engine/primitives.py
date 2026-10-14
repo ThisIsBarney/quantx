@@ -467,33 +467,20 @@ def _dm_simulate(
 ) -> "np.ndarray":
     """Simulate a circuit with noise using a density matrix.
 
-    After each gate applies the appropriate noise channel derived from the
-    noise model:
-
-    - :class:`~quantx_engine.noise.DepolarizingNoise` → depolarizing channel
-      (isotropic Pauli mixing, ``depolarizing_prob`` key).
-    - :class:`~quantx_engine.noise.AmplitudeDampingNoise` or
-      :class:`~quantx_engine.noise.ThermalRelaxationNoise` → amplitude-damping
-      channel via proper Kraus operators K0/K1 (``amplitude_damping_gamma``
-      key), which correctly biases population toward |0⟩.
-    - Both keys present (composite noise) → depolarizing then amplitude
-      damping applied in sequence.
+    After each gate, the noise model's channels act on every qubit, exactly as
+    the native circuit backend applies them: the channels and their order come
+    from :func:`~quantx_engine.noise.native_channels` (depolarizing, amplitude
+    damping, then the ``noise`` kind: bit flip, phase flip, T1 or T2 decay).
+    The result is the density matrix the backend's trajectories average to.
     """
+    from .noise import native_channels
+
     d = 1 << n_qubits
     rho = np.zeros((d, d), dtype=complex)
     rho[0, 0] = 1.0
 
-    p_depol = 0.0
-    gamma_ad = 0.0
-    if noise_model is not None:
-        nd = noise_model.to_dict()
-        p_depol = float(nd.get("depolarizing_prob", 0.0))
-        # amplitude_damping_gamma is set by AmplitudeDampingNoise.to_dict()
-        # and also appears in ThermalRelaxationNoise metadata under "gamma"
-        # via the noise_metadata sub-dict; use the top-level key when present.
-        gamma_ad = float(nd.get("amplitude_damping_gamma", 0.0))
-        if gamma_ad == 0.0 and "noise_metadata" in nd:
-            gamma_ad = float(nd["noise_metadata"].get("gamma", 0.0))
+    channels = native_channels(noise_model)
+    every_qubit = list(range(n_qubits))
 
     for op in ops:
         name: str = op.get("name", "").lower()
@@ -504,11 +491,32 @@ def _dm_simulate(
         qubits: list[int] = op.get("qubits", op.get("targets", []))
         U = _get_gate_matrix(name, params if params else None)
         rho = _apply_gate_dm(rho, U, qubits, n_qubits)
-        if p_depol > 0.0:
-            rho = _depolarize_local(rho, p_depol, qubits, n_qubits)
-        if gamma_ad > 0.0:
-            rho = _amplitude_damp_local(rho, gamma_ad, qubits, n_qubits)
+        for kind, rate in channels:
+            if kind == "depolarizing":
+                rho = _depolarize_local(rho, rate, every_qubit, n_qubits)
+            elif kind == "amplitude_damping":
+                rho = _amplitude_damp_local(rho, rate, every_qubit, n_qubits)
+            else:   # bit_flip, phase_flip
+                rho = _pauli_flip_local(rho, "x" if kind == "bit_flip" else "z", rate,
+                                        every_qubit, n_qubits)
 
+    return rho
+
+
+def _pauli_flip_local(
+    rho: "np.ndarray",
+    pauli: str,
+    p: float,
+    qubits: list[int],
+    n: int,
+) -> "np.ndarray":
+    """Apply the flip channel ``E(ρ) = (1 − p)ρ + p PρP`` (P = X or Z) to each qubit."""
+    if p <= 0.0:
+        return rho
+    P_local = _gate_matrices()[pauli]
+    for q in qubits:
+        P_full = _embed_gate(P_local, [q], n)
+        rho = (1.0 - p) * rho + p * (P_full @ rho @ P_full.conj().T)
     return rho
 
 

@@ -407,9 +407,11 @@ class DynamicSimulator:
     ----------
     noise_model:
         Optional :class:`~quantx_engine.noise.NoiseModel` instance.  When
-        set, a single-qubit depolarizing channel (probability ``p``) is
-        applied after every gate.  Noise is modelled via random Pauli kicks
-        (Pauli-twirl approximation) so each trajectory remains a pure state.
+        set, its channels act on every qubit after every gate, as on the
+        native circuit backend (:func:`~quantx_engine.noise.native_channels`:
+        depolarizing, amplitude damping, bit and phase flips, T1/T2 decay).
+        Each shot is one trajectory, so the noise is sampled as random Pauli
+        kicks and quantum jumps and every trajectory stays a pure state.
     shots:
         Number of independent trajectories to run.
     seed:
@@ -455,13 +457,10 @@ class DynamicSimulator:
                 f"Expected DynamicCircuit, got {type(circuit).__name__}."
             )
 
-        # Noise probability
-        p_noise = 0.0
-        if self.noise_model is not None:
-            nd = self.noise_model.to_dict()
-            p_noise = float(
-                nd.get("depolarizing_prob", nd.get("amplitude_damping_gamma", 0.0))
-            )
+        # The channels the native backend would apply, so a noise model means the same
+        # thing here: every qubit after every gate (see noise.native_channels).
+        from .noise import native_channels
+        channels = native_channels(self.noise_model)
 
         rng = np.random.default_rng(self.seed)
         counts: dict[str, int] = {}
@@ -469,7 +468,7 @@ class DynamicSimulator:
 
         for _ in range(self.shots):
             sv, cbits = self._run_trajectory(
-                circuit, rng, p_noise
+                circuit, rng, channels
             )
             key = _cbits_to_str(cbits, circuit.n_cbits)
             counts[key] = counts.get(key, 0) + 1
@@ -484,7 +483,7 @@ class DynamicSimulator:
                 "n_cbits": circuit.n_cbits,
                 "n_ops": len(circuit.operations),
                 "shots": self.shots,
-                "p_noise": p_noise,
+                "noise_channels": [list(c) for c in channels],
             },
         )
 
@@ -494,7 +493,7 @@ class DynamicSimulator:
         self,
         circuit: DynamicCircuit,
         rng: "np.random.Generator",
-        p_noise: float,
+        channels: list[tuple[str, float]],
     ) -> tuple["np.ndarray", list[int]]:
         """Run one shot of the circuit; return (final_sv, classical_bits)."""
         nq = circuit.n_qubits
@@ -512,8 +511,8 @@ class DynamicSimulator:
                     op["params"] if op["params"] else None,
                 )
                 sv = _apply_gate_sv(sv, U, op["qubits"])
-                if p_noise > 0.0:
-                    sv = _apply_pauli_twirl(sv, op["qubits"], p_noise, rng)
+                if channels:
+                    sv = _apply_noise_channels_sv(sv, channels, nq, rng)
 
             elif otype == "measure":
                 outcome, sv = _measure_sv_inplace(sv, op["qubit"], rng)
@@ -530,10 +529,8 @@ class DynamicSimulator:
                         gate["params"] if gate["params"] else None,
                     )
                     sv = _apply_gate_sv(sv, U, gate["qubits"])
-                    if p_noise > 0.0:
-                        sv = _apply_pauli_twirl(
-                            sv, gate["qubits"], p_noise, rng
-                        )
+                    if channels:
+                        sv = _apply_noise_channels_sv(sv, channels, nq, rng)
 
             elif otype == "repeat_until":
                 success_cbit  = op["success_cbit"]
@@ -558,30 +555,59 @@ class DynamicSimulator:
 
 
 # ===========================================================================
-# Noise: Pauli-twirl approximation for trajectory simulation
+# Noise: the native backend's channels, sampled per trajectory
 # ===========================================================================
 
-def _apply_pauli_twirl(
+def _apply_noise_channels_sv(
     sv: "np.ndarray",
-    qubits: list[int],
-    p: float,
+    channels: list[tuple[str, float]],
+    n_qubits: int,
     rng: "np.random.Generator",
 ) -> "np.ndarray":
-    """Apply a random Pauli kick (Pauli-twirl depolarizing approximation).
+    """One trajectory's draw of the noise channels on every qubit, in the native backend's
+    order (each qubit in turn, each channel in turn; see ``noise.native_channels``).
 
-    For each qubit in ``qubits``, with probability ``p`` randomly apply one
-    of {X, Y, Z} (equal probability 1/3 each) to simulate a single-qubit
-    depolarizing channel in the trajectory picture.
+    Depolarizing p applies a uniformly random X, Y or Z with probability 3p/4, which
+    averages to (1 - p)rho + p I/2. Amplitude damping gamma is a quantum jump: |1> decays
+    to |0> with probability gamma times the qubit's |1> population. A flip applies X or Z
+    with probability p.
     """
     from .primitives import _gate_matrices
     mats = _gate_matrices()
     paulis = [mats["x"], mats["y"], mats["z"]]
-
-    for q in qubits:
-        if rng.random() < p:
-            idx = int(rng.integers(3))
-            sv = _apply_gate_sv(sv, paulis[idx], [q])
+    for q in range(n_qubits):
+        for kind, rate in channels:
+            if kind == "depolarizing":
+                if rng.random() < 0.75 * rate:
+                    sv = _apply_gate_sv(sv, paulis[int(rng.integers(3))], [q])
+            elif kind == "amplitude_damping":
+                sv = _amplitude_damp_sv(sv, q, rate, rng)
+            elif kind in ("bit_flip", "phase_flip"):
+                if rng.random() < rate:
+                    sv = _apply_gate_sv(sv, mats["x" if kind == "bit_flip" else "z"], [q])
     return sv
+
+
+def _amplitude_damp_sv(
+    sv: "np.ndarray",
+    qubit: int,
+    gamma: float,
+    rng: "np.random.Generator",
+) -> "np.ndarray":
+    """Amplitude damping on one qubit, as a quantum jump (LSB = qubit 0)."""
+    if gamma <= 0.0:
+        return sv
+    idx = np.arange(sv.shape[0])
+    one = ((idx >> qubit) & 1).astype(bool)
+    p1 = float(np.sum(np.abs(sv[one]) ** 2))
+    if rng.random() < gamma * p1:
+        new = np.zeros_like(sv)
+        new[idx[one] ^ (1 << qubit)] = sv[one]          # |1> -> |0> on this qubit
+    else:
+        new = sv.copy()
+        new[one] *= math.sqrt(max(1.0 - gamma, 0.0))  # the no-jump branch
+    norm = float(np.linalg.norm(new))
+    return new / norm if norm > 0.0 else sv
 
 
 # ===========================================================================

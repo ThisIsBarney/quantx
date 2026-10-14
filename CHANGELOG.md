@@ -97,6 +97,18 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
   alike: `S H|0⟩ = |+i⟩` read −1. Every observable with an odd number of Y factors
   had its sign flipped, and so did any energy with such terms (a real Hamiltonian has
   none). The statevector, Lindblad and MPS code already used the right sign.
+- The Python simulators read noise models on their own terms. The density-matrix
+  simulator in `primitives` (behind `Estimator`, `Sampler` and `noise_vqe`):
+  - put noise only on the qubits a gate acts on;
+  - never applied `ReadoutNoise`'s bit flip;
+  - took T1 decay from `noise_metadata`, and only when `amplitude_damping_gamma` was
+    unset.
+
+  The dynamic-circuit simulator treated amplitude damping as a depolarizing
+  probability and dropped every other channel. Now all three simulators apply the
+  same channels, resolved by the new `noise.native_channels`: every qubit after every
+  gate, as on the native backend. For dynamic circuits, `DynamicResult.metadata` reports
+  `noise_channels` in place of the old `p_noise`.
 - The block engine's lossless centre moves padded every bond they crossed with
   zero-weight states, so reported bond dimensions were inflated (a circuit capped at
   `max_bond` 4 reported 10). Energies and entropies were unaffected (#197).
