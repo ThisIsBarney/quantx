@@ -1,5 +1,8 @@
 # Third-Party Dependencies and Reuse Policy
 
+> **Out of date.** This is an early note; its versions are stale. The current
+> dependencies and their licenses are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
 ## Reuse policy
 
 - Prefer mature open-source implementations over custom reimplementation when:

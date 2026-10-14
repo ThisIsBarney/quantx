@@ -1,5 +1,6 @@
 ﻿#include "dmrg_internal.hpp"
 #include "tdvp.hpp"            // qx_tdvp::expmv (Krylov matrix exponential)
+#include "robust_svd.hpp"      // BDCSVD with a JacobiSVD fallback
 
 #include <algorithm>
 #include <cassert>
@@ -1823,8 +1824,8 @@ static BlockSVDResult block_svd_truncate(
                 thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
                 { g_tebd_nlapacke++; continue; }
 #endif
-            Eigen::BDCSVD<Mat> bsvd(*svblk[i], Eigen::ComputeThinU | Eigen::ComputeThinV);
-            sb[i].U = bsvd.matrixU(); sb[i].V = bsvd.matrixV(); sb[i].s = bsvd.singularValues();
+            auto bsvd = qx::robust_thin_bdcsvd(*svblk[i]);
+            sb[i].U = std::move(bsvd.U); sb[i].V = std::move(bsvd.V); sb[i].s = std::move(bsvd.s);
             continue;
         }
 #ifdef QX_USE_CUDA

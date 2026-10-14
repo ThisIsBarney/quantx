@@ -129,6 +129,14 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 - `ReadoutNoise`'s docstring said its bit flip follows each measurement. The backend
   applies it to every qubit after every gate except measurements, so it is gate noise,
   not a readout error (#198).
+- The wheels build without LAPACKE, so the DMRG's direct SVDs run Eigen's BDCSVD. In
+  Eigen 3.4.0 it can read out of bounds on some rank-deficient blocks (it crashed the
+  HVA centre moves before #197; DMRG had not been seen to trigger it). The build now
+  applies Eigen 3.4.1's two BDCSVD fixes to Eigen 3.4.0: the guarded case reports a
+  numerical issue, and the total-deflation test uses |col0|. The engine redoes any SVD
+  that BDCSVD reports as failed with JacobiSVD. (Eigen 3.4.1 itself is not used: with
+  Visual Studio 2026 it made the compiler crash on a few percent of the large DMRG
+  sources.)
 - The DMRG C API failed on every odd-length Heisenberg chain, with an error that blamed
   `max_bond` (#196).
 - An unknown model type in `qx_dmrg_sweep` silently ran as an empty Hamiltonian and

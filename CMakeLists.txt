@@ -83,12 +83,25 @@ if(NOT eigen_POPULATED)
   endif()
   FetchContent_Populate(eigen)
 endif()
+# Two BDCSVD fixes from Eigen 3.4.1, applied to the downloaded 3.4.0 (see the file for why
+# the build does not use 3.4.1 itself).
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/eigen_bdcsvd_fixes.cmake)
+qx_fix_eigen_bdcsvd("${eigen_SOURCE_DIR}")
 add_library(qx_eigen INTERFACE)
 target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
 # Eigen is MPL-2.0 apart from a few files: some LGPL, some permissive. The engine is MIT
 # and ships in wheels, so EIGEN_MPL2_ONLY makes including Eigen's LGPL code a compile
 # error. The permissive headers it does include are listed in THIRD_PARTY_NOTICES.md.
 target_compile_definitions(qx_eigen INTERFACE EIGEN_MPL2_ONLY)
+
+# The robust thin SVD (src/robust_svd.hpp), compiled once. The DMRG, TDVP and SU(2) sources
+# call it, and they all link qx_eigen, so qx_eigen carries it. It takes Eigen's directory and
+# definition itself rather than linking qx_eigen, which links it.
+add_library(qx_svd STATIC src/robust_svd.cpp)
+set_target_properties(qx_svd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(qx_svd PRIVATE ${eigen_SOURCE_DIR})
+target_compile_definitions(qx_svd PRIVATE EIGEN_MPL2_ONLY)
+target_link_libraries(qx_eigen INTERFACE qx_svd)
 
 # Optional: link OpenBLAS/LAPACKE so the large-block SVD uses LAPACK zgesdd
 # instead of Eigen's built-in Gram eigensolve (Phase 0, docs/gpu_acceleration_plan.md).

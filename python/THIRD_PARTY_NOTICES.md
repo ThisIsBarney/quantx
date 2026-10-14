@@ -10,16 +10,19 @@ The library (`libquantx.so`, `libquantx.dylib`, `quantx.dll`) contains code from
 
 | Component | Version | License | Copyright |
 |---|---|---|---|
-| [Eigen](https://eigen.tuxfamily.org) | 3.4.0 | MPL-2.0 | Eigen contributors |
+| [Eigen](https://eigen.tuxfamily.org) | 3.4.0, with two fixes from 3.4.1 | MPL-2.0 | Eigen contributors |
 | [nlohmann/json](https://github.com/nlohmann/json) | 3.11.3 | MIT | Copyright (c) 2013-2022 Niels Lohmann |
 | [spdlog](https://github.com/gabime/spdlog) | 1.17.0 | MIT | Copyright (c) 2016 - present, Gabi Melman and spdlog contributors |
 | [{fmt}](https://github.com/fmtlib/fmt), bundled with spdlog | 12.1.0 | MIT | Copyright (c) 2012 - present, Victor Zverovich and {fmt} contributors |
 
-**Eigen** is used unmodified, as header-only templates. Most of it is under the Mozilla
-Public License 2.0: its source code is available from
+**Eigen** is used as header-only templates. Most of it is under the Mozilla Public
+License 2.0: its source code is available from
 https://gitlab.com/libeigen/eigen/-/tree/3.4.0, and the license text is at
-https://www.mozilla.org/MPL/2.0/. The engine is compiled with `EIGEN_MPL2_ONLY`, which
-keeps out Eigen's LGPL code.
+https://www.mozilla.org/MPL/2.0/. One file is modified: the build applies two fixes
+from Eigen 3.4.1 to `Eigen/src/SVD/BDCSVD.h`, verbatim, and the modified file stays
+under the MPL-2.0. `cmake/eigen_bdcsvd_fixes.cmake` in the QuantX repository makes
+the change, and applied to the 3.4.0 source it gives the file's source code. The
+engine is compiled with `EIGEN_MPL2_ONLY`, which keeps out Eigen's LGPL code.
 
 A few headers that `Eigen/Core` always includes carry, or derive from, permissive
 licenses:
