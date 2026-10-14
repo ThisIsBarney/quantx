@@ -1067,6 +1067,32 @@ class TestCalibrationToNoiseModel(unittest.TestCase):
         types = [type(c).__name__ for c in nm.models]
         self.assertIn("DepolarizingNoise", types)
 
+    @staticmethod
+    def _depolarizing_p(nm):
+        from quantx_engine.noise import DepolarizingNoise
+        return next(c for c in nm.models if isinstance(c, DepolarizingNoise)).prob
+
+    def test_one_qubit_error_maps_to_its_channel(self):
+        # One qubit: (1 - p)rho + p I/2 has average infidelity p/2.
+        cal = BackendCalibration("b", 2, gate_errors={"sx": 0.004})
+        p = self._depolarizing_p(calibration_to_noise_model(cal))
+        self.assertAlmostEqual(p, 0.008, places=12)
+
+    def test_two_qubit_error_maps_to_its_channel(self):
+        # The channel on each of a CX's two qubits; its average infidelity on d = 4 is
+        # (4/5)(1 - (1 - 3p/4)^2), which must give back the calibrated error.
+        r = 0.02
+        cal = BackendCalibration("b", 2, gate_errors={"cx": r, "sx": 0.0003})
+        p = self._depolarizing_p(calibration_to_noise_model(cal))
+        self.assertAlmostEqual(0.8 * (1.0 - (1.0 - 0.75 * p) ** 2), r, places=12)
+        self.assertAlmostEqual(p, 5.0 * r / 6.0, delta=0.01 * r)  # to first order in r
+
+    def test_the_worst_gate_sets_p(self):
+        # p = 2r for the one-qubit gate beats about 5r/6 for the two-qubit one.
+        cal = BackendCalibration("b", 2, gate_errors={"cx": 0.004, "x": 0.003})
+        p = self._depolarizing_p(calibration_to_noise_model(cal))
+        self.assertAlmostEqual(p, 0.006, places=12)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # available_backends

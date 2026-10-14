@@ -635,13 +635,31 @@ ContinuousExportConfig sanitize_continuous_export_config(const ContinuousExportC
   return sanitize_continuous_export_config_impl(config);
 }
 
+// Read a circuit's shot count. It is read wide and saturated, so a count past 2^32 reaches
+// run_circuit's cap (QX_TOO_MANY_SHOTS) instead of wrapping: 2^32 + 10 used to run 10 shots.
+std::uint32_t parse_circuit_shots(const json& j, std::uint32_t def) {
+  const auto it = j.find("shots");
+  if (it == j.end() || it->is_null()) {
+    return def;
+  }
+  const double v = it->is_number() ? it->get<double>() : -1.0;
+  if (!(v >= 0.0) || v != std::floor(v)) {
+    throw CircuitError("QX_INVALID_CIRCUIT", "circuit shots must be a non-negative integer");
+  }
+  constexpr auto kWidest = std::numeric_limits<std::uint32_t>::max();
+  if (it->is_number_unsigned()) {
+    return static_cast<std::uint32_t>(std::min<std::uint64_t>(it->get<std::uint64_t>(), kWidest));
+  }
+  return v >= static_cast<double>(kWidest) ? kWidest : static_cast<std::uint32_t>(v);
+}
+
 // Parse circuit JSON and enforce at least one operation.
 QuantumCircuit circuit_from_json(const std::string& json_text) {
   const json j = parse_json_or_throw(json_text);
   QuantumCircuit c;
   c.qubits = get_or<std::uint32_t>(j, "qubits", c.qubits);
   c.observables = get_or<std::vector<std::string>>(j, "observables", c.observables);
-  c.shots = get_or<std::uint32_t>(j, "shots", c.shots);
+  c.shots = parse_circuit_shots(j, c.shots);
   c.depolarizing_prob = get_or<double>(j, "depolarizing_prob", c.depolarizing_prob);
   c.amplitude_damping_gamma = get_or<double>(j, "amplitude_damping_gamma", c.amplitude_damping_gamma);
   c.seed = get_or<std::uint64_t>(j, "seed", c.seed);

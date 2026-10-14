@@ -538,7 +538,10 @@ class QuasiProbabilityDecomposition:
 
             Λ_p(ρ) = (1-p)ρ + (p/3)(XρX + YρY + ZρZ)
 
-        and inverts it to recover the ideal gate.  The resulting quasi-probability
+        and inverts it to recover the ideal gate.  This is the Pauli-error
+        parameterisation: :class:`~quantx_engine.noise.DepolarizingNoise` with
+        probability p is (1 − p)ρ + p·I/2, which is this channel at
+        ``noise_prob = 3p/4``.  The resulting quasi-probability
         weights are:
 
         - q_I = (1 − p/3) / (1 − 4p/3)   [positive]

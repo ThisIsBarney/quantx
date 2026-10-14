@@ -60,6 +60,43 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 
 ### Fixed
 
+- Shots on the native circuit backend were sampled from one random pass, so any
+  randomness in the circuit made them unanimous.
+  - **Measured circuits:** a measured Bell pair read `00` on all 1000 shots, as did
+    every QASM program that ends in `measure`. When every measurement is terminal and
+    no noise acts, the shots are now sampled from the state before measurement: the
+    exact distribution, still from one pass. An observable with X or Y on a measured
+    qubit then reads 0.
+  - **Noise:** `|1>` under `DepolarizingNoise(0.5)` read all 0 or all 1, never the
+    mixed state's 3/4. With noise, or a measurement that later gates depend on, every
+    shot now runs its own pass. This costs one full pass per shot, and
+    `expectation_exact` becomes the average over the passes.
+  - With `shots = 0`, a noisy circuit still returns one random pass.
+  - The classical register and the returned state come from one pass.
+  - A noise channel at strength zero counts as no noise.
+  - `max_shots` (1 000 000) is now enforced, not only advertised. A shot count must be
+    a non-negative integer, and one past 2³² is refused: 2³² + 10 used to wrap to 10
+    shots.
+  - Amplitude damping runs in place, which makes the noisy per-shot path about three
+    times faster (a 16-qubit GHZ circuit at 1000 shots: 47 s, from about 150 s).
+- The native depolarizing channel applied a random Pauli with probability p, which is
+  (1 − p)ρ + (p/3)(XρX + YρY + ZρZ). `DepolarizingNoise` documents, and the
+  density-matrix simulator in `primitives` runs, (1 − p)ρ + p·I/2. The native backend
+  now runs the documented channel too. Two readers of the parameter were also wrong:
+  - `hardware.calibration_to_noise_model` passed a gate's average infidelity r as p.
+    It now inverts the channel for the gate's arity: p = 2r for a one-qubit gate, and
+    about 5r/6 for a two-qubit gate, where the channel acts on both qubits. The worst
+    gate sets p.
+  - `noise_char`'s process-tomography fit used the average-gate factor (d + 1)/d where
+    the depolarizing parameter needs d²/(d² − 1). It read `DepolarizingNoise(0.1)`
+    back as 0.1125.
+
+  PEC's `from_depolarizing` keeps its Pauli-error parameter and now says how it maps:
+  `DepolarizingNoise(p)` is `noise_prob = 3p/4`.
+- The native circuit backend returned ⟨Y⟩ with the wrong sign, exact and sampled
+  alike: `S H|0⟩ = |+i⟩` read −1. Every observable with an odd number of Y factors
+  had its sign flipped, and so did any energy with such terms (a real Hamiltonian has
+  none). The statevector, Lindblad and MPS code already used the right sign.
 - The block engine's lossless centre moves padded every bond they crossed with
   zero-weight states, so reported bond dimensions were inflated (a circuit capped at
   `max_bond` 4 reported 10). Energies and entropies were unaffected (#197).

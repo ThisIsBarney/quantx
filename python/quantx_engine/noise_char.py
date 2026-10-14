@@ -11,7 +11,7 @@ Quick reference::
     rb_result = StandardRB(p_error=0.02, seed=0).run([1, 5, 10, 20, 50])
     nc = NoiseCharacterizer(gate_time=0.1)
     cn = nc.fit_from_rb(rb_result)
-    print(cn.depolarizing_prob)   # ≈ 0.04
+    print(cn.depolarizing_prob)   # ≈ 0.02 (2 × the error per Clifford)
     noise = cn.to_noise_model()   # DepolarizingNoise instance
 
 References
@@ -266,7 +266,7 @@ class NoiseCharacterizer:
         Uses the relation between process infidelity and the depolarizing
         probability for an n-qubit system (d = 2^n)::
 
-            p_dep = (d + 1) / d * process_infidelity
+            p_dep = d**2 / (d**2 - 1) * process_infidelity
 
         Parameters
         ----------
@@ -301,8 +301,11 @@ class NoiseCharacterizer:
         n_qubits = int(round(math.log2(n_ops) / 2))
         d = 1 << n_qubits  # 2^n
 
-        # p_dep = (d+1)/d * process_infidelity
-        p_dep = float(np.clip((d + 1) / d * process_infidelity, 0.0, 1.0))
+        # The depolarizing channel (1 - p)rho + p I/d has process fidelity
+        # 1 - p (d^2 - 1)/d^2, so p = d^2/(d^2 - 1) * process infidelity. (This used
+        # (d + 1)/d, the factor that links average-gate and process infidelity: it read
+        # DepolarizingNoise(0.1) back as 0.1125.)
+        p_dep = float(np.clip(d * d / (d * d - 1) * process_infidelity, 0.0, 1.0))
 
         t1_est: "float | None" = None
         if p_dep > 0.0:

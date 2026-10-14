@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <sstream>
 #include <vector>
@@ -1038,18 +1039,132 @@ int main() {
   expect(std::abs(std::norm(cd.state[0]) - 1.0) < 1e-8, "full amplitude damping should relax |1> to |0>");
   expect(std::abs(std::norm(cd.state[1])) < 1e-8, "full amplitude damping should clear |1> population");
 
-  qx::QuantumCircuit y_eigen;
-  y_eigen.qubits = 1;
-  y_eigen.shots = 1500;
-  y_eigen.observables = {"Y0"};
-  y_eigen.operations = {
-      qx::CircuitOp{"H", {0}, {}, {}},
-      qx::CircuitOp{"Z", {0}, {}, {}},
-      qx::CircuitOp{"S", {0}, {}, {}},
-  };
-  const auto cy = qx::run_circuit(y_eigen, o);
-  expect(std::abs(cy.expectation_exact.at("Y0") - 1.0) < 2e-2, "|+i> should satisfy <Y>=1");
-  expect(std::abs(cy.expectation_shot.at("Y0") - 1.0) < 0.1, "shot <Y> should be near 1");
+  // S H|0> = |+i> has <Y> = +1, and S Z H|0> = |-i> has <Y> = -1. (The second circuit used to be
+  // checked for +1: <Y> had the wrong sign, exact and sampled alike.)
+  qx::QuantumCircuit y_plus;
+  y_plus.qubits = 1;
+  y_plus.shots = 1500;
+  y_plus.observables = {"Y0"};
+  y_plus.operations = {qx::CircuitOp{"H", {0}, {}, {}}, qx::CircuitOp{"S", {0}, {}, {}}};
+  const auto cyp = qx::run_circuit(y_plus, o);
+  expect(std::abs(cyp.expectation_exact.at("Y0") - 1.0) < 1e-12, "|+i> should satisfy <Y> = +1");
+  expect(std::abs(cyp.expectation_shot.at("Y0") - 1.0) < 1e-12, "shot <Y> of |+i> should be +1");
+  qx::QuantumCircuit y_minus = y_plus;
+  y_minus.operations = {qx::CircuitOp{"H", {0}, {}, {}}, qx::CircuitOp{"Z", {0}, {}, {}},
+                        qx::CircuitOp{"S", {0}, {}, {}}};
+  const auto cym = qx::run_circuit(y_minus, o);
+  expect(std::abs(cym.expectation_exact.at("Y0") + 1.0) < 1e-12, "|-i> should satisfy <Y> = -1");
+  expect(std::abs(cym.expectation_shot.at("Y0") + 1.0) < 1e-12, "shot <Y> of |-i> should be -1");
+  // Y on one qubit of a Bell pair's relative: (|00> + i|11>)/sqrt2 has <X0Y1> = +1.
+  qx::QuantumCircuit xy;
+  xy.qubits = 2;
+  xy.observables = {"X0Y1", "Y0X1", "Y0Y1"};
+  xy.operations = {qx::CircuitOp{"H", {0}, {}, {}}, qx::CircuitOp{"CNOT", {1}, {0}, {}},
+                   qx::CircuitOp{"S", {1}, {}, {}}};
+  const auto cxy = qx::run_circuit(xy, o);
+  expect(std::abs(cxy.expectation_exact.at("X0Y1") - 1.0) < 1e-12, "<X0Y1> of (|00> + i|11>)/sqrt2 is +1");
+  expect(std::abs(cxy.expectation_exact.at("Y0X1") - 1.0) < 1e-12, "<Y0X1> of (|00> + i|11>)/sqrt2 is +1");
+  expect(std::abs(cxy.expectation_exact.at("Y0Y1")) < 1e-12, "<Y0Y1> of (|00> + i|11>)/sqrt2 is 0");
+
+  // Noisy shots: every shot is its own trajectory. Depolarizing p = 1 after X leaves the
+  // maximally mixed state, so about half the shots read 1. (All of them used to sample one
+  // trajectory's final state, so the counts were unanimous.)
+  qx::QuantumCircuit noisy;
+  noisy.qubits = 1;
+  noisy.shots = 4000;
+  noisy.observables = {"Z0", "X0"};
+  noisy.operations = {qx::CircuitOp{"X", {0}, {}, {}}};
+  noisy.depolarizing_prob = 1.0;
+  const auto cn = qx::run_circuit(noisy, o);
+  const double noisy_p1 = cn.counts.count("1") ? cn.counts.at("1") / 4000.0 : 0.0;
+  expect(std::abs(noisy_p1 - 0.5) < 0.05, "depolarizing 1 after X should read 1 on about half the shots");
+  expect(std::abs(cn.expectation_exact.at("Z0")) < 0.1, "trajectory-averaged <Z0> should be near 0");
+  expect(std::abs(cn.expectation_shot.at("X0")) < 0.1, "shot <X0> of the mixed state should be near 0");
+
+  // Amplitude damping 0.3 after X: P(1) = 0.7, so <Z0> averages to -0.4 over the shots'
+  // trajectories (any one trajectory reads +1 or -1).
+  qx::QuantumCircuit damped;
+  damped.qubits = 1;
+  damped.shots = 20000;
+  damped.observables = {"Z0"};
+  damped.operations = {qx::CircuitOp{"X", {0}, {}, {}}};
+  damped.amplitude_damping_gamma = 0.3;
+  const auto cdp = qx::run_circuit(damped, o);
+  const double damped_p0 = cdp.counts.count("0") ? cdp.counts.at("0") / 20000.0 : 0.0;
+  expect(std::abs(damped_p0 - 0.3) < 0.02, "amplitude damping 0.3 after X should read 0 on 30% of the shots");
+  expect(std::abs(cdp.expectation_exact.at("Z0") + 0.4) < 0.03,
+         "trajectory-averaged <Z0> after X and damping 0.3 should be -0.4");
+
+  // A MEASURE is random too: H then MEASURE reads 1 on about half the shots, not on all or none.
+  qx::QuantumCircuit measured;
+  measured.qubits = 1;
+  measured.shots = 2000;
+  measured.operations = {qx::CircuitOp{"H", {0}, {}, {}}, qx::CircuitOp{"MEASURE", {0}, {}, {}}};
+  const auto cm = qx::run_circuit(measured, o);
+  const double measured_p1 = cm.counts.count("1") ? cm.counts.at("1") / 2000.0 : 0.0;
+  expect(std::abs(measured_p1 - 0.5) < 0.05, "H then MEASURE should read 1 on about half the shots");
+
+  // A measured Bell pair, terminal measurements and no noise: one pass, the shots sampled from
+  // the state before measurement. Both outcomes appear, never 01 or 10; X0X1 averages to 0 over
+  // the outcomes, Z0Z1 stays 1. (It used to read '00' on every shot.)
+  qx::QuantumCircuit bell_measured;
+  bell_measured.qubits = 2;
+  bell_measured.shots = 2000;
+  bell_measured.observables = {"Z0Z1", "X0X1"};
+  bell_measured.operations = {qx::CircuitOp{"H", {0}, {}, {}}, qx::CircuitOp{"CNOT", {1}, {0}, {}},
+                              qx::CircuitOp{"MEASURE", {0}, {}, {}}, qx::CircuitOp{"MEASURE", {1}, {}, {}}};
+  const auto cbm = qx::run_circuit(bell_measured, o);
+  const double bm00 = cbm.counts.count("00") ? cbm.counts.at("00") / 2000.0 : 0.0;
+  expect(std::abs(bm00 - 0.5) < 0.05, "a measured Bell pair should read 00 on about half the shots");
+  expect(cbm.counts.count("01") == 0 && cbm.counts.count("10") == 0, "a measured Bell pair never reads 01 or 10");
+  expect(std::abs(cbm.expectation_exact.at("Z0Z1") - 1.0) < 1e-12, "measurement keeps <Z0Z1> = 1");
+  expect(std::abs(cbm.expectation_exact.at("X0X1")) < 1e-12, "measurement dephases <X0X1> to 0");
+  expect(cbm.measurement_results.size() == 2 &&
+             cbm.measurement_results[0] == cbm.measurement_results[1],
+         "the classical register holds one outcome of the pair");
+
+  // A noise kind at strength zero is no noise: the circuit stays on the one-pass path.
+  qx::QuantumCircuit zero_flip = bell_measured;
+  zero_flip.noise_model = "bit_flip";
+  zero_flip.noise_params["prob"] = 0.0;
+  const auto czf = qx::run_circuit(zero_flip, o);
+  expect(czf.counts == cbm.counts, "bit_flip at prob 0 should give the noiseless counts");
+
+  // max_shots is enforced, not only advertised.
+  qx::QuantumCircuit too_many = measured;
+  too_many.shots = 1000001;
+  bool refused = false;
+  try {
+    (void)qx::run_circuit(too_many, o);
+  } catch (const qx::CircuitError& ex) {
+    refused = ex.code() == "QX_TOO_MANY_SHOTS";
+  }
+  expect(refused, "more than max_shots should be refused with QX_TOO_MANY_SHOTS");
+
+  // The shot count is read wide: 2^32 + 10 reaches the cap instead of wrapping to 10 shots.
+  const auto wide = qx::circuit_from_json(
+      R"({"qubits":1,"shots":4294967306,"operations":[{"name":"H","targets":[0]}]})");
+  expect(wide.shots == (std::numeric_limits<std::uint32_t>::max)(), "a shot count past 2^32 should saturate");
+  bool refused_wide = false;
+  try {
+    (void)qx::run_circuit(wide, o);
+  } catch (const qx::CircuitError& ex) {
+    refused_wide = ex.code() == "QX_TOO_MANY_SHOTS";
+  }
+  expect(refused_wide, "2^32 + 10 shots should be refused with QX_TOO_MANY_SHOTS, not run as 10");
+  for (const char* bad : {"-1", "2.5", "\"100\"", "true"}) {
+    bool refused_bad = false;
+    try {
+      (void)qx::circuit_from_json(std::string(R"({"qubits":1,"shots":)") + bad +
+                                  R"(,"operations":[{"name":"H","targets":[0]}]})");
+    } catch (const qx::CircuitError& ex) {
+      refused_bad = ex.code() == "QX_INVALID_CIRCUIT";
+    }
+    expect(refused_bad, (std::string("shots ") + bad + " should be refused with QX_INVALID_CIRCUIT").c_str());
+  }
+  expect(qx::circuit_from_json(R"({"qubits":1,"shots":1e3,"operations":[{"name":"H","targets":[0]}]})")
+                 .shots == 1000,
+         "an integral shot count written as a float should be read");
 
   std::cout << "qx_smoke passed\n";
   return 0;

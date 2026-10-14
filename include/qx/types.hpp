@@ -400,7 +400,9 @@ struct QuantumCircuit {
   std::uint32_t qubits{1};
   std::vector<CircuitOp> operations{};
   std::vector<std::string> observables{};
-  // 0 means exact expectation only; >0 enables sampling statistics.
+  // 0 means no sampling: expectation_exact is <psi|O|psi> of the final state. Noise runs
+  // as trajectories, so with noise that is one trajectory, a random sample of the noise
+  // rather than its average; shots > 0 runs one trajectory per shot and averages them.
   std::uint32_t shots{0};
   // Optional explicit noise-model selector for adapter payloads.
   // "none" keeps legacy explicit probability fields in force.

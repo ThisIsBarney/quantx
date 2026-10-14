@@ -218,37 +218,41 @@ void apply_amplitude_damping(
   if (gamma <= 0.0) return;
   gamma = std::clamp(gamma, 0.0, 1.0);
 
+  // In place, in two passes: one for the populations, one to apply the Kraus operator and
+  // renormalize (the new norm follows from the populations). Every shot of a noisy circuit
+  // runs this for every qubit after every gate, so it allocates nothing.
   const std::size_t n = state.size();
   const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
-  const double p1 = qubit_one_population(state, qubit);
-  const double p_jump = gamma * p1;
+  double n0 = 0.0;
+  double n1 = 0.0;
+  for (std::size_t i = 0; i < n; ++i) {
+    ((i & mask) != 0 ? n1 : n0) += std::norm(state[i]);
+  }
+  const double total = n0 + n1;
+  if (!(total > 0.0)) return;
+  const double p_jump = gamma * n1 / total;
 
   std::uniform_real_distribution<double> u01(0.0, 1.0);
   const bool jumped = (p_jump > 0.0) && (u01(rng) < p_jump);
 
-  std::vector<Complex> out(n, Complex{0.0, 0.0});
   if (jumped) {
-    // E1 = sqrt(gamma) |0><1|; after normalization -> divide by sqrt(p1).
-    const double inv = p1 > 0.0 ? 1.0 / std::sqrt(p1) : 1.0;
+    // E1 = sqrt(gamma) |0><1|: |1> moves to |0>, and the norm becomes gamma n1.
+    const double inv = 1.0 / std::sqrt(n1);
     for (std::size_t i = 0; i < n; ++i) {
       if ((i & mask) == 0) {
-        const std::size_t j = i | mask;
-        out[i] = state[j] * inv;
+        state[i] = state[i | mask] * inv;
+        state[i | mask] = Complex{0.0, 0.0};
       }
     }
   } else {
-    // E0 = |0><0| + sqrt(1-gamma)|1><1|
+    // E0 = |0><0| + sqrt(1-gamma)|1><1|: the norm becomes n0 + (1 - gamma) n1.
     const double s = std::sqrt(std::max(0.0, 1.0 - gamma));
-    out = state;
+    const double inv = 1.0 / std::sqrt(n0 + (1.0 - gamma) * n1);
+    const double s1 = s * inv;
     for (std::size_t i = 0; i < n; ++i) {
-      if ((i & mask) != 0) {
-        out[i] *= s;
-      }
+      state[i] *= (i & mask) != 0 ? s1 : inv;
     }
-    renormalize(out);
   }
-
-  state.swap(out);
 }
 
 // Apply one-qubit bit-flip channel: X gate applied with probability p.
@@ -272,11 +276,15 @@ void apply_phase_flip(std::vector<Complex>& state, std::uint32_t qubit, double p
 }
 
 // Apply one-qubit depolarizing channel via random Pauli kick.
+// The depolarizing channel with parameter p: rho -> (1 - p) rho + p I/2, which is
+// (1 - 3p/4) rho + (p/4)(X rho X + Y rho Y + Z rho Z). One trajectory applies a uniformly random
+// Pauli with probability 3p/4. (This used to apply one with probability p, a different channel
+// from the one DepolarizingNoise documents and the density-matrix simulator in primitives runs.)
 void apply_depolarizing(std::vector<Complex>& state, std::uint32_t qubit, double p, std::mt19937_64& rng) {
   if (p <= 0.0) return;
   p = std::clamp(p, 0.0, 1.0);
   std::uniform_real_distribution<double> u01(0.0, 1.0);
-  if (u01(rng) >= p) return;
+  if (u01(rng) >= 0.75 * p) return;
 
   std::uniform_int_distribution<int> pick(0, 2);
   const int pauli = pick(rng);
@@ -402,7 +410,9 @@ Complex exact_pauli_expectation(const std::vector<Complex>& state, const std::ve
       if (t.pauli == 'X') {
         j ^= mask;
       } else if (t.pauli == 'Y') {
-        phase *= bit ? Complex{0.0, -1.0} : Complex{0.0, 1.0};
+        // Row bit b, column 1 - b: <0|Y|1> = -i and <1|Y|0> = +i. (This had the two swapped,
+        // which is <psi|Y^T|psi> = -<psi|Y|psi>: every odd number of Y's came out negated.)
+        phase *= bit ? Complex{0.0, 1.0} : Complex{0.0, -1.0};
         j ^= mask;
       } else {  // Z
         phase *= bit ? Complex{-1.0, 0.0} : Complex{1.0, 0.0};
@@ -509,147 +519,37 @@ ShotStats shot_stats_rotated_state(
     const std::size_t idx = dist(rng);
     acc += z_sign_from_index(idx, obs);
   }
-  std::uint32_t y_count = 0;
-  for (const auto& t : obs) {
-    if (t.pauli == 'Y') {
-      ++y_count;
-    }
-  }
-  const double sign_correction = (y_count % 2 == 0) ? 1.0 : -1.0;
-  out.mean = sign_correction * (acc / static_cast<double>(shots));
+  // rotate_for_pauli_measurement's U satisfies U^dagger Z U = P exactly, so the sampled Z
+  // signs need no correction. (A -1 per odd number of Y's used to be applied here, matching
+  // the then-negated exact value.)
+  out.mean = acc / static_cast<double>(shots);
   out.variance = std::max(0.0, 1.0 - out.mean * out.mean);
   out.std_err = std::sqrt(out.variance / static_cast<double>(shots));
   return out;
 }
 
-}  // namespace
+// The most shots run_circuit accepts (the capability report advertises it). Noise or a
+// mid-circuit MEASURE costs one full pass per shot.
+constexpr std::uint32_t kMaxCircuitShots = 1000000;
 
-// Build a structured circuit execution error.
-CircuitError::CircuitError(std::string code, std::string message)
-    : std::runtime_error(std::move(message)), code_(std::move(code)) {}
+// A MEASURE the pass did not perform: its classical bit and qubit.
+struct DeferredMeasure {
+  std::uint32_t clbit{0};
+  std::uint32_t qubit{0};
+};
 
-// Return the machine-readable circuit error code.
-const std::string& CircuitError::code() const noexcept { return code_; }
-
-// Register built-in backends into global registry.
-void register_builtin_backends() {
-  auto& registry = BackendRegistry::instance();
-  registry.register_backend("statevector", &make_statevector_backend, make_statevector_backend()->capabilities());
-  registry.register_backend("mps", &make_mps_backend, make_mps_backend()->capabilities());
-  registry.register_backend("continuous2d", &make_continuous2d_backend, make_continuous2d_backend()->capabilities());
-  registry.register_backend("continuous3d", &make_continuous3d_backend, make_continuous3d_backend()->capabilities());
-  registry.register_backend("lindblad", &make_lindblad_backend, make_lindblad_backend()->capabilities());
-}
-
-// Public API: explain backend choice.
-BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptions& options) {
-  ensure_builtin_backends();
-  log::init_logging();
-  const BackendInfo info = explain_backend_choice_internal(problem, options);
-  log::debug("backend explain selected: " + info.selected_backend);
-  return info;
-}
-
-// Public API: report the circuit executor capability contract.
-CircuitCapabilities circuit_backend_capabilities() {
-  CircuitCapabilities c;
-  c.backend = "statevector";
-  c.supported_gates = supported_circuit_gates();
-  c.supported_noise_models = supported_circuit_noise_models();
-  c.max_qubits = 25;
-  c.max_shots = 1000000;
-  c.supports_qiskit_like = true;
-  c.supports_cirq_like = true;
-  return c;
-}
-
-// Public API: run Hamiltonian simulation.
-SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
-  ensure_builtin_backends();
-  log::init_logging();
-  const auto t0 = std::chrono::high_resolution_clock::now();
-  log::info("run started: qubits=" + std::to_string(problem.qubits));
-
-  SimulationResult result;
-  const ContinuousExportConfig raw_export = make_continuous_export_config(options);
-  const ContinuousExportConfig normalized_export = sanitize_continuous_export_config(raw_export);
-  RunOptions effective_options = options;
-  effective_options.export_frame_stride = normalized_export.export_frame_stride;
-  effective_options.export_points_max = normalized_export.export_points_max;
-  effective_options.export_density_floor_ratio = normalized_export.export_density_floor_ratio;
-  result.continuous_export = normalized_export;
-  RuntimeContext runtime(effective_options);
-  runtime.emit_event("runtime_initialized",
-                     {{"threads", static_cast<double>(runtime.effective_threads())},
-                      {"mpi_ranks", static_cast<double>(runtime.effective_mpi_ranks())}});
-  emit_continuous_export_contract_event(runtime, raw_export, normalized_export);
-
-  const std::string backend_name = choose_backend(problem, effective_options);
-  log::info("scheduler selected backend: " + backend_name);
-  auto backend = BackendRegistry::instance().create(backend_name);
-
-  if (effective_options.enable_checkpoint) {
-    std::filesystem::create_directories(effective_options.checkpoint_path);
-    backend->restore(effective_options.checkpoint_path);
-    runtime.emit_event("checkpoint_restore_attempt", {{"success", 1.0}});
-    log::debug("checkpoint restore attempted at: " + effective_options.checkpoint_path);
-  }
-
-  backend->initialize(problem, effective_options);
-  runtime.emit_event("backend_initialized", {{"qubits", static_cast<double>(problem.qubits)}});
-  backend->evolve(problem, effective_options);
-  runtime.emit_event("evolution_complete", {{"total_time", problem.evolution.total_time}});
-
-  result.ok = true;
-  result.backend = backend->name();
-  result.observables = backend->measure(problem);
-  result.state = backend->current_state();
-  result.continuous_density_frames = backend->continuous_density_frames();
-  result.mps_frames = backend->mps_frames();
-  result.lindblad_frames = backend->lindblad_frames();
-  result.wigner_frames = backend->wigner_frames();
-  result.entanglement_frames = backend->entanglement_frames();
-  result.events = runtime.events();
-  result.message = "Simulation completed";
-
-  if (effective_options.enable_checkpoint) {
-    backend->checkpoint(effective_options.checkpoint_path);
-    result.events.push_back(Event{"checkpoint_saved", {{"enabled", 1.0}}});
-    log::debug("checkpoint saved at: " + effective_options.checkpoint_path);
-  }
-
-  const auto t1 = std::chrono::high_resolution_clock::now();
-  result.elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
-  {
-    std::ostringstream os;
-    os << "run finished: backend=" << result.backend << ", elapsed_ms=" << result.elapsed_ms;
-    log::info(os.str());
-  }
-
-  return result;
-}
-
-// Public API: run gate-level circuit simulation.
-CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
-  log::init_logging();
-  const auto t0 = std::chrono::high_resolution_clock::now();
-  log::info("circuit run started: qubits=" + std::to_string(circuit.qubits));
-  if (circuit.qubits == 0) {
-    throw invalid_circuit_error("circuit must have at least 1 qubit");
-  }
-  if (circuit.qubits >= 26) {
-    throw CircuitError("QX_CIRCUIT_TOO_LARGE", "circuit execution currently supports qubits < 26");
-  }
-  require_supported_noise_model(circuit);
-
-  std::mt19937_64 rng(circuit.seed);
-
-  const std::size_t n = static_cast<std::size_t>(1ULL << circuit.qubits);
-  std::vector<Complex> state(n, Complex{0.0, 0.0});
+// One pass through the circuit from |0...0>, in place. The noise channels and any MEASURE draw
+// from rng, so when either acts the pass is one random trajectory, not the circuit's mixed state.
+// With `deferred`, the MEASUREs are not performed but recorded there, with their classical bits
+// reserved: valid only when every MEASURE is terminal (see has_nonterminal_measure).
+void run_trajectory(const QuantumCircuit& circuit, std::mt19937_64& rng, std::vector<Complex>& state,
+                    std::vector<std::uint32_t>& measurement_results,
+                    std::vector<DeferredMeasure>* deferred = nullptr) {
+  std::fill(state.begin(), state.end(), Complex{0.0, 0.0});
   state[0] = Complex{1.0, 0.0};
 
   // Classical register: pre-sized when clbits > 0, or grown dynamically by unaddressed MEASUREs.
-  std::vector<std::uint32_t> measurement_results(circuit.clbits, 0U);
+  measurement_results.assign(circuit.clbits, 0U);
 
   for (const auto& op : circuit.operations) {
     std::string g = op.name;
@@ -751,6 +651,15 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
                            "MEASURE targets out-of-range classical bit " + std::to_string(clbit));
       }
 
+      if (deferred != nullptr) {
+        if (clbit >= measurement_results.size()) {
+          measurement_results.push_back(0U);
+          clbit = static_cast<std::uint32_t>(measurement_results.size() - 1);
+        }
+        deferred->push_back(DeferredMeasure{clbit, t});
+        continue;
+      }
+
       const double p1 = qubit_one_population(state, t);
       std::uniform_real_distribution<double> u01(0.0, 1.0);
       const std::uint32_t outcome = (u01(rng) < p1) ? 1U : 0U;
@@ -766,45 +675,354 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
 
     throw unsupported_gate_error(g);
   }
+}
+
+// True when a noise channel acts with nonzero strength, as apply_noise_after_gate reads it. A
+// named kind at strength zero (bit_flip with prob 0, say) leaves the passes deterministic.
+bool circuit_has_active_noise(const QuantumCircuit& circuit) {
+  if (circuit.depolarizing_prob > 0.0 || circuit.amplitude_damping_gamma > 0.0) {
+    return true;
+  }
+  const std::string& nm = circuit.noise_model;
+  if (nm == "bit_flip" || nm == "phase_flip") {
+    return noise_param(circuit, "prob") > 0.0;
+  }
+  if (nm == "t1_decay") {
+    return noise_param(circuit, "T1") > 0.0 && noise_param(circuit, "dt") > 0.0;
+  }
+  if (nm == "t2_decay") {
+    return noise_param(circuit, "T2") > 0.0 && noise_param(circuit, "dt") > 0.0;
+  }
+  return false;
+}
+
+std::string upper_gate_name(const std::string& name) {
+  std::string g = name;
+  std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+  return g;
+}
+
+bool circuit_has_measure(const QuantumCircuit& circuit) {
+  for (const auto& op : circuit.operations) {
+    if (upper_gate_name(op.name) == "MEASURE") {
+      return true;
+    }
+  }
+  return false;
+}
+
+// True when a gate acts on a qubit after that qubit was measured, so the rest of the pass
+// depends on the outcome. When every MEASURE is terminal, the measurements commute with
+// everything after them and can be taken at the end, from the final state.
+bool has_nonterminal_measure(const QuantumCircuit& circuit) {
+  std::vector<bool> measured(circuit.qubits, false);
+  for (const auto& op : circuit.operations) {
+    if (upper_gate_name(op.name) == "MEASURE") {
+      for (const auto t : op.targets) {
+        if (t < measured.size()) measured[t] = true;
+      }
+      continue;   // a MEASURE's controls name a classical bit, not a qubit
+    }
+    for (const auto t : op.targets) {
+      if (t < measured.size() && measured[t]) return true;
+    }
+    for (const auto c : op.controls) {
+      if (c < measured.size() && measured[c]) return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
+// Build a structured circuit execution error.
+CircuitError::CircuitError(std::string code, std::string message)
+    : std::runtime_error(std::move(message)), code_(std::move(code)) {}
+
+// Return the machine-readable circuit error code.
+const std::string& CircuitError::code() const noexcept { return code_; }
+
+// Register built-in backends into global registry.
+void register_builtin_backends() {
+  auto& registry = BackendRegistry::instance();
+  registry.register_backend("statevector", &make_statevector_backend, make_statevector_backend()->capabilities());
+  registry.register_backend("mps", &make_mps_backend, make_mps_backend()->capabilities());
+  registry.register_backend("continuous2d", &make_continuous2d_backend, make_continuous2d_backend()->capabilities());
+  registry.register_backend("continuous3d", &make_continuous3d_backend, make_continuous3d_backend()->capabilities());
+  registry.register_backend("lindblad", &make_lindblad_backend, make_lindblad_backend()->capabilities());
+}
+
+// Public API: explain backend choice.
+BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptions& options) {
+  ensure_builtin_backends();
+  log::init_logging();
+  const BackendInfo info = explain_backend_choice_internal(problem, options);
+  log::debug("backend explain selected: " + info.selected_backend);
+  return info;
+}
+
+// Public API: report the circuit executor capability contract.
+CircuitCapabilities circuit_backend_capabilities() {
+  CircuitCapabilities c;
+  c.backend = "statevector";
+  c.supported_gates = supported_circuit_gates();
+  c.supported_noise_models = supported_circuit_noise_models();
+  c.max_qubits = 25;
+  c.max_shots = kMaxCircuitShots;
+  c.supports_qiskit_like = true;
+  c.supports_cirq_like = true;
+  return c;
+}
+
+// Public API: run Hamiltonian simulation.
+SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
+  ensure_builtin_backends();
+  log::init_logging();
+  const auto t0 = std::chrono::high_resolution_clock::now();
+  log::info("run started: qubits=" + std::to_string(problem.qubits));
+
+  SimulationResult result;
+  const ContinuousExportConfig raw_export = make_continuous_export_config(options);
+  const ContinuousExportConfig normalized_export = sanitize_continuous_export_config(raw_export);
+  RunOptions effective_options = options;
+  effective_options.export_frame_stride = normalized_export.export_frame_stride;
+  effective_options.export_points_max = normalized_export.export_points_max;
+  effective_options.export_density_floor_ratio = normalized_export.export_density_floor_ratio;
+  result.continuous_export = normalized_export;
+  RuntimeContext runtime(effective_options);
+  runtime.emit_event("runtime_initialized",
+                     {{"threads", static_cast<double>(runtime.effective_threads())},
+                      {"mpi_ranks", static_cast<double>(runtime.effective_mpi_ranks())}});
+  emit_continuous_export_contract_event(runtime, raw_export, normalized_export);
+
+  const std::string backend_name = choose_backend(problem, effective_options);
+  log::info("scheduler selected backend: " + backend_name);
+  auto backend = BackendRegistry::instance().create(backend_name);
+
+  if (effective_options.enable_checkpoint) {
+    std::filesystem::create_directories(effective_options.checkpoint_path);
+    backend->restore(effective_options.checkpoint_path);
+    runtime.emit_event("checkpoint_restore_attempt", {{"success", 1.0}});
+    log::debug("checkpoint restore attempted at: " + effective_options.checkpoint_path);
+  }
+
+  backend->initialize(problem, effective_options);
+  runtime.emit_event("backend_initialized", {{"qubits", static_cast<double>(problem.qubits)}});
+  backend->evolve(problem, effective_options);
+  runtime.emit_event("evolution_complete", {{"total_time", problem.evolution.total_time}});
+
+  result.ok = true;
+  result.backend = backend->name();
+  result.observables = backend->measure(problem);
+  result.state = backend->current_state();
+  result.continuous_density_frames = backend->continuous_density_frames();
+  result.mps_frames = backend->mps_frames();
+  result.lindblad_frames = backend->lindblad_frames();
+  result.wigner_frames = backend->wigner_frames();
+  result.entanglement_frames = backend->entanglement_frames();
+  result.events = runtime.events();
+  result.message = "Simulation completed";
+
+  if (effective_options.enable_checkpoint) {
+    backend->checkpoint(effective_options.checkpoint_path);
+    result.events.push_back(Event{"checkpoint_saved", {{"enabled", 1.0}}});
+    log::debug("checkpoint saved at: " + effective_options.checkpoint_path);
+  }
+
+  const auto t1 = std::chrono::high_resolution_clock::now();
+  result.elapsed_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+  {
+    std::ostringstream os;
+    os << "run finished: backend=" << result.backend << ", elapsed_ms=" << result.elapsed_ms;
+    log::info(os.str());
+  }
+
+  return result;
+}
+
+// Public API: run gate-level circuit simulation.
+CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
+  log::init_logging();
+  const auto t0 = std::chrono::high_resolution_clock::now();
+  log::info("circuit run started: qubits=" + std::to_string(circuit.qubits));
+  if (circuit.qubits == 0) {
+    throw invalid_circuit_error("circuit must have at least 1 qubit");
+  }
+  if (circuit.qubits >= 26) {
+    throw CircuitError("QX_CIRCUIT_TOO_LARGE", "circuit execution currently supports qubits < 26");
+  }
+  require_supported_noise_model(circuit);
+  if (circuit.shots > kMaxCircuitShots) {
+    throw CircuitError("QX_TOO_MANY_SHOTS", "circuit shots exceed the maximum of " +
+                                                 std::to_string(kMaxCircuitShots));
+  }
+
+  std::mt19937_64 rng(circuit.seed);
+
+  // A pass is random when noise acts or a measurement feeds later gates; then each shot needs its
+  // own pass. Otherwise one pass suffices, with any (terminal) measurements taken at the end.
+  const bool branching = circuit_has_active_noise(circuit) || has_nonterminal_measure(circuit);
+  const bool deferred_measures = !branching && circuit_has_measure(circuit);
+
+  const std::size_t n = static_cast<std::size_t>(1ULL << circuit.qubits);
+  std::vector<Complex> state(n, Complex{0.0, 0.0});
+  std::vector<std::uint32_t> measurement_results;
+  std::vector<DeferredMeasure> deferred;
+  run_trajectory(circuit, rng, state, measurement_results, deferred_measures ? &deferred : nullptr);
 
   CircuitResult out;
   out.ok = true;
   out.backend = "statevector";
-  out.state = state;
-  out.measurement_results = std::move(measurement_results);
   out.message = "Circuit executed";
 
-  if (circuit.shots > 0) {
-    std::vector<double> probs(state.size(), 0.0);
-    for (std::size_t i = 0; i < state.size(); ++i) {
-      probs[i] = std::norm(state[i]);
+  std::vector<std::vector<PauliTarget>> parsed_obs;
+  for (const auto& obs : circuit.observables) {
+    parsed_obs.push_back(parse_pauli_observable(obs, circuit.qubits));
+  }
+  auto record_shots = [&](const std::string& obs, double exact, const ShotStats& stats) {
+    out.expectation_shot[obs] = stats.mean;
+    out.estimation_error[obs] = stats.mean - exact;
+    out.shot_variance[obs] = stats.variance;
+    out.shot_stderr[obs] = stats.std_err;
+  };
+  auto obs_seed = [&](const std::string& obs) {
+    return circuit.seed + static_cast<std::uint64_t>(std::hash<std::string>{}(obs));
+  };
+
+  if (circuit.shots > 0 && branching) {
+    // With noise, or a measurement that later gates depend on, each pass is one random
+    // trajectory, so every shot gets its own pass. Sampling all the shots from one pass's final
+    // state, as this used to, made the counts unanimous: |1> under depolarizing 0.5 read all-0 or
+    // all-1, never the mixed state's split. "expectation_exact" is then the average over the
+    // trajectories, an estimate of the noisy expectation; the state and classical register
+    // returned are the last trajectory's.
+    std::vector<double> exact_sum(parsed_obs.size(), 0.0);
+    std::vector<double> rotated_sum(parsed_obs.size(), 0.0);
+    std::vector<std::mt19937_64> obs_rngs;
+    for (const auto& obs : circuit.observables) {
+      obs_rngs.emplace_back(obs_seed(obs));
+    }
+    for (std::uint32_t s = 0; s < circuit.shots; ++s) {
+      if (s > 0) {
+        run_trajectory(circuit, rng, state, measurement_results);
+      }
+      std::vector<double> probs(state.size(), 0.0);
+      for (std::size_t i = 0; i < state.size(); ++i) {
+        probs[i] = std::norm(state[i]);
+      }
+      std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
+      out.counts[bitstring(dist(rng), circuit.qubits)] += 1;
+      for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+        exact_sum[k] += exact_pauli_expectation(state, parsed_obs[k]).real();
+        if (!observable_all_z(parsed_obs[k])) {
+          rotated_sum[k] += shot_stats_rotated_state(state, parsed_obs[k], 1, obs_rngs[k]).mean;
+        }
+      }
+    }
+    const double shots = static_cast<double>(circuit.shots);
+    for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+      const auto& obs = circuit.observables[k];
+      const double exact = exact_sum[k] / shots;
+      out.expectation_exact[obs] = exact;
+      ShotStats stats;
+      if (observable_all_z(parsed_obs[k])) {
+        stats = shot_stats_from_counts(out.counts, parsed_obs[k], circuit.qubits);
+      } else {
+        stats.mean = rotated_sum[k] / shots;
+        stats.variance = std::max(0.0, 1.0 - stats.mean * stats.mean);
+        stats.std_err = std::sqrt(stats.variance / shots);
+      }
+      record_shots(obs, exact, stats);
+    }
+  } else if (deferred_measures) {
+    // Every MEASURE is terminal and no noise acts: the measurements commute with the rest of the
+    // circuit, so the pass skipped them and the shots are sampled from the state before
+    // measurement, the exact outcome distribution, from one pass. (Sampling them from one
+    // collapsed state, as this used to, made the measured qubits unanimous: a measured Bell pair
+    // read '00' on every shot.) One more sample fills the classical register and collapses the
+    // returned state. Over the outcomes, an observable with X or Y on a measured qubit averages
+    // to 0; the others keep their value in the state before measurement.
+    const std::vector<Complex> pre = state;
+    std::vector<double> probs(pre.size(), 0.0);
+    for (std::size_t i = 0; i < pre.size(); ++i) {
+      probs[i] = std::norm(pre[i]);
     }
     std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
     for (std::uint32_t s = 0; s < circuit.shots; ++s) {
-      const std::size_t idx = dist(rng);
-      out.counts[bitstring(idx, circuit.qubits)] += 1;
+      out.counts[bitstring(dist(rng), circuit.qubits)] += 1;
     }
-  }
-
-  for (const auto& obs : circuit.observables) {
-    const auto parsed = parse_pauli_observable(obs, circuit.qubits);
-    const double exact = exact_pauli_expectation(state, parsed).real();
-    out.expectation_exact[obs] = exact;
-    if (circuit.shots > 0) {
-      ShotStats stats;
-      if (observable_all_z(parsed)) {
-        stats = shot_stats_from_counts(out.counts, parsed, circuit.qubits);
-      } else {
-        std::mt19937_64 obs_rng(circuit.seed + static_cast<std::uint64_t>(std::hash<std::string>{}(obs)));
-        stats = shot_stats_rotated_state(state, parsed, circuit.shots, obs_rng);
+    const std::size_t outcome = dist(rng);
+    std::vector<bool> measured(circuit.qubits, false);
+    for (const auto& m : deferred) {
+      const auto bit = static_cast<std::uint32_t>((outcome >> m.qubit) & 1U);
+      measurement_results[m.clbit] = bit;
+      if (!measured[m.qubit]) {
+        measured[m.qubit] = true;
+        collapse_qubit(state, m.qubit, bit);
       }
-      const double shot = stats.mean;
-      out.expectation_shot[obs] = shot;
-      out.estimation_error[obs] = shot - exact;
-      out.shot_variance[obs] = stats.variance;
-      out.shot_stderr[obs] = stats.std_err;
+    }
+    for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+      const auto& obs = circuit.observables[k];
+      bool dephased = false;
+      for (const auto& pt : parsed_obs[k]) {
+        if ((pt.pauli == 'X' || pt.pauli == 'Y') && measured[pt.qubit]) dephased = true;
+      }
+      const double exact = dephased ? 0.0 : exact_pauli_expectation(pre, parsed_obs[k]).real();
+      out.expectation_exact[obs] = exact;
+      if (circuit.shots > 0) {
+        ShotStats stats;
+        if (observable_all_z(parsed_obs[k])) {
+          stats = shot_stats_from_counts(out.counts, parsed_obs[k], circuit.qubits);
+        } else if (dephased) {
+          // Measured in Z, the qubit reads +-1 in X or Y with equal probability.
+          std::mt19937_64 obs_rng(obs_seed(obs));
+          std::uniform_int_distribution<int> coin(0, 1);
+          double acc = 0.0;
+          for (std::uint32_t s = 0; s < circuit.shots; ++s) {
+            acc += coin(obs_rng) != 0 ? 1.0 : -1.0;
+          }
+          const double shots = static_cast<double>(circuit.shots);
+          stats.mean = acc / shots;
+          stats.variance = std::max(0.0, 1.0 - stats.mean * stats.mean);
+          stats.std_err = std::sqrt(stats.variance / shots);
+        } else {
+          std::mt19937_64 obs_rng(obs_seed(obs));
+          stats = shot_stats_rotated_state(pre, parsed_obs[k], circuit.shots, obs_rng);
+        }
+        record_shots(obs, exact, stats);
+      }
+    }
+  } else {
+    if (circuit.shots > 0) {
+      std::vector<double> probs(state.size(), 0.0);
+      for (std::size_t i = 0; i < state.size(); ++i) {
+        probs[i] = std::norm(state[i]);
+      }
+      std::discrete_distribution<std::size_t> dist(probs.begin(), probs.end());
+      for (std::uint32_t s = 0; s < circuit.shots; ++s) {
+        const std::size_t idx = dist(rng);
+        out.counts[bitstring(idx, circuit.qubits)] += 1;
+      }
+    }
+
+    for (std::size_t k = 0; k < parsed_obs.size(); ++k) {
+      const auto& obs = circuit.observables[k];
+      const double exact = exact_pauli_expectation(state, parsed_obs[k]).real();
+      out.expectation_exact[obs] = exact;
+      if (circuit.shots > 0) {
+        ShotStats stats;
+        if (observable_all_z(parsed_obs[k])) {
+          stats = shot_stats_from_counts(out.counts, parsed_obs[k], circuit.qubits);
+        } else {
+          std::mt19937_64 obs_rng(obs_seed(obs));
+          stats = shot_stats_rotated_state(state, parsed_obs[k], circuit.shots, obs_rng);
+        }
+        record_shots(obs, exact, stats);
+      }
     }
   }
+  out.state = state;
+  out.measurement_results = std::move(measurement_results);
 
   if (!out.estimation_error.empty()) {
     double sum_abs = 0.0;

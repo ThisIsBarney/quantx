@@ -85,7 +85,11 @@ class DepolarizingNoise(NoiseModel):
     """Uniform depolarizing channel applied after every gate.
 
     The depolarizing channel replaces the qubit state with the maximally mixed
-    state with probability p:  ρ → (1-p)ρ + p·I/2
+    state with probability p:  ρ → (1-p)ρ + p·I/2, which is
+    (1 - 3p/4)ρ + (p/4)(XρX + YρY + ZρZ). The native circuit backend applies it
+    to every qubit after every gate (idle qubits included), one trajectory per
+    shot; the density-matrix simulator in :mod:`quantx_engine.primitives`
+    applies the same channel to the qubits the gate acts on.
 
     Parameters
     ----------

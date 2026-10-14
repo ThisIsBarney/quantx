@@ -29,7 +29,7 @@
     },
     "expectation_exact": {
       "type": "object",
-      "description": "Exact <psi|O|psi> values keyed by observable label.",
+      "description": "Exact expectation values keyed by observable label: <psi|O|psi> of the final state; with noise or a mid-circuit measurement, the average over the shots' trajectories (with shots 0, one trajectory: a random sample of the noise, not its average); after a terminal measurement, 0 for an observable with X or Y on a measured qubit.",
       "additionalProperties": { "type": "number" }
     },
     "expectation_shot": {
