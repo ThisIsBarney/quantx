@@ -2,8 +2,9 @@
 
 Wraps the native C++ two-site DMRG implementation (``src/dmrg_dense.cpp`` +
 ``src/dmrg_blocks.cpp`` + ``src/dmrg_mpo.cpp``, exposed via ``src/dmrg_capi.cpp``)
-with a clean Python API.  Falls back to a pure-Python reference DMRG (via
-``quantx_engine.tdmrg``) when the native library is not available.
+with a clean Python API. Without the native library, :func:`ground_state` raises
+:class:`DMRGError`, and :meth:`DMRGSolver.solve` falls back to exact diagonalisation,
+for chains of up to 20 sites.
 
 Supported Hamiltonians
 ----------------------
@@ -48,8 +49,8 @@ Quick-start example::
 
 References
 ----------
-.. [1] Schollwöck (2011). Ann. Phys. 326, 96. DOI: 10.1016/j.aop.2010.09.012
-.. [2] White (1992). Phys. Rev. Lett. 69, 2863. DOI: 10.1103/PhysRevLett.69.2863
+- Schollwöck (2011). Ann. Phys. 326, 96. DOI: 10.1016/j.aop.2010.09.012
+- White (1992). Phys. Rev. Lett. 69, 2863. DOI: 10.1103/PhysRevLett.69.2863
 """
 from __future__ import annotations
 
@@ -170,7 +171,7 @@ def ground_state(
     model : XXZChain, J1J2Chain, Spin1Chain, HubbardChain or HubbardLattice
         The Hamiltonian; see :mod:`quantx_engine.models` for the conventions.
     sz : float, optional
-        Spin models: total S^z (a multiple of 1/2). Default: the lowest |S^z| the
+        Spin models: total S^z (a multiple of 1/2). Default: the lowest ``|S^z|`` the
         chain allows (0, or 1/2 for an odd spin-1/2 chain).
     n_up, n_dn : int, optional
         Hubbard models: the numbers of up and down electrons. Default: half
@@ -373,7 +374,7 @@ class DMRGSolver:
         n_sweeps : int
             Maximum number of full left→right→left DMRG sweeps.
         tol : float
-            Energy convergence tolerance.  Stops early when |ΔE| < tol.
+            Energy convergence tolerance.  Stops early when ``|ΔE| < tol``.
         method : str
             ``"u1"`` (default): Sz-conserving block-sparse two-site DMRG.
             ``"su2"``: SU(2) spin-symmetric DMRG (Heisenberg only); tracks spin

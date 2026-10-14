@@ -10,7 +10,8 @@ Build a model, then hand it to a solver::
 
     gs = ground_state(XXZChain(L=21, delta=0.5), sz=0.5)
 
-Every model is a 1D chain with open boundaries. The engine conserves the model's U(1)
+The chains are open; :class:`HubbardLattice` adds ladders, strips and cylinders (open
+along x, optionally periodic around y). The engine conserves the model's U(1)
 charges exactly, so a solver works inside one symmetry sector: total S^z for the spin
 chains, the numbers of up and down electrons for Hubbard.
 
@@ -22,7 +23,7 @@ literature (the open spin-1/2 Heisenberg chain has E/L -> 1/4 - ln 2 per site).
 
 This differs from ``DMRGSolver(hamiltonian_type="heisenberg")``, which keeps the
 engine's Pauli convention, J sigma.sigma = 4 J S.S. The conversion happens here, in
-:meth:`problem`: the engine's spin-1/2 builders take Pauli couplings, so J is sent as J/4.
+each model's ``problem()``: the engine's spin-1/2 builders take Pauli couplings, so J is sent as J/4.
 """
 from __future__ import annotations
 

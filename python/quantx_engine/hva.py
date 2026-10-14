@@ -78,7 +78,7 @@ class HVAResult:
     Attributes
     ----------
     energy : float
-        <psi(theta)| H |psi(theta)> for the model's full Hamiltonian.
+        ``<psi(theta)| H |psi(theta)>`` for the model's full Hamiltonian.
     entropy_max, entropy_mid : float or None
         Entanglement entropy (natural log) of the final state: the largest over all
         cuts of the site chain, and the balanced cut's (None for an odd number of sites).

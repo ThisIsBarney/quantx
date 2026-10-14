@@ -1,7 +1,7 @@
 """Dynamical spin structure factor S(k, omega) via MPS time evolution.
 
 Wraps ``qx_spectral`` (``src/dmrg_blocks.cpp`` via ``src/dmrg_capi.cpp``): computes
-the time-dependent ground-state correlations
+the time-dependent ground-state correlations::
 
     C_{j,l0}(t) = <psi0| sigma^z_j  e^{-i(H-E0) t}  sigma^z_{l0} |psi0>
 
@@ -50,7 +50,7 @@ class DSFResult:
     times : np.ndarray
         Time grid, shape (n_t,).
     C : np.ndarray
-        Complex correlations C[t, j] = <psi0| sz_j e^{-i(H-E0)t} sz_l0 |psi0>,
+        Complex correlations ``C[t, j] = <psi0| sz_j e^{-i(H-E0)t} sz_l0 |psi0>``,
         shape (n_t, n).
     l0 : int
         Source site.

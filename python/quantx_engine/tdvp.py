@@ -116,7 +116,7 @@ class TDVPSolver:
             TDVP2 (bond-adaptive, needed for entanglement growth) if True;
             TDVP1 (fixed bond) otherwise.
         initial : str
-            Initial state: ``"neel"`` (|up dn up dn...>) or ``"up"`` (all up).
+            Initial state: ``"neel"`` (``|up dn up dn...>``) or ``"up"`` (all up).
 
         Returns
         -------
@@ -159,7 +159,7 @@ class LoschmidtResult:
     times : list[float]
         Time grid.
     L : list[float]
-        Return probability L(t) = |<psi0|psi(t)>|^2 (L(0)=1).
+        Return probability ``L(t) = |<psi0|psi(t)>|^2`` (L(0)=1).
     rate : list[float]
         Rate function lambda(t) = -ln L(t) / n; its non-analyticities (cusps)
         are dynamical quantum phase transitions.

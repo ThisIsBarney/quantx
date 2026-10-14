@@ -1,83 +1,63 @@
-QuantX Engine Documentation
-============================
+QuantX
+======
 
-**QuantX Engine** is a high-performance quantum simulation SDK that exposes 130+ physics
-modules — from gate-model circuits and VQE to many-body Hamiltonians, fault-tolerant
-architectures, quantum networks, and machine learning.
+**QuantX** is a tensor-network engine for quantum many-body physics. It runs
+block-sparse MPS algorithms (DMRG, TDVP and fermionic HVA circuits) that conserve U(1),
+U(1)×U(1) and SU(2) charges exactly. The core is C++20, with a Python API.
 
-.. image:: https://img.shields.io/pypi/v/quantx-engine
-   :target: https://pypi.org/project/quantx-engine/
-   :alt: PyPI version
+These pages document what the engine does from Python and how each capability is
+checked. Everything else in the package is marked experimental.
 
-.. image:: https://img.shields.io/badge/python-3.10%2B-blue
-   :alt: Python 3.10+
+What is verified, and against what
+----------------------------------
 
-.. image:: https://img.shields.io/badge/license-MIT-green
-   :alt: MIT License
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30 36
 
-.. image:: https://github.com/ThisIsBarney/quantx/actions/workflows/docs.yml/badge.svg
-   :target: https://github.com/ThisIsBarney/quantx/actions/workflows/docs.yml
-   :alt: Docs
+   * - Capability
+     - Python
+     - Checked against
+   * - Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a
+       chosen symmetry sector
+     - :func:`~quantx_engine.dmrg.ground_state` with the models of
+       :mod:`quantx_engine.models`
+     - exact diagonalisation, written independently of the engine, to 1e-10
+   * - Hubbard ground states on ladders, strips and cylinders
+     - ``ground_state(HubbardLattice(...))``
+     - exact diagonalisation on a ladder and a cylinder, where the fermion signs are
+       physical, to 1e-10
+   * - Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy,
+       entanglement entropy, truncation
+     - :func:`~quantx_engine.hva.circuit`, :func:`~quantx_engine.hva.layout`
+     - an independent state vector: energy and entropies to 1e-10 from a product start;
+       to 1e-6 from the default U = 0 start (about 1e-8 measured)
 
-----
+These checks run in CI on a Linux build of the engine (``test_models_ed.py`` and
+``test_hva_statevector.py`` in ``python/quantx_engine/tests/``).
 
 .. toctree::
    :maxdepth: 1
-   :caption: Getting Started
+   :caption: Getting started
 
    installation
    quickstart
-   changelog
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference
+   :caption: API reference
 
+   api/engine
    api/index
 
 .. toctree::
    :maxdepth: 1
-   :caption: REST API
+   :caption: More
 
    rest_api
+   changelog
 
-----
-
-Features at a Glance
----------------------
-
-.. rubric:: Core Simulation
-
-* :class:`~quantx_engine.Engine` — C++ physics solver dispatcher (37 named solvers)
-* :class:`~quantx_engine.lanczos.LanczosSolver` — sparse Hamiltonian eigensolver
-* :class:`~quantx_engine.trotter.TrotterSimulator` — product-formula time evolution
-* :class:`~quantx_engine.mps_simulator.MPSSimulator` — matrix-product-state simulator (TEBD)
-
-.. rubric:: Quantum Error Correction
-
-* :class:`~quantx_engine.qec.RepetitionCode` — classical repetition code
-* :class:`~quantx_engine.fault_tolerant.SurfaceCode` — surface code threshold analysis
-* :class:`~quantx_engine.qldpc.QLDPCCode` — quantum LDPC / bicycle codes (M119)
-* :class:`~quantx_engine.bosonic.BosonicQubit` — bosonic cat/GKP qubits (M120)
-
-.. rubric:: Algorithms
-
-* :class:`~quantx_engine.qaoa_optim.CVaRQAOA` — CVaR-QAOA optimizer
-* :class:`~quantx_engine.advanced_chemistry.VQE` — noise-aware variational eigensolver
-* :class:`~quantx_engine.qsp_qsvt.QSPCircuit` — quantum signal processing / QSVT
-* :class:`~quantx_engine.quantum_walk.ContinuousTimeQuantumWalk` — CTQW simulator
-* :class:`~quantx_engine.quantum_walk.GroverWalk` — Grover walk search (quadratic speedup)
-* :class:`~quantx_engine.mitigation.RichardsonExtrapolation` — Richardson ZNE extrapolation
-
-.. rubric:: Quantum Networking
-
-* :class:`~quantx_engine.quantum_network.QuantumNetwork` — entanglement-based network
-* :class:`~quantx_engine.quantum_protocols.BB84Protocol` — BB84 key distribution
-* :class:`~quantx_engine.quantum_protocols.QuantumTeleportation` — teleportation with Werner states
-
-Indices and Tables
-------------------
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+The project's `roadmap <https://github.com/ThisIsBarney/quantx/blob/master/ROADMAP.md>`_
+says where it is going, and the
+`contributing guide <https://github.com/ThisIsBarney/quantx/blob/master/CONTRIBUTING.md>`_
+says how to take part. QuantX is released under the MIT License.

@@ -1,110 +1,69 @@
-Quick Start
+Quick start
 ===========
 
-This page shows five common workflows to get you started.
+Ground states
+-------------
 
-1. Gate-model circuit simulation
----------------------------------
-
-.. code-block:: python
-
-   from quantx_engine.engine import Engine
-
-   engine = Engine()                 # needs QUANTX_LIB_PATH set
-
-   circuit = {
-       "qubits": 2,
-       "gates": [
-           {"gate": "H",    "target": 0},
-           {"gate": "CNOT", "control": 0, "target": 1},
-       ],
-   }
-   result = engine.run_circuit(circuit)
-   print(result["counts"])           # e.g. {"00": 512, "11": 512}
-
-2. Lanczos eigensolver
------------------------
-
-Find the ground-state energy of a 1D Heisenberg chain:
+Build a model, then solve it in a symmetry sector:
 
 .. code-block:: python
 
-   import numpy as np
-   from quantx_engine.lanczos import LanczosSolver
+   from quantx_engine.models import HubbardChain, XXZChain
+   from quantx_engine.dmrg import ground_state
 
-   # 2-site Heisenberg: H = J*(XX + YY + ZZ), J=1
-   # exact E₀ = -3/2
-   H = np.array([
-       [-1,  0,  0,  0],
-       [ 0,  1, -2,  0],
-       [ 0, -2,  1,  0],
-       [ 0,  0,  0, -1],
-   ], dtype=float) * 0.5
+   gs = ground_state(HubbardChain(L=16, U=4.0), n_up=8, n_dn=8, max_bond=256)
+   gs.energy, gs.truncation_error, gs.sector
 
-   solver = LanczosSolver(H, num_eigenvalues=1, max_iterations=100, tolerance=1e-10)
-   result = solver.solve()
-   print(f"E₀ = {result.eigenvalues[0]:.6f}")   # -1.500000
+   gs = ground_state(XXZChain(L=21, delta=0.5), sz=0.5)   # an odd chain, S^z = 1/2
 
-3. Variational Quantum Eigensolver (VQE)
------------------------------------------
+The models are :class:`~quantx_engine.models.XXZChain`,
+:class:`~quantx_engine.models.J1J2Chain`, :class:`~quantx_engine.models.Spin1Chain`,
+:class:`~quantx_engine.models.HubbardChain` and
+:class:`~quantx_engine.models.HubbardLattice` (ladders, strips and cylinders).
+
+Fermionic circuits
+------------------
 
 .. code-block:: python
 
-   from quantx_engine.advanced_chemistry import VQE, MolecularHamiltonian
+   from quantx_engine.models import HubbardLattice
+   from quantx_engine import hva
 
-   mol = MolecularHamiltonian(n_qubits=4, terms=[
-       (0.5, "ZI"), (-0.5, "IZ"), (0.25, "XX"), (0.25, "YY"),
-   ])
-   vqe = VQE(mol, ansatz="hardware_efficient", layers=2)
-   result = vqe.run(max_iterations=100)
-   print(f"VQE energy: {result.energy:.4f}")
+   cyl = HubbardLattice(Lx=4, W=3, U=4.0, y_periodic=True)
+   angles = [[0.1] * hva.layout(cyl).angles_per_layer] * 3      # 3 layers
+   r = hva.circuit(cyl, angles, n_up=6, n_dn=6, max_bond=256)   # ~10 s
+   r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
 
-4. Quantum error correction
------------------------------
+This cylinder already truncates at ``max_bond=256``: ``truncation_error`` is about 5e-4,
+and the energy moves by 3e-3 at ``max_bond=1024``. Raise ``max_bond`` until it stops
+moving.
 
-Test a distance-3 repetition code:
+Conventions
+-----------
 
-.. code-block:: python
+* The spin models use physical spin operators S = σ/2 throughout.
+* Every chain is open.
+* Hubbard is H = −t Σ (c†c + h.c.) + U Σ n↑n↓ − μ Σ n.
+* A solver works in one symmetry sector: total S\ :sup:`z`, or the numbers of up and
+  down electrons.
+* An unreachable sector, or an unknown argument, is an error rather than a silent
+  default.
 
-   from quantx_engine.qec import RepetitionCode
+Reading the results
+-------------------
 
-   code = RepetitionCode(n=3)
-   # Encode logical |0>
-   logical = [0]
-   encoded = code.encode(logical)         # [0, 0, 0]
-   # Flip the middle qubit
-   noisy = list(encoded)
-   noisy[1] ^= 1                          # [0, 1, 0]
-   # Decode
-   syndrome = code.syndrome(noisy)
-   corrected = code.correct(syndrome, noisy)
-   decoded = code.decode(corrected)
-   assert decoded == logical, "Correction failed!"
-   print("Error corrected successfully")
-
-5. Quantum network simulation
-------------------------------
-
-Simulate entanglement distribution over a three-node chain:
-
-.. code-block:: python
-
-   from quantx_engine.quantum_network import QuantumNetwork
-
-   net = QuantumNetwork()
-   net.add_node("Alice")
-   net.add_node("Bob")
-   net.add_node("Charlie")
-   net.add_link("Alice", "Bob",     fidelity=0.95, distance_km=10)
-   net.add_link("Bob",   "Charlie", fidelity=0.92, distance_km=15)
-
-   # Swap entanglement through Bob
-   fidelity = net.entanglement_swap("Alice", "Bob", "Charlie")
-   print(f"Alice-Charlie fidelity after swap: {fidelity:.3f}")
+* ``truncation_error`` is the weight the bond-dimension cap discarded. For
+  ``ground_state`` it is summed over the last sweep; for ``hva.circuit`` it is the
+  largest single truncation.
+* An HVA circuit started from the U = 0 ground state (``init="free"``, the default)
+  inherits that state's DMRG error. ``init_energy_error`` is the start's energy against
+  the exact U = 0 energy. A large value flags a bad start, but a small one does not
+  bound the circuit's error: the energy is stationary at the ground state, so a start
+  right to 1e-14 in energy can still carry ~1e-8 into the circuit. For the full
+  precision, start from ``init="product"``.
 
 Next steps
 ----------
 
-* Browse the :doc:`API Reference <api/index>` for all 130+ modules.
-* Explore the REST API docs at :doc:`rest_api`.
-* Read the :doc:`changelog` for what changed in v0.2.0.
+* The :doc:`engine API <api/engine>` documents every function and result field.
+* The experimental modules are listed in the :doc:`API reference <api/index>`.
