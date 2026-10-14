@@ -13,13 +13,48 @@ The library (`libquantx.so`, `libquantx.dylib`, `quantx.dll`) contains code from
 | [Eigen](https://eigen.tuxfamily.org) | 3.4.0 | MPL-2.0 | Eigen contributors |
 | [nlohmann/json](https://github.com/nlohmann/json) | 3.11.3 | MIT | Copyright (c) 2013-2022 Niels Lohmann |
 | [spdlog](https://github.com/gabime/spdlog) | 1.17.0 | MIT | Copyright (c) 2016 - present, Gabi Melman and spdlog contributors |
-| [{fmt}](https://github.com/fmtlib/fmt), bundled with spdlog | (spdlog's) | MIT | Copyright (c) 2012 - present, Victor Zverovich and {fmt} contributors |
+| [{fmt}](https://github.com/fmtlib/fmt), bundled with spdlog | 12.1.0 | MIT | Copyright (c) 2012 - present, Victor Zverovich and {fmt} contributors |
 
-**Eigen** is used unmodified, as header-only templates, and is compiled with
-`EIGEN_MPL2_ONLY`, so no Eigen code under another license is included. Under the
-Mozilla Public License 2.0, its source code is available from
+**Eigen** is used unmodified, as header-only templates. Most of it is under the Mozilla
+Public License 2.0: its source code is available from
 https://gitlab.com/libeigen/eigen/-/tree/3.4.0, and the license text is at
-https://www.mozilla.org/MPL/2.0/.
+https://www.mozilla.org/MPL/2.0/. The engine is compiled with `EIGEN_MPL2_ONLY`, which
+keeps out Eigen's LGPL code.
+
+A few headers that `Eigen/Core` always includes carry, or derive from, permissive
+licenses:
+
+- `Eigen/src/Core/arch/Default/BFloat16.h`: Apache License 2.0, Copyright 2017 The
+  TensorFlow Authors (text: https://www.apache.org/licenses/LICENSE-2.0);
+- `Eigen/src/Core/util/MKL_support.h`: BSD 3-Clause, Copyright (c) 2011, Intel
+  Corporation (below);
+- `Eigen/src/Core/arch/Default/Half.h`: its half-precision conversion routines are
+  Copyright (c) Fabian Giesen, 2016, whose license permits redistribution and use in
+  source and binary forms, with or without modification, without warranty;
+- the vectorised sin and cos (`arch/SSE`, `arch/AVX`, `arch/Default`) derive from
+  Julien Pommier's sse_mathfun, under the zlib license.
+
+The BSD 3-Clause terms for Intel's file:
+
+> Redistribution and use in source and binary forms, with or without modification, are
+> permitted provided that the following conditions are met: (1) Redistributions of
+> source code must retain the above copyright notice, this list of conditions and the
+> following disclaimer. (2) Redistributions in binary form must reproduce the above
+> copyright notice, this list of conditions and the following disclaimer in the
+> documentation and/or other materials provided with the distribution. (3) Neither the
+> name of the copyright holder nor the names of its contributors may be used to endorse
+> or promote products derived from this software without specific prior written
+> permission.
+>
+> THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+> EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+> MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
+> THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+> SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+> PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+> INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+> STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+> THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 **nlohmann/json, spdlog and {fmt}** are used under the MIT License. The copyright
 notices are in the table above; the license text is:
@@ -48,9 +83,10 @@ notices are in the table above; the license text is:
 | Linux (`manylinux_2_28`) | `libgomp`, the GNU OpenMP runtime, from GCC | GPL-3.0-or-later WITH GCC-exception-3.1 |
 | Windows | `vcomp140.dll`, the Microsoft Visual C++ OpenMP runtime | Microsoft Visual C++ redistributable terms |
 
-The GCC Runtime Library Exception permits distributing `libgomp` with programs under
-any license. Its source is part of GCC (https://gcc.gnu.org), and the exception's text
-is at https://www.gnu.org/licenses/gcc-exception-3.1.html. `vcomp140.dll` is one of
+`libgomp` is licensed under the GNU General Public License v3 or later
+(https://www.gnu.org/licenses/gpl-3.0.html) with the GCC Runtime Library Exception 3.1
+(https://www.gnu.org/licenses/gcc-exception-3.1.html), which permits distributing it
+with programs under any license. Its source is part of GCC (https://gcc.gnu.org). `vcomp140.dll` is one of
 the files Microsoft licenses for redistribution with applications built by Visual
 Studio. The macOS wheels bundle no runtime library, and the Windows engine links the
 C++ runtime statically.
@@ -62,6 +98,6 @@ C++ runtime statically.
 | [CLI11](https://github.com/CLIUtils/CLI11) 2.4.2 | the `qx_cli` executable of a source build | BSD-3-Clause | Copyright (c) 2017-2024 University of Cincinnati, developed by Henry Schreiner under NSF AWARD 1414736 |
 | [three.js](https://threejs.org) and its `OrbitControls` | `scripts/vendor/`, for the visualisation scripts | MIT | Copyright 2010-2021 Three.js Authors |
 
-The CMake build downloads nlohmann/json, spdlog, CLI11 and Eigen at configure time
-unless they are installed already (`CMakeLists.txt`). Each distribution includes its
+The CMake build downloads Eigen at configure time, and nlohmann/json, spdlog and CLI11
+too unless they are installed already (`CMakeLists.txt`). Each distribution includes its
 own license file.

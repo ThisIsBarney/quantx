@@ -83,9 +83,9 @@ if(NOT eigen_POPULATED)
 endif()
 add_library(qx_eigen INTERFACE)
 target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
-# Eigen is MPL-2.0 apart from a few files under other licenses; the engine is MIT and
-# ships in wheels. EIGEN_MPL2_ONLY makes including any non-MPL2 Eigen code a compile
-# error (see THIRD_PARTY_NOTICES.md).
+# Eigen is MPL-2.0 apart from a few files: some LGPL, some permissive. The engine is MIT
+# and ships in wheels, so EIGEN_MPL2_ONLY makes including Eigen's LGPL code a compile
+# error. The permissive headers it does include are listed in THIRD_PARTY_NOTICES.md.
 target_compile_definitions(qx_eigen INTERFACE EIGEN_MPL2_ONLY)
 
 # Optional: link OpenBLAS/LAPACKE so the large-block SVD uses LAPACK zgesdd
