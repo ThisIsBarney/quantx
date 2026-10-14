@@ -63,7 +63,7 @@ Parametric binding: set `param_names` on an op and supply a `parameter_map` on t
 Supported noise model selectors:
 
 - `none`
-- `depolarizing` — random Pauli kick with `prob`
+- `depolarizing` — the channel (1 − p)ρ + p·I/2 with p = `prob`: a random Pauli kick with probability 3p/4
 - `amplitude_damping` — T1-style decay with `gamma`
 - `bit_flip` — X applied with `prob`
 - `phase_flip` — Z applied with `prob`

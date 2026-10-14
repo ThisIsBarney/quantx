@@ -478,7 +478,10 @@ Minimal command-line repro for an unsupported gate:
 
 Output includes:
 
-- `expectation_exact`: exact expectation from final statevector
+- `expectation_exact`: the exact expectation of the final state. With noise, or a
+  measurement that later gates depend on, it is the average over the shots'
+  trajectories; after a terminal measurement, an observable with X or Y on a measured
+  qubit is 0
 - `expectation_shot`: estimated expectation from sampled counts
 - `estimation_error`: `expectation_shot - expectation_exact`
 - `shot_variance`: per-observable Bernoulli variance estimate (`1 - mean^2`)

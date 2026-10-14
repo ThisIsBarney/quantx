@@ -1334,7 +1334,9 @@ def calibration_to_noise_model(
 
     max_gate_err = max(calibration.gate_errors.values(), default=0.0)
     if max_gate_err > 0.001:
-        depol = DepolarizingNoise(prob=min(max_gate_err, 1.0))
+        # A gate error is an average gate infidelity r. For the one-qubit depolarizing
+        # channel (1 - p)rho + p I/2 that DepolarizingNoise applies, r = p/2, so p = 2r.
+        depol = DepolarizingNoise(prob=min(2.0 * max_gate_err, 1.0))
         return CompositeNoise([depol, thermal])
     return thermal
 

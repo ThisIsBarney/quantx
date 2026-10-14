@@ -381,6 +381,17 @@ class TestFitFromProcessTomography:
         assert cn.process_infidelity == pytest.approx(0.0, abs=1e-10)
         assert cn.depolarizing_prob == pytest.approx(0.0, abs=1e-10)
 
+    @pytest.mark.parametrize("p", [0.02, 0.1, 0.4])
+    def test_depolarizing_channel_reads_back_its_own_p(self, p):
+        """DepolarizingNoise(p), (1 - p)rho + p I/2, has the Pauli chi matrix
+        diag(1 - 3p/4, p/4, p/4, p/4), so its process infidelity is 3p/4 and the fit must
+        return p. (The old factor (d + 1)/d gave 9p/8: 0.1125 for p = 0.1.)"""
+        target = identity_chi()
+        chi = np.diag([1 - 0.75 * p, 0.25 * p, 0.25 * p, 0.25 * p]).astype(complex)
+        assert np.trace(chi @ target.conj().T).real == pytest.approx(1 - 0.75 * p)
+        cn = NoiseCharacterizer().fit_from_process_tomography(chi, target)
+        assert cn.depolarizing_prob == pytest.approx(p, rel=1e-12)
+
     def test_sources_contains_process_tomography(self):
         chi = identity_chi()
         nc = NoiseCharacterizer()
