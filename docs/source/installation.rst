@@ -54,16 +54,27 @@ These serve the experimental modules.
 Building from source
 --------------------
 
-The engine builds with CMake 3.20 or later and a C++20 compiler:
+The engine builds with CMake 3.20 or later and a C++20 compiler. On Linux and macOS:
 
 .. code-block:: bash
 
    git clone https://github.com/ThisIsBarney/quantx.git
    cd quantx
-   cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+   cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
    cmake --build build --parallel
    pip install -e "python/[dev]"
-   export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"   # quantx.dll on Windows
+   export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"   # libquantx.dylib on macOS
+
+On Windows, with Visual Studio 2022 (64-bit, which a 64-bit Python needs):
+
+.. code-block:: powershell
+
+   git clone https://github.com/ThisIsBarney/quantx.git
+   cd quantx
+   cmake -S . -B build -A x64
+   cmake --build build --config Release --parallel
+   pip install -e "python/[dev]"
+   $env:QUANTX_LIB_PATH = "$PWD\build\Release\quantx.dll"
 
 ``-DQX_ENABLE_BLAS=ON`` links OpenBLAS/LAPACKE for faster large-block SVDs, and
 ``-DQX_USE_CUDA=ON`` builds the cuSOLVER GPU path. The

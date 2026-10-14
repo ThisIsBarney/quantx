@@ -2,8 +2,9 @@
 
 Wraps the native C++ two-site DMRG implementation (``src/dmrg_dense.cpp`` +
 ``src/dmrg_blocks.cpp`` + ``src/dmrg_mpo.cpp``, exposed via ``src/dmrg_capi.cpp``)
-with a clean Python API.  Falls back to a pure-Python reference DMRG (via
-``quantx_engine.tdmrg``) when the native library is not available.
+with a clean Python API. Without the native library, :func:`ground_state` raises
+:class:`DMRGError`, and :meth:`DMRGSolver.solve` falls back to exact diagonalisation,
+for chains of up to 20 sites.
 
 Supported Hamiltonians
 ----------------------
@@ -48,8 +49,8 @@ Quick-start example::
 
 References
 ----------
-.. [1] Schollwöck (2011). Ann. Phys. 326, 96. DOI: 10.1016/j.aop.2010.09.012
-.. [2] White (1992). Phys. Rev. Lett. 69, 2863. DOI: 10.1103/PhysRevLett.69.2863
+- Schollwöck (2011). Ann. Phys. 326, 96. DOI: 10.1016/j.aop.2010.09.012
+- White (1992). Phys. Rev. Lett. 69, 2863. DOI: 10.1103/PhysRevLett.69.2863
 """
 from __future__ import annotations
 

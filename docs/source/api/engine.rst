@@ -1,11 +1,16 @@
 Engine API
 ==========
 
-These modules drive the native engine and are held to its gates: each capability is
-tested against a reference computed independently of the engine (see the
-:doc:`front page <../index>`). They need the native library, which comes with the
-platform wheels (or set ``QUANTX_LIB_PATH``). Without it, each raises its module's
+These modules drive the native engine. They need the native library, which comes with
+the platform wheels (or set ``QUANTX_LIB_PATH``); without it, each raises its module's
 error, naming what is missing.
+
+:func:`~quantx_engine.dmrg.ground_state` with :mod:`quantx_engine.models`, and
+:mod:`quantx_engine.hva`, are gated: each capability is tested against a reference
+computed independently of the engine (see the :doc:`front page <../index>`).
+:mod:`quantx_engine.tdvp`, :mod:`quantx_engine.structure_factor` and the SU(2) path of
+:class:`~quantx_engine.dmrg.DMRGSolver` are validated in the C++ tests but have no
+Python gate yet.
 
 .. list-table::
    :header-rows: 1
