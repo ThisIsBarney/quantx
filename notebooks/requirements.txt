@@ -1,7 +1,7 @@
 # Binder / Colab requirements for QuantX Engine tutorial notebooks
 # Install: pip install -r notebooks/requirements.txt
 
-quantx-engine>=0.2.0
+quantx-engine>=0.1.0
 numpy>=1.24
 scipy>=1.10
 networkx>=3.0

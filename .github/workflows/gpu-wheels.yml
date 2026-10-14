@@ -126,12 +126,14 @@ jobs:
       - name: Install wheel with [gpu] extra (CuPy will be pulled from PyPI)
         run: |
           python -m pip install --upgrade pip
-          # Install from local wheelhouse if available, else from PyPI
+          # The wheel this run built. (This used to fall back to quantx-engine==0.4.0 from
+          # PyPI, a version that was never published; a missing artifact is a failure.)
           if ls wheelhouse/*.whl 1>/dev/null 2>&1; then
             pip install numpy scipy networkx
             pip install --no-index --find-links=wheelhouse --no-deps quantx-engine
           else
-            pip install "quantx-engine==0.4.0"
+            echo "::error::no wheel artifact from the build job"
+            exit 1
           fi
           # Install CuPy CPU stub (cupy-cuda12x fails on CPU-only runners;
           # install numpy-only cupy shim for import-path testing)

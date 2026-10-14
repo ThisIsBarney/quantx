@@ -35,8 +35,22 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 - **`models.HubbardLattice` and `quantx_engine.hva`** (#197): Hubbard ground states on
   ladders, strips and cylinders, and fermionic HVA circuits on the same lattices
   (`hva.circuit`, `hva.layout`), returning energy, entanglement entropies and
-  truncation. The circuits are gated against an independent state vector to 1e-10;
-  lattice DMRG against exact diagonalisation where the fermion signs are physical.
+  truncation. The circuits are gated against an independent state vector: to 1e-10
+  from a product start, and to 1e-6 from the default U = 0 start, which carries its
+  DMRG preparation's residual (measured at about 1e-8). Lattice DMRG is gated against
+  exact diagonalisation on the geometries where the fermion signs are physical.
+- **The native engine these sit on**, built since the internal 1.0.0 (the git history
+  has the details):
+  - two-site DMRG on a block-sparse MPS that conserves U(1) or packed U(1)×U(1)
+    charges, for any charge-conserving MPO, with a DMRG3S mixer;
+  - SU(2)-symmetric DMRG for Heisenberg chains of any spin;
+  - TDVP and TEBD;
+  - finite-temperature statics and dynamics by purification;
+  - Hubbard chains, ladders and cylinders, and fermionic HVA circuits;
+  - a matrix-free Lindblad solver;
+  - optional cuSOLVER acceleration in source builds.
+
+  Only part of it is reachable from Python so far; the README lists which.
 
 ### Fixed
 
@@ -58,10 +72,12 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
   not a readout error (#198).
 - The DMRG C API failed on every odd-length Heisenberg chain, with an error that blamed
   `max_bond` (#196).
-- An unknown model type silently ran as an empty Hamiltonian, and a misspelled sector
-  key silently kept the default sector (#196).
-- The 2-site entry points crashed the process (an uncaught exception, misdiagnosed as a
-  stack overrun); they now solve densely or refuse clearly (#195).
+- An unknown model type in `qx_dmrg_sweep` silently ran as an empty Hamiltonian and
+  returned E = 0; it is now an error (#196).
+- At n = 2 the five DMRG and dynamics entry points of the C API returned an internal
+  error from inside the block engine, which needs n ≥ 3. `qx_dmrg_sweep` and
+  `qx_tdvp_evolve` now answer 2-site chains with their dense and non-block solvers;
+  the other three refuse with a message that says why (#195).
 - Four tutorial notebooks called APIs that do not exist, and printed claims their own
   outputs contradicted (#195).
 

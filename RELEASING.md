@@ -38,7 +38,9 @@ a tag push publishes, so the release tag must be new.
    `qx_version()`, and the docs all read it. Do not add `version =` to
    `python/pyproject.toml`. The version is declared dynamic there, so a static one is a
    build error.
-2. Add a `## [X.Y.Z]` section to `CHANGELOG.md`.
+2. Add a `## [X.Y.Z]` section to `CHANGELOG.md`, or, for 0.1.0, replace "unreleased" in
+   its heading with the release date. `release.yml` copies that section into the GitHub
+   Release.
 3. Merge to `master` and wait for CI to pass. Every push to `master` builds all the wheels
    without publishing, so by now the release build has already run once.
 4. Tag and push:
@@ -47,7 +49,9 @@ a tag push publishes, so the release tag must be new.
    git push origin vX.Y.Z
    ```
    `build-wheels.yml` builds and smoke-tests. The upload then waits for the `pypi`
-   environment's reviewers, if you set any, and runs.
+   environment's reviewers, if you set any, and runs. It refuses to upload when the tag
+   and the built files name different versions, for example `v0.2.0` pushed on a tree
+   that still says 0.1.0.
 5. Optional: create the GitHub Release by hand. Go to Actions → Release → Run workflow and
    set `publish=true`, `tag=vX.Y.Z`. It attaches the sdist and the CHANGELOG entry.
 

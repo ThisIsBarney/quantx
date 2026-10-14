@@ -4,8 +4,10 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.4.x   | :white_check_mark: |
-| < 0.4   | :x:                |
+| 0.1.x   | :white_check_mark: |
+
+0.1.0 is the first published version. The earlier numbers in `CHANGELOG.md` (up to an
+internal 1.0.0) were development milestones that were never released.
 
 ## Reporting a Vulnerability
 
