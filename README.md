@@ -119,6 +119,13 @@ ctest --test-dir build
 Point the Python package at the library with `QUANTX_LIB_PATH`, or build a wheel as in
 [RELEASING.md](RELEASING.md).
 
+## Roadmap and contributing
+
+Where the project is going, phase by phase, is in [ROADMAP.md](ROADMAP.md).
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) covers the development
+setup and the standard every engine change is held to: a test against an independent
+reference. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
 MIT, © 2026 Marshall WU. See [LICENSE](LICENSE).

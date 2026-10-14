@@ -49,6 +49,10 @@ and chemistry, error correction, noise and mitigation, quantum walks, bosonic co
 hardware connectors and more), plus a few older interfaces to parts of the engine.
 
 Documentation, benchmarks and the C++ engine are in the
-[repository](https://github.com/ThisIsBarney/quantx).
+[repository](https://github.com/ThisIsBarney/quantx). Its
+[roadmap](https://github.com/ThisIsBarney/quantx/blob/master/ROADMAP.md) says where the
+project is going, and the
+[contributing guide](https://github.com/ThisIsBarney/quantx/blob/master/CONTRIBUTING.md)
+says how to take part.
 
 MIT License, © 2026 Marshall WU.

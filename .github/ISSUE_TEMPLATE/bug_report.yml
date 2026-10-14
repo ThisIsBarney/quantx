@@ -1,7 +1,7 @@
 name: Bug Report
 description: File a bug report
 title: "[Bug]: "
-labels: ["bug", "triage"]
+labels: ["bug"]
 assignees: []
 
 body:
@@ -17,7 +17,19 @@ body:
       label: QuantX version
       description: >
         Run `python -c "import quantx_engine; print(quantx_engine.__version__)"`.
-      placeholder: "0.4.0"
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: backend
+    attributes:
+      label: Engine
+      description: >
+        Run `python -c "import quantx_engine; print(quantx_engine.backend_info())"`.
+        It says whether the native engine was loaded. Say also how you installed it: a
+        wheel from PyPI, or a source build (and its CMake options).
+      render: text
     validations:
       required: true
 
