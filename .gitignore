@@ -1,7 +1,6 @@
+# CMake build trees: build/ and any build-<name>/ (build-vs, build-cuda, ...)
 build/
-build-vs/
-build-cuda/
-build-cuda-blas/
+build-*/
 out/
 dist/
 .vs/
@@ -41,3 +40,7 @@ build-dbg/
 build_asan_local.bat
 build_dbg_local.bat
 benchmarks/*.err
+# Virtual environments (CONTRIBUTING creates python/.venv)
+.venv/
+# Figures the tutorial notebooks save when run
+notebooks/*.png
