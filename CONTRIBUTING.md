@@ -1,289 +1,180 @@
 # Contributing to QuantX
 
-Thank you for your interest in contributing to QuantX! This guide covers the
-full contribution lifecycle — from filing issues to getting your PR merged —
-as well as development setup, build instructions, and coding conventions.
+Thank you for considering a contribution. QuantX is a block-sparse tensor-network engine
+for quantum many-body physics (see the [README](README.md)); this guide covers how to set
+up a development environment, the standard every engine change is held to, and how a
+pull request gets merged.
 
-All contributors are expected to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md)
+([中文版](CODE_OF_CONDUCT_CN.md)). Report security problems privately, as described in
+[SECURITY.md](SECURITY.md), never in a public issue.
 
----
+## Contents
 
-## Table of Contents
-
-1. [Community channels](#community-channels)
-2. [How to contribute](#how-to-contribute)
-   - [Reporting bugs](#reporting-bugs)
-   - [Requesting features](#requesting-features)
-   - [Submitting a pull request](#submitting-a-pull-request)
-   - [Developer Certificate of Origin](#developer-certificate-of-origin)
+1. [Where to start](#where-to-start)
+2. [The verification standard](#the-verification-standard)
 3. [Development environment](#development-environment)
-4. [Pure-Python SDK](#pure-python-sdk)
-5. [Building the native C++ engine](#building-the-native-c-engine)
-   - [Linux / macOS](#linux--macos)
-   - [Windows](#windows)
-   - [MSYS2 / MinGW (Windows)](#msys2--mingw-windows)
-6. [Verifying the build](#verifying-the-build)
-7. [Wiring Python to the native library](#wiring-python-to-the-native-library)
-8. [Running the test suite](#running-the-test-suite)
-9. [Coding conventions](#coding-conventions)
+4. [Building the native engine](#building-the-native-engine)
+5. [Running the tests](#running-the-tests)
+6. [Pull requests](#pull-requests)
+7. [Coding conventions](#coding-conventions)
+8. [Licensing of contributions](#licensing-of-contributions)
 
----
+## Where to start
 
-## Community channels
+- **Bugs, questions and feature requests** go to
+  [GitHub Issues](https://github.com/ThisIsBarney/quantx/issues), using the templates.
+  Search first; for a bug, include `quantx_engine.__version__` and the output of
+  `quantx_engine.backend_info()`, which says whether the native engine was loaded.
+- **What the project is working towards** is in [ROADMAP.md](ROADMAP.md). Issues
+  labelled `good first issue` or `help wanted` are open for anyone.
+- **Large changes** (a new solver, a new public API, a change to the C API): open an
+  issue first, so the design can be agreed before you write the code.
 
-| Channel | Purpose |
-|---------|---------|
-| [GitHub Issues](https://github.com/ThisIsBarney/quantx/issues) | Bug reports, feature requests, questions |
-| [GitHub Discussions](https://github.com/ThisIsBarney/quantx/discussions) | General Q&A, ideas, show-and-tell |
-| [Discord](https://discord.gg/quantx) | Real-time chat — `#help`, `#dev`, `#hardware` channels |
+The package has two parts, held to different bars:
 
-For security vulnerabilities please read [SECURITY.md](SECURITY.md) and
-**do not** open a public issue.
+| Part | What it is | Bar |
+|---|---|---|
+| The engine | The C++ core in `src/` and `include/qx/`, its C API (`include/qx/c_api.h`), and the Python modules that drive it: `models`, `dmrg`, `hva`, `tdvp`, `structure_factor` | A new capability comes with a gate (next section). Today `dmrg.ground_state` and `hva` are gated; `tdvp`, `structure_factor` and the SU(2) path of `DMRGSolver` are validated in the C++ tests but have no Python gate yet. Changes to `c_api.h` keep existing callers working. |
+| Experimental modules | The pure-Python modules that do not use the engine (VQE, error correction, noise, quantum walks, connectors, ...) | Tests for what they claim. Their API may change, and they may move to a separate `quantx_engine.contrib` namespace. |
 
----
+## The verification standard
 
-## How to contribute
+This is the rule that matters most. **Every engine capability exposed to Python ships
+with a gate:** a test that compares the engine against a reference computed
+independently of it, at a stated tolerance. The reference can be exact
+diagonalisation, a state vector, or an analytic result. (The older `tdvp`,
+`structure_factor` and SU(2) entry points predate the rule; giving them gates is open
+work.) The existing gates show the pattern:
 
-### Reporting bugs
+- `python/quantx_engine/tests/test_models_ed.py`: every model's ground state against
+  an exact diagonalisation written separately from the engine, to 1e-10.
+- `python/quantx_engine/tests/test_hva_statevector.py`: HVA circuits against an
+  independent Fock-space simulator: energies and entanglement entropies.
+- `python/quantx_engine/tests/test_noise.py`: the noise-model rules against the native
+  circuit backend.
 
-Before opening an issue, search [existing issues](https://github.com/ThisIsBarney/quantx/issues)
-to avoid duplicates.
+Three habits follow from it:
 
-Use the **Bug Report** template when filing a bug.  Include:
-- QuantX version (`python -c "import quantx_engine; print(quantx_engine.__version__)"`)
-- Python version and operating system
-- Minimal reproducible example
-- Full traceback (if applicable)
-
-### Requesting features
-
-Use the **Feature Request** template.  Describe the quantum simulation use-case
-you are trying to address and, if possible, a sketch of the proposed API.
-
-### Submitting a pull request
-
-1. **Fork** the repository and create a branch:
-   ```bash
-   git checkout -b feat/short-description
-   ```
-2. **Write tests** — every new feature needs at least one `test_*.py` file.
-3. **Run the test suite** locally (see [Running the test suite](#running-the-test-suite)).
-4. **Open a PR** against `master` using the PR template.
-5. A maintainer will review within a few business days.
-6. Address any feedback; the PR is merged once CI passes and at least one
-   approval is received.
-
-**PR scope guidelines**:
-- Keep PRs focused — one feature or fix per PR.
-- Include a `CHANGELOG.md` entry under `[Unreleased]` for user-visible changes.
-- Reference the issue number in the PR description (`Closes #NNN`).
-
-### Developer Certificate of Origin
-
-By submitting a pull request you certify that you have the right to submit
-the contribution under the project's MIT licence and that you agree to the
-[Developer Certificate of Origin v1.1](https://developercertificate.org/).
-
-Add a sign-off to each commit:
-```bash
-git commit -s -m "feat: add my contribution"
-```
-or append manually:
-```
-Signed-off-by: Your Name <your@email.com>
-```
-
----
+1. **A gate must fail when it cannot run.** Native gates skip when the library is
+   missing, but fail instead under `QX_REQUIRE_NATIVE=1`, which the Linux native CI job
+   sets. A gate that silently skips proves nothing.
+2. **Refuse rather than guess.** An unknown argument, an unreachable symmetry sector or a
+   degenerate start is an error with a message, never a silent default.
+3. **Say only what a test checks.** Docstrings, the README and the changelog state the
+   tolerance a gate actually holds. If a claim has no test, write the test or drop the
+   claim.
 
 ## Development environment
 
-**Python requirements**: Python ≥ 3.11  
-**C++ requirements**: CMake ≥ 3.20, a C++20-capable compiler (GCC ≥ 11, Clang ≥ 14, or MSVC ≥ 19.30)
+You need Python 3.10 or later. For the native engine you also need CMake 3.20 or later
+and a C++20 compiler (GCC 11+, Clang 14+, or Visual Studio 2022).
 
 ```bash
-# Clone the repo
-git clone https://github.com/yourusername/quantx.git
+git clone https://github.com/<your-fork>/quantx.git
 cd quantx
-
-# Create a virtual environment
 python -m venv python/.venv
-source python/.venv/bin/activate        # Linux / macOS
-python\.venv\Scripts\Activate.ps1       # Windows PowerShell
-
-# Install the Python SDK in editable mode with all dev dependencies
-pip install scipy networkx pennylane
+source python/.venv/bin/activate          # Windows: python\.venv\Scripts\Activate.ps1
 pip install -e "python/[dev]"
 ```
 
----
+Without the native library the package runs in pure-Python mode:
+`quantx_engine.backend_info()["native"]` is `False`, and the engine gates skip.
 
-## Pure-Python SDK
-
-The vast majority of QuantX functionality is pure Python and requires **no C++
-build**. All modules in `python/quantx_engine/` except `engine.py` work
-without the native library.
+## Building the native engine
 
 ```bash
-# Run the full pure-Python test suite
-pytest python/quantx_engine/tests/ -q --tb=short
+# Linux (Ubuntu/Debian: apt install cmake g++ ninja-build libgomp1) and macOS
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
 ```
-
----
-
-## Building the native C++ engine
-
-The native engine (`libquantx.so` / `quantx.dll`) provides C++ implementations
-of Lanczos diagonalization, Trotter simulation, MPS backends, and 30+ physics
-solvers. It is an optional performance accelerator; the Python SDK falls back
-gracefully when it is unavailable.
-
-### Linux / macOS
-
-```bash
-# Install prerequisites (Ubuntu / Debian)
-sudo apt-get install cmake g++ ninja-build libgomp1
-
-# macOS with Homebrew
-brew install cmake ninja libomp
-
-# Configure
-cmake -S . -B build \
-  -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DQX_ENABLE_OPENMP=ON \
-  -DQX_ENABLE_MPI=OFF \
-  -DQX_ENABLE_PYBIND=OFF
-
-# Build (uses all available CPU cores)
-cmake --build build --parallel $(nproc)
-
-# The shared library is at:
-#   build/Release/libquantx.so   (Linux)
-#   build/Release/libquantx.dylib (macOS)
-```
-
-### Windows
-
-Using **Visual Studio 2022** (MSVC):
 
 ```powershell
-# From a Developer PowerShell for VS 2022 prompt
-cmake -S . -B build `
-  -DCMAKE_BUILD_TYPE=Release `
-  -DQX_ENABLE_OPENMP=OFF `
-  -DQX_ENABLE_MPI=OFF `
-  -DQX_ENABLE_PYBIND=OFF
-
+# Windows (Visual Studio 2022): the Visual Studio generator, 64-bit
+cmake -S . -B build -A x64
 cmake --build build --config Release --parallel
-
-# DLL is at: build\Release\quantx.dll
 ```
 
-### MSYS2 / MinGW (Windows)
+On Windows, build 64-bit: a 64-bit Python cannot load a 32-bit DLL. The plain
+"Developer PowerShell for VS 2022" shortcut sets up the 32-bit (x86) compiler, so for
+Ninja use the "x64 Native Tools Command Prompt" instead, or run
+`Enter-VsDevShell -Arch amd64 -HostArch amd64` first.
 
-If you prefer GCC on Windows via [MSYS2](https://www.msys2.org/):
+The shared library lands in `build/Release/` (`build/<config>/` for any configuration):
+`libquantx.so` on Linux, `libquantx.dylib` on macOS, `quantx.dll` on Windows. Point
+Python at it with `QUANTX_LIB_PATH`, on Linux (on macOS, name `libquantx.dylib`):
 
 ```bash
-# In an MSYS2 UCRT64 shell — install build tools
-pacman -S mingw-w64-ucrt-x86_64-cmake \
-           mingw-w64-ucrt-x86_64-gcc \
-           mingw-w64-ucrt-x86_64-ninja
-
-# Configure + build
-cmake -S . -B build \
-  -G Ninja \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DQX_ENABLE_OPENMP=ON
-
-cmake --build build --parallel $(nproc)
-
-# DLL is at: build/Release/quantx.dll
+export QUANTX_LIB_PATH="$PWD/build/Release/libquantx.so"
+python -c "import quantx_engine; print(quantx_engine.backend_info())"
 ```
 
----
+and on Windows:
 
-## Verifying the build
-
-After a successful build, run the C++ smoke tests:
-
-```bash
-# Linux
-./build/Release/qx_smoke
-./build/Release/qx_fft_smoke
-
-# Windows
-.\build\Release\qx_smoke.exe
-.\build\Release\qx_fft_smoke.exe
+```powershell
+$env:QUANTX_LIB_PATH = "$PWD\build\Release\quantx.dll"
+python -c "import quantx_engine; print(quantx_engine.backend_info())"
 ```
 
-Check that the shared library exports the expected symbols:
+Options worth knowing:
 
-```bash
-# Linux
-nm -D build/Release/libquantx.so | grep "qx_run\|qx_version\|qx_list_solvers"
+| Option | Default | What it does |
+|---|---|---|
+| `QX_ENABLE_OPENMP` | ON | Threads the block-sparse kernels |
+| `QX_ENABLE_BLAS` | OFF | Links OpenBLAS/LAPACKE for the large-block SVDs (faster at large bond dimension). Needs `-DQX_BLAS_INCLUDE_DIR=<dir with lapacke.h>` and `-DQX_BLAS_LIB=<OpenBLAS library>`; on Windows the OpenBLAS DLL must be on `PATH` at run time |
+| `QX_USE_CUDA` | OFF | The cuSOLVER GPU path for the block-sparse SVDs (`-DCMAKE_CUDA_ARCHITECTURES=89` etc.) |
+| `QX_ENABLE_CUDA` | OFF | cuFFT for the FFT provider (separate from `QX_USE_CUDA`) |
 
-# Windows (from a VS Developer Command Prompt)
-dumpbin /exports build\Release\quantx.dll | findstr qx_run
-```
+The published wheels are built with the defaults: no BLAS, no CUDA. Test engine changes
+in that configuration too.
 
----
+## Running the tests
 
-## Wiring Python to the native library
+| What | Command |
+|---|---|
+| Python package (pure-Python mode) | `pytest python/quantx_engine/tests -q` |
+| Engine gates (needs the library) | `QX_REQUIRE_NATIVE=1 QUANTX_LIB_PATH=... pytest python/quantx_engine/tests/test_models_ed.py python/quantx_engine/tests/test_hva_statevector.py python/quantx_engine/tests/test_noise.py` |
+| C++ tests | `ctest --test-dir build --output-on-failure` |
+| Tutorial notebooks | `pip install -r notebooks/requirements.txt nbmake && pytest --nbmake notebooks/` |
+| REST server | `pip install fastapi httpx anyio pydantic aiosqlite pytest-asyncio prometheus_client && pytest server/tests` |
 
-Set the `QUANTX_LIB_PATH` environment variable to the path of the compiled
-shared library, then import QuantX as usual:
+Some C++ suites are long: `qx_hubbard_test` takes tens of minutes. Run the ones your
+change touches while you work (`ctest -R <name>`), and the full set before asking for a
+review. Run the Python suite with the library loaded as well, so the engine paths are
+exercised.
 
-```python
-import os
-os.environ["QUANTX_LIB_PATH"] = "/path/to/build/Release/libquantx.so"
+## Pull requests
 
-from quantx_engine import backend_info
-print(backend_info())
-# {'native': True, 'gpu': False, 'version': '0.1.0', 'solvers': [...]}
+1. Branch from `master` and keep each PR to one change.
+2. Name commits with a type prefix: `feat`, `fix`, `perf`, `docs`, `test`, `ci`,
+   `chore`, e.g. `fix(dmrg): refuse an odd chain in an even sector`. Say in the body
+   what changed and why, and what you ran to check it.
+3. Add tests (see the verification standard) and a line under `[Unreleased]` in
+   [CHANGELOG.md](CHANGELOG.md) for anything a user would notice.
+4. Fill in the PR template, including the test plan.
+5. A maintainer reviews the PR. Expect questions about the reference your gate compares
+   against and about its tolerance.
+6. Once the review is addressed and the checks pass, a maintainer squash-merges it.
 
-from quantx_engine.engine import Engine
-e = Engine()
-result = e.run_solver("heisenberg", {"n_sites": 8, "J": 1.0, "scenario": "ground_state"})
-print(result["ground_energy"])
-```
-
-When `QUANTX_LIB_PATH` is set, `LanczosSolver`, `TrotterSimulator`, and
-`MPSSimulator` automatically route eligible problems through the native
-C++ backend (≥10× faster for large systems), falling back to pure Python
-for unsupported problem shapes.
-
----
-
-## Running the test suite
-
-```bash
-# Fast pure-Python unit tests
-pytest python/quantx_engine/tests/ -q --tb=short
-
-# Literature-validation tests (M134-M148) — reproduce paper results
-pytest python/quantx_engine/tests/test_literature_*.py -v
-
-# Full suite including server tests
-pytest python/ server/tests/ -q --tb=short
-```
-
-With the native library available:
-
-```bash
-QUANTX_LIB_PATH=/path/to/libquantx.so \
-  pytest python/quantx_engine/tests/ -q --tb=short
-```
-
----
+Releases are cut by maintainers; see [RELEASING.md](RELEASING.md).
 
 ## Coding conventions
 
-- **Python**: Follow PEP 8. NumPy-style docstrings with `References` section
-  citing DOI-linked papers for all scientific algorithms.
-- **C++**: C++20, 2-space indentation, `snake_case` for functions/variables,
-  `PascalCase` for structs/classes.
-- **Tests**: Every new feature needs a `test_*.py` file. Literature-validation
-  tests (`test_literature_mNNN.py`) must cite the paper and reproduce a specific
-  numerical result. Use `pytest.skip()` for graceful API-mismatch handling.
-- **References**: Use the `.. [N] Author (year). Title. Journal. DOI` format
-  in module docstrings.
+- **Python:** PEP 8; NumPy-style docstrings, with a `References` section citing the
+  paper (with DOI) for every scientific algorithm; type hints on public functions.
+- **C++:** C++20. Follow the indentation and naming of the file you are editing (the
+  codebase mixes 2- and 4-space indentation); `snake_case` for functions and
+  variables, `PascalCase` for types. When you add or change a function in
+  `include/qx/c_api.h`, document its JSON inputs, outputs and conventions there.
+- **Physics conventions:** state them. The spin models in `quantx_engine.models` use
+  S = σ/2; the older spin-1/2 Heisenberg entry points (`DMRGSolver`, `tdvp`,
+  `structure_factor`) use the Pauli convention J σ·σ. Every chain is open unless a
+  parameter says otherwise.
+
+## Licensing of contributions
+
+QuantX is released under the [MIT License](LICENSE). By submitting a contribution you
+agree that it is licensed under the same terms, and you certify the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/): sign off each
+commit with `git commit -s`, which adds a `Signed-off-by: Your Name <you@example.com>`
+line.

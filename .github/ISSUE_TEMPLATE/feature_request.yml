@@ -17,17 +17,15 @@ body:
       label: Area
       description: Which part of QuantX does this relate to?
       options:
-        - Statevector simulation
-        - MPS / tensor networks (DMRG, TEBD)
-        - Lindblad / open systems
-        - Quantum error correction (QEC)
-        - Variational algorithms (VQE, QAOA)
-        - Quantum chemistry
-        - Quantum walks
-        - Error mitigation (ZNE, PEC)
-        - Hardware backends (IBM, IonQ, etc.)
-        - Benchmarking / performance
-        - Python SDK / API ergonomics
+        - "Engine: models and ground states (DMRG)"
+        - "Engine: time evolution (TDVP, TEBD) and dynamical correlators"
+        - "Engine: finite temperature (purification)"
+        - "Engine: fermionic circuits (HVA)"
+        - "Engine: symmetries, GPU, performance"
+        - "C API / Python bindings"
+        - "Experimental: VQE, chemistry, error correction, noise, quantum walks"
+        - "Experimental: hardware connectors (IBM, PennyLane)"
+        - "REST server / CLI"
         - Documentation / notebooks
         - Other
     validations:

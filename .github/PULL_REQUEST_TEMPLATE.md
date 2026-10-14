@@ -1,35 +1,35 @@
 ## Summary
 
-<!-- One paragraph describing what this PR does and why. -->
-
-Closes #<!-- issue number -->
+<!-- What this PR changes and why, in a paragraph. Link the issue: Closes #NNN -->
 
 ## Changes
 
-<!-- Bullet list of the key changes: new files, modified APIs, etc. -->
+<!-- The key changes: new or changed APIs, files, behaviour. -->
 
 - 
 
 ## Test plan
 
-<!-- Describe how you verified the changes. -->
+<!-- What you ran, and what it showed. See "The verification standard" in CONTRIBUTING.md. -->
 
-- [ ] New unit tests added in `python/quantx_engine/tests/test_*.py`
-- [ ] All existing tests pass: `pytest python/quantx_engine/tests/ -q`
-- [ ] Literature-validation test updated / added (if applicable)
-- [ ] `CHANGELOG.md` updated under `[Unreleased]`
-- [ ] Docstrings updated with `since=` version and `References` entries
+- [ ] Python tests pass: `pytest python/quantx_engine/tests -q`
+- [ ] Engine change: a gate compares it against an independent reference (exact
+      diagonalisation, a state vector or an analytic result) at a stated tolerance, and it
+      passes with `QX_REQUIRE_NATIVE=1` and the library loaded
+- [ ] C++ change: `ctest --test-dir build --output-on-failure` passes in the default
+      configuration (no BLAS, no CUDA), which the wheels use
+- [ ] `CHANGELOG.md` has a line under `[Unreleased]` for anything a user would notice
+- [ ] Docstrings and docs state only what a test checks
 
 ## Type of change
 
-- [ ] Bug fix (non-breaking change that fixes an issue)
-- [ ] New feature (non-breaking change that adds functionality)
-- [ ] Breaking change (fix or feature that changes existing behaviour)
-- [ ] Documentation update
-- [ ] Performance improvement / refactor (no behaviour change)
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Breaking change (changes existing behaviour or the C API)
+- [ ] Documentation
+- [ ] Performance or refactor, with no behaviour change
 
 ## Checklist
 
-- [ ] My branch is up-to-date with `master`
-- [ ] I have added `Signed-off-by: Name <email>` to my commits (DCO)
-- [ ] CI passes (green checkmarks on this PR)
+- [ ] The branch is up to date with `master`
+- [ ] Each commit is signed off (`git commit -s`, DCO)

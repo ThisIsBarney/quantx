@@ -8,13 +8,9 @@ body:
   - type: markdown
     attributes:
       value: |
-        For quick questions, consider asking on
-        [GitHub Discussions](https://github.com/ThisIsBarney/quantx/discussions)
-        or the [Discord server](https://discord.gg/quantx) — you'll usually
-        get a faster response there.
-
-        Use this form for technical questions that might benefit from a
-        permanent, searchable record.
+        Ask anything about using QuantX here; questions stay searchable for the
+        next person. The [README](https://github.com/ThisIsBarney/quantx#readme)
+        covers what the engine does and how to read its results.
 
   - type: textarea
     id: question
@@ -39,6 +35,6 @@ body:
     id: version
     attributes:
       label: QuantX version
-      placeholder: "0.4.0"
+      placeholder: "0.1.0"
     validations:
       required: false
