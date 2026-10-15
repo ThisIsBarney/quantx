@@ -149,6 +149,15 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 - Four tutorial notebooks called APIs that do not exist, and printed claims their own
   outputs contradicted (#195).
 
+### Known issues
+
+- **The VQE showcase's measured bond dimensions are overstated.** They were recorded
+  before the #197 fix, so they are upper bounds. This covers `docs/universal_mpo.md`,
+  the `chi_used` columns of `docs/vqe_hubbard.csv`, `vqe_entanglement.csv` and
+  `vqe_ladder.csv`, and the `chi` column of `vqe_width.csv`. Configured χ (caps, the
+  lossless budgets in `vqe_barren_size.csv`) are unaffected, and so are the energies,
+  entropies and truncation errors.
+
 ---
 
 ## Development history before the first public release
