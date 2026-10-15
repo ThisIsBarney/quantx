@@ -18,11 +18,31 @@ The library (`libquantx.so`, `libquantx.dylib`, `quantx.dll`) contains code from
 **Eigen** is used as header-only templates. Most of it is under the Mozilla Public
 License 2.0: its source code is available from
 https://gitlab.com/libeigen/eigen/-/tree/3.4.0, and the license text is at
-https://www.mozilla.org/MPL/2.0/. One file is modified: the build applies two fixes
-from Eigen 3.4.1 to `Eigen/src/SVD/BDCSVD.h`, verbatim, and the modified file stays
-under the MPL-2.0. `cmake/eigen_bdcsvd_fixes.cmake` in the QuantX repository makes
-the change, and applied to the 3.4.0 source it gives the file's source code. The
-engine is compiled with `EIGEN_MPL2_ONLY`, which keeps out Eigen's LGPL code.
+https://www.mozilla.org/MPL/2.0/. The engine is compiled with `EIGEN_MPL2_ONLY`,
+which keeps out Eigen's LGPL code.
+
+One file is modified, `Eigen/src/SVD/BDCSVD.h`, and it stays under the MPL-2.0. Its
+source code is Eigen 3.4.0's file with two changes, both copied verbatim from Eigen
+3.4.1 (https://gitlab.com/libeigen/eigen/-/blob/3.4.1/Eigen/src/SVD/BDCSVD.h):
+
+- in `perturbCol0`, the line `Index j = i<k ? i : perm(l-1);` becomes
+
+  ```cpp
+  // Avoid index out of bounds.
+  // Will end up setting zhat(k) = 0.
+  if (i >= k && l == 0) {
+    m_info = NumericalIssue;
+    prod = 0;
+    break;
+  }
+  Index j = i<k ? i : l > 0 ? perm(l-1) : i;
+  ```
+
+- in `deflation`, `bool total_deflation = (col0.tail(length-1).array()<considerZero).all();`
+  becomes
+  `const bool total_deflation = (col0.tail(length-1).array().abs()<considerZero).all();`.
+
+The QuantX build applies them with `cmake/eigen_bdcsvd_fixes.cmake`.
 
 A few headers that `Eigen/Core` always includes carry, or derive from, permissive
 licenses:

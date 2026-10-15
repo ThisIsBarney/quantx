@@ -1272,9 +1272,9 @@ static std::pair<std::map<int,Mat>, BondSpace> expand_M_LR(
 // slower than BDCSVD on large blocks. The single-site/mixer phase at production chi
 // therefore wants the BLAS build (all benchmarks and production runs use it).
 // SCOPE NOTE: BDCSVD still backs the two-site block_svd_truncate below (size-gated,
-// and only on the early non-degenerate sweeps) and the dynamics/dense paths. Those
-// have never crashed -- the fault needs the bunched-up Schmidt spectrum of a deeply
-// converged single-site sweep -- but if one ever does, route it here too.
+// and only on the early non-degenerate sweeps) and the dynamics/dense paths, through
+// qx::robust_thin_bdcsvd: the build fixes the out-of-bounds read in Eigen's BDCSVD
+// (cmake/eigen_bdcsvd_fixes.cmake), which then reports the case, and JacobiSVD answers.
 static void robust_thin_svd(const Mat& X, Mat& U, Mat& Vt, RVec& sv) {
 #ifdef QX_HAS_LAPACKE
     if (std::min((int)X.rows(), (int)X.cols()) >= gesdd_min()) {
@@ -3123,9 +3123,9 @@ static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cu
 // crossed filled up with zero-weight states: reported bond dimensions ran to 3.6x the
 // cap (10 at chi_max 4, 58 at 16), and every later gate paid for the padding. So each
 // move is capped at the bond's current dimension, which by the rank bound drops only
-// the padding. (Not the direct SVD: Eigen 3.4.0's BDCSVD reads out of bounds, perm(l-1)
+// the padding. (Not the direct SVD: Eigen 3.4.0's BDCSVD read out of bounds, perm(l-1)
 // at l == 0 in perturbCol0, on exactly these rank-deficient blocks, and crashed
-// cylinder circuits.)
+// cylinder circuits. The build now fixes that, but the Gram route is also faster.)
 static int bond_total(const BondSpace& b) {
     int t = 0;
     for (int d : b.dims) t += d;

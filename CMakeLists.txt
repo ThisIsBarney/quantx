@@ -83,12 +83,12 @@ if(NOT eigen_POPULATED)
   endif()
   FetchContent_Populate(eigen)
 endif()
-# Two BDCSVD fixes from Eigen 3.4.1, applied to the downloaded 3.4.0 (see the file for why
-# the build does not use 3.4.1 itself).
+# Two BDCSVD fixes from Eigen 3.4.1, applied to Eigen 3.4.0 (see the file for why the build
+# does not use 3.4.1 itself). QX_EIGEN_DIR is the fixed Eigen to compile against.
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/eigen_bdcsvd_fixes.cmake)
-qx_fix_eigen_bdcsvd("${eigen_SOURCE_DIR}")
+qx_fix_eigen_bdcsvd("${eigen_SOURCE_DIR}" QX_EIGEN_DIR)
 add_library(qx_eigen INTERFACE)
-target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
+target_include_directories(qx_eigen INTERFACE ${QX_EIGEN_DIR})
 # Eigen is MPL-2.0 apart from a few files: some LGPL, some permissive. The engine is MIT
 # and ships in wheels, so EIGEN_MPL2_ONLY makes including Eigen's LGPL code a compile
 # error. The permissive headers it does include are listed in THIRD_PARTY_NOTICES.md.
@@ -116,7 +116,7 @@ endif()
 # BLAS build keeps EIGEN_USE_BLAS in these SVDs.
 add_library(qx_svd STATIC src/robust_svd.cpp)
 set_target_properties(qx_svd PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(qx_svd PRIVATE ${eigen_SOURCE_DIR})
+target_include_directories(qx_svd PRIVATE ${QX_EIGEN_DIR})
 target_compile_definitions(qx_svd PRIVATE EIGEN_MPL2_ONLY)
 target_link_libraries(qx_svd PRIVATE qx_blas)
 target_link_libraries(qx_eigen INTERFACE qx_svd)
@@ -142,6 +142,11 @@ endif()
 
 if(QX_ENABLE_OPENMP)
   find_package(OpenMP)
+endif()
+# The robust SVD's matrix products thread as they did inline in the OpenMP-built sources (Eigen
+# runs them serially inside an already-parallel loop).
+if(OpenMP_CXX_FOUND)
+  target_link_libraries(qx_svd PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
 if(QX_ENABLE_MPI)
@@ -408,6 +413,12 @@ if(OpenMP_CXX_FOUND)
 endif()
 target_include_directories(qx_su2_bench PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 qx_set_config_output_dirs(qx_su2_bench)
+
+# The BDCSVD fixes and the JacobiSVD fallback: crashes or fails on an Eigen that was not fixed.
+add_executable(qx_robust_svd_test src/robust_svd_test.cpp)
+target_link_libraries(qx_robust_svd_test PRIVATE qx_eigen)
+target_include_directories(qx_robust_svd_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+qx_set_config_output_dirs(qx_robust_svd_test)
 
 add_executable(qx_tdvp_test src/tdvp_test.cpp src/dmrg_mpo.cpp)
 target_link_libraries(qx_tdvp_test PRIVATE qx_eigen nlohmann_json::nlohmann_json)
@@ -706,6 +717,7 @@ add_test(NAME qx_su2_mpo_test COMMAND qx_su2_mpo_test)
 add_test(NAME qx_su2_env_test COMMAND qx_su2_env_test)
 add_test(NAME qx_su2_heff_test COMMAND qx_su2_heff_test)
 add_test(NAME qx_su2_run_test COMMAND qx_su2_run_test)
+add_test(NAME qx_robust_svd_test COMMAND qx_robust_svd_test)
 add_test(NAME qx_tdvp_test COMMAND qx_tdvp_test)
 add_test(NAME qx_tdvp_blocks_test COMMAND qx_tdvp_blocks_test)
 add_test(NAME qx_mpo_sym_test COMMAND qx_mpo_sym_test)

@@ -10,8 +10,7 @@
 //
 // The function is compiled once, in robust_svd.cpp (the qx_svd library, which every target
 // linking qx_eigen gets), for Eigen::MatrixXd and Eigen::MatrixXcd. That also keeps the two
-// SVDs out of the large DMRG translation units, where MSVC 19.50 (VS 2026) crashed (C1001)
-// on some compilations with the function inline.
+// SVDs out of the large DMRG translation units.
 #include <Eigen/Core>
 
 namespace qx {
