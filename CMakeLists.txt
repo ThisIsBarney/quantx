@@ -94,15 +94,6 @@ target_include_directories(qx_eigen INTERFACE ${eigen_SOURCE_DIR})
 # error. The permissive headers it does include are listed in THIRD_PARTY_NOTICES.md.
 target_compile_definitions(qx_eigen INTERFACE EIGEN_MPL2_ONLY)
 
-# The robust thin SVD (src/robust_svd.hpp), compiled once. The DMRG, TDVP and SU(2) sources
-# call it, and they all link qx_eigen, so qx_eigen carries it. It takes Eigen's directory and
-# definition itself rather than linking qx_eigen, which links it.
-add_library(qx_svd STATIC src/robust_svd.cpp)
-set_target_properties(qx_svd PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(qx_svd PRIVATE ${eigen_SOURCE_DIR})
-target_compile_definitions(qx_svd PRIVATE EIGEN_MPL2_ONLY)
-target_link_libraries(qx_eigen INTERFACE qx_svd)
-
 # Optional: link OpenBLAS/LAPACKE so the large-block SVD uses LAPACK zgesdd
 # instead of Eigen's built-in Gram eigensolve (Phase 0, docs/gpu_acceleration_plan.md).
 # Configure with: -DQX_ENABLE_BLAS=ON -DQX_BLAS_INCLUDE_DIR=<dir with lapacke.h>
@@ -118,6 +109,17 @@ if(QX_ENABLE_BLAS)
   target_compile_definitions(qx_blas INTERFACE QX_HAS_LAPACKE=1 EIGEN_USE_BLAS=1)
   message(STATUS "QX_ENABLE_BLAS: linking ${QX_BLAS_LIB}")
 endif()
+
+# The robust thin SVD (src/robust_svd.hpp), compiled once. The DMRG, TDVP and SU(2) sources
+# call it, and they all link qx_eigen, so qx_eigen carries it. It takes Eigen's directory and
+# definition itself rather than linking qx_eigen, which links it, and it links qx_blas, so a
+# BLAS build keeps EIGEN_USE_BLAS in these SVDs.
+add_library(qx_svd STATIC src/robust_svd.cpp)
+set_target_properties(qx_svd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(qx_svd PRIVATE ${eigen_SOURCE_DIR})
+target_compile_definitions(qx_svd PRIVATE EIGEN_MPL2_ONLY)
+target_link_libraries(qx_svd PRIVATE qx_blas)
+target_link_libraries(qx_eigen INTERFACE qx_svd)
 
 # Optional: GPU (cuSOLVER/cuBLAS) Gram-SVD path for the block-sparse TEBD dynamics
 # (Phase A, docs/gpu_acceleration_plan.md). Off by default; the CPU build is
