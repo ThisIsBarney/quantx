@@ -129,6 +129,15 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 - `ReadoutNoise`'s docstring said its bit flip follows each measurement. The backend
   applies it to every qubit after every gate except measurements, so it is gate noise,
   not a readout error (#198).
+- Eigen 3.4.0's BDCSVD can read out of bounds on some rank-deficient blocks. It crashed
+  the DMRG's single-site splits, which since use JacobiSVD, and the HVA centre moves
+  before #197. The wheels build without LAPACKE, so the two-site DMRG, the dense DMRG,
+  TDVP and the SU(2) DMRG still ran it. The build now applies Eigen 3.4.1's two BDCSVD
+  fixes to Eigen 3.4.0: that case reports a numerical issue, and the total-deflation
+  test uses |col0|. The engine redoes any SVD that BDCSVD reports as failed with
+  JacobiSVD, and a new test (`qx_robust_svd_test`) drives that path. The build stays on
+  3.4.0, the version the engine was validated with, and takes only these two fixes from
+  3.4.1.
 - The DMRG C API failed on every odd-length Heisenberg chain, with an error that blamed
   `max_bond` (#196).
 - An unknown model type in `qx_dmrg_sweep` silently ran as an empty Hamiltonian and

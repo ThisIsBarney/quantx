@@ -8,6 +8,7 @@
 //  reproduces the full-space energy.)
 
 #include "dmrg_su2_core.hpp"
+#include "robust_svd.hpp"
 #include <Eigen/Dense>
 #include <map>
 #include <vector>
@@ -381,10 +382,10 @@ inline void svd_split(const Theta& th, SpinBond bondL, SpinBond bondR,
     std::vector<Eigen::VectorXd> Sv(nj);
     #pragma omp parallel for schedule(dynamic) if(nj > 2)
     for (int j = 0; j < nj; ++j) {
-        Eigen::BDCSVD<Mat> svd(*Mptr[j], Eigen::ComputeThinU | Eigen::ComputeThinV);
-        Uv[j] = svd.matrixU();
-        Vv[j] = svd.matrixV();
-        Sv[j] = svd.singularValues();
+        auto svd = qx::robust_thin_bdcsvd(*Mptr[j]);
+        Uv[j] = std::move(svd.U);
+        Vv[j] = std::move(svd.V);
+        Sv[j] = std::move(svd.s);
     }
     std::map<int, Mat> Umap, Vmap;
     std::map<int, Eigen::VectorXd> Smap;

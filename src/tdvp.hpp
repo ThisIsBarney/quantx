@@ -7,6 +7,7 @@
 // evolution, tau = -dt for imaginary-time (cooling toward the ground state).
 
 #include "dmrg_internal.hpp"     // qx_dmrg::MPOSite (2x2 MPO), build_heisenberg_mpo
+#include "robust_svd.hpp"        // BDCSVD with a JacobiSVD fallback
 #include <Eigen/Dense>
 #include <complex>
 #include <functional>
@@ -233,14 +234,14 @@ inline Mat merge_two(const Mat& Ai, const Mat& Aj) {
 inline Eigen::VectorXd split_two(const Mat& T, int chiL, int chiR, int dir,
                                  int chi_max, double cutoff, Mat& Aleft, Mat& Aright) {
     // reshape T(s1*chiL+a, s2*chiR+b) -> M((s1,a),(s2,b)) is already that layout
-    Eigen::BDCSVD<Mat> svd(T, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    Eigen::VectorXd sv = svd.singularValues();
+    auto svd = qx::robust_thin_bdcsvd(T);
+    Eigen::VectorXd sv = svd.s;
     int k = 0; double tot = sv.squaredNorm();
     while (k < sv.size() && k < chi_max && sv(k) > cutoff * std::sqrt(std::max(tot,1e-300))) ++k;
     if (k == 0) k = 1;
     Eigen::VectorXd s = sv.head(k);
-    Mat U = svd.matrixU().leftCols(k);          // (2chiL, k)
-    Mat V = svd.matrixV().leftCols(k);          // (2chiR, k)
+    Mat U = svd.U.leftCols(k);                  // (2chiL, k)
+    Mat V = svd.V.leftCols(k);                  // (2chiR, k)
     // A_left = U (rows already s1*chiL+a); A_right reshaped from V^dagger.
     if (dir > 0) {
         Aleft = U;                              // left-canonical (chiL*2, k)

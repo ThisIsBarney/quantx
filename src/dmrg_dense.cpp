@@ -1,4 +1,5 @@
 #include "dmrg_internal.hpp"
+#include "robust_svd.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -338,8 +339,8 @@ struct SVDResult {
 };
 
 static SVDResult svd_truncate(const Mat& theta, int max_bond, double cutoff) {
-    Eigen::BDCSVD<Mat> svd(theta, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    RVec sv = svd.singularValues();
+    const auto svd = qx::robust_thin_bdcsvd(theta);
+    RVec sv = svd.s;
 
     int chi_new = sv.size();
     double sv_sq_sum = sv.squaredNorm();
@@ -361,9 +362,9 @@ static SVDResult svd_truncate(const Mat& theta, int max_bond, double cutoff) {
         trunc += sv[k] * sv[k];
 
     SVDResult res;
-    res.U    = svd.matrixU().leftCols(chi_new);
+    res.U    = svd.U.leftCols(chi_new);
     res.S    = sv.head(chi_new);
-    res.Vt   = svd.matrixV().adjoint().topRows(chi_new);
+    res.Vt   = svd.V.adjoint().topRows(chi_new);
     res.truncation_error = trunc;
     res.chi_new = chi_new;
     return res;
