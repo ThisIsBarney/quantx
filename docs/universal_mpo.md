@@ -663,13 +663,20 @@ After the fixes the t'=+0.25 production run completed all 20 sweeps clean
 
 ## Showcase: fermionic VQE — how deep, and is the circuit classically hard?
 
-> **The bond dimensions in this section are overstated** (noted 2026-10). They were
-> recorded before [#197](https://github.com/ThisIsBarney/quantx/pull/197) fixed the
-> circuit's canonical-form moves, which padded every bond they crossed with zero-weight
-> states (a circuit capped at `max_bond` 4 reported 10). The `chi_used` and `chi`
-> columns of `docs/vqe_*.csv`, and every χ quoted below, are upper bounds. Energies,
-> entanglement entropies and truncation errors were unaffected. A re-run with the fixed
-> engine is pending.
+> **The measured bond dimensions in this section are overstated** (noted 2026-10).
+> They were recorded before [#197](https://github.com/ThisIsBarney/quantx/pull/197)
+> fixed the circuit's canonical-form moves, which padded every bond they crossed with
+> zero-weight states (a circuit capped at `max_bond` 4 reported 10).
+>
+> - **Upper bounds:** the bond dimensions the circuit reported. These are the
+>   `chi_used` columns of `docs/vqe_hubbard.csv`, `vqe_entanglement.csv` and
+>   `vqe_ladder.csv`, the `chi` column of `vqe_width.csv`, and the χ quoted from them
+>   below.
+> - **Unaffected:** the χ values that were inputs, a cap, the lossless 4^(n/2) budget
+>   (the `chi` column of `vqe_barren_size.csv`) or a full-Hilbert-space bound.
+> - **Also unaffected:** energies, entanglement entropies and truncation errors.
+>
+> A re-run with the fixed engine is pending.
 
 ![VQE on the block engine](vqe_hubbard.svg)
 
