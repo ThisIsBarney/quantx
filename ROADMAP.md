@@ -1,6 +1,6 @@
 # QuantX roadmap
 
-*Last updated 2026-10-14.* The work is organised in phases, each closed by a gate whose
+*Last updated 2026-10-15.* The work is organised in phases, each closed by a gate whose
 condition can be checked. Dates are targets. The status of each item is kept current
 here as work merges.
 
@@ -34,11 +34,11 @@ verified capabilities in users' hands.
 | | Item | Done when | Status |
 |---|---|---|---|
 | R1 | Release artefacts | Wheels and sdist; one version number (0.1.0); MIT license; changelog; a release workflow that refuses a tag that does not match the version (#194, #199) | ✅ |
-| R2 | A clear product | The README and the PyPI page describe only verified engine capabilities (#200). The documentation site says the same. The API reference separates the engine from the experimental modules. | 🔄 |
+| R2 | A clear product | The README and the PyPI page describe only verified engine capabilities (#200). The documentation site says the same, and the API reference separates the engine from the experimental modules (#203). | ✅ |
 | R3 | Contributing | A contributing guide that matches how the project works, an English code of conduct, issue and PR templates, code owners | ✅ |
 | R4 | A public roadmap | This file | ✅ |
-| R5 | No known serious bugs | The full Python suite, the C++ tests and the notebooks pass in the configuration the wheels use. Known problems are fixed, or recorded as public issues. | 🔄 |
-| R6 | Open-source hygiene | Third-party notices shipped with the wheels; no secrets in the history; no local paths in the docs | 🔄 |
+| R5 | No known serious bugs | The full Python suite, the C++ tests and the notebooks pass in the configuration the wheels use. Known problems are fixed (#204–#207), or recorded (the 0.1.0 known issues in the changelog, #208). | ✅ |
+| R6 | Open-source hygiene | Third-party notices shipped with the wheels; no secrets in the history; no local paths in the docs (#202) | ✅ |
 | **G0** | **Gate: open source** | The repository is public, CI is green on `master`, and 0.1.0 is on PyPI with `pip install` giving `backend_info()["native"] == True` on Linux, macOS and Windows | ⬜ |
 
 ### Phase 1B: gate G1
