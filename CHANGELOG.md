@@ -15,7 +15,7 @@ bug-fixes and packaging corrections only.
 
 ---
 
-## [0.1.0] — unreleased  *(first public release, in preparation)*
+## [0.1.0] — 2026-10-16  *(first public release)*
 
 The first version published to PyPI. The native engine is now installable; what it can
 do from Python is gated against exact references.
