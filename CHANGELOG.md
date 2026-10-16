@@ -163,9 +163,9 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 ## Development history before the first public release
 
 The versions below were internal milestones of the project. None was published to PyPI,
-and none has a release tag, apart from an old `v0.2.0` tag that corresponds to no
-published package. They are kept as a record of what was built and when. Version
-numbering restarts at 0.1.0 with the first public release.
+and none has a release tag (an old `v0.2.0` tag, which published nothing, was deleted
+before the first release). They are kept as a record of what was built and when.
+Version numbering restarts at 0.1.0 with the first public release.
 
 ### 1.0.0 (internal) — 2026-05-25  *(Phase 2 complete)*
 
