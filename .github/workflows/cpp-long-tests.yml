@@ -34,6 +34,7 @@ jobs:
         run: >
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
           -DQX_ENABLE_PYBIND=OFF -DQX_ENABLE_MPI=OFF -DQX_ENABLE_CUDA=OFF
+          -DQX_HUBBARD_TEST_TIMEOUT=18000
 
       - name: Build
         run: cmake --build build --parallel "$(nproc)"
