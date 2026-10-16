@@ -39,6 +39,13 @@ bug-fixes and packaging corrections only.
 - The zero-temperature dynamics entry points (`qx_tdvp_evolve`, `qx_spectral`,
   `qx_loschmidt` and `qx_conductivity`) accept the type `"xxz"`, as their error messages
   always said; they took only `"heisenberg"`.
+- The exact Lieb–Wu energies in `docs/hubbard_lieb_wu.csv`, against which the Hubbard
+  chain's DMRG is compared, were off in the 7th digit (1.8e-7, 3.6e-7 and 7.3e-7 at
+  U = 2, 4 and 8): the trapezoid rule that made them left an endpoint error from the
+  integrand's slope at ω = 0. They are made with Simpson's rule now, and
+  `test_reference_data.py` recomputes them independently, with the strong-coupling
+  series checking its normalisation. The DMRG energies at N = 64 sit 8.4e-5, 4.6e-5
+  and 2.6e-5 from them.
 
 ---
 

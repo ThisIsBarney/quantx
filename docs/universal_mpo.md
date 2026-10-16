@@ -182,10 +182,12 @@ brute-force ED cannot reach and compares the **incremental bulk energy** `e_bulk
 density `e(U) = −4 ∫_0^∞ J_0(ω)J_1(ω)/(ω(1+e^{ωU/2})) dω`. In the Mott regime (U>0, a
 charge gap → area-law entanglement, so χ=128 is converged) the block-sparse energy lands
 on the exact curve at every interaction strength: **U=2/4/8 → e_bulk = −0.84429 /
-−0.57368 / −0.32750** vs Lieb–Wu **−0.84438 / −0.57373 / −0.32753** (error ~1e-5, shrinking
-with N). The free-fermion point `e(0) = −4/π` is reproduced by the same quadrature; the
-U=0 *metal* itself is critical (entanglement grows with N), a hard DMRG case unrelated to
-the fermion physics, so the convergence is shown in the gapped Mott regime.
+−0.57368 / −0.32750** vs Lieb–Wu **−0.84437 / −0.57373 / −0.32753** (error ~1e-5, shrinking
+with N). The free-fermion point `e(0) = −4/π` is reproduced by the same quadrature to
+2.4e-6, which the cut at ω = 50 limits (only U = 0's integrand decays as slowly as
+1/ω²). The U=0 *metal* itself is critical (entanglement grows with N), a hard DMRG
+case unrelated to the fermion physics, so the convergence is shown in the gapped Mott
+regime.
 
 ### Fermion dynamics (TDVP2 + TEBD), and the bug they exposed
 
