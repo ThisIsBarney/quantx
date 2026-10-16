@@ -165,9 +165,13 @@ jobs:
   real-cuda-test:
     name: Real CUDA smoke test
     runs-on: [self-hosted, gpu, cuda-12]
+    # Without a self-hosted NVIDIA runner this job queues until GitHub gives up, a day
+    # later. So it runs only where the repository variable QX_GPU_RUNNER is "true"
+    # (Settings -> Secrets and variables -> Actions -> Variables).
     if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+      vars.QX_GPU_RUNNER == 'true' && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')))
     steps:
       - uses: actions/checkout@v4
 

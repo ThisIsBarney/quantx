@@ -1,0 +1,42 @@
+name: C++ long tests
+
+# The whole C++ suite, qx_hubbard_test included, in the configuration the wheels ship
+# (Release, no BLAS, no CUDA). qx_hubbard_test takes about an hour on a 20-thread desktop,
+# too long for every push: the Windows benchmark gate skips it, and this runs it every
+# night and on demand (Actions -> C++ long tests -> Run workflow).
+
+on:
+  schedule:
+    - cron: "17 18 * * *"   # 18:17 UTC, 02:17 in Beijing
+  workflow_dispatch:
+
+concurrency:
+  group: cpp-long-tests
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ctest-linux:
+    name: ctest / Linux, every suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake g++ ninja-build libgomp1
+
+      - name: Configure (Release)
+        run: >
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DQX_ENABLE_PYBIND=OFF -DQX_ENABLE_MPI=OFF -DQX_ENABLE_CUDA=OFF
+
+      - name: Build
+        run: cmake --build build --parallel "$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 18000

@@ -138,9 +138,10 @@ in that configuration too.
 | Tutorial notebooks | `pip install -r notebooks/requirements.txt nbmake && pytest --nbmake notebooks/` |
 | REST server | `pip install fastapi httpx anyio pydantic aiosqlite pytest-asyncio prometheus_client && pytest server/tests` |
 
-Some C++ suites are long: `qx_hubbard_test` takes tens of minutes. Run the ones your
+Some C++ suites are long: `qx_hubbard_test` takes about an hour. Run the ones your
 change touches while you work (`ctest -R <name>`), and the full set before asking for a
-review. Run the Python suite with the library loaded as well, so the engine paths are
+review. CI runs the fast suites on every push (the Windows benchmark gate) and the whole
+set, `qx_hubbard_test` included, every night (the C++ long tests workflow). Run the Python suite with the library loaded as well, so the engine paths are
 exercised.
 
 ## Pull requests
