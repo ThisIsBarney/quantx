@@ -88,7 +88,7 @@ matching, so the comparison is not a normalisation artefact.
 
 Data: ``docs/vqe_barren.csv``, ``docs/vqe_barren_size.csv``. The instrument is calibrated
 before it is used: Richardson extrapolation puts the finite-difference noise floor at
-1.7e-9 and every plotted point sits at least 1.8e8 × above it, which is why the floor is
+1.7e-9 and every point in this figure sits at least 5.4e8 × above it, which is why the floor is
 drawn on the same axes. This figure does **not** show a barren plateau — that term means
 exponential decay in system size, and the accompanying size scan cannot establish one in
 either direction. The documentation says why at length.
@@ -149,7 +149,7 @@ E(χ = 8) − E(χ = 128) per site:
    :alt: Energy a chi=8 calculation misses across the J1-J2 chain
    :width: 100%
 
-Data: ``docs/j1j2_dimerization.csv``. The collapse is about ×1300 from J2 = 0 to the
+Data: ``docs/j1j2_dimerization.csv``. The collapse is ×1313 from J2 = 0 to the
 points straddling Majumdar-Ghosh. This is a truncation-sensitivity curve, not an order
 parameter: it measures how much entanglement the state carries, which is why it bottoms
 out exactly where the ground state becomes a bond-dimension-2 product.
