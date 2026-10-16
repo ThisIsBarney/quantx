@@ -1,6 +1,6 @@
 # QuantX roadmap
 
-*Last updated 2026-10-15.* The work is organised in phases, each closed by a gate whose
+*Last updated 2026-10-16.* The work is organised in phases, each closed by a gate whose
 condition can be checked. Dates are targets. The status of each item is kept current
 here as work merges.
 
@@ -39,7 +39,7 @@ verified capabilities in users' hands.
 | R4 | A public roadmap | This file | ✅ |
 | R5 | No known serious bugs | The full Python suite, the C++ tests and the notebooks pass in the configuration the wheels use. Known problems are fixed (#204–#207), or recorded (the 0.1.0 known issues in the changelog, #208). | ✅ |
 | R6 | Open-source hygiene | Third-party notices shipped with the wheels; no secrets in the history; no local paths in the docs (#202) | ✅ |
-| **G0** | **Gate: open source** | The repository is public, CI is green on `master`, and 0.1.0 is on PyPI with `pip install` giving `backend_info()["native"] == True` on Linux, macOS and Windows | ⬜ |
+| **G0** | **Gate: open source** | The repository is public, CI is green on `master`, and 0.1.0 is on PyPI with `pip install` giving `backend_info()["native"] == True` on Linux, macOS and Windows. Released 2026-10-16: [PyPI](https://pypi.org/project/quantx-engine/0.1.0/), [release notes](https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0) | ✅ |
 
 ### Phase 1B: gate G1
 
