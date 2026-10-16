@@ -61,7 +61,10 @@ def expect(label, text):
 def expect_res(label, text):
     """Assert against docs/source/results.rst -- the page the docs site publishes."""
     if res is None:
-        fails.append("results.rst is missing, but the docs site publishes it")
+        # once, not once per call: 13 identical lines would bury the real report
+        msg = "docs/source/results.rst is missing, but the docs site publishes it"
+        if msg not in fails:
+            fails.append(msg)
     elif text not in res:
         fails.append(f"results page: {label}\n    expected in results.rst: {text}")
 
@@ -571,7 +574,14 @@ if len(cyl_even) != 1:
 # which live in docs/gpu_acceleration_report.md rather than a CSV, and the Haldane and
 # Lieb-Wu reference values, which are external constants -- those are checked below only
 # where a CSV can reproduce them.
-if res is not None:
+if res is None:
+    # NOT a skip. The block below is wrapped in `res is not None`, so a missing page made
+    # every check vanish and the script still printed success -- the same silently-skipping
+    # guard this project has been bitten by before. The docs site publishes this page; if
+    # it is gone, that is a failure, not a reason to check less.
+    fails.append("docs/source/results.rst is missing, but docs.yml publishes it and this "
+                 "script is what keeps its figures honest")
+else:
     # part E: the width scan's correlation-energy row, as the page states it
     pw_ = max(p for (_, p) in Wd)
     for w_ in sorted({w for (w, _) in Wd}):
