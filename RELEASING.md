@@ -71,10 +71,11 @@ tag push publishes.
 
    The upload refuses to run when the tag and the built files name different
    versions, for example `v0.2.0` pushed on a tree that still says 0.1.0.
-5. Check the release: https://pypi.org/project/quantx-engine/ shows it, and in a fresh
-   virtual environment `pip install quantx-engine==X.Y.Z` followed by
-   `python -c "import quantx_engine; print(quantx_engine.backend_info())"` prints
-   `'native': True`.
+5. Check the release: https://pypi.org/project/quantx-engine/ shows it. Then, on one of
+   the platforms with a native wheel (Linux x86_64, macOS, Windows AMD64; see "What
+   ships"), in a fresh virtual environment, `pip install quantx-engine==X.Y.Z` followed
+   by `python -c "import quantx_engine; print(quantx_engine.backend_info())"` prints
+   `'native': True`. Elsewhere pip builds the pure-Python sdist, and `False` is correct.
 6. Optional: create the GitHub Release by hand. Go to Actions → Release → Run workflow and
    set `publish=true`, `tag=vX.Y.Z`. It attaches the sdist and the CHANGELOG entry.
 
