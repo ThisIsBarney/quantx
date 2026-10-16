@@ -7,29 +7,45 @@ accepts the same version twice.
 
 ## One-time setup (maintainer)
 
-1. On PyPI, add a trusted publisher for the project `quantx-engine`: owner `ThisIsBarney`,
-   repository `quantx`, workflow `build-wheels.yml`, environment `pypi`. A project that is
-   not on PyPI yet takes a *pending* publisher with the same fields.
-2. On GitHub, create the environment `pypi` (Settings → Environments). With required
-   reviewers set there, every upload waits for an explicit approval.
+**GitHub** (done 2026-10-16):
+
+- the repository is public;
+- the environment `pypi` exists (Settings → Environments). Its required reviewer is the
+  maintainer, so every upload waits for an explicit approval, and it deploys `v*` tags
+  only;
+- a ruleset on `master` requires the `DCO` check and forbids force-pushes and deletion;
+  repository admins can bypass it.
+
+**PyPI**, once, by the maintainer:
+
+1. Create an account at https://pypi.org/account/register/ and confirm the email.
+2. Turn on two-factor authentication (Account settings → Two factor authentication):
+   an authenticator app or a security key. PyPI requires it to publish. Keep the
+   recovery codes.
+3. Add a *pending* trusted publisher at https://pypi.org/manage/account/publishing/,
+   on the GitHub tab:
+
+   | Field | Value |
+   |---|---|
+   | PyPI Project Name | `quantx-engine` |
+   | Owner | `ThisIsBarney` |
+   | Repository name | `quantx` |
+   | Workflow name | `build-wheels.yml` |
+   | Environment name | `pypi` |
+
+   The workflow then uploads with a short-lived token from GitHub; no API token is
+   stored anywhere. The project appears on PyPI with the first upload. A pending
+   publisher does not reserve the name, so do not leave it pending for long.
 
 ## Before the first upload
 
-- **The repository is private.** The PyPI page links to it: `python/README.md` is the
-  page's text, and `[project.urls]` in `python/pyproject.toml` fills its sidebar. For
-  everyone but the owner those links are dead. Make the repository public first, or
-  remove the links.
-- **The upload runs in GitHub Actions.** Both the build and the upload need Actions to
-  be starting jobs on the account. When this was written, jobs were not starting
-  because of a billing problem.
+- **CI must run, and pass, on `master`.** While the repository was private, Actions
+  did not start jobs (a billing problem). Check the latest runs on `master` before
+  tagging.
 
-## A stale tag to know about
-
-The repository has an old tag `v0.2.0` from an internal milestone. It corresponds to no
-published package (nothing was on PyPI before 0.1.0, and `CHANGELOG.md` lists the
-internal milestones as history). It does not affect 0.1.0. Before releasing 0.2.0,
-delete it (`git push --delete origin v0.2.0` and `git tag -d v0.2.0`) or skip to 0.3.0:
-a tag push publishes, so the release tag must be new.
+The repository's old `v0.2.0` tag, from an internal milestone that published nothing,
+was deleted on 2026-10-16 (it pointed at a3c657e). A release tag must be new, because a
+tag push publishes.
 
 ## Cutting a release
 
@@ -48,11 +64,18 @@ a tag push publishes, so the release tag must be new.
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-   `build-wheels.yml` builds and smoke-tests. The upload then waits for the `pypi`
-   environment's reviewers, if you set any, and runs. It refuses to upload when the tag
-   and the built files name different versions, for example `v0.2.0` pushed on a tree
-   that still says 0.1.0.
-5. Optional: create the GitHub Release by hand. Go to Actions → Release → Run workflow and
+   `build-wheels.yml` builds and smoke-tests, which takes about half an hour. The
+   upload then waits for the `pypi` environment's approval:
+   1. Open Actions → "Build & publish wheels" → the run for the tag.
+   2. Click **Review deployments**, tick `pypi`, then **Approve and deploy**.
+
+   The upload refuses to run when the tag and the built files name different
+   versions, for example `v0.2.0` pushed on a tree that still says 0.1.0.
+5. Check the release: https://pypi.org/project/quantx-engine/ shows it, and in a fresh
+   virtual environment `pip install quantx-engine==X.Y.Z` followed by
+   `python -c "import quantx_engine; print(quantx_engine.backend_info())"` prints
+   `'native': True`.
+6. Optional: create the GitHub Release by hand. Go to Actions → Release → Run workflow and
    set `publish=true`, `tag=vX.Y.Z`. It attaches the sdist and the CHANGELOG entry.
 
 ## What ships
