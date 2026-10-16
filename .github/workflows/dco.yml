@@ -1,0 +1,27 @@
+name: DCO
+
+# Every commit in a pull request must be signed off by its author (`git commit -s`): the
+# Developer Certificate of Origin, see CONTRIBUTING.md. The check is scripts/check_dco.sh.
+# Require it for master (Settings -> Rules -> Rulesets -> Require status checks: "DCO"), so
+# that a pull request with an unsigned commit cannot be merged.
+
+on:
+  pull_request:
+    branches: ["master", "main"]
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: DCO
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Every commit is signed off by its author
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/check_dco.sh "$BASE" "$HEAD"
