@@ -178,3 +178,13 @@ agree that it is licensed under the same terms, and you certify the
 [Developer Certificate of Origin 1.1](https://developercertificate.org/): sign off each
 commit with `git commit -s`, which adds a `Signed-off-by: Your Name <you@example.com>`
 line.
+
+The sign-off is required. A DCO check runs on every pull request and fails if any
+commit lacks a `Signed-off-by:` line with the email of that commit's author. Merge
+commits and bots are exempt. To sign off commits you have already made, run
+`git rebase --signoff origin/master` and force-push the branch. Run the same check
+locally before you push:
+
+```bash
+scripts/check_dco.sh origin/master HEAD
+```

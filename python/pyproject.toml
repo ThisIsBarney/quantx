@@ -15,7 +15,7 @@ license = "MIT"
 # them identical). THIRD_PARTY_NOTICES.md covers the code compiled into the native engine.
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt"]
 authors = [
-  {name = "Marshall WU", email = "wujian.thu@icloud.com"},
+  {name = "Marshall WU", email = "wujian.thu@gmail.com"},
 ]
 keywords = ["quantum", "tensor-network", "dmrg", "mps", "many-body", "hubbard", "physics"]
 classifiers = [
