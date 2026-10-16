@@ -50,7 +50,7 @@ verified capabilities in users' hands.
 | M3 | Gradient-variance study | Barren plateaus versus width, published with its caveats (#193) | ✅ |
 | M4 | General models from Python | XXZ, J1-J2, spin-1 and Hubbard ground states from Python, against exact diagonalisation to 1e-10 (#196) | ✅ |
 | M5 | Fermionic circuits from Python | HVA circuits on chains, ladders, strips and cylinders, against a state vector (#197) | ✅ |
-| M6 | Finite-temperature spectroscopy from Python | S(k, ω, T) and σ(ω, T) for the M4 models, against exact diagonalisation | ⬜ |
+| M6 | Finite-temperature spectroscopy from Python | S(k, ω, T) and σ(ω, T) for the M4 models, against exact diagonalisation. Done for the XXZ, spin-1 and Hubbard chains, against a full-space ED (#215); J1-J2, whose next-nearest coupling has no purified form in the engine yet, is left for later | ✅ |
 | M7 | A smaller product surface | The README describes the engine (#200); the pure-Python modules move to `quantx_engine.contrib`, marked experimental (planned for 0.2) | 🔄 |
 | M8 | Referee feasibility | A one-page assessment of a classical baseline for SU(2) lattice gauge-theory dynamics (60 sites, conserved charge): the bond dimension and error needed, against the published tensor-network baseline | 🔄 |
 | M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference | ⬜ |
