@@ -60,7 +60,7 @@ r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
 from quantx_engine.models import XXZChain
 from quantx_engine import thermal
 
-sf = thermal.structure_factor(XXZChain(L=12), beta=1.0, t_max=4.0)  # about a minute
+sf = thermal.structure_factor(XXZChain(L=12), beta=1.0, t_max=4.0)  # ~10 s on a desktop CPU
 k, w, S = sf.spectrum()                     # S(k, omega, T), both signs of omega
 # Converged at the default max_bond 128: the correlations move by 1e-5 at 256.
 ```
