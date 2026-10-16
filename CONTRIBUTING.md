@@ -51,6 +51,9 @@ work.) The existing gates show the pattern:
   an exact diagonalisation written separately from the engine, to 1e-10.
 - `python/quantx_engine/tests/test_hva_statevector.py`: HVA circuits against an
   independent Fock-space simulator: energies and entanglement entropies.
+- `python/quantx_engine/tests/test_thermal_ed.py`: the finite-temperature statics and
+  correlators against an exact diagonalisation of the whole Hilbert space, to the
+  Trotter error of the steps, which must fall by 4 at half the step.
 - `python/quantx_engine/tests/test_noise.py`: the noise-model rules against the native
   circuit backend.
 
@@ -133,7 +136,7 @@ in that configuration too.
 | What | Command |
 |---|---|
 | Python package (pure-Python mode) | `pytest python/quantx_engine/tests -q` |
-| Engine gates (needs the library) | `QX_REQUIRE_NATIVE=1 QUANTX_LIB_PATH=... pytest python/quantx_engine/tests/test_models_ed.py python/quantx_engine/tests/test_hva_statevector.py python/quantx_engine/tests/test_noise.py` |
+| Engine gates (needs the library) | `QX_REQUIRE_NATIVE=1 QUANTX_LIB_PATH=... pytest python/quantx_engine/tests/test_models_ed.py python/quantx_engine/tests/test_hva_statevector.py python/quantx_engine/tests/test_thermal_ed.py python/quantx_engine/tests/test_noise.py` |
 | C++ tests | `ctest --test-dir build --output-on-failure` |
 | Tutorial notebooks | `pip install -r notebooks/requirements.txt nbmake && pytest --nbmake notebooks/` |
 | REST server | `pip install fastapi httpx anyio pydantic aiosqlite pytest-asyncio prometheus_client && pytest server/tests` |

@@ -159,6 +159,48 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
 // {ok, n_sites, groups: [[[i, j], ...], ...], angles_per_layer}.
 QX_API const char* qx_hva_layout(const char* problem_json);
 
+// ── M6: finite temperature by ancilla purification ───────────────────────────
+// The Gibbs state rho = e^{-beta H}/Z of an open chain, held as the pure state
+// e^{-beta H/2}|I> on a chain of 2*n_sites (each physical site paired with an ancilla;
+// |I> is the beta = 0 state), cooled by imaginary-time block TEBD (second order).
+// The ensemble is grand canonical: every Sz (and, for hubbard, every N) sector, with
+// hubbard's mu fixing the filling.
+//
+// problem_json: the qx_dmrg_sweep fields for one of
+//   heisenberg, xxz   J, delta (Pauli convention)
+//   spin1_heisenberg  J (spin-1 S)
+//   hubbard           t, U, mu
+// with n_sites >= 3. Other types are refused: no purified MPO exists for them.
+//
+// options_json:
+//   quantity  : "statics" | "structure_factor" | "current"   (required)
+//   beta      : float > 0. statics: the largest beta of the scan; else the temperature 1/T
+//   dbeta     : float > 0 (default 0.05). The cooling step in beta; beta/dbeta is rounded
+//               to a whole number of steps, and the step is shrunk to fit beta exactly
+//   max_bond  : int (default 128), cutoff: float (default 1e-10)
+//   statics only:
+//     stride         : int (default 1). Measure every stride-th step, and at the end
+//     susceptibility : bool (default true; costs n_sites overlaps per measurement)
+//   structure_factor and current:
+//     dt         : float > 0 (default 0.05), t_max: float >= 0 (default 5)
+//     disentangle: bool (default true). The Karrasch-Bardarson-Moore backward ancilla
+//                  evolution: exact without truncation, and it slows the bond growth
+//
+// Observables are in the engine's units. O_j is the site's charge: 2 Sz_j for the spin
+// chains (the Pauli Z for spin-1/2), n_j for hubbard.
+// Returns thread-local JSON with ok, quantity, n_sites, max_bond, wall_time_s, and
+//   statics: betas[], energy[] (<H>, whole chain), O[beta][j] (<O_j>), OO[beta][j]
+//     (<O_c O_j>, c = n_sites/2), susceptibility[] (beta Var(sum_j O_j) / n_sites; zeros
+//     without "susceptibility"), center (c)
+//   structure_factor: times[], C_re[t][j], C_im[t][j], C_{j,c}(t) = <S_j(t) S_c(0)>_beta
+//     with S = 2 Sz (hubbard too: the spin structure factor), source (c), beta, energy,
+//     bond_t[]
+//   current: times[], C_re[t], C_im[t], C(t) = <J(t) J(0)>_beta, beta, energy, bond_t[],
+//     with J = sum_l i J (s+_l s-_{l+1} - h.c.) for the spins, J the coupling as sent and
+//     s+ the raising operator (|up><dn| for spin-1/2, S+ for spin-1), and
+//     J = sum_{l,s} i t (c+_{l s} c_{l+1 s} - h.c.) for hubbard
+QX_API const char* qx_thermal(const char* problem_json, const char* options_json);
+
 #ifdef __cplusplus
 }
 #endif

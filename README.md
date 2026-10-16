@@ -15,9 +15,10 @@ checked. Everything else in the package is marked experimental below.
 | Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a chosen symmetry sector | `dmrg.ground_state` with `models.XXZChain`, `J1J2Chain`, `Spin1Chain`, `HubbardChain` | exact diagonalisation, written independently of the engine, to 1e-10 |
 | Hubbard ground states on ladders, strips and cylinders | `dmrg.ground_state(models.HubbardLattice(...))` | exact diagonalisation on a ladder and a cylinder, where the fermion signs are physical, to 1e-10 |
 | Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy, entanglement entropy, truncation | `hva.circuit`, `hva.layout` | an independent state-vector simulation: energy and entropies to 1e-10 from a product start (`init="product"`); to 1e-6 from the default U = 0 start, measured at about 1e-8 (see below) |
+| Finite-temperature statics, the dynamical structure factor S(k, ω, T) and the optical conductivity σ(ω, T) of the XXZ, spin-1 and Hubbard chains | `thermal.statics`, `thermal.structure_factor(...).spectrum()`, `thermal.current_correlation(...).conductivity()` | exact diagonalisation of the whole Hilbert space, to the second-order Trotter error of the steps: below 1e-3 at the default step 0.05, and falling by 4 at half the step; the transforms against Lehmann sums to 1e-8 |
 
-These checks run in CI against a fresh Linux build of the engine (`test_models_ed.py`
-and `test_hva_statevector.py` in `python/quantx_engine/tests/`). The macOS and Windows
+These checks run in CI against a fresh Linux build of the engine (`test_models_ed.py`,
+`test_hva_statevector.py` and `test_thermal_ed.py` in `python/quantx_engine/tests/`). The macOS and Windows
 wheels are checked only for loading the engine.
 
 ## Install
@@ -55,12 +56,26 @@ r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
 # the energy moves by 3e-3 at max_bond 1024. Raise max_bond until it stops moving.
 ```
 
+```python
+from quantx_engine.models import XXZChain
+from quantx_engine import thermal
+
+sf = thermal.structure_factor(XXZChain(L=12), beta=1.0, t_max=4.0)  # about a minute
+k, w, S = sf.spectrum()                     # S(k, omega, T), both signs of omega
+# Converged at the default max_bond 128: the correlations move by 1e-5 at 256.
+```
+
+Finite temperature works by purification, in the grand-canonical ensemble. The Hubbard
+chain needs a larger `max_bond` than the spin chains for the same times; see
+[docs/finite_temperature.md](docs/finite_temperature.md).
+
 **Conventions.**
 - The spin models use physical spin operators S = σ/2 throughout.
 - Every chain is open.
 - Hubbard is H = −t Σ (c†c + h.c.) + U Σ n↑n↓ − μ Σ n.
-- A solver works in one symmetry sector: total S^z, or the numbers of up and down
-  electrons.
+- A ground-state or circuit solver works in one symmetry sector: total S^z, or the
+  numbers of up and down electrons. Finite temperature is grand canonical, over every
+  sector, with μ setting the Hubbard filling.
 - An unreachable sector, or an unknown argument, is an error rather than a silent
   default.
 
@@ -77,9 +92,6 @@ r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
 
 ## More in the C++ engine, partly exposed
 
-- **Finite-temperature response:** the dynamical structure factor S(k, ω, T) and the
-  optical conductivity σ(ω, T), by purification. C++ only for now. Validated against
-  exact diagonalisation: [docs/finite_temperature.md](docs/finite_temperature.md).
 - **Real-time evolution** (TDVP and TEBD). From Python, only the XXZ chain is reachable:
   `tdvp.TDVPSolver` and `tdvp.LoschmidtSolver`, and the zero-temperature S(k, ω) and
   current correlator through `structure_factor.StructureFactorSolver` and

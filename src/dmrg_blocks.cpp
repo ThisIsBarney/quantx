@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <random>
@@ -3424,13 +3425,20 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
 }
 
 // ===== Apply a block MPO to a block MPS (for operator-applied observables) ====
-// Compress a block MPS to chi_max by symmetric SVD sweeps (centre ends at 0).
+// Compress a block MPS to chi_max by symmetric SVD sweeps (centre ends at 0). The
+// sweep out only brings the state to left-canonical form, dropping numerical zeros;
+// the sweep back truncates. Truncating on the way out, against a right part that is
+// not orthonormal (the raw W-wide product of apply_mpo_to_bmps), cuts singular values
+// that are not Schmidt values, and loses weight even from a state whose Schmidt rank
+// is within chi_max: 3e-2 of <J(t)J> on a 4-site Hubbard chain at the exact chi.
 static void compress_bmps(BMPS& p, int chi_max, double cutoff,
                           const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
     const int n = p.n; const std::map<int,RVec> no_sv;
+    const int no_cap = std::numeric_limits<int>::max();
+    const double zero_cut = std::min(cutoff, 1e-14);
     for (int i = 0; i < n - 1; ++i) {
         auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true, qphys);
-        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], chi_max, cutoff, false, false, qphys);
+        auto svd = block_svd_truncate(theta, p.bond[i], p.bond[i+2], no_cap, zero_cut, false, false, qphys);
         p.bond[i+1] = svd.new_mid_bs;
         p.A[i]   = bt_A_from_U(svd, p.bond[i], p.bond[i+1], qphys);
         p.A[i+1] = bt_center_LR(svd);
@@ -3516,6 +3524,53 @@ static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
     }
     compress_bmps(p, chi_max, cutoff, qphys);
     return p;
+}
+
+// <bra| W |ket> for a block MPO W with any Sz-conserving bond structure, contracted
+// left to right through the transfer environments E[b][q_ket], each a
+// (d_bra(q_ket + delta_b) x d_ket(q_ket)) block. Exact: W|ket> is never formed, so
+// nothing is compressed, and it costs one overlap per MPO channel.
+static S mpo_sandwich(const BMPS& bra, const std::vector<MPOSite>& W, const BMPS& ket) {
+    const int n = ket.n;
+    const std::vector<int> wdelta = derive_mpo_sym(W).delta;
+    const std::vector<int>& qphys = W[0].phys_charge;
+    auto mpodim = [&](int ib) { return (ib == 0) ? W[0].chi_l : W[ib-1].chi_r; };
+    auto hbd    = [&](int ib, int b) { return (mpodim(ib) == 1) ? 0 : wdelta[b]; };
+    std::vector<std::map<int,Mat>> E(1);
+    E[0][0] = Mat::Constant(1, 1, S(1));
+    for (int i = 0; i < n; ++i) {
+        std::vector<std::map<int,Mat>> En(W[i].chi_r);
+        for (int b_in = 0; b_in < W[i].chi_l; ++b_in) {
+            for (auto& [q_kL, Eblk] : E[b_in]) {
+                const int q_bL = q_kL + hbd(i, b_in);
+                auto ik = ket.A[i].find(q_kL); auto ib = bra.A[i].find(q_bL);
+                if (ik == ket.A[i].end() || ib == bra.A[i].end()) continue;
+                auto kcols = phys_groups(ket.bond[i+1], q_kL, +1, qphys);
+                auto bcols = phys_groups(bra.bond[i+1], q_bL, +1, qphys);
+                for (int sp = 0; sp < (int)qphys.size(); ++sp) {          // ket (in)
+                    if (kcols[sp].width == 0) continue;
+                    const int q_kR = q_kL + qphys[sp];
+                    Mat EK = Eblk * ik->second.middleCols(kcols[sp].off, kcols[sp].width);
+                    for (int b_out = 0; b_out < W[i].chi_r; ++b_out) {
+                        for (int s = 0; s < (int)qphys.size(); ++s) {     // bra (out)
+                            if (bcols[s].width == 0) continue;
+                            if (q_bL + qphys[s] != q_kR + hbd(i + 1, b_out)) continue;
+                            S w = mscal(W[i].W(b_in, b_out)(s, sp));
+                            if (std::abs(w) < 1e-15) continue;
+                            Mat c = w * (ib->second.middleCols(bcols[s].off, bcols[s].width)
+                                             .adjoint() * EK);
+                            auto& dst = En[b_out][q_kR];
+                            if (dst.size() == 0) dst = c; else dst += c;
+                        }
+                    }
+                }
+            }
+        }
+        E = std::move(En);
+    }
+    S v = 0;
+    for (auto& [q, blk] : E[0]) v += blk(0, 0);
+    return v;
 }
 
 // ===== Spin conductivity: current-current correlator C(t) = <J(t)J(0)> ========
@@ -4009,8 +4064,7 @@ struct ConductivityThermalOut {
 // Structurally the F1 spectral routine with the local sigma^z source replaced by
 // the extensive total current J (a 5-wide MPO): cool to |psi(beta)>, set
 // B = J|psi>, real-time evolve both A = e^{-iHt}|psi> and B = e^{-iHt}J|psi>, and
-// measure C(t) = <A(t)|J|B(t)> = <J A(t)|B(t)> (J Hermitian) via apply_mpo_to_bmps
-// + an overlap, normalised by Z = <psi|psi>.
+// measure C(t) = <A(t)|J|B(t)> by an exact MPO sandwich, normalised by Z = <psi|psi>.
 static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, double delta,
                                                        double beta, int n_cool,
                                                        double dt, int n_steps, int chi_max,
@@ -4063,13 +4117,11 @@ static ConductivityThermalOut run_conductivity_thermal(int n_phys, double J, dou
     BMPS A = psi;
     BMPS B = apply_mpo_to_bmps(psi, Jmpo, chi_max, cutoff);
 
-    // 3. evolve both; C(t) = <J A(t)|B(t)>/Z
+    // 3. evolve both; C(t) = <A(t)|J|B(t)>/Z, contracted exactly (compressing J A(t)
+    //    back to chi_max at every step, as this once did, loses weight)
     auto t0 = clk::now();
     for (int step = 0; step <= n_steps; ++step) {
-        BMPS JA = apply_mpo_to_bmps(A, Jmpo, chi_max, cutoff);
-        auto OL = overlap_left_envs(JA, B, qphys);
-        S ov = OL[n].count(qtot) ? OL[n].at(qtot)(0, 0) : S(0);
-        S c = ov / S(Z);
+        S c = mpo_sandwich(A, Jmpo, B) / S(Z);
         out.times.push_back(step * dt);
         out.C_re.push_back(c.real()); out.C_im.push_back(c.imag());
         out.bond_t.push_back(std::max(bond_of(A), bond_of(B)));

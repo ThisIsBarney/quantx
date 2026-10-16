@@ -392,7 +392,8 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         double J        = prob.value("J", 1.0);
         double delta    = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
-        if (type != "heisenberg") return dmrg_error("tdvp supports only type 'heisenberg'/'xxz'");
+        if (type != "heisenberg" && type != "xxz")
+            return dmrg_error("tdvp supports only type 'heisenberg'/'xxz'");
         if (n < 2)  return dmrg_error("n_qubits must be >= 2");
 
         double dt       = opts.value("dt", 0.05);
@@ -474,7 +475,8 @@ QX_API const char* qx_spectral(const char* problem_json, const char* options_jso
         double J  = prob.value("J", 1.0);
         double delta = prob.value("delta", 1.0);   // XXZ anisotropy (1 = Heisenberg)
         std::string type = prob.value("type", "heisenberg");
-        if (type != "heisenberg") return dmrg_error("spectral supports only type 'heisenberg'/'xxz'");
+        if (type != "heisenberg" && type != "xxz")
+            return dmrg_error("spectral supports only type 'heisenberg'/'xxz'");
         // Block-sparse only (no dense fallback here), and the block engine needs a bulk MPO
         // site. Say so in the caller's terms rather than surfacing derive_mpo_sym's.
         if (n < 3) return dmrg_error("n_qubits must be >= 3 (block-sparse solver)");
@@ -512,7 +514,8 @@ QX_API const char* qx_loschmidt(const char* problem_json, const char* options_js
         double J  = prob.value("J", 1.0);
         double delta = prob.value("delta", 1.0);     // initial XXZ anisotropy
         std::string type = prob.value("type", "heisenberg");
-        if (type != "heisenberg") return dmrg_error("loschmidt supports only type 'heisenberg'/'xxz'");
+        if (type != "heisenberg" && type != "xxz")
+            return dmrg_error("loschmidt supports only type 'heisenberg'/'xxz'");
         // Block-sparse only (no dense fallback here), and the block engine needs a bulk MPO
         // site. Say so in the caller's terms rather than surfacing derive_mpo_sym's.
         if (n < 3) return dmrg_error("n_qubits must be >= 3 (block-sparse solver)");
@@ -553,7 +556,8 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
         double J  = prob.value("J", 1.0);
         double delta = prob.value("delta", 1.0);
         std::string type = prob.value("type", "heisenberg");
-        if (type != "heisenberg") return dmrg_error("conductivity supports only type 'heisenberg'/'xxz'");
+        if (type != "heisenberg" && type != "xxz")
+            return dmrg_error("conductivity supports only type 'heisenberg'/'xxz'");
         // Block-sparse only (no dense fallback here), and the block engine needs a bulk MPO
         // site. Say so in the caller's terms rather than surfacing derive_mpo_sym's.
         if (n < 3) return dmrg_error("n_qubits must be >= 3 (block-sparse solver)");
@@ -577,6 +581,104 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
         out["max_bond"]    = r.max_bond;
         out["wall_time_s"] = r.wall_time_s;
         out["delta"]       = delta;
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+// M6: finite temperature (see c_api.h). The purification entry points select the model
+// by its local dimension d, with the (J, delta) arguments read as (t, U) for hubbard.
+QX_API const char* qx_thermal(const char* problem_json, const char* options_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        nlj opts = nlj::parse(options_json ? options_json : "{}");
+        const std::string type = prob.value("type", "");
+        int d = 0;
+        double J = 1.0, delta = 1.0, mu = 0.0;
+        if (type == "heisenberg" || type == "xxz") {
+            d = 2; J = prob.value("J", 1.0); delta = prob.value("delta", 1.0);
+        } else if (type == "spin1_heisenberg") {
+            d = 3; J = prob.value("J", 1.0);
+        } else if (type == "hubbard") {
+            d = 4; J = prob.value("t", 1.0); delta = prob.value("U", 0.0);
+            mu = prob.value("mu", 0.0);
+        } else {
+            return dmrg_error("thermal supports the heisenberg/xxz, spin1_heisenberg and "
+                              "hubbard chains; got type '" + type + "'");
+        }
+        const int n = read_n(prob);
+        if (n < 3) return dmrg_error("thermal needs n_sites >= 3 (block-sparse solver)");
+
+        if (!opts.contains("quantity"))
+            return dmrg_error("thermal needs options.quantity: statics, structure_factor "
+                              "or current");
+        const std::string quantity = opts["quantity"].get<std::string>();
+        const double beta = opts.value("beta", 0.0);
+        const double dbeta = opts.value("dbeta", 0.05);
+        const int max_bond = opts.value("max_bond", 128);
+        const double cutoff = opts.value("cutoff", 1e-10);
+        if (!(beta > 0.0)) return dmrg_error("thermal needs beta > 0");
+        if (!(dbeta > 0.0)) return dmrg_error("thermal needs dbeta > 0");
+        if (max_bond < 1) return dmrg_error("thermal needs max_bond >= 1");
+        // A whole number of cooling steps that ends exactly at beta.
+        const int n_cool = std::max(1, (int)std::lround(beta / dbeta));
+
+        nlj out;
+        out["ok"] = true;
+        out["quantity"] = quantity;
+        out["n_sites"] = n;
+        if (quantity == "statics") {
+            const int stride = opts.value("stride", 1);
+            const bool with_chi = opts.value("susceptibility", true);
+            auto r = qx_dmrg::run_thermal_blocks(n, J, delta, beta / n_cool, n_cool, max_bond,
+                                                 cutoff, stride, with_chi, d, mu);
+            out["betas"] = r.betas;
+            out["energy"] = r.E;
+            out["O"] = r.sz;
+            out["OO"] = r.szsz;
+            out["susceptibility"] = r.chi_zz;
+            out["center"] = r.c;
+            out["max_bond"] = r.max_bond;
+            out["wall_time_s"] = r.wall_time_s;
+        } else if (quantity == "structure_factor" || quantity == "current") {
+            const double dt = opts.value("dt", 0.05);
+            const double t_max = opts.value("t_max", 5.0);
+            const bool disentangle = opts.value("disentangle", true);
+            if (!(dt > 0.0)) return dmrg_error("thermal needs dt > 0");
+            if (!(t_max >= 0.0)) return dmrg_error("thermal needs t_max >= 0");
+            const int n_steps = (int)std::lround(t_max / dt);
+            if (quantity == "structure_factor") {
+                auto r = qx_dmrg::run_spectral_thermal_blocks(n, J, delta, beta, n_cool, dt,
+                                                              n_steps, max_bond, cutoff,
+                                                              disentangle, d, mu);
+                out["times"] = r.times;
+                out["C_re"] = r.C_re;
+                out["C_im"] = r.C_im;
+                out["source"] = r.l0;
+                out["beta"] = r.beta;
+                out["energy"] = r.E;
+                out["bond_t"] = r.bond_t;
+                out["max_bond"] = r.max_bond;
+                out["wall_time_s"] = r.wall_time_s;
+            } else {
+                auto r = qx_dmrg::run_conductivity_thermal_blocks(n, J, delta, beta, n_cool, dt,
+                                                                  n_steps, max_bond, cutoff,
+                                                                  disentangle, d, mu);
+                out["times"] = r.times;
+                out["C_re"] = r.C_re;
+                out["C_im"] = r.C_im;
+                out["beta"] = r.beta;
+                out["energy"] = r.E;
+                out["bond_t"] = r.bond_t;
+                out["max_bond"] = r.max_bond;
+                out["wall_time_s"] = r.wall_time_s;
+            }
+        } else {
+            return dmrg_error("thermal: unknown quantity '" + quantity +
+                              "' (statics, structure_factor or current)");
+        }
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
     } catch (const std::exception& e) {
