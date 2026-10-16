@@ -42,6 +42,7 @@ These checks run in CI on a Linux build of the engine (``test_models_ed.py`` and
 
    installation
    quickstart
+   results
 
 .. toctree::
    :maxdepth: 2
