@@ -179,8 +179,8 @@ def statics(model, beta: float, *, dbeta: float = 0.05, max_bond: int = 128,
     beta : float
         The largest inverse temperature of the scan.
     dbeta : float
-        The cooling step. ``beta / dbeta`` is rounded to a whole number of steps, and the
-        step shrinks to end exactly at ``beta``. The error is second order in it.
+        The cooling step. ``beta / dbeta`` is rounded up to a whole number of steps, so
+        the step shrinks to end exactly at ``beta``. The error is second order in it.
     max_bond : int
         Bond dimension cap of the purified state.
     cutoff : float
@@ -232,15 +232,20 @@ def _omegas(times: np.ndarray, n_omega: int, omega_max: Optional[float], *,
 
 def _fourier(times: np.ndarray, C: np.ndarray, omegas: np.ndarray,
              window: np.ndarray) -> np.ndarray:
-    """int dt e^{i w t} C(t) over all t, from t >= 0 and C(-t) = conj(C(t)).
+    """int dt e^{i w t} C(t) over [-t_max, t_max], from t >= 0 and C(-t) = conj(C(t)).
 
-    C has time along its first axis; the result has omega first.
+    The trapezoid rule: each t > 0 also stands for -t, t = 0 counts once, and the two ends
+    +-t_max count half. C has time along its first axis; the result has omega first.
     """
-    dt = float(times[1] - times[0]) if len(times) > 1 else 1.0
+    if len(times) < 2:
+        raise ThermalError("a spectrum needs at least two times: t_max must be >= dt")
+    dt = float(times[1] - times[0])
     wC = window.reshape((-1,) + (1,) * (C.ndim - 1)) * C
     ewt = np.exp(1j * np.outer(omegas, times))                    # (n_w, n_t)
-    F = 2.0 * np.real(np.tensordot(ewt, wC, axes=(1, 0))) * dt    # trapezoid, t = 0 twice
-    return F - np.real(wC[0]) * dt
+    F = 2.0 * np.real(np.tensordot(ewt, wC, axes=(1, 0))) * dt    # every t counted twice
+    F -= np.real(wC[0]) * dt                                       # t = 0 once
+    F -= np.real(np.multiply.outer(ewt[:, -1], wC[-1])) * dt       # +-t_max at half weight
+    return F
 
 
 @dataclass(frozen=True)
@@ -390,8 +395,10 @@ def structure_factor(model, beta: float, *, t_max: float = 5.0, dt: float = 0.05
         Inverse temperature.
     t_max, dt : float
         The real-time window and step (second-order Trotter error in ``dt``).
+        ``t_max / dt`` is rounded up to a whole number of steps, so the step shrinks to
+        end exactly at ``t_max``.
     dbeta : float
-        Cooling step (second-order error).
+        Cooling step (second-order error), rounded the same way to end at ``beta``.
     max_bond, cutoff
         Truncation of the purified states.
     disentangle : bool

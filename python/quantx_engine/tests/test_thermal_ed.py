@@ -238,6 +238,18 @@ def test_dynamics_match_ed(engine, name):
     _check_trotter(name, err, half)
 
 
+def test_grids_end_at_the_requested_beta_and_time(engine):
+    # 0.07 / 0.05 is not a whole number of steps: the ratio is rounded up and the step
+    # shrinks, so neither grid overshoots (rounding the count alone ran to t = 0.10).
+    st = thermal.statics(XXZChain(L=4), beta=0.07, dbeta=0.05, engine=engine)
+    np.testing.assert_allclose(st.betas, [0.0, 0.035, 0.07], atol=1e-12)
+    for run in (thermal.structure_factor, thermal.current_correlation):
+        r = run(XXZChain(L=4), beta=0.5, t_max=0.07, dt=0.05, engine=engine)
+        np.testing.assert_allclose(r.times, [0.0, 0.035, 0.07], atol=1e-12)
+    r = thermal.structure_factor(XXZChain(L=4), beta=0.5, t_max=0.0, engine=engine)
+    np.testing.assert_allclose(r.times, [0.0])
+
+
 def test_statics_stride_and_no_susceptibility(engine):
     model, chi = MODELS["xxz"]
     full = thermal.statics(model, beta=1.0, max_bond=chi, engine=engine)
@@ -280,6 +292,32 @@ def test_spectrum_is_the_lehmann_sum():
     # Absorption above zero: at beta > 0 the positive frequencies carry more weight.
     local = S.mean(axis=0)
     assert np.sum(local[omegas > 0]) > np.sum(local[omegas < 0])
+
+
+def test_transform_is_the_trapezoid_rule():
+    """The transform is the trapezoid rule over [-t_max, t_max], ends at half weight.
+
+    At the default window the last time still carries e^{-4.5}, so a rule that counted the
+    ends in full would be off by that much of the last sample.
+    """
+    rng = np.random.default_rng(7)
+    times = np.arange(0.0, 3.0 + 1e-9, 0.05)
+    C = (rng.normal(size=len(times)) + 1j * rng.normal(size=len(times)))[:, None]
+    sf = ThermalStructureFactor(beta=1.0, times=times, correlation=C, source=0, energy=0.0,
+                                max_bond=0, bond_dims=np.zeros(len(times), dtype=int),
+                                wall_time_s=0.0)
+    _, omegas, S = sf.spectrum(n_omega=61, omega_max=6.0)
+    t_all = np.concatenate([-times[:0:-1], times])
+    C_all = np.concatenate([np.conj(C[:0:-1, 0]), C[:, 0]])
+    window = np.exp(-0.5 * (3.0 / times[-1] * t_all) ** 2)
+    trapezoid = getattr(np, "trapezoid", None) or np.trapz    # numpy < 2 has only trapz
+    ref = [trapezoid(np.exp(1j * w * t_all) * window * C_all, t_all).real for w in omegas]
+    np.testing.assert_allclose(S[0], ref, rtol=0, atol=1e-12)
+    single = ThermalStructureFactor(beta=1.0, times=times[:1], correlation=C[:1], source=0,
+                                    energy=0.0, max_bond=0, bond_dims=np.zeros(1, dtype=int),
+                                    wall_time_s=0.0)
+    with pytest.raises(ThermalError, match="two times"):
+        single.spectrum()
 
 
 def test_conductivity_is_the_kubo_formula():

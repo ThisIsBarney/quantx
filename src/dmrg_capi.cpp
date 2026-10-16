@@ -622,8 +622,14 @@ QX_API const char* qx_thermal(const char* problem_json, const char* options_json
         if (!(beta > 0.0)) return dmrg_error("thermal needs beta > 0");
         if (!(dbeta > 0.0)) return dmrg_error("thermal needs dbeta > 0");
         if (max_bond < 1) return dmrg_error("thermal needs max_bond >= 1");
-        // A whole number of cooling steps that ends exactly at beta.
-        const int n_cool = std::max(1, (int)std::lround(beta / dbeta));
+        // A whole number of steps that ends exactly at the end of the span, none longer
+        // than the step asked for: the ratio rounded up (1e-9 absorbs the rounding, so
+        // 5 / 0.05 stays 100 steps).
+        auto steps_to = [](double span, double step) {
+            return (int)std::ceil(span / step - 1e-9);
+        };
+        if (beta / dbeta > 1e7) return dmrg_error("thermal: beta / dbeta exceeds 1e7 steps");
+        const int n_cool = std::max(1, steps_to(beta, dbeta));
 
         nlj out;
         out["ok"] = true;
@@ -648,9 +654,11 @@ QX_API const char* qx_thermal(const char* problem_json, const char* options_json
             const bool disentangle = opts.value("disentangle", true);
             if (!(dt > 0.0)) return dmrg_error("thermal needs dt > 0");
             if (!(t_max >= 0.0)) return dmrg_error("thermal needs t_max >= 0");
-            const int n_steps = (int)std::lround(t_max / dt);
+            if (t_max / dt > 1e7) return dmrg_error("thermal: t_max / dt exceeds 1e7 steps");
+            const int n_steps = (t_max > 0.0) ? std::max(1, steps_to(t_max, dt)) : 0;
+            const double dt_run = (n_steps > 0) ? t_max / n_steps : dt;
             if (quantity == "structure_factor") {
-                auto r = qx_dmrg::run_spectral_thermal_blocks(n, J, delta, beta, n_cool, dt,
+                auto r = qx_dmrg::run_spectral_thermal_blocks(n, J, delta, beta, n_cool, dt_run,
                                                               n_steps, max_bond, cutoff,
                                                               disentangle, d, mu);
                 out["times"] = r.times;
@@ -663,7 +671,7 @@ QX_API const char* qx_thermal(const char* problem_json, const char* options_json
                 out["max_bond"] = r.max_bond;
                 out["wall_time_s"] = r.wall_time_s;
             } else {
-                auto r = qx_dmrg::run_conductivity_thermal_blocks(n, J, delta, beta, n_cool, dt,
+                auto r = qx_dmrg::run_conductivity_thermal_blocks(n, J, delta, beta, n_cool, dt_run,
                                                                   n_steps, max_bond, cutoff,
                                                                   disentangle, d, mu);
                 out["times"] = r.times;

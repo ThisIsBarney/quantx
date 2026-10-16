@@ -176,13 +176,14 @@ QX_API const char* qx_hva_layout(const char* problem_json);
 //   quantity  : "statics" | "structure_factor" | "current"   (required)
 //   beta      : float > 0. statics: the largest beta of the scan; else the temperature 1/T
 //   dbeta     : float > 0 (default 0.05). The cooling step in beta; beta/dbeta is rounded
-//               to a whole number of steps, and the step is shrunk to fit beta exactly
+//               up to a whole number of steps, so the step shrinks to end exactly at beta
 //   max_bond  : int (default 128), cutoff: float (default 1e-10)
 //   statics only:
 //     stride         : int (default 1). Measure every stride-th step, and at the end
 //     susceptibility : bool (default true; costs n_sites overlaps per measurement)
 //   structure_factor and current:
-//     dt         : float > 0 (default 0.05), t_max: float >= 0 (default 5)
+//     dt         : float > 0 (default 0.05), t_max: float >= 0 (default 5). t_max/dt is
+//                  rounded up the same way, so the time grid ends exactly at t_max
 //     disentangle: bool (default true). The Karrasch-Bardarson-Moore backward ancilla
 //                  evolution: exact without truncation, and it slows the bond growth
 //
