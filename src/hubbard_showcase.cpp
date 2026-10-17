@@ -75,16 +75,21 @@ static double besselJ(int nu, double x) {
     return s * h / PI;
 }
 
-// Lieb-Wu half-filling GS energy density (t=1) by quadrature of the Bessel integral.
+// Lieb-Wu half-filling GS energy density (t=1) by quadrature of the Bessel integral,
+// e(U) = -4 int_0^inf J0(w) J1(w) / (w (1 + e^{wU/2})) dw. Simpson's rule: the trapezoid
+// rule this used left an O(h^2) error from the integrand's slope -U/16 at w = 0, which
+// put e(U) off by 1.8e-7, 3.6e-7 and 7.3e-7 at U = 2, 4 and 8. The cut at w = 50 is
+// harmless for U > 0 (the factor 1/(1 + e^{wU/2}) is below e^{-50}); at U = 0 the
+// integrand decays only as 1/w^2 and the cut leaves 2.4e-6 against -4/pi.
 static double lieb_wu_e(double U) {
-    const double wmax = 50.0; const int M = 24000; const double h = wmax / M;
+    const double wmax = 50.0; const int M = 24000; const double h = wmax / M;   // M even
     auto integrand = [&](double w) {
         if (w <= 0) return 0.25;   // limit w->0: J0~1, J1~w/2, 1+e^0=2 -> 1/4
         return besselJ(0, w) * besselJ(1, w) / (w * (1.0 + std::exp(w * U / 2.0)));
     };
-    double s = 0.5 * (integrand(0.0) + integrand(wmax));
-    for (int k = 1; k < M; ++k) s += integrand(k * h);
-    return -4.0 * s * h;
+    double s = integrand(0.0) + integrand(wmax);
+    for (int k = 1; k < M; ++k) s += (k % 2 ? 4.0 : 2.0) * integrand(k * h);
+    return -4.0 * s * h / 3.0;
 }
 
 int main(int argc, char** argv) {
