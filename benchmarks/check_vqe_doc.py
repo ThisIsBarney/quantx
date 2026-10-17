@@ -634,6 +634,67 @@ else:
                        f"{float(mg['E_per_site']):.5f}".replace("-", "\u2212"))
         gaps = [float(r_["gap_per_site"]) for r_ in J.values()]
         expect_res("J1-J2 collapse factor", f"\u00d7{max(gaps)/min(gaps):.0f}")
+    # the cylinder/chain 2-sigma on the Results page. Codex found the page quoting a single
+    # +/-0.05 while the data spans +/-0.049..0.061 -- the page rounded the error bar DOWN,
+    # i.e. claimed more precision than measured, and nothing here checked it.
+    if F:
+        sig2r = []
+        for p_ in sorted({p for (_, p) in F}):
+            if (3, p_) in F and (1, p_) in F:
+                v3, v1 = float(F[(3, p_)]["var_frac"]), float(F[(1, p_)]["var_frac"])
+                e3, e1 = float(F[(3, p_)]["se_frac"]), float(F[(1, p_)]["se_frac"])
+                r_ = v3 / v1
+                sig2r.append(2 * r_ * math.sqrt((e3 / v3) ** 2 + (e1 / v1) ** 2))
+        if sig2r:
+            expect_res("cylinder/chain 2-sigma",
+                       f"2σ of ±{min(sig2r):.2f}–{max(sig2r):.2f}")
+    # The J1-J2 energy the page quotes is the J2 = 0.49 row, and it must say so: the CSV
+    # skips the exact Majumdar-Ghosh point, and attributing -1.50021 to MG made the engine
+    # look wrong exactly where chi = 8 is exact by construction.
+    jj2 = os.path.join(DOCS, "j1j2_dimerization.csv")
+    if os.path.exists(jj2):
+        J2 = {f"{float(r_['j2']):.2f}": r_ for r_ in csv.DictReader(open(jj2))}
+        if "0.50" in J2:
+            fails.append("results page: j1j2 CSV now has a J2 = 0.50 row, so the page's "
+                         "'the scan samples the two points straddling it' is stale")
+        elif "0.49" in J2:
+            expect_res("J1-J2 straddling energy attributed to J2 = 0.49/0.51",
+                       "J2 = 0.49 and 0.51,\nwhose energies are "
+                       + f"{float(J2['0.49']['E_per_site']):.5f}".replace("-", "−"))
+    # Every figure on the page names where its numbers come from -- the page promises it in
+    # its first paragraph, and the README repeats the promise. The GPU figure broke it, so
+    # the promise is now structural: each `.. image::` must be followed, before the next
+    # image or section heading, by a line starting "Data:".
+    _lines = res.split("\n")
+    for _i, _ln in enumerate(_lines):
+        if not _ln.startswith(".. image:: "):
+            continue
+        _fig = _ln.split("/")[-1]
+        _ok = False
+        # grouped figures may share one Data: line (the two Haldane figures do), so
+        # scan to the next SECTION, not the next image
+        for _nx in _lines[_i + 1:]:
+            if _nx.startswith("----"):
+                break
+            if _nx.startswith("Data:"):
+                _ok = True
+                break
+        if not _ok:
+            fails.append(f"results page: figure {_fig} has no 'Data:' line naming its "
+                         f"source, though the page promises one for every figure")
+    # The HVA-vs-state-vector bound the page states must not be tighter than the bound the
+    # README states and CI enforces. The page said 1e-12 against a measured 2.7e-12.
+    _rm = open(os.path.join(HERE, "..", "README.md"), encoding="utf-8").read()
+    import re as _re2
+    _pg = _re2.search(r"independent state-vector simulator to \*\*(1e-\d+)\*\*", res)
+    _rd = _re2.search(r"state-vector simulation: energy and entropies to (1e-\d+)", _rm)
+    if _pg and _rd and float(_pg.group(1)) < float(_rd.group(1)):
+        fails.append(f"results page: claims HVA agreement to {_pg.group(1)}, tighter than "
+                     f"the {_rd.group(1)} the README states and CI enforces")
+    elif not _pg:
+        fails.append("results page: the HVA-vs-state-vector precision sentence is gone or "
+                     "reworded, so its bound can no longer be checked against the README")
+
     # the stripe demonstration's stated size
     st_path = os.path.join(DOCS, "hubbard_stripes.csv")
     if os.path.exists(st_path):

@@ -55,8 +55,10 @@ written independently of the engine, to **1e-10**. These run in CI
 **Fermionic VQE circuits against a dense state vector.** Hamiltonian Variational Ansatz
 circuits are simulated *exactly*: every layer conserves particle number and spin, so the
 U(1)×U(1) block structure is an advantage for circuits rather than a restriction. Energy
-and entanglement entropies agree with an independent state-vector simulator to **1e-12**
-at the sizes below, where χ is at the full Hilbert-space bound.
+and entanglement entropies agree with an independent state-vector simulator to **1e-10**
+at the sizes below, where χ is at the full Hilbert-space bound — the bound the README
+states and CI enforces. The measured residuals are smaller and are tabulated with the width
+scan in the documentation; they are not repeated here, so they cannot drift.
 
 *What width costs a fermionic VQE.* Chain, ladder and cylinder at the same 12 qubits, the
 same site-split representation, the same balanced cut and the same search protocol — only
@@ -78,7 +80,7 @@ limitation of the size, not of the measurement.
 *Trainability against width.* The same three geometries, now measuring the variance of a
 cost gradient over random parameter draws. The cylinder's landscape is flatter than the
 chain's by a depth-independent factor: ×0.30–0.35 on the dimensionless cost and
-×0.15–0.18 on the raw gradient, at every depth, with a measured 2σ of ±0.05. The
+×0.15–0.18 on the raw gradient, at every depth, with a measured 2σ of ±0.05–0.06. The
 differentiated generator holds three bonds at every width and a colouring group is a
 matching, so the comparison is not a normalisation artefact.
 
@@ -124,8 +126,10 @@ Convergence and truncation
 
 **What a low-χ calculation misses, across the J1-J2 chain.** At J2 = J1/2 — the
 Majumdar-Ghosh point — the exact ground state is a product of nearest-neighbour dimers, so
-it has bond dimension 2 and χ = 8 is already exact: the engine gives −1.50021 per site
-against the exact −1.5 (Pauli convention). Away from that point the frustrated state is
+it has bond dimension 2 and χ = 8 represents it exactly; its energy is −1.5 per site
+(Pauli convention). The scan samples the two points straddling it, J2 = 0.49 and 0.51,
+whose energies are −1.50021 — a different J2, not a discrepancy. Away from that point the
+frustrated state is
 genuinely entangled and χ = 8 under-converges. The figure plots that difference,
 E(χ = 8) − E(χ = 128) per site:
 
@@ -213,6 +217,9 @@ min-of-2 runs:
 .. image:: ../gpu_margin_vs_chi.svg
    :alt: GPU speed-up margin against bond dimension
    :width: 100%
+
+Data: the values are hard-coded in ``benchmarks/plot_margin_vs_chi.py`` from the
+measurements in ``docs/gpu_acceleration_report.md``; there is no CSV for this figure.
 
 The margin grows with χ because that is where the SVD dominates: the bare GPU SVD kernel
 is 45× the CPU one at χ = 1024. **Below χ ≈ 512 the engine is at parity or slower**, and
