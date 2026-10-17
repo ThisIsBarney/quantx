@@ -24,12 +24,13 @@ NVIDIA RTX 4090, Windows), whose clocks throttle: expect the ratios to move by u
     cmake --build build --config Release --target qx_tebd_bench qx_hubbard_showcase
     ```
 
-    The scripts look under `QX_BUILD_DIR` (default `build/`); `QX_TEBD_BENCH` and
+    Both run on the CPU; a CUDA build adds the GPU path to `qx_tebd_bench`. The
+    scripts look under `QX_BUILD_DIR` (default `build/`); `QX_TEBD_BENCH` and
     `QX_HUB_SHOWCASE` override with a full path. `QX_DLL_DIR` goes first on PATH for
     the runs, for a Windows build whose OpenBLAS or CUDA DLLs are elsewhere.
 - **The GPU comparison** needs a CUDA build (`-DQX_USE_CUDA=ON`) and an NVIDIA GPU.
-- **The ITensor comparison** needs Julia with ITensors.jl and ITensorMPS.jl
-  (`JULIA_EXE` points at `julia`).
+- **The ITensor comparison** needs Julia with ITensors.jl and ITensorMPS.jl, `julia` on
+  PATH or `JULIA_EXE` set to it.
 
 Each script prints a table and writes `benchmarks/results_<name>.json` (not tracked).
 The size, bond dimensions and repetitions come from `BENCH_*` variables; the quick
