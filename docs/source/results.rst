@@ -28,16 +28,16 @@ N = 64:
      - difference
    * - 2
      - −0.84429042
-     - −0.84437452
+     - −0.84437434
      - 8.4e-5
    * - 4
      - −0.57368361
-     - −0.57372973
+     - −0.57372937
      - 4.6e-5
    * - 8
      - −0.32750449
-     - −0.32753126
-     - 2.7e-5
+     - −0.32753053
+     - 2.6e-5
 
 .. image:: ../hubbard_lieb_wu.svg
    :alt: Hubbard chain energy per site against the Lieb-Wu exact solution
