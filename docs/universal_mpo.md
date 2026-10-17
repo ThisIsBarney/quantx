@@ -306,7 +306,8 @@ k=π (spinons at the superexchange scale, `C(0)=0.8045` at T=0.5 vs 0.806 at T=0
 half filling pinned to 3 digits), while the current spectral function (∝ σ(ω,T), not
 Kubo-reweighted) puts most of its weight **above the Mott gap**: at T = 1 and 0.5 it
 peaks at ω ≈ 3.4 and 3.2, the upper Hubbard band, and the share of its weight below the
-gap (Δ_c = 1.287 at U = 4, Lieb–Wu) drops 27% → 17% → **9%** as T cools 2 → 1 → 0.5 —
+gap (Δ_c = 1.287 at U = 4, Lieb–Wu; of all the weight the time step resolves) drops
+24% → 14% → **7%** as T cools 2 → 1 → 0.5 —
 thermal in-gap carriers freezing out. (At T = 2 the largest single peak is the thermal one
 at ω ≈ 0.25.) `benchmarks/plot_conductivity.py` prints these numbers.
 
