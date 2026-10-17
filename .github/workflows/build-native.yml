@@ -17,6 +17,8 @@ on:
       - ".github/workflows/build-native.yml"
       # The Linux job runs the Python-side gates against this build's library, so a
       # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/__init__.py"
+      - "python/quantx_engine/engine.py"
       - "python/quantx_engine/models.py"
       - "python/quantx_engine/dmrg.py"
       - "python/quantx_engine/tests/test_models_ed.py"
@@ -26,6 +28,7 @@ on:
       - "python/quantx_engine/tests/test_noise.py"
       - "python/quantx_engine/thermal.py"
       - "python/quantx_engine/tests/test_thermal_ed.py"
+      - "notebooks/engine/**"
   pull_request:
     branches: ["master", "main"]
     paths:
@@ -35,6 +38,8 @@ on:
       - ".github/workflows/build-native.yml"
       # The Linux job runs the Python-side gates against this build's library, so a
       # Python-only change to what they test must trigger it too.
+      - "python/quantx_engine/__init__.py"
+      - "python/quantx_engine/engine.py"
       - "python/quantx_engine/models.py"
       - "python/quantx_engine/dmrg.py"
       - "python/quantx_engine/tests/test_models_ed.py"
@@ -44,6 +49,7 @@ on:
       - "python/quantx_engine/tests/test_noise.py"
       - "python/quantx_engine/thermal.py"
       - "python/quantx_engine/tests/test_thermal_ed.py"
+      - "notebooks/engine/**"
   workflow_dispatch:
 
 concurrency:
@@ -139,6 +145,16 @@ jobs:
                            python/quantx_engine/tests/test_hva_statevector.py \
                            python/quantx_engine/tests/test_thermal_ed.py \
                            python/quantx_engine/tests/test_noise.py -v
+
+      - name: Engine notebooks (M9) against this build's library
+        # notebooks/engine needs the native engine, so it runs here rather than in
+        # notebooks-ci.yml, which installs the package without one. Each notebook checks
+        # the engine against an exact reference and asserts the agreement.
+        run: |
+          python -m pip install "nbmake>=1.4" ipykernel matplotlib
+          python -m ipykernel install --user
+          export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
+          python -m pytest --nbmake --nbmake-timeout=900 notebooks/engine -v
 
       - name: Upload library artifact
         uses: actions/upload-artifact@v4
