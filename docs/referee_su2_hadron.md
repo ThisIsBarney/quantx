@@ -3,20 +3,22 @@
 *As of 2026-10-16. Every number below is from the sources listed at the end.*
 
 **Verdict.** The [Quantum Advantage Tracker](https://quantum-advantage-tracker.github.io/)'s
-SU(2) hadron instance is within reach of the U(1) block-sparse engine, but it is
-already classically matched: an MPS simulation of the published circuits with quimb,
-converged by χ = 800, ran in under an hour on a laptop, and the tracker lists it as
-verified. A QuantX run would add an exactly conserved charge and an error bar on the
-physical observable, where the published classical methods disagree at the last step.
-That would refine a classical result, not provide a new one. It is also the tracker's
-only instance with a conserved U(1) charge, so the tracker gives the block-sparse engine
-little leverage today.
+SU(2) hadron instance is within reach of the U(1) block-sparse engine, but a classical
+simulation already matches it: an MPS simulation of the published circuits with quimb
+ran in under an hour on a laptop, and the tracker accepted it after maintainer review.
+Its convergence (χ = 500 to 800 compared) is its submitter's own, it gives no error bound,
+and no entry measures the bond dimension and error the instance needs. That measurement
+is what is left of M8. A QuantX run would add an exactly conserved charge and an error bar
+on the physical observable, where the published classical methods disagree at the last
+step: it would refine a classical result, not provide a new one. And this is the
+tracker's only instance with a conserved U(1) charge, so the tracker gives the
+block-sparse engine little leverage today.
 
 ## The instance
 
 | | |
 |---|---|
-| Tracker ids | `su2_hadron_dynamics_lsh_x_100_meson`, and `_SCV`, the vacuum it is subtracted from |
+| Tracker instance | `su2_hadron_dynamics_lsh_x_100_meson`. Its observable is the difference from a second circuit, `x_100_SCV`, the vacuum |
 | Model | SU(2) lattice gauge theory in 1+1D, loop-string-hadron (LSH) encoding, at weak coupling x = 100 |
 | Size | 60 sites on 120 qubits, two per site |
 | Circuit | first-order Trotter, step 0.0015, 20 steps; two-qubit depth 259. As published it is transpiled: 11,840 CX, 10,720 RZ, 4,720 H, 2,462 X and 2,330 SWAP (meson circuit) |
@@ -32,7 +34,7 @@ little leverage today.
 | Pauli propagation, CPU | 0.408 | 2,484 s | HP Z2 Tower G9 |
 | Pauli propagation, GPU (cuPauliProp, coefficients below 1e-5 dropped) | 0.246 | 2,930 s | NVIDIA RTX 5000 Ada |
 | Tensor network: 2-site TDVP of the full LSH Hamiltonian (ITensors.jl), D = 200 | 0.278 | 8,949 s | Mac Pro, 16-core Xeon W |
-| MPS simulation of the circuits (quimb), χ = 800 | not reported | 3,003 s, both circuits | Apple M3 Pro laptop |
+| MPS simulation of the circuits (quimb), χ = 800, converged by its submitter's comparison | not reported | 3,003 s, both circuits | Apple M3 Pro laptop |
 
 - The three published classical methods spread by 0.16 at step 20.
 - The QPU sits 0.32 to 0.49 below them.
@@ -47,9 +49,10 @@ network as 2,484 s. The paper's Table 2 and the CPU Pauli-propagation submission
 
 - **An exact charge.** The circuit conserves Q, and a U(1) block-sparse MPS keeps
   Q = 60 exactly at any truncation; the quimb run reports 59.9985.
-- **An error bar on n_f(t).** The tracker records only Q. A χ-converged n_f(t), with
-  the change from χ = 800 to 1600 as its error bar, would settle which published
-  method is right at step 20.
+- **An error bar on n_f(t).** The tracker records only Q, and no entry measures how
+  n_f(t) converges. n_f(20) at χ = 800 and 1600, the change between them its error bar,
+  would settle which published method is right at step 20, and is the measurement M8
+  still needs.
 - **A converter for the circuit.** The published QASM is transpiled, so its H, X and CX
   gates each break the U(1) symmetry, which only whole gate clusters keep. A converter
   would fuse the gates of each cluster back into one charge-conserving block, check it,
@@ -65,7 +68,7 @@ symmetry, is the bound to beat.
 |---|---|---|---|---|
 | `floquet_mixed_field_ising` | 5 | 51, 74 | heavy-hex | none: a transverse field |
 | `operator_loschmidt_echo` | 4 | 49, 56, 70 | 2D (heavy-hex or square) | none: X rotations |
-| `su2_hadron_dynamics_lsh` | 2 | 120 | chain | Q |
+| `su2_hadron_dynamics_lsh` | 1, with its vacuum circuit | 120 | chain | Q |
 
 The classically verifiable problems (peaked circuits, and random-graph sampling) are
 generic circuits, arbitrary single-qubit rotations between CZ gates, with no symmetry to
@@ -99,7 +102,8 @@ exploit either.
   [#149](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/issues/149);
   Pauli propagation on the CPU,
   [#202](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/issues/202);
-  the quimb MPS simulation (R. Farrell, Caltech; verified),
+  the quimb MPS simulation (R. Farrell, Caltech; accepted after maintainer review, with
+  no error bound),
   [#227](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/issues/227).
 - The other instances: [circuit-models.json](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/blob/main/data/observable-estimations/circuit-models.json)
   and each family's README.
