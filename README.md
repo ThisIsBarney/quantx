@@ -115,7 +115,10 @@ do not cover it. That is more than 50 pure-Python modules that do not use the en
 error mitigation, quantum walks, bosonic codes, an IBM Quantum connector, a PennyLane
 device, and more), plus a few older interfaces to parts of the engine. The pure-Python
 modules may move to a separate `quantx_engine.contrib` namespace. The tutorial notebooks
-in [`notebooks/`](notebooks/) use several of them, and run in CI.
+in [`notebooks/`](notebooks/) use several of them, and run in CI. The two in
+[`notebooks/engine/`](notebooks/engine/) run the engine itself against exact references:
+Hubbard ground states against exact diagonalisation and the Lieb–Wu solution, and
+finite-temperature spectra against exact diagonalisation.
 
 The repository also has a REST server ([`server/`](server/)) and a command-line
 interface (`qx_cli`).
