@@ -1,0 +1,1298 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../genindex.html"><link rel="search" title="Search" href="../search.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>quantx_engine - QuantX Engine 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../index.html"><div class="brand">QuantX Engine 0.1.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.1.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../quickstart.html">Quick start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.lanczos.html">quantx_engine.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.trotter.html">quantx_engine.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.mclachlan.html">quantx_engine.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.noise.html">quantx_engine.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.mitigation.html">quantx_engine.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.lindblad.html">quantx_engine.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.adapters.html">quantx_engine.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.transpiler.html">quantx_engine.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qasm.html">quantx_engine.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.templates.html">quantx_engine.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.hardware.html">quantx_engine.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.ibm.html">quantx_engine.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.many_body.html">quantx_engine.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.finite_size.html">quantx_engine.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.mps_simulator.html">quantx_engine.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.tensor_network.html">quantx_engine.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.tdmrg.html">quantx_engine.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.spectral.html">quantx_engine.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.chemistry.html">quantx_engine.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.advanced_chemistry.html">quantx_engine.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.oovqe.html">quantx_engine.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.noise_vqe.html">quantx_engine.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qaoa_optim.html">quantx_engine.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qec.html">quantx_engine.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.fault_tolerant.html">quantx_engine.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.ft_tgate.html">quantx_engine.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.clifford_sim.html">quantx_engine.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.clifford_t.html">quantx_engine.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.ftqc_pipeline.html">quantx_engine.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qldpc.html">quantx_engine.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.bosonic.html">quantx_engine.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.quantum_walk.html">quantx_engine.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qsp_qsvt.html">quantx_engine.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.excited_state.html">quantx_engine.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.dynamic.html">quantx_engine.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.sweep.html">quantx_engine.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.mbqc.html">quantx_engine.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.quantum_network.html">quantx_engine.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.quantum_protocols.html">quantx_engine.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.pulse.html">quantx_engine.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.optimal_control.html">quantx_engine.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.dyndecouple.html">quantx_engine.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.crosstalk.html">quantx_engine.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.gpu.html">quantx_engine.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.ray_sim.html">quantx_engine.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qml.html">quantx_engine.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.qbm.html">quantx_engine.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.quantum_kernel.html">quantx_engine.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.rb_qv.html">quantx_engine.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.noise_char.html">quantx_engine.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.xeb.html">quantx_engine.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.tomography.html">quantx_engine.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.floquet.html">quantx_engine.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.neqdyn.html">quantx_engine.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.rydberg.html">quantx_engine.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.pennylane_plugin.html">quantx_engine.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.primitives.html">quantx_engine.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.jupyter_widgets.html">quantx_engine.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.circuit.html">quantx_engine.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../api/generated/quantx_engine.statevector.html">quantx_engine.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Public Python SDK exports for QuantX."""</span>
+
+<span class="c1"># The only place the version is written: pyproject.toml reads it from here.</span>
+<span class="n">__version__</span> <span class="o">=</span> <span class="s2">"0.1.0"</span>
+
+
+<div class="viewcode-block" id="backend_info">
+<a class="viewcode-back" href="../api/generated/quantx_engine.html#quantx_engine.backend_info">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">backend_info</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a capability summary for the active QuantX backend.</span>
+
+<span class="sd">    Checks whether the native C++ shared library is loaded (requires</span>
+<span class="sd">    ``QUANTX_LIB_PATH`` to point to a compiled ``libquantx.so`` /</span>
+<span class="sd">    ``quantx.dll``), and returns a dict describing available features.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Keys:</span>
+
+<span class="sd">        ``native`` : bool</span>
+<span class="sd">            ``True`` when the native C++ engine is available and loaded.</span>
+<span class="sd">        ``gpu`` : bool</span>
+<span class="sd">            ``True`` when the native engine was built with CUDA/OpenCL support.</span>
+<span class="sd">        ``version`` : str</span>
+<span class="sd">            Version string (native engine version when available, else</span>
+<span class="sd">            ``"pure-python-&lt;__version__&gt;"``).</span>
+<span class="sd">        ``solvers`` : list[str]</span>
+<span class="sd">            Named physics solvers exposed by the native library (empty for</span>
+<span class="sd">            pure-Python mode).</span>
+<span class="sd">        ``max_qubits`` : int | None</span>
+<span class="sd">            Practical qubit limit reported by the native circuit backend, or</span>
+<span class="sd">            ``None`` in pure-Python mode.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; from quantx_engine import backend_info</span>
+<span class="sd">    &gt;&gt;&gt; info = backend_info()</span>
+<span class="sd">    &gt;&gt;&gt; info["native"]</span>
+<span class="sd">    False  # unless QUANTX_LIB_PATH is set and the library is compiled</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">Engine</span>
+        <span class="n">engine</span> <span class="o">=</span> <span class="n">Engine</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">version_str</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">version</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">version_str</span> <span class="o">=</span> <span class="n">__version__</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">solvers_raw</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">list_solvers</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">solvers_raw</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">cap</span> <span class="o">=</span> <span class="n">engine</span><span class="o">.</span><span class="n">circuit_capabilities</span><span class="p">()</span>
+            <span class="n">gpu</span> <span class="o">=</span> <span class="n">cap</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gpu"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+            <span class="n">max_qubits</span> <span class="o">=</span> <span class="n">cap</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_qubits"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">gpu</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">max_qubits</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"native"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"gpu"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">gpu</span><span class="p">),</span>
+            <span class="s2">"version"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="n">version_str</span><span class="p">),</span>
+            <span class="s2">"solvers"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">solvers_raw</span><span class="p">),</span>
+            <span class="s2">"max_qubits"</span><span class="p">:</span> <span class="n">max_qubits</span><span class="p">,</span>
+        <span class="p">}</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"native"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"gpu"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="s2">"version"</span><span class="p">:</span> <span class="sa">f</span><span class="s2">"pure-python-</span><span class="si">{</span><span class="n">__version__</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
+            <span class="s2">"solvers"</span><span class="p">:</span> <span class="p">[],</span>
+            <span class="s2">"max_qubits"</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.fault_tolerant</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FTError</span><span class="p">,</span>
+    <span class="n">LogicalQubit</span><span class="p">,</span>
+    <span class="n">MagicStateDistillery</span><span class="p">,</span>
+    <span class="n">DistillationResult</span><span class="p">,</span>
+    <span class="n">FaultTolerantCircuit</span><span class="p">,</span>
+    <span class="n">logical_error_rate_vs_distance</span><span class="p">,</span>
+    <span class="n">t_gate_cost</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.crosstalk</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">CrosstalkError</span><span class="p">,</span>
+    <span class="n">CouplingGraph</span><span class="p">,</span>
+    <span class="n">CrosstalkModel</span><span class="p">,</span>
+    <span class="n">zz_routing_cost</span><span class="p">,</span>
+    <span class="n">cheapest_path</span><span class="p">,</span>
+    <span class="n">echo_sequence</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.pulse</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PulseError</span><span class="p">,</span>
+    <span class="n">DriveChannel</span><span class="p">,</span>
+    <span class="n">MeasureChannel</span><span class="p">,</span>
+    <span class="n">ControlChannel</span><span class="p">,</span>
+    <span class="n">ConstantWaveform</span><span class="p">,</span>
+    <span class="n">GaussianWaveform</span><span class="p">,</span>
+    <span class="n">DRAGWaveform</span><span class="p">,</span>
+    <span class="n">FlatTopWaveform</span><span class="p">,</span>
+    <span class="n">ArbitraryWaveform</span><span class="p">,</span>
+    <span class="n">PulseSchedule</span><span class="p">,</span>
+    <span class="n">PulseInstruction</span><span class="p">,</span>
+    <span class="n">QubitSystem</span><span class="p">,</span>
+    <span class="n">PulseResult</span><span class="p">,</span>
+    <span class="n">PulseSimulator</span><span class="p">,</span>
+    <span class="n">pi_pulse_area</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.primitives</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PrimitiveError</span><span class="p">,</span>
+    <span class="n">SparsePauliOp</span><span class="p">,</span>
+    <span class="n">EstimatorResult</span><span class="p">,</span>
+    <span class="n">SamplerResult</span><span class="p">,</span>
+    <span class="n">Estimator</span><span class="p">,</span>
+    <span class="n">Sampler</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dynamic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DynamicCircuitError</span><span class="p">,</span>
+    <span class="n">DynamicCircuit</span><span class="p">,</span>
+    <span class="n">DynamicResult</span><span class="p">,</span>
+    <span class="n">DynamicSimulator</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.engine</span><span class="w"> </span><span class="kn">import</span> <span class="n">CircuitError</span><span class="p">,</span> <span class="n">Engine</span><span class="p">,</span> <span class="n">QuantXNativeUnavailable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qasm</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParseError</span><span class="p">,</span> <span class="n">parse_qasm_to_circuit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.noise</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NoiseModel</span><span class="p">,</span>
+    <span class="n">DepolarizingNoise</span><span class="p">,</span>
+    <span class="n">AmplitudeDampingNoise</span><span class="p">,</span>
+    <span class="n">ThermalRelaxationNoise</span><span class="p">,</span>
+    <span class="n">ReadoutNoise</span><span class="p">,</span>
+    <span class="n">CompositeNoise</span><span class="p">,</span>
+    <span class="n">NoiseModelError</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.ibm</span><span class="w"> </span><span class="kn">import</span> <span class="n">IBMQuantumBackend</span><span class="p">,</span> <span class="n">IBMConnectorError</span><span class="p">,</span> <span class="n">circuit_to_qasm3</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.chemistry</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">PauliTerm</span><span class="p">,</span> <span class="n">PauliHamiltonian</span><span class="p">,</span> <span class="n">jordan_wigner</span><span class="p">,</span> <span class="n">MolecularVQE</span><span class="p">,</span> <span class="n">ChemistryError</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.advanced_chemistry</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AdvChemError</span><span class="p">,</span>
+    <span class="n">build_hamiltonian_matrix</span><span class="p">,</span>
+    <span class="n">hf_state</span><span class="p">,</span>
+    <span class="n">UCCSDResult</span><span class="p">,</span>
+    <span class="n">UCCSDSolver</span><span class="p">,</span>
+    <span class="n">ADAPTVQEResult</span><span class="p">,</span>
+    <span class="n">ADAPTVQESolver</span><span class="p">,</span>
+    <span class="n">QAOAResult</span><span class="p">,</span>
+    <span class="n">QAOASolver</span><span class="p">,</span>
+    <span class="n">QITEResult</span><span class="p">,</span>
+    <span class="n">QITESolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.quantum_kernel</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">QKernelError</span><span class="p">,</span>
+    <span class="n">QuantumFeatureMap</span><span class="p">,</span>
+    <span class="n">ZZFeatureMap</span><span class="p">,</span>
+    <span class="n">FidelityQuantumKernel</span><span class="p">,</span>
+    <span class="n">target_alignment</span><span class="p">,</span>
+    <span class="n">frobenius_alignment</span><span class="p">,</span>
+    <span class="n">QSVMResult</span><span class="p">,</span>
+    <span class="n">QSVM</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.rb_qv</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">RBQVError</span><span class="p">,</span>
+    <span class="n">RBResult</span><span class="p">,</span>
+    <span class="n">StandardRB</span><span class="p">,</span>
+    <span class="n">QVResult</span><span class="p">,</span>
+    <span class="n">QuantumVolume</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qml</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuantumNeuralNetwork</span><span class="p">,</span> <span class="n">QuantumClassifier</span><span class="p">,</span> <span class="n">QMLError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qec</span><span class="w"> </span><span class="kn">import</span> <span class="n">RepetitionCode</span><span class="p">,</span> <span class="n">SurfaceCode</span><span class="p">,</span> <span class="n">LogicalErrorSimulator</span><span class="p">,</span> <span class="n">ThresholdResult</span><span class="p">,</span> <span class="n">QECError</span><span class="p">,</span> <span class="n">MWPMDecoder</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.tensor_network</span><span class="w"> </span><span class="kn">import</span> <span class="n">MPS</span><span class="p">,</span> <span class="n">MPO</span><span class="p">,</span> <span class="n">TEBD</span><span class="p">,</span> <span class="n">DMRGResult</span><span class="p">,</span> <span class="n">DMRG</span><span class="p">,</span> <span class="n">TensorNetworkError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qbm</span><span class="w"> </span><span class="kn">import</span> <span class="n">RBM</span><span class="p">,</span> <span class="n">QuantumBoltzmannMachine</span><span class="p">,</span> <span class="n">BoltzmannSampler</span><span class="p">,</span> <span class="n">QBMError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.clifford_t</span><span class="w"> </span><span class="kn">import</span> <span class="n">GateSequence</span><span class="p">,</span> <span class="n">CliffordGroup</span><span class="p">,</span> <span class="n">SolovayKitaev</span><span class="p">,</span> <span class="n">TCountOptimizer</span><span class="p">,</span> <span class="n">CliffordTError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.pennylane_plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuantXDevice</span><span class="p">,</span> <span class="n">QuantXPluginError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.lanczos</span><span class="w"> </span><span class="kn">import</span> <span class="n">LanczosSolver</span><span class="p">,</span> <span class="n">ArnoldiSolver</span><span class="p">,</span> <span class="n">SparseHamiltonian</span><span class="p">,</span> <span class="n">EigenResult</span><span class="p">,</span> <span class="n">LanczosError</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.sweep</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParameterSweep</span><span class="p">,</span> <span class="n">SweepResult</span><span class="p">,</span> <span class="n">SweepError</span><span class="p">,</span> <span class="n">grid_sweep</span><span class="p">,</span> <span class="n">list_sweep</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.gpu</span><span class="w"> </span><span class="kn">import</span> <span class="n">GpuBackend</span><span class="p">,</span> <span class="n">GpuStatevector</span><span class="p">,</span> <span class="n">GpuLanczos</span><span class="p">,</span> <span class="n">GpuBatchedCircuit</span><span class="p">,</span> <span class="n">GpuError</span><span class="p">,</span> <span class="n">gpu_info</span><span class="p">,</span> <span class="n">to_gpu</span><span class="p">,</span> <span class="n">to_cpu</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.lindblad</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">LindbladError</span><span class="p">,</span>
+    <span class="n">JumpOperator</span><span class="p">,</span>
+    <span class="n">LindbladFrame</span><span class="p">,</span>
+    <span class="n">EntanglementTrace</span><span class="p">,</span>
+    <span class="n">LindbladResult</span><span class="p">,</span>
+    <span class="n">LindbladSolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.spectral</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SpectralError</span><span class="p">,</span>
+    <span class="n">SpectralResult</span><span class="p">,</span>
+    <span class="n">KrylovResult</span><span class="p">,</span>
+    <span class="n">KrylovEvolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.quantum_channel</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ChannelError</span><span class="p">,</span>
+    <span class="n">QuantumChannel</span><span class="p">,</span>
+    <span class="n">SteadyStateSolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.finite_size</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FiniteSizeError</span><span class="p">,</span>
+    <span class="n">ScalingResult</span><span class="p">,</span>
+    <span class="n">EntanglementResult</span><span class="p">,</span>
+    <span class="n">FiniteSizeScaling</span><span class="p">,</span>
+    <span class="n">binder_cumulant</span><span class="p">,</span>
+    <span class="n">entanglement_scaling</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.mitigation</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MitigationError</span><span class="p">,</span>
+    <span class="n">fold_gates</span><span class="p">,</span>
+    <span class="n">Extrapolator</span><span class="p">,</span>
+    <span class="n">RichardsonExtrapolator</span><span class="p">,</span>
+    <span class="n">PolyExtrapolator</span><span class="p">,</span>
+    <span class="n">ExpExtrapolator</span><span class="p">,</span>
+    <span class="n">ZNEResult</span><span class="p">,</span>
+    <span class="n">zne_mitigate</span><span class="p">,</span>
+    <span class="n">QuasiProbabilityDecomposition</span><span class="p">,</span>
+    <span class="n">PECResult</span><span class="p">,</span>
+    <span class="n">pec_mitigate</span><span class="p">,</span>
+    <span class="n">make_sv_executor</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.transpiler</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TranspilerError</span><span class="p">,</span>
+    <span class="n">GateOp</span><span class="p">,</span>
+    <span class="n">CouplingMap</span><span class="p">,</span>
+    <span class="n">TranspileResult</span><span class="p">,</span>
+    <span class="n">HardwareTranspiler</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.adapters</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AdapterError</span><span class="p">,</span>
+    <span class="n">to_cirq</span><span class="p">,</span>
+    <span class="n">from_cirq</span><span class="p">,</span>
+    <span class="n">to_braket</span><span class="p">,</span>
+    <span class="n">from_braket</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.xeb</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">XEBError</span><span class="p">,</span>
+    <span class="n">XEBResult</span><span class="p">,</span>
+    <span class="n">CrossEntropyBenchmarking</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.tomography</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TomographyError</span><span class="p">,</span>
+    <span class="n">StateTomography</span><span class="p">,</span>
+    <span class="n">ProcessTomography</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.optimal_control</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OCError</span><span class="p">,</span>
+    <span class="n">GRAPEResult</span><span class="p">,</span>
+    <span class="n">GRAPESolver</span><span class="p">,</span>
+    <span class="n">CRABResult</span><span class="p">,</span>
+    <span class="n">CRABSolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.templates</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TemplateError</span><span class="p">,</span>
+    <span class="n">CircuitTemplate</span><span class="p">,</span>
+    <span class="n">hardware_efficient_ansatz</span><span class="p">,</span>
+    <span class="n">iqp_circuit</span><span class="p">,</span>
+    <span class="n">qaoa_circuit</span><span class="p">,</span>
+    <span class="n">ghz_circuit</span><span class="p">,</span>
+    <span class="n">quantum_fourier_transform</span><span class="p">,</span>
+    <span class="n">uccsd_ansatz</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.noise_char</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NoiseCharError</span><span class="p">,</span>
+    <span class="n">CharacterizedNoise</span><span class="p">,</span>
+    <span class="n">NoiseCharacterizer</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.floquet</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">FloquetError</span><span class="p">,</span>
+    <span class="n">FloquetSystem</span><span class="p">,</span>
+    <span class="n">FloquetResult</span><span class="p">,</span>
+    <span class="n">BlochFloquetSolver</span><span class="p">,</span>
+    <span class="n">floquet_spectrum</span><span class="p">,</span>
+    <span class="n">floquet_effective_hamiltonian</span><span class="p">,</span>
+    <span class="n">driven_two_level</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.hardware</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">HardwareError</span><span class="p">,</span>
+    <span class="n">BackendCalibration</span><span class="p">,</span>
+    <span class="n">HardwareJobResult</span><span class="p">,</span>
+    <span class="n">HardwareJob</span><span class="p">,</span>
+    <span class="n">IBMHardwareBackend</span><span class="p">,</span>
+    <span class="n">IonQBackend</span><span class="p">,</span>
+    <span class="n">GoogleBackend</span><span class="p">,</span>
+    <span class="n">calibration_to_noise_model</span><span class="p">,</span>
+    <span class="n">available_backends</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.tdmrg</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TDMRGError</span><span class="p">,</span>
+    <span class="n">TDMRGResult</span><span class="p">,</span>
+    <span class="n">TDMRGSolver</span><span class="p">,</span>
+    <span class="n">real_time_evolve</span><span class="p">,</span>
+    <span class="n">imaginary_time_evolve</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.quantum_network</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NetworkError</span><span class="p">,</span>
+    <span class="n">QuantumNode</span><span class="p">,</span>
+    <span class="n">QuantumChannel</span><span class="p">,</span>
+    <span class="n">QuantumNetwork</span><span class="p">,</span>
+    <span class="n">BellPairGenerator</span><span class="p">,</span>
+    <span class="n">EntanglementSwapper</span><span class="p">,</span>
+    <span class="n">QuantumRepeater</span><span class="p">,</span>
+    <span class="n">NetworkResult</span><span class="p">,</span>
+    <span class="n">fidelity_after_dephasing</span><span class="p">,</span>
+    <span class="n">fidelity_after_swapping</span><span class="p">,</span>
+    <span class="n">fidelity_after_purification</span><span class="p">,</span>
+    <span class="n">simulate_repeater_chain</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.quantum_protocols</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ProtocolError</span><span class="p">,</span>
+    <span class="n">BB84Result</span><span class="p">,</span>
+    <span class="n">BB84Protocol</span><span class="p">,</span>
+    <span class="n">E91Result</span><span class="p">,</span>
+    <span class="n">E91Protocol</span><span class="p">,</span>
+    <span class="n">TeleportationResult</span><span class="p">,</span>
+    <span class="n">TeleportationProtocol</span><span class="p">,</span>
+    <span class="n">DenseCodingResult</span><span class="p">,</span>
+    <span class="n">DenseCodingProtocol</span><span class="p">,</span>
+    <span class="n">bb84_key_rate</span><span class="p">,</span>
+    <span class="n">chsh_inequality_value</span><span class="p">,</span>
+    <span class="n">teleportation_fidelity</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.noise_vqe</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">NoiseVQEError</span><span class="p">,</span>
+    <span class="n">SPSAOptimizer</span><span class="p">,</span>
+    <span class="n">NoiseAwareVQEResult</span><span class="p">,</span>
+    <span class="n">NoiseAwareVQE</span><span class="p">,</span>
+    <span class="n">build_hea_circuit</span><span class="p">,</span>
+    <span class="n">hardware_efficient_vqe</span><span class="p">,</span>
+    <span class="n">n_hea_params</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.quantum_walk</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">QuantumWalkError</span><span class="p">,</span>
+    <span class="n">WalkResult</span><span class="p">,</span>
+    <span class="n">GroverWalkResult</span><span class="p">,</span>
+    <span class="n">DiscreteTimeWalk</span><span class="p">,</span>
+    <span class="n">ContinuousTimeQuantumWalk</span><span class="p">,</span>
+    <span class="n">GroverWalk</span><span class="p">,</span>
+    <span class="n">walk_spectrum</span><span class="p">,</span>
+    <span class="n">ctqw_transfer_probability</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.trotter</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">TrotterError</span><span class="p">,</span>
+    <span class="n">TrotterTerm</span><span class="p">,</span>
+    <span class="n">TrotterResult</span><span class="p">,</span>
+    <span class="n">TrotterSimulator</span><span class="p">,</span>
+    <span class="n">heisenberg_trotter</span><span class="p">,</span>
+    <span class="n">ising_trotter</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.many_body</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ManyBodyError</span><span class="p">,</span>
+    <span class="n">OTOCResult</span><span class="p">,</span>
+    <span class="n">OTOCSweepResult</span><span class="p">,</span>
+    <span class="n">SYKResult</span><span class="p">,</span>
+    <span class="n">SYKModel</span><span class="p">,</span>
+    <span class="n">DMRG2DResult</span><span class="p">,</span>
+    <span class="n">SnakeMapper</span><span class="p">,</span>
+    <span class="n">compute_otoc</span><span class="p">,</span>
+    <span class="n">otoc_sweep</span><span class="p">,</span>
+    <span class="n">syk_hamiltonian</span><span class="p">,</span>
+    <span class="n">dmrg_2d</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.mps_simulator</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MPSSimulatorError</span><span class="p">,</span>
+    <span class="n">AdaptiveTruncation</span><span class="p">,</span>
+    <span class="n">MPSSimulator</span><span class="p">,</span>
+    <span class="n">CachedDMRG</span><span class="p">,</span>
+    <span class="n">BenchmarkResult</span><span class="p">,</span>
+    <span class="n">ComparisonResult</span><span class="p">,</span>
+    <span class="n">GpuBenchmarkResult</span><span class="p">,</span>       <span class="c1"># M109</span>
+    <span class="n">mps_benchmark</span><span class="p">,</span>
+    <span class="n">ghz_fidelity</span><span class="p">,</span>
+    <span class="n">compare_mps_sv</span><span class="p">,</span>
+    <span class="n">gpu_mps_benchmark</span><span class="p">,</span>        <span class="c1"># M109</span>
+    <span class="n">get_backend_module</span><span class="p">,</span>       <span class="c1"># M109</span>
+    <span class="n">is_gpu_available</span><span class="p">,</span>         <span class="c1"># M109</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.clifford_sim</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>   <span class="c1"># M110</span>
+    <span class="n">CliffordError</span><span class="p">,</span>
+    <span class="n">StabilizerState</span><span class="p">,</span>
+    <span class="n">CliffordSimulator</span><span class="p">,</span>
+    <span class="n">StimCircuit</span><span class="p">,</span>
+    <span class="n">StimCircuitError</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.ray_sim</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>        <span class="c1"># M111</span>
+    <span class="n">DistSVError</span><span class="p">,</span>
+    <span class="n">DistSVResult</span><span class="p">,</span>
+    <span class="n">DistributedSVSimulator</span><span class="p">,</span>
+    <span class="n">is_ray_available</span><span class="p">,</span>
+    <span class="n">dist_sv_benchmark</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.ftqc_pipeline</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M112 + M156</span>
+    <span class="n">FTQCPipelineError</span><span class="p">,</span>
+    <span class="n">PipelineResult</span><span class="p">,</span>
+    <span class="n">ThresholdCurveResult</span><span class="p">,</span>
+    <span class="n">FTQCPipeline</span><span class="p">,</span>
+    <span class="n">threshold_curve</span><span class="p">,</span>
+    <span class="n">threshold_crossing</span><span class="p">,</span>
+    <span class="n">ResourceEstimate</span><span class="p">,</span>         <span class="c1"># M156</span>
+    <span class="n">FTQCResourceEstimator</span><span class="p">,</span>    <span class="c1"># M156</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.excited_state</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M113</span>
+    <span class="n">ExcitedStateError</span><span class="p">,</span>
+    <span class="n">ExcitedStateResult</span><span class="p">,</span>
+    <span class="n">ExcitedStateVQE</span><span class="p">,</span>
+    <span class="n">ConicalIntersectionResult</span><span class="p">,</span>
+    <span class="n">detect_conical_intersections</span><span class="p">,</span>
+    <span class="n">pyscf_to_pauli_hamiltonian</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.neqdyn</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M114</span>
+    <span class="n">NonEquilError</span><span class="p">,</span>
+    <span class="n">KeldyshResult</span><span class="p">,</span>
+    <span class="n">KeldyshSolver</span><span class="p">,</span>
+    <span class="n">EntanglementDynamicsResult</span><span class="p">,</span>
+    <span class="n">EntanglementDynamics</span><span class="p">,</span>
+    <span class="n">KibbleZurekResult</span><span class="p">,</span>
+    <span class="n">KibbleZurekScaling</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qaoa_optim</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M115</span>
+    <span class="n">CVaRQAOAError</span><span class="p">,</span>
+    <span class="n">QAOAResult</span> <span class="k">as</span> <span class="n">CVaRQAOAResult</span><span class="p">,</span>  <span class="c1"># renamed to avoid clash with advanced_chemistry.QAOAResult</span>
+    <span class="n">MaxCutProblem</span><span class="p">,</span>
+    <span class="n">TSPProblem</span><span class="p">,</span>
+    <span class="n">CVaRQAOA</span><span class="p">,</span>
+    <span class="n">QAOALandscapeResult</span><span class="p">,</span>
+    <span class="n">QAOALandscape</span><span class="p">,</span>
+    <span class="n">warm_start_qaoa</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qiskit_compat</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M116</span>
+    <span class="n">QiskitCompatError</span><span class="p">,</span>
+    <span class="n">BitArray</span><span class="p">,</span>
+    <span class="n">DataBin</span><span class="p">,</span>
+    <span class="n">PubResult</span><span class="p">,</span>
+    <span class="n">PrimitiveResult</span><span class="p">,</span>
+    <span class="n">SamplerPUB</span><span class="p">,</span>
+    <span class="n">EstimatorPUB</span><span class="p">,</span>
+    <span class="n">QuantXSamplerV2</span><span class="p">,</span>
+    <span class="n">QuantXEstimatorV2</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.jupyter_widgets</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M117</span>
+    <span class="n">WidgetError</span><span class="p">,</span>
+    <span class="n">CircuitWidgetState</span><span class="p">,</span>
+    <span class="n">CircuitWidget</span><span class="p">,</span>
+    <span class="n">BlochSphereWidgetState</span><span class="p">,</span>
+    <span class="n">BlochSphereWidget</span><span class="p">,</span>
+    <span class="n">JobMonitorWidgetState</span><span class="p">,</span>
+    <span class="n">JobMonitorWidget</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.rydberg</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M118</span>
+    <span class="n">RydbergError</span><span class="p">,</span>
+    <span class="n">RydbergAtom</span><span class="p">,</span>
+    <span class="n">RydbergHamiltonian</span><span class="p">,</span>
+    <span class="n">RydbergResult</span><span class="p">,</span>
+    <span class="n">RydbergSimulator</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.bosonic</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M119</span>
+    <span class="n">BosonicError</span><span class="p">,</span>
+    <span class="n">CatNoiseModel</span><span class="p">,</span>
+    <span class="n">CatQubit</span><span class="p">,</span>
+    <span class="n">GKPState</span><span class="p">,</span>
+    <span class="n">GKPDecoder</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.dyndecouple</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M126</span>
+    <span class="n">DDError</span><span class="p">,</span>
+    <span class="n">DDSequence</span><span class="p">,</span>
+    <span class="n">DynamicalDecoupling</span><span class="p">,</span>
+    <span class="n">QuantumMemory</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.mbqc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M125</span>
+    <span class="n">MBQCError</span><span class="p">,</span>
+    <span class="n">GraphState</span><span class="p">,</span>
+    <span class="n">MBQCPattern</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.oovqe</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M124</span>
+    <span class="n">OOVQEError</span><span class="p">,</span>
+    <span class="n">OOVQEResult</span><span class="p">,</span>
+    <span class="n">OOVQESolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qsp_qsvt</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M123</span>
+    <span class="n">QSPError</span><span class="p">,</span>
+    <span class="n">QSPAnglesFinder</span><span class="p">,</span>
+    <span class="n">QSVTCircuit</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.mclachlan</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M122</span>
+    <span class="n">McLachlanError</span><span class="p">,</span>
+    <span class="n">McLachlanResult</span><span class="p">,</span>
+    <span class="n">McLachlanSolver</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qldpc</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M121</span>
+    <span class="n">LDPCError</span><span class="p">,</span>
+    <span class="n">ClassicalCode</span><span class="p">,</span>
+    <span class="n">HypergraphProductCode</span><span class="p">,</span>
+    <span class="n">LDPCDecoder</span><span class="p">,</span>
+    <span class="n">bicycle_code</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.ft_tgate</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>  <span class="c1"># M120</span>
+    <span class="n">MagicStateError</span><span class="p">,</span>
+    <span class="n">MagicStateFactory</span><span class="p">,</span>
+    <span class="n">FTTGate</span><span class="p">,</span>
+    <span class="n">FTCCXGate</span><span class="p">,</span>
+    <span class="c1"># TCountOptimizer lives in ft_tgate but is not re-exported here to</span>
+    <span class="c1"># avoid shadowing the existing quantx_engine.clifford_t.TCountOptimizer.</span>
+    <span class="c1"># Import it directly: from quantx_engine.ft_tgate import TCountOptimizer</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.statevector</span><span class="w"> </span><span class="kn">import</span> <span class="n">StatevectorSimulator</span>  <span class="c1"># M160</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.circuit</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuantumCircuit</span><span class="p">,</span> <span class="n">CircuitResult</span><span class="p">,</span> <span class="n">Symbol</span>  <span class="c1"># M161</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="c1"># Fault-tolerant logical qubits (M91)</span>
+    <span class="s2">"FTError"</span><span class="p">,</span>
+    <span class="s2">"LogicalQubit"</span><span class="p">,</span>
+    <span class="s2">"MagicStateDistillery"</span><span class="p">,</span>
+    <span class="s2">"DistillationResult"</span><span class="p">,</span>
+    <span class="s2">"FaultTolerantCircuit"</span><span class="p">,</span>
+    <span class="s2">"logical_error_rate_vs_distance"</span><span class="p">,</span>
+    <span class="s2">"t_gate_cost"</span><span class="p">,</span>
+    <span class="c1"># Crosstalk + ZZ coupling model (M90)</span>
+    <span class="s2">"CrosstalkError"</span><span class="p">,</span>
+    <span class="s2">"CouplingGraph"</span><span class="p">,</span>
+    <span class="s2">"CrosstalkModel"</span><span class="p">,</span>
+    <span class="s2">"zz_routing_cost"</span><span class="p">,</span>
+    <span class="s2">"cheapest_path"</span><span class="p">,</span>
+    <span class="s2">"echo_sequence"</span><span class="p">,</span>
+    <span class="c1"># Pulse-level simulator (M89)</span>
+    <span class="s2">"PulseError"</span><span class="p">,</span>
+    <span class="s2">"DriveChannel"</span><span class="p">,</span>
+    <span class="s2">"MeasureChannel"</span><span class="p">,</span>
+    <span class="s2">"ControlChannel"</span><span class="p">,</span>
+    <span class="s2">"ConstantWaveform"</span><span class="p">,</span>
+    <span class="s2">"GaussianWaveform"</span><span class="p">,</span>
+    <span class="s2">"DRAGWaveform"</span><span class="p">,</span>
+    <span class="s2">"FlatTopWaveform"</span><span class="p">,</span>
+    <span class="s2">"ArbitraryWaveform"</span><span class="p">,</span>
+    <span class="s2">"PulseSchedule"</span><span class="p">,</span>
+    <span class="s2">"PulseInstruction"</span><span class="p">,</span>
+    <span class="s2">"QubitSystem"</span><span class="p">,</span>
+    <span class="s2">"PulseResult"</span><span class="p">,</span>
+    <span class="s2">"PulseSimulator"</span><span class="p">,</span>
+    <span class="s2">"pi_pulse_area"</span><span class="p">,</span>
+    <span class="s2">"__version__"</span><span class="p">,</span>
+    <span class="s2">"CircuitError"</span><span class="p">,</span>
+    <span class="s2">"Engine"</span><span class="p">,</span>
+    <span class="s2">"QuantXNativeUnavailable"</span><span class="p">,</span>
+    <span class="s2">"ParseError"</span><span class="p">,</span>
+    <span class="s2">"parse_qasm_to_circuit"</span><span class="p">,</span>
+    <span class="s2">"NoiseModel"</span><span class="p">,</span>
+    <span class="s2">"DepolarizingNoise"</span><span class="p">,</span>
+    <span class="s2">"AmplitudeDampingNoise"</span><span class="p">,</span>
+    <span class="s2">"ThermalRelaxationNoise"</span><span class="p">,</span>
+    <span class="s2">"ReadoutNoise"</span><span class="p">,</span>
+    <span class="s2">"CompositeNoise"</span><span class="p">,</span>
+    <span class="s2">"NoiseModelError"</span><span class="p">,</span>
+    <span class="s2">"IBMQuantumBackend"</span><span class="p">,</span>
+    <span class="s2">"IBMConnectorError"</span><span class="p">,</span>
+    <span class="s2">"circuit_to_qasm3"</span><span class="p">,</span>
+    <span class="s2">"PauliTerm"</span><span class="p">,</span>
+    <span class="s2">"PauliHamiltonian"</span><span class="p">,</span>
+    <span class="s2">"jordan_wigner"</span><span class="p">,</span>
+    <span class="s2">"MolecularVQE"</span><span class="p">,</span>
+    <span class="s2">"ChemistryError"</span><span class="p">,</span>
+    <span class="c1"># Advanced chemistry solvers (M79)</span>
+    <span class="s2">"AdvChemError"</span><span class="p">,</span>
+    <span class="s2">"build_hamiltonian_matrix"</span><span class="p">,</span>
+    <span class="s2">"hf_state"</span><span class="p">,</span>
+    <span class="s2">"UCCSDResult"</span><span class="p">,</span>
+    <span class="s2">"UCCSDSolver"</span><span class="p">,</span>
+    <span class="s2">"ADAPTVQEResult"</span><span class="p">,</span>
+    <span class="s2">"ADAPTVQESolver"</span><span class="p">,</span>
+    <span class="s2">"QAOAResult"</span><span class="p">,</span>
+    <span class="s2">"QAOASolver"</span><span class="p">,</span>
+    <span class="s2">"QITEResult"</span><span class="p">,</span>
+    <span class="s2">"QITESolver"</span><span class="p">,</span>
+    <span class="c1"># Quantum kernel methods + QSVM (M80)</span>
+    <span class="s2">"QKernelError"</span><span class="p">,</span>
+    <span class="s2">"QuantumFeatureMap"</span><span class="p">,</span>
+    <span class="s2">"ZZFeatureMap"</span><span class="p">,</span>
+    <span class="s2">"FidelityQuantumKernel"</span><span class="p">,</span>
+    <span class="s2">"target_alignment"</span><span class="p">,</span>
+    <span class="s2">"frobenius_alignment"</span><span class="p">,</span>
+    <span class="s2">"QSVMResult"</span><span class="p">,</span>
+    <span class="s2">"QSVM"</span><span class="p">,</span>
+    <span class="c1"># Randomized Benchmarking + Quantum Volume (M81)</span>
+    <span class="s2">"RBQVError"</span><span class="p">,</span>
+    <span class="s2">"RBResult"</span><span class="p">,</span>
+    <span class="s2">"StandardRB"</span><span class="p">,</span>
+    <span class="s2">"QVResult"</span><span class="p">,</span>
+    <span class="s2">"QuantumVolume"</span><span class="p">,</span>
+    <span class="s2">"QuantumNeuralNetwork"</span><span class="p">,</span>
+    <span class="s2">"QuantumClassifier"</span><span class="p">,</span>
+    <span class="s2">"QMLError"</span><span class="p">,</span>
+    <span class="s2">"RepetitionCode"</span><span class="p">,</span>
+    <span class="s2">"SurfaceCode"</span><span class="p">,</span>
+    <span class="s2">"LogicalErrorSimulator"</span><span class="p">,</span>
+    <span class="s2">"ThresholdResult"</span><span class="p">,</span>
+    <span class="s2">"QECError"</span><span class="p">,</span>
+    <span class="s2">"MWPMDecoder"</span><span class="p">,</span>
+    <span class="s2">"MPS"</span><span class="p">,</span>
+    <span class="s2">"MPO"</span><span class="p">,</span>
+    <span class="s2">"TEBD"</span><span class="p">,</span>
+    <span class="s2">"DMRGResult"</span><span class="p">,</span>
+    <span class="s2">"DMRG"</span><span class="p">,</span>
+    <span class="s2">"TensorNetworkError"</span><span class="p">,</span>
+    <span class="s2">"RBM"</span><span class="p">,</span>
+    <span class="s2">"QuantumBoltzmannMachine"</span><span class="p">,</span>
+    <span class="s2">"BoltzmannSampler"</span><span class="p">,</span>
+    <span class="s2">"QBMError"</span><span class="p">,</span>
+    <span class="s2">"GateSequence"</span><span class="p">,</span>
+    <span class="s2">"CliffordGroup"</span><span class="p">,</span>
+    <span class="s2">"SolovayKitaev"</span><span class="p">,</span>
+    <span class="s2">"TCountOptimizer"</span><span class="p">,</span>
+    <span class="s2">"CliffordTError"</span><span class="p">,</span>
+    <span class="s2">"QuantXDevice"</span><span class="p">,</span>
+    <span class="s2">"QuantXPluginError"</span><span class="p">,</span>
+    <span class="s2">"LanczosSolver"</span><span class="p">,</span>
+    <span class="s2">"ArnoldiSolver"</span><span class="p">,</span>
+    <span class="s2">"SparseHamiltonian"</span><span class="p">,</span>
+    <span class="s2">"EigenResult"</span><span class="p">,</span>
+    <span class="s2">"LanczosError"</span><span class="p">,</span>
+    <span class="s2">"ParameterSweep"</span><span class="p">,</span>
+    <span class="s2">"SweepResult"</span><span class="p">,</span>
+    <span class="s2">"SweepError"</span><span class="p">,</span>
+    <span class="s2">"grid_sweep"</span><span class="p">,</span>
+    <span class="s2">"list_sweep"</span><span class="p">,</span>
+    <span class="s2">"GpuBackend"</span><span class="p">,</span>
+    <span class="s2">"GpuStatevector"</span><span class="p">,</span>
+    <span class="s2">"GpuLanczos"</span><span class="p">,</span>
+    <span class="s2">"GpuBatchedCircuit"</span><span class="p">,</span>
+    <span class="s2">"GpuError"</span><span class="p">,</span>
+    <span class="s2">"gpu_info"</span><span class="p">,</span>
+    <span class="s2">"to_gpu"</span><span class="p">,</span>
+    <span class="s2">"to_cpu"</span><span class="p">,</span>
+    <span class="c1"># Quantum channels + steady-state solver (M75)</span>
+    <span class="s2">"ChannelError"</span><span class="p">,</span>
+    <span class="s2">"QuantumChannel"</span><span class="p">,</span>
+    <span class="s2">"SteadyStateSolver"</span><span class="p">,</span>
+    <span class="c1"># Finite-size scaling + quantum phase transitions (M74)</span>
+    <span class="s2">"FiniteSizeError"</span><span class="p">,</span>
+    <span class="s2">"ScalingResult"</span><span class="p">,</span>
+    <span class="s2">"EntanglementResult"</span><span class="p">,</span>
+    <span class="s2">"FiniteSizeScaling"</span><span class="p">,</span>
+    <span class="s2">"binder_cumulant"</span><span class="p">,</span>
+    <span class="s2">"entanglement_scaling"</span><span class="p">,</span>
+    <span class="c1"># Spectral functions + Krylov time evolution (M73)</span>
+    <span class="s2">"SpectralError"</span><span class="p">,</span>
+    <span class="s2">"SpectralResult"</span><span class="p">,</span>
+    <span class="s2">"KrylovResult"</span><span class="p">,</span>
+    <span class="s2">"KrylovEvolver"</span><span class="p">,</span>
+    <span class="c1"># Lindblad open-system solver (M71)</span>
+    <span class="s2">"LindbladError"</span><span class="p">,</span>
+    <span class="s2">"JumpOperator"</span><span class="p">,</span>
+    <span class="s2">"LindbladFrame"</span><span class="p">,</span>
+    <span class="s2">"EntanglementTrace"</span><span class="p">,</span>
+    <span class="s2">"LindbladResult"</span><span class="p">,</span>
+    <span class="s2">"LindbladSolver"</span><span class="p">,</span>
+    <span class="c1"># Error mitigation (M70)</span>
+    <span class="s2">"MitigationError"</span><span class="p">,</span>
+    <span class="s2">"fold_gates"</span><span class="p">,</span>
+    <span class="s2">"Extrapolator"</span><span class="p">,</span>
+    <span class="s2">"RichardsonExtrapolator"</span><span class="p">,</span>
+    <span class="s2">"PolyExtrapolator"</span><span class="p">,</span>
+    <span class="s2">"ExpExtrapolator"</span><span class="p">,</span>
+    <span class="s2">"ZNEResult"</span><span class="p">,</span>
+    <span class="s2">"zne_mitigate"</span><span class="p">,</span>
+    <span class="s2">"QuasiProbabilityDecomposition"</span><span class="p">,</span>
+    <span class="s2">"PECResult"</span><span class="p">,</span>
+    <span class="s2">"pec_mitigate"</span><span class="p">,</span>
+    <span class="s2">"make_sv_executor"</span><span class="p">,</span>
+    <span class="c1"># Hardware-aware transpilation (M76)</span>
+    <span class="s2">"TranspilerError"</span><span class="p">,</span>
+    <span class="s2">"GateOp"</span><span class="p">,</span>
+    <span class="s2">"CouplingMap"</span><span class="p">,</span>
+    <span class="s2">"TranspileResult"</span><span class="p">,</span>
+    <span class="s2">"HardwareTranspiler"</span><span class="p">,</span>
+    <span class="c1"># Cirq + Braket adapters (M77)</span>
+    <span class="s2">"AdapterError"</span><span class="p">,</span>
+    <span class="s2">"to_cirq"</span><span class="p">,</span>
+    <span class="s2">"from_cirq"</span><span class="p">,</span>
+    <span class="s2">"to_braket"</span><span class="p">,</span>
+    <span class="s2">"from_braket"</span><span class="p">,</span>
+    <span class="c1"># Cross-entropy benchmarking (M82)</span>
+    <span class="s2">"XEBError"</span><span class="p">,</span>
+    <span class="s2">"XEBResult"</span><span class="p">,</span>
+    <span class="s2">"CrossEntropyBenchmarking"</span><span class="p">,</span>
+    <span class="c1"># State and process tomography (M83)</span>
+    <span class="s2">"TomographyError"</span><span class="p">,</span>
+    <span class="s2">"StateTomography"</span><span class="p">,</span>
+    <span class="s2">"ProcessTomography"</span><span class="p">,</span>
+    <span class="c1"># Quantum optimal control — GRAPE and CRAB (M84)</span>
+    <span class="s2">"OCError"</span><span class="p">,</span>
+    <span class="s2">"GRAPEResult"</span><span class="p">,</span>
+    <span class="s2">"GRAPESolver"</span><span class="p">,</span>
+    <span class="s2">"CRABResult"</span><span class="p">,</span>
+    <span class="s2">"CRABSolver"</span><span class="p">,</span>
+    <span class="c1"># Estimator + Sampler primitives (M85)</span>
+    <span class="s2">"PrimitiveError"</span><span class="p">,</span>
+    <span class="s2">"SparsePauliOp"</span><span class="p">,</span>
+    <span class="s2">"EstimatorResult"</span><span class="p">,</span>
+    <span class="s2">"SamplerResult"</span><span class="p">,</span>
+    <span class="s2">"Estimator"</span><span class="p">,</span>
+    <span class="s2">"Sampler"</span><span class="p">,</span>
+    <span class="c1"># Dynamic circuits (M86)</span>
+    <span class="s2">"DynamicCircuitError"</span><span class="p">,</span>
+    <span class="s2">"DynamicCircuit"</span><span class="p">,</span>
+    <span class="s2">"DynamicResult"</span><span class="p">,</span>
+    <span class="s2">"DynamicSimulator"</span><span class="p">,</span>
+    <span class="c1"># Circuit Templates Library (M88)</span>
+    <span class="s2">"TemplateError"</span><span class="p">,</span>
+    <span class="s2">"CircuitTemplate"</span><span class="p">,</span>
+    <span class="s2">"hardware_efficient_ansatz"</span><span class="p">,</span>
+    <span class="s2">"iqp_circuit"</span><span class="p">,</span>
+    <span class="s2">"qaoa_circuit"</span><span class="p">,</span>
+    <span class="s2">"ghz_circuit"</span><span class="p">,</span>
+    <span class="s2">"quantum_fourier_transform"</span><span class="p">,</span>
+    <span class="s2">"uccsd_ansatz"</span><span class="p">,</span>
+    <span class="c1"># Noise characterization pipeline (M87)</span>
+    <span class="s2">"NoiseCharError"</span><span class="p">,</span>
+    <span class="s2">"CharacterizedNoise"</span><span class="p">,</span>
+    <span class="s2">"NoiseCharacterizer"</span><span class="p">,</span>
+    <span class="c1"># Floquet engineering + Bloch-Floquet band structure (M92)</span>
+    <span class="s2">"FloquetError"</span><span class="p">,</span>
+    <span class="s2">"FloquetSystem"</span><span class="p">,</span>
+    <span class="s2">"FloquetResult"</span><span class="p">,</span>
+    <span class="s2">"BlochFloquetSolver"</span><span class="p">,</span>
+    <span class="s2">"floquet_spectrum"</span><span class="p">,</span>
+    <span class="s2">"floquet_effective_hamiltonian"</span><span class="p">,</span>
+    <span class="s2">"driven_two_level"</span><span class="p">,</span>
+    <span class="c1"># Quantum communication protocols (M97)</span>
+    <span class="s2">"ProtocolError"</span><span class="p">,</span>
+    <span class="s2">"BB84Result"</span><span class="p">,</span>
+    <span class="s2">"BB84Protocol"</span><span class="p">,</span>
+    <span class="s2">"E91Result"</span><span class="p">,</span>
+    <span class="s2">"E91Protocol"</span><span class="p">,</span>
+    <span class="s2">"TeleportationResult"</span><span class="p">,</span>
+    <span class="s2">"TeleportationProtocol"</span><span class="p">,</span>
+    <span class="s2">"DenseCodingResult"</span><span class="p">,</span>
+    <span class="s2">"DenseCodingProtocol"</span><span class="p">,</span>
+    <span class="s2">"bb84_key_rate"</span><span class="p">,</span>
+    <span class="s2">"chsh_inequality_value"</span><span class="p">,</span>
+    <span class="s2">"teleportation_fidelity"</span><span class="p">,</span>
+    <span class="c1"># Quantum network simulation (M96)</span>
+    <span class="s2">"NetworkError"</span><span class="p">,</span>
+    <span class="s2">"QuantumNode"</span><span class="p">,</span>
+    <span class="s2">"QuantumChannel"</span><span class="p">,</span>
+    <span class="s2">"QuantumNetwork"</span><span class="p">,</span>
+    <span class="s2">"BellPairGenerator"</span><span class="p">,</span>
+    <span class="s2">"EntanglementSwapper"</span><span class="p">,</span>
+    <span class="s2">"QuantumRepeater"</span><span class="p">,</span>
+    <span class="s2">"NetworkResult"</span><span class="p">,</span>
+    <span class="s2">"fidelity_after_dephasing"</span><span class="p">,</span>
+    <span class="s2">"fidelity_after_swapping"</span><span class="p">,</span>
+    <span class="s2">"fidelity_after_purification"</span><span class="p">,</span>
+    <span class="s2">"simulate_repeater_chain"</span><span class="p">,</span>
+    <span class="c1"># Noise-aware VQE + SPSA optimizer (M95)</span>
+    <span class="s2">"NoiseVQEError"</span><span class="p">,</span>
+    <span class="s2">"SPSAOptimizer"</span><span class="p">,</span>
+    <span class="s2">"NoiseAwareVQEResult"</span><span class="p">,</span>
+    <span class="s2">"NoiseAwareVQE"</span><span class="p">,</span>
+    <span class="s2">"build_hea_circuit"</span><span class="p">,</span>
+    <span class="s2">"hardware_efficient_vqe"</span><span class="p">,</span>
+    <span class="s2">"n_hea_params"</span><span class="p">,</span>
+    <span class="c1"># Time-dependent DMRG (M94)</span>
+    <span class="s2">"TDMRGError"</span><span class="p">,</span>
+    <span class="s2">"TDMRGResult"</span><span class="p">,</span>
+    <span class="s2">"TDMRGSolver"</span><span class="p">,</span>
+    <span class="s2">"real_time_evolve"</span><span class="p">,</span>
+    <span class="s2">"imaginary_time_evolve"</span><span class="p">,</span>
+    <span class="c1"># Real hardware backend integration (M93)</span>
+    <span class="s2">"HardwareError"</span><span class="p">,</span>
+    <span class="s2">"BackendCalibration"</span><span class="p">,</span>
+    <span class="s2">"HardwareJobResult"</span><span class="p">,</span>
+    <span class="s2">"HardwareJob"</span><span class="p">,</span>
+    <span class="s2">"IBMHardwareBackend"</span><span class="p">,</span>
+    <span class="s2">"IonQBackend"</span><span class="p">,</span>
+    <span class="s2">"GoogleBackend"</span><span class="p">,</span>
+    <span class="s2">"calibration_to_noise_model"</span><span class="p">,</span>
+    <span class="s2">"available_backends"</span><span class="p">,</span>
+    <span class="c1"># Quantum walk algorithms (M100)</span>
+    <span class="s2">"QuantumWalkError"</span><span class="p">,</span>
+    <span class="s2">"WalkResult"</span><span class="p">,</span>
+    <span class="s2">"GroverWalkResult"</span><span class="p">,</span>
+    <span class="s2">"DiscreteTimeWalk"</span><span class="p">,</span>
+    <span class="s2">"ContinuousTimeQuantumWalk"</span><span class="p">,</span>
+    <span class="s2">"GroverWalk"</span><span class="p">,</span>
+    <span class="s2">"walk_spectrum"</span><span class="p">,</span>
+    <span class="s2">"ctqw_transfer_probability"</span><span class="p">,</span>
+    <span class="c1"># Suzuki-Trotter Hamiltonian simulation (M101)</span>
+    <span class="s2">"TrotterError"</span><span class="p">,</span>
+    <span class="s2">"TrotterTerm"</span><span class="p">,</span>
+    <span class="s2">"TrotterResult"</span><span class="p">,</span>
+    <span class="s2">"TrotterSimulator"</span><span class="p">,</span>
+    <span class="s2">"heisenberg_trotter"</span><span class="p">,</span>
+    <span class="s2">"ising_trotter"</span><span class="p">,</span>
+    <span class="c1"># Many-body physics enhancements (M102)</span>
+    <span class="s2">"ManyBodyError"</span><span class="p">,</span>
+    <span class="s2">"OTOCResult"</span><span class="p">,</span>
+    <span class="s2">"OTOCSweepResult"</span><span class="p">,</span>
+    <span class="s2">"SYKResult"</span><span class="p">,</span>
+    <span class="s2">"SYKModel"</span><span class="p">,</span>
+    <span class="s2">"DMRG2DResult"</span><span class="p">,</span>
+    <span class="s2">"SnakeMapper"</span><span class="p">,</span>
+    <span class="s2">"compute_otoc"</span><span class="p">,</span>
+    <span class="s2">"otoc_sweep"</span><span class="p">,</span>
+    <span class="s2">"syk_hamiltonian"</span><span class="p">,</span>
+    <span class="s2">"dmrg_2d"</span><span class="p">,</span>
+    <span class="c1"># MPS simulator extension (M104)</span>
+    <span class="s2">"MPSSimulatorError"</span><span class="p">,</span>
+    <span class="s2">"AdaptiveTruncation"</span><span class="p">,</span>
+    <span class="s2">"MPSSimulator"</span><span class="p">,</span>
+    <span class="s2">"CachedDMRG"</span><span class="p">,</span>
+    <span class="s2">"BenchmarkResult"</span><span class="p">,</span>
+    <span class="s2">"ComparisonResult"</span><span class="p">,</span>
+    <span class="s2">"mps_benchmark"</span><span class="p">,</span>
+    <span class="s2">"ghz_fidelity"</span><span class="p">,</span>
+    <span class="s2">"compare_mps_sv"</span><span class="p">,</span>
+    <span class="c1"># GPU-accelerated MPS (M109)</span>
+    <span class="s2">"GpuBenchmarkResult"</span><span class="p">,</span>
+    <span class="s2">"gpu_mps_benchmark"</span><span class="p">,</span>
+    <span class="s2">"get_backend_module"</span><span class="p">,</span>
+    <span class="s2">"is_gpu_available"</span><span class="p">,</span>
+    <span class="c1"># Large-scale Clifford simulation (M110)</span>
+    <span class="s2">"CliffordError"</span><span class="p">,</span>
+    <span class="s2">"StabilizerState"</span><span class="p">,</span>
+    <span class="s2">"CliffordSimulator"</span><span class="p">,</span>
+    <span class="s2">"StimCircuit"</span><span class="p">,</span>
+    <span class="s2">"StimCircuitError"</span><span class="p">,</span>
+    <span class="c1"># Distributed statevector via Ray (M111)</span>
+    <span class="s2">"DistSVError"</span><span class="p">,</span>
+    <span class="s2">"DistSVResult"</span><span class="p">,</span>
+    <span class="s2">"DistributedSVSimulator"</span><span class="p">,</span>
+    <span class="s2">"is_ray_available"</span><span class="p">,</span>
+    <span class="s2">"dist_sv_benchmark"</span><span class="p">,</span>
+    <span class="c1"># Fault-tolerant QC end-to-end pipeline (M112) + resource estimator (M156)</span>
+    <span class="s2">"FTQCPipelineError"</span><span class="p">,</span>
+    <span class="s2">"PipelineResult"</span><span class="p">,</span>
+    <span class="s2">"ThresholdCurveResult"</span><span class="p">,</span>
+    <span class="s2">"FTQCPipeline"</span><span class="p">,</span>
+    <span class="s2">"threshold_curve"</span><span class="p">,</span>
+    <span class="s2">"threshold_crossing"</span><span class="p">,</span>
+    <span class="s2">"ResourceEstimate"</span><span class="p">,</span>
+    <span class="s2">"FTQCResourceEstimator"</span><span class="p">,</span>
+    <span class="c1"># Excited-state quantum chemistry (M113)</span>
+    <span class="s2">"ExcitedStateError"</span><span class="p">,</span>
+    <span class="s2">"ExcitedStateResult"</span><span class="p">,</span>
+    <span class="s2">"ExcitedStateVQE"</span><span class="p">,</span>
+    <span class="s2">"ConicalIntersectionResult"</span><span class="p">,</span>
+    <span class="s2">"detect_conical_intersections"</span><span class="p">,</span>
+    <span class="s2">"pyscf_to_pauli_hamiltonian"</span><span class="p">,</span>
+    <span class="c1"># Non-equilibrium quantum dynamics (M114)</span>
+    <span class="s2">"NonEquilError"</span><span class="p">,</span>
+    <span class="s2">"KeldyshResult"</span><span class="p">,</span>
+    <span class="s2">"KeldyshSolver"</span><span class="p">,</span>
+    <span class="s2">"EntanglementDynamicsResult"</span><span class="p">,</span>
+    <span class="s2">"EntanglementDynamics"</span><span class="p">,</span>
+    <span class="s2">"KibbleZurekResult"</span><span class="p">,</span>
+    <span class="s2">"KibbleZurekScaling"</span><span class="p">,</span>
+    <span class="c1"># CVaR-QAOA combinatorial optimisation (M115)</span>
+    <span class="s2">"CVaRQAOAError"</span><span class="p">,</span>
+    <span class="s2">"CVaRQAOAResult"</span><span class="p">,</span>  <span class="c1"># quantx_engine.qaoa_optim.QAOAResult aliased to avoid clash</span>
+    <span class="s2">"MaxCutProblem"</span><span class="p">,</span>
+    <span class="s2">"TSPProblem"</span><span class="p">,</span>
+    <span class="s2">"CVaRQAOA"</span><span class="p">,</span>
+    <span class="s2">"QAOALandscapeResult"</span><span class="p">,</span>
+    <span class="s2">"QAOALandscape"</span><span class="p">,</span>
+    <span class="s2">"warm_start_qaoa"</span><span class="p">,</span>
+    <span class="c1"># Qiskit 1.x Primitives V2 compatibility (M116)</span>
+    <span class="s2">"QiskitCompatError"</span><span class="p">,</span>
+    <span class="s2">"BitArray"</span><span class="p">,</span>
+    <span class="s2">"DataBin"</span><span class="p">,</span>
+    <span class="s2">"PubResult"</span><span class="p">,</span>
+    <span class="s2">"PrimitiveResult"</span><span class="p">,</span>
+    <span class="s2">"SamplerPUB"</span><span class="p">,</span>
+    <span class="s2">"EstimatorPUB"</span><span class="p">,</span>
+    <span class="s2">"QuantXSamplerV2"</span><span class="p">,</span>
+    <span class="s2">"QuantXEstimatorV2"</span><span class="p">,</span>
+    <span class="c1"># Jupyter interactive widgets (M117)</span>
+    <span class="s2">"WidgetError"</span><span class="p">,</span>
+    <span class="s2">"CircuitWidgetState"</span><span class="p">,</span>
+    <span class="s2">"CircuitWidget"</span><span class="p">,</span>
+    <span class="s2">"BlochSphereWidgetState"</span><span class="p">,</span>
+    <span class="s2">"BlochSphereWidget"</span><span class="p">,</span>
+    <span class="s2">"JobMonitorWidgetState"</span><span class="p">,</span>
+    <span class="s2">"JobMonitorWidget"</span><span class="p">,</span>
+    <span class="c1"># Neutral-atom Rydberg blockade simulator (M118)</span>
+    <span class="s2">"RydbergError"</span><span class="p">,</span>
+    <span class="s2">"RydbergAtom"</span><span class="p">,</span>
+    <span class="s2">"RydbergHamiltonian"</span><span class="p">,</span>
+    <span class="s2">"RydbergResult"</span><span class="p">,</span>
+    <span class="s2">"RydbergSimulator"</span><span class="p">,</span>
+    <span class="c1"># Bosonic codes — cat qubits + GKP (M119)</span>
+    <span class="s2">"BosonicError"</span><span class="p">,</span>
+    <span class="s2">"CatNoiseModel"</span><span class="p">,</span>
+    <span class="s2">"CatQubit"</span><span class="p">,</span>
+    <span class="s2">"GKPState"</span><span class="p">,</span>
+    <span class="s2">"GKPDecoder"</span><span class="p">,</span>
+    <span class="c1"># Fault-tolerant T gate via magic state injection (M120)</span>
+    <span class="s2">"MagicStateError"</span><span class="p">,</span>
+    <span class="s2">"MagicStateFactory"</span><span class="p">,</span>
+    <span class="s2">"FTTGate"</span><span class="p">,</span>
+    <span class="s2">"FTCCXGate"</span><span class="p">,</span>
+    <span class="c1"># Quantum memory + dynamical decoupling (M126)</span>
+    <span class="s2">"DDError"</span><span class="p">,</span>
+    <span class="s2">"DDSequence"</span><span class="p">,</span>
+    <span class="s2">"DynamicalDecoupling"</span><span class="p">,</span>
+    <span class="s2">"QuantumMemory"</span><span class="p">,</span>
+    <span class="c1"># Measurement-based quantum computation (M125)</span>
+    <span class="s2">"MBQCError"</span><span class="p">,</span>
+    <span class="s2">"GraphState"</span><span class="p">,</span>
+    <span class="s2">"MBQCPattern"</span><span class="p">,</span>
+    <span class="c1"># Orbital-optimised VQE (M124)</span>
+    <span class="s2">"OOVQEError"</span><span class="p">,</span>
+    <span class="s2">"OOVQEResult"</span><span class="p">,</span>
+    <span class="s2">"OOVQESolver"</span><span class="p">,</span>
+    <span class="c1"># Quantum signal processing + QSVT (M123)</span>
+    <span class="s2">"QSPError"</span><span class="p">,</span>
+    <span class="s2">"QSPAnglesFinder"</span><span class="p">,</span>
+    <span class="s2">"QSVTCircuit"</span><span class="p">,</span>
+    <span class="c1"># McLachlan variational quantum dynamics (M122)</span>
+    <span class="s2">"McLachlanError"</span><span class="p">,</span>
+    <span class="s2">"McLachlanResult"</span><span class="p">,</span>
+    <span class="s2">"McLachlanSolver"</span><span class="p">,</span>
+    <span class="c1"># Quantum LDPC codes — hypergraph product + bicycle (M121)</span>
+    <span class="s2">"LDPCError"</span><span class="p">,</span>
+    <span class="s2">"ClassicalCode"</span><span class="p">,</span>
+    <span class="s2">"HypergraphProductCode"</span><span class="p">,</span>
+    <span class="s2">"LDPCDecoder"</span><span class="p">,</span>
+    <span class="s2">"bicycle_code"</span><span class="p">,</span>
+    <span class="c1"># Backend capability introspection (M153)</span>
+    <span class="s2">"backend_info"</span><span class="p">,</span>
+    <span class="c1"># Pure-Python dense statevector simulator (M160)</span>
+    <span class="s2">"StatevectorSimulator"</span><span class="p">,</span>
+    <span class="c1"># QuantumCircuit fluent builder API (M161)</span>
+    <span class="s2">"QuantumCircuit"</span><span class="p">,</span>
+    <span class="s2">"CircuitResult"</span><span class="p">,</span>
+    <span class="s2">"Symbol"</span><span class="p">,</span>
+<span class="p">]</span>
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

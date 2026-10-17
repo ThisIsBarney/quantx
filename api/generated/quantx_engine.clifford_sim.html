@@ -1,0 +1,945 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="quantx_engine.clifford_t" href="quantx_engine.clifford_t.html"><link rel="prev" title="quantx_engine.ft_tgate" href="quantx_engine.ft_tgate.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>quantx_engine.clifford_sim - QuantX Engine 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.1.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.1.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.lanczos.html">quantx_engine.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.trotter.html">quantx_engine.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.mclachlan.html">quantx_engine.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.noise.html">quantx_engine.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.mitigation.html">quantx_engine.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.lindblad.html">quantx_engine.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.adapters.html">quantx_engine.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.transpiler.html">quantx_engine.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qasm.html">quantx_engine.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.templates.html">quantx_engine.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.hardware.html">quantx_engine.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.ibm.html">quantx_engine.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.many_body.html">quantx_engine.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.finite_size.html">quantx_engine.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.mps_simulator.html">quantx_engine.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.tensor_network.html">quantx_engine.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.tdmrg.html">quantx_engine.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.spectral.html">quantx_engine.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.chemistry.html">quantx_engine.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.advanced_chemistry.html">quantx_engine.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.oovqe.html">quantx_engine.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.noise_vqe.html">quantx_engine.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qaoa_optim.html">quantx_engine.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qec.html">quantx_engine.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.fault_tolerant.html">quantx_engine.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.ft_tgate.html">quantx_engine.ft_tgate</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">quantx_engine.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.clifford_t.html">quantx_engine.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.ftqc_pipeline.html">quantx_engine.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qldpc.html">quantx_engine.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.bosonic.html">quantx_engine.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.quantum_walk.html">quantx_engine.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qsp_qsvt.html">quantx_engine.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.excited_state.html">quantx_engine.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.dynamic.html">quantx_engine.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.sweep.html">quantx_engine.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.mbqc.html">quantx_engine.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.quantum_network.html">quantx_engine.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.quantum_protocols.html">quantx_engine.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.pulse.html">quantx_engine.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.optimal_control.html">quantx_engine.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.dyndecouple.html">quantx_engine.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.crosstalk.html">quantx_engine.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.gpu.html">quantx_engine.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.ray_sim.html">quantx_engine.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qml.html">quantx_engine.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.qbm.html">quantx_engine.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.quantum_kernel.html">quantx_engine.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.rb_qv.html">quantx_engine.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.noise_char.html">quantx_engine.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.xeb.html">quantx_engine.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.tomography.html">quantx_engine.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.floquet.html">quantx_engine.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.neqdyn.html">quantx_engine.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.rydberg.html">quantx_engine.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.pennylane_plugin.html">quantx_engine.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.primitives.html">quantx_engine.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.jupyter_widgets.html">quantx_engine.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.circuit.html">quantx_engine.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.statevector.html">quantx_engine.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/blob/master/docs/source/api/generated/quantx_engine.clifford_sim.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/edit/master/docs/source/api/generated/quantx_engine.clifford_sim.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-quantx_engine.clifford_sim">
+<span id="quantx-engine-clifford-sim"></span><h1>quantx_engine.clifford_sim<a class="headerlink" href="#module-quantx_engine.clifford_sim" title="Link to this heading">¶</a></h1>
+<p>M110: Large-scale Clifford (stabilizer) simulation.</p>
+<p>Implements the Aaronson-Gottesman binary symplectic tableau algorithm
+[arXiv:quant-ph/0406196] which tracks an n-qubit stabilizer state in
+O(n²) bits and applies every Clifford gate in O(n) time.  The algorithm
+scales to 10 000+ qubits where state-vector simulation is completely
+infeasible.</p>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h2>
+<dl>
+<dt>StabilizerState</dt><dd><p>Full Aaronson-Gottesman tableau: (2n) × (2n+1) boolean array.
+Initialised to <a href="#id1"><span class="problematic" id="id2">|</span></a>0…0⟩.</p>
+</dd>
+<dt>CliffordSimulator</dt><dd><p>Gate-level interface wrapping <code class="docutils literal notranslate"><span class="pre">StabilizerState</span></code>.  Supported gates:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>h(q)          Hadamard
+s(q)          Phase (S = √Z)
+sdg(q)        S†
+x(q)          Pauli-X
+y(q)          Pauli-Y
+z(q)          Pauli-Z
+cx(ctrl, tgt) CNOT
+cz(q0, q1)    CZ   (= H·CNOT·H)
+swap(q0, q1)  SWAP (= CX·CX†·CX)
+measure(q)    Single-qubit Z-measurement (returns 0 or 1,
+              collapses state randomly when outcome is
+              indeterminate)
+</pre></div>
+</div>
+</dd>
+<dt>StimCircuit</dt><dd><p>Lightweight Stim-compatible circuit parser.  Reads the textual
+Stim circuit format and translates supported gates to
+<code class="docutils literal notranslate"><span class="pre">CliffordSimulator</span></code> calls:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">QUBIT_COORDS</span><span class="p">,</span> <span class="n">TICK</span>             <span class="n">skipped</span>
+<span class="n">H</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">S_DAG</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">Y</span><span class="p">,</span> <span class="n">Z</span>          <span class="n">single</span><span class="o">-</span><span class="n">qubit</span> <span class="n">Clifford</span>
+<span class="n">CNOT</span><span class="p">,</span> <span class="n">CX</span><span class="p">,</span> <span class="n">CZ</span><span class="p">,</span> <span class="n">SWAP</span>            <span class="n">two</span><span class="o">-</span><span class="n">qubit</span> <span class="n">Clifford</span>
+<span class="n">M</span><span class="p">,</span> <span class="n">MZ</span>                         <span class="n">Z</span><span class="o">-</span><span class="n">measurement</span>
+</pre></div>
+</div>
+</dd>
+</dl>
+<p>Quick start:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.clifford_sim</span><span class="w"> </span><span class="kn">import</span> <span class="n">CliffordSimulator</span><span class="p">,</span> <span class="n">StimCircuit</span>
+
+<span class="c1"># 10 000-qubit GHZ circuit</span>
+<span class="n">sim</span> <span class="o">=</span> <span class="n">CliffordSimulator</span><span class="p">(</span><span class="n">n_qubits</span><span class="o">=</span><span class="mi">10_000</span><span class="p">)</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">h</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">9_999</span><span class="p">):</span>
+    <span class="n">sim</span><span class="o">.</span><span class="n">cx</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">q</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Measure all qubits — should all collapse to the same value</span>
+<span class="n">outcomes</span> <span class="o">=</span> <span class="p">[</span><span class="n">sim</span><span class="o">.</span><span class="n">measure</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10_000</span><span class="p">)]</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">outcomes</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>        <span class="c1"># all 0s or all 1s</span>
+
+<span class="c1"># Stim circuit import</span>
+<span class="n">stim_text</span> <span class="o">=</span> <span class="s1">'''</span>
+<span class="s1">H 0</span>
+<span class="s1">CNOT 0 1</span>
+<span class="s1">M 0 1</span>
+<span class="s1">'''</span>
+<span class="n">circ</span> <span class="o">=</span> <span class="n">StimCircuit</span><span class="o">.</span><span class="n">from_string</span><span class="p">(</span><span class="n">stim_text</span><span class="p">)</span>
+<span class="n">results</span> <span class="o">=</span> <span class="n">circ</span><span class="o">.</span><span class="n">run</span><span class="p">()</span>                  <span class="c1"># returns list of measurement outcomes</span>
+</pre></div>
+</div>
+<p class="rubric">References</p>
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id3" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></span>
+<p>Aaronson, S. &amp; Gottesman, D. (2004). Improved simulation of stabilizer
+circuits. <em>Phys. Rev. A</em> 70, 052328.
+<a class="reference external" href="https://doi.org/10.1103/PhysRevA.70.052328">https://doi.org/10.1103/PhysRevA.70.052328</a></p>
+</aside>
+<aside class="footnote brackets" id="id4" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></span>
+<p>Gottesman, D. (1997). Stabilizer codes and quantum error correction.
+PhD thesis, Caltech.
+<a class="reference external" href="https://arxiv.org/abs/quant-ph/9705052">https://arxiv.org/abs/quant-ph/9705052</a></p>
+</aside>
+<aside class="footnote brackets" id="id5" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></span>
+<p>Gidney, C. (2021). Stim: a fast stabilizer circuit simulator.
+<em>Quantum</em> 5, 497. <a class="reference external" href="https://doi.org/10.22331/q-2021-07-06-497">https://doi.org/10.22331/q-2021-07-06-497</a></p>
+</aside>
+</aside>
+</section>
+<section id="physical-validation">
+<h2>Physical validation<a class="headerlink" href="#physical-validation" title="Link to this heading">¶</a></h2>
+<p>Bell state prepared via H(0)+CNOT(0,1): stabilizer generators are &lt;XX, ZZ&gt;.
+Clifford simulation reproduces Bell-state correlations: Z_0 Z_1 = +1,
+X_0 X_1 = +1, Z_0 Z_1 Y_0 Y_1 = -1 (standard Bell-state relations).
+10000-qubit GHZ state runs in O(n) time via tableau updates [Aaronson2004].</p>
+<p class="rubric">Classes</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.CliffordSimulator" title="quantx_engine.clifford_sim.CliffordSimulator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CliffordSimulator</span></code></a>(n_qubits[, seed])</p></td>
+<td><p>Gate-level Clifford circuit simulator using the Aaronson-Gottesman tableau.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.StabilizerState" title="quantx_engine.clifford_sim.StabilizerState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StabilizerState</span></code></a>(n_qubits)</p></td>
+<td><p>Aaronson-Gottesman binary symplectic tableau for n-qubit stabilizer states.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.StimCircuit" title="quantx_engine.clifford_sim.StimCircuit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StimCircuit</span></code></a>(n_qubits[, instructions])</p></td>
+<td><p>Parsed Stim-format circuit ready to simulate with <code class="docutils literal notranslate"><span class="pre">CliffordSimulator</span></code>.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Exceptions</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.CliffordError" title="quantx_engine.clifford_sim.CliffordError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CliffordError</span></code></a></p></td>
+<td><p>Raised for invalid Clifford simulator operations.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.StimCircuitError" title="quantx_engine.clifford_sim.StimCircuitError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StimCircuitError</span></code></a></p></td>
+<td><p>Raised for malformed or unsupported Stim circuit syntax.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<dl class="py exception">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.clifford_sim.</span></span><span class="sig-name descname"><span class="pre">CliffordError</span></span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordError" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></a></p>
+<p>Raised for invalid Clifford simulator operations.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.clifford_sim.</span></span><span class="sig-name descname"><span class="pre">StabilizerState</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_qubits</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Aaronson-Gottesman binary symplectic tableau for n-qubit stabilizer states.</p>
+<section id="tableau-layout-following-ag04-section-4">
+<h2>Tableau layout (following [AG04] Section 4)<a class="headerlink" href="#tableau-layout-following-ag04-section-4" title="Link to this heading">¶</a></h2>
+<p>Row indices 0..n-1   : destabilizer generators
+Row indices n..2n-1  : stabilizer generators
+Column layout per row: [x_0, …, x_{n-1}, z_0, …, z_{n-1}, r]</p>
+<blockquote>
+<div><p>where x_i, z_i ∈ {0,1} and r ∈ {0,1} is the phase (r=1 means −1 factor).</p>
+</div></blockquote>
+<p>All Clifford gates are O(n) vectorized numpy operations (no Python loops).</p>
+<dl class="field-list simple">
+<dt class="field-odd">param n_qubits<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Number of qubits.  The tableau shape is (2n) × (2n+1).</p>
+</dd>
+<dt class="field-even">type n_qubits<span class="colon">:</span></dt>
+<dd class="field-even"><p>int</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_qubits</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.h">
+<span class="sig-name descname"><span class="pre">h</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.h"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.h" title="Link to this definition">¶</a></dt>
+<dd><p>Hadamard gate on <em>qubit</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.s">
+<span class="sig-name descname"><span class="pre">s</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.s"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.s" title="Link to this definition">¶</a></dt>
+<dd><p>S gate (√Z) on <em>qubit</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.sdg">
+<span class="sig-name descname"><span class="pre">sdg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.sdg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.sdg" title="Link to this definition">¶</a></dt>
+<dd><p>S† gate on <em>qubit</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.x">
+<span class="sig-name descname"><span class="pre">x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.x"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.x" title="Link to this definition">¶</a></dt>
+<dd><p>Pauli-X gate on <em>qubit</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.y">
+<span class="sig-name descname"><span class="pre">y</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.y"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.y" title="Link to this definition">¶</a></dt>
+<dd><p>Pauli-Y gate on <em>qubit</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.z">
+<span class="sig-name descname"><span class="pre">z</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.z"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.z" title="Link to this definition">¶</a></dt>
+<dd><p>Pauli-Z gate on <em>qubit</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.cx">
+<span class="sig-name descname"><span class="pre">cx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctrl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.cx"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.cx" title="Link to this definition">¶</a></dt>
+<dd><p>CNOT gate.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.cz">
+<span class="sig-name descname"><span class="pre">cz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.cz"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.cz" title="Link to this definition">¶</a></dt>
+<dd><p>CZ gate.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.swap">
+<span class="sig-name descname"><span class="pre">swap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.swap"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.swap" title="Link to this definition">¶</a></dt>
+<dd><p>SWAP gate.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.measure">
+<span class="sig-name descname"><span class="pre">measure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.measure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.measure" title="Link to this definition">¶</a></dt>
+<dd><p>Measure <em>qubit</em> in the Z basis, collapsing the state.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>qubit</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>)</p></li>
+<li><p><strong>rng</strong> (<a class="reference external" href="https://docs.python.org/3/library/random.html#random.Random" title="(in Python v3.15)"><em>random.Random</em></a>) – Caller-supplied RNG advanced once per indeterminate measurement.
+Pass a shared, persistent instance to get independent draws across
+multiple <code class="docutils literal notranslate"><span class="pre">measure()</span></code> calls.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>int — 0 or 1.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.copy">
+<span class="sig-name descname"><span class="pre">copy</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StabilizerState.copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.copy" title="Link to this definition">¶</a></dt>
+<dd><p>Return a deep copy of this tableau.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StabilizerState.n_qubits">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_qubits</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><a class="headerlink" href="#quantx_engine.clifford_sim.StabilizerState.n_qubits" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.clifford_sim.</span></span><span class="sig-name descname"><span class="pre">CliffordSimulator</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_qubits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Gate-level Clifford circuit simulator using the Aaronson-Gottesman tableau.</p>
+<p>All operations run in O(n) time; the full state fits in O(n²) bits,
+enabling 10 000+ qubit simulation on commodity hardware.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_qubits</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of qubits.  Initialised to <a href="#id6"><span class="problematic" id="id7">|</span></a>0…0⟩.</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><em>None</em>) – Default RNG seed for indeterminate measurements.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_qubits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.h">
+<span class="sig-name descname"><span class="pre">h</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.h"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.h" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.s">
+<span class="sig-name descname"><span class="pre">s</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.s"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.s" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.sdg">
+<span class="sig-name descname"><span class="pre">sdg</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.sdg"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.sdg" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.x">
+<span class="sig-name descname"><span class="pre">x</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.x"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.x" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.y">
+<span class="sig-name descname"><span class="pre">y</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.y"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.y" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.z">
+<span class="sig-name descname"><span class="pre">z</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.z"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.z" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.cx">
+<span class="sig-name descname"><span class="pre">cx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctrl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.cx"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.cx" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.cnot">
+<span class="sig-name descname"><span class="pre">cnot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ctrl</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.cnot"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.cnot" title="Link to this definition">¶</a></dt>
+<dd><p>CNOT gate (alias for cx).</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.cz">
+<span class="sig-name descname"><span class="pre">cz</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.cz"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.cz" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.swap">
+<span class="sig-name descname"><span class="pre">swap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">q0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">q1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.swap"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.swap" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.measure">
+<span class="sig-name descname"><span class="pre">measure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">qubit</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.measure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.measure" title="Link to this definition">¶</a></dt>
+<dd><p>Measure <em>qubit</em> in the Z basis.  Returns 0 or 1.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>qubit</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>)</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><em>None</em>) – If provided, the simulator’s RNG is re-seeded with this value
+<em>before</em> this measurement.  Useful for reproducible individual
+measurements; for reproducible multi-qubit circuits, seed the
+simulator at construction time instead.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.measure_all">
+<span class="sig-name descname"><span class="pre">measure_all</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.measure_all"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.measure_all" title="Link to this definition">¶</a></dt>
+<dd><p>Measure all qubits in order using the simulator’s shared RNG.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><em>None</em>) – If provided, re-seeds the simulator’s RNG once before the first
+measurement (not once per qubit), so successive measurements get
+independent draws from the same seeded sequence.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.n_qubits">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">n_qubits</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.n_qubits" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.state">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">state</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.StabilizerState" title="quantx_engine.clifford_sim.StabilizerState"><span class="pre">StabilizerState</span></a></span><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.state" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.measurement_outcomes">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">measurement_outcomes</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.measurement_outcomes" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.CliffordSimulator.pauli_expectation">
+<span class="sig-name descname"><span class="pre">pauli_expectation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pauli</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#CliffordSimulator.pauli_expectation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.CliffordSimulator.pauli_expectation" title="Link to this definition">¶</a></dt>
+<dd><p>Return expectation value of a Pauli string: +1.0, -1.0, or 0.0.</p>
+<p>Returns +1 if the Pauli is in the stabiliser group, -1 if its
+negative is, and 0 if the outcome is indeterminate (the Pauli does
+not commute with at least one generator).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>pauli</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Pauli string of length n_qubits, each character in {I,X,Y,Z}.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.clifford_sim.</span></span><span class="sig-name descname"><span class="pre">StimCircuit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_qubits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instructions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StimCircuit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Parsed Stim-format circuit ready to simulate with <code class="docutils literal notranslate"><span class="pre">CliffordSimulator</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_qubits</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Inferred from the largest qubit index in the circuit.</p></li>
+<li><p><strong>instructions</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>]</em>) – Sequence of <code class="docutils literal notranslate"><span class="pre">(gate_name,</span> <span class="pre">[qubit_indices])</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit.n_qubits">
+<span class="sig-name descname"><span class="pre">n_qubits</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit.n_qubits" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit.instructions">
+<span class="sig-name descname"><span class="pre">instructions</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit.instructions" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit.from_string">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_string</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">text</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StimCircuit.from_string"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit.from_string" title="Link to this definition">¶</a></dt>
+<dd><p>Parse a Stim circuit from <em>text</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_qubits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instructions</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">&lt;factory&gt;</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit.from_file">
+<span class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">from_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StimCircuit.from_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit.from_file" title="Link to this definition">¶</a></dt>
+<dd><p>Parse a Stim circuit from <em>path</em>.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuit.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StimCircuit.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuit.run" title="Link to this definition">¶</a></dt>
+<dd><p>Execute the circuit on a fresh <a class="reference internal" href="../qec.html#quantx_engine.clifford_sim.CliffordSimulator" title="quantx_engine.clifford_sim.CliffordSimulator"><code class="xref py py-class docutils literal notranslate"><span class="pre">CliffordSimulator</span></code></a>.</p>
+<p>Returns all measurement outcomes in order as a list of ints.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py exception">
+<dt class="sig sig-object py" id="quantx_engine.clifford_sim.StimCircuitError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.clifford_sim.</span></span><span class="sig-name descname"><span class="pre">StimCircuitError</span></span><a class="reference internal" href="../../_modules/quantx_engine/clifford_sim.html#StimCircuitError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.clifford_sim.StimCircuitError" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></a></p>
+<p>Raised for malformed or unsupported Stim circuit syntax.</p>
+</dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="quantx_engine.clifford_t.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">quantx_engine.clifford_t</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="quantx_engine.ft_tgate.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">quantx_engine.ft_tgate</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">quantx_engine.clifford_sim</a><ul>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#physical-validation">Physical validation</a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordError"><code class="docutils literal notranslate"><span class="pre">CliffordError</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState"><code class="docutils literal notranslate"><span class="pre">StabilizerState</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.__init__"><code class="docutils literal notranslate"><span class="pre">StabilizerState.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.h"><code class="docutils literal notranslate"><span class="pre">StabilizerState.h()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.s"><code class="docutils literal notranslate"><span class="pre">StabilizerState.s()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.sdg"><code class="docutils literal notranslate"><span class="pre">StabilizerState.sdg()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.x"><code class="docutils literal notranslate"><span class="pre">StabilizerState.x()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.y"><code class="docutils literal notranslate"><span class="pre">StabilizerState.y()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.z"><code class="docutils literal notranslate"><span class="pre">StabilizerState.z()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.cx"><code class="docutils literal notranslate"><span class="pre">StabilizerState.cx()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.cz"><code class="docutils literal notranslate"><span class="pre">StabilizerState.cz()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.swap"><code class="docutils literal notranslate"><span class="pre">StabilizerState.swap()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.measure"><code class="docutils literal notranslate"><span class="pre">StabilizerState.measure()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.copy"><code class="docutils literal notranslate"><span class="pre">StabilizerState.copy()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StabilizerState.n_qubits"><code class="docutils literal notranslate"><span class="pre">StabilizerState.n_qubits</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.__init__"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.h"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.h()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.s"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.s()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.sdg"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.sdg()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.x"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.x()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.y"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.y()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.z"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.z()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.cx"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.cx()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.cnot"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.cnot()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.cz"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.cz()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.swap"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.swap()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.measure"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.measure()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.measure_all"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.measure_all()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.n_qubits"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.n_qubits</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.state"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.state</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.measurement_outcomes"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.measurement_outcomes</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.CliffordSimulator.pauli_expectation"><code class="docutils literal notranslate"><span class="pre">CliffordSimulator.pauli_expectation()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit"><code class="docutils literal notranslate"><span class="pre">StimCircuit</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit.n_qubits"><code class="docutils literal notranslate"><span class="pre">StimCircuit.n_qubits</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit.instructions"><code class="docutils literal notranslate"><span class="pre">StimCircuit.instructions</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit.from_string"><code class="docutils literal notranslate"><span class="pre">StimCircuit.from_string()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit.__init__"><code class="docutils literal notranslate"><span class="pre">StimCircuit.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit.from_file"><code class="docutils literal notranslate"><span class="pre">StimCircuit.from_file()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuit.run"><code class="docutils literal notranslate"><span class="pre">StimCircuit.run()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.clifford_sim.StimCircuitError"><code class="docutils literal notranslate"><span class="pre">StimCircuitError</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

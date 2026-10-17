@@ -1,0 +1,1028 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>quantx_engine.templates - QuantX Engine 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.1.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.1.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.lanczos.html">quantx_engine.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.trotter.html">quantx_engine.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mclachlan.html">quantx_engine.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.noise.html">quantx_engine.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mitigation.html">quantx_engine.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.lindblad.html">quantx_engine.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.adapters.html">quantx_engine.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.transpiler.html">quantx_engine.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qasm.html">quantx_engine.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.templates.html">quantx_engine.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.hardware.html">quantx_engine.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ibm.html">quantx_engine.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.many_body.html">quantx_engine.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.finite_size.html">quantx_engine.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mps_simulator.html">quantx_engine.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tensor_network.html">quantx_engine.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tdmrg.html">quantx_engine.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.spectral.html">quantx_engine.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.chemistry.html">quantx_engine.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.advanced_chemistry.html">quantx_engine.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.oovqe.html">quantx_engine.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.noise_vqe.html">quantx_engine.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qaoa_optim.html">quantx_engine.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qec.html">quantx_engine.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.fault_tolerant.html">quantx_engine.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ft_tgate.html">quantx_engine.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.clifford_sim.html">quantx_engine.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.clifford_t.html">quantx_engine.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ftqc_pipeline.html">quantx_engine.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qldpc.html">quantx_engine.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.bosonic.html">quantx_engine.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_walk.html">quantx_engine.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qsp_qsvt.html">quantx_engine.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.excited_state.html">quantx_engine.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dynamic.html">quantx_engine.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.sweep.html">quantx_engine.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mbqc.html">quantx_engine.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_network.html">quantx_engine.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_protocols.html">quantx_engine.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.pulse.html">quantx_engine.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.optimal_control.html">quantx_engine.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dyndecouple.html">quantx_engine.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.crosstalk.html">quantx_engine.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.gpu.html">quantx_engine.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ray_sim.html">quantx_engine.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qml.html">quantx_engine.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qbm.html">quantx_engine.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_kernel.html">quantx_engine.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.rb_qv.html">quantx_engine.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.noise_char.html">quantx_engine.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.xeb.html">quantx_engine.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tomography.html">quantx_engine.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.floquet.html">quantx_engine.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.neqdyn.html">quantx_engine.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.rydberg.html">quantx_engine.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.pennylane_plugin.html">quantx_engine.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.primitives.html">quantx_engine.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.jupyter_widgets.html">quantx_engine.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.circuit.html">quantx_engine.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.statevector.html">quantx_engine.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.templates</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Circuit Templates Library — M88.</span>
+
+<span class="sd">Provides a collection of standard parameterized quantum circuit ansätze and</span>
+<span class="sd">fully-fixed circuit templates, all returning circuit dicts compatible with the</span>
+<span class="sd">:class:`~quantx_engine.primitives.Estimator` and</span>
+<span class="sd">:class:`~quantx_engine.primitives.Sampler` primitives.</span>
+
+<span class="sd">Quick reference::</span>
+
+<span class="sd">    from quantx_engine.templates import hardware_efficient_ansatz, ghz_circuit</span>
+
+<span class="sd">    # Parameterized HEA on 4 qubits, 2 layers</span>
+<span class="sd">    tmpl = hardware_efficient_ansatz(4, n_layers=2)</span>
+<span class="sd">    bound = tmpl.bind([0.1] * tmpl.n_parameters)</span>
+<span class="sd">    # bound is a plain circuit dict ready for Estimator/Sampler</span>
+
+<span class="sd">    # Fixed GHZ circuit (no parameters)</span>
+<span class="sd">    ghz = ghz_circuit(3)</span>
+<span class="sd">    circuit_dict = ghz.to_circuit()</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Kandala, A. et al. (2017). Hardware-efficient variational quantum</span>
+<span class="sd">       eigensolver for small molecules and quantum magnets.</span>
+<span class="sd">       *Nature* 549, 242. https://doi.org/10.1038/nature23879</span>
+<span class="sd">       (Hardware-efficient ansatz template)</span>
+
+<span class="sd">.. [2] Farhi, E., Goldstone, J. &amp; Gutmann, S. (2014). A quantum approximate</span>
+<span class="sd">       optimization algorithm. arXiv:1411.4028.</span>
+<span class="sd">       https://doi.org/10.48550/arXiv.1411.4028</span>
+
+<span class="sd">.. [3] Romero, J. et al. (2018). Strategies for quantum computing molecular</span>
+<span class="sd">       energies using the unitary coupled cluster ansatz.</span>
+<span class="sd">       *Quantum Sci. Technol.* 4, 014008.</span>
+<span class="sd">       https://doi.org/10.1088/2058-9565/aad3e4</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Union</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"TemplateError"</span><span class="p">,</span>
+    <span class="s2">"CircuitTemplate"</span><span class="p">,</span>
+    <span class="s2">"hardware_efficient_ansatz"</span><span class="p">,</span>
+    <span class="s2">"iqp_circuit"</span><span class="p">,</span>
+    <span class="s2">"qaoa_circuit"</span><span class="p">,</span>
+    <span class="s2">"ghz_circuit"</span><span class="p">,</span>
+    <span class="s2">"quantum_fourier_transform"</span><span class="p">,</span>
+    <span class="s2">"uccsd_ansatz"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># Exception</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="TemplateError">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.TemplateError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TemplateError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised for invalid inputs to circuit template factory functions."""</span></div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># CircuitTemplate dataclass</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="CircuitTemplate">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.CircuitTemplate">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A parameterized (or fixed) circuit with metadata.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Number of qubits in the circuit.</span>
+<span class="sd">    operations:</span>
+<span class="sd">        List of gate-op dicts (may contain string parameter names).</span>
+<span class="sd">    parameter_names:</span>
+<span class="sd">        Ordered list of symbolic parameter name strings.</span>
+<span class="sd">    name:</span>
+<span class="sd">        Human-readable name of the template.</span>
+<span class="sd">    description:</span>
+<span class="sd">        Optional longer description.</span>
+<span class="sd">    """</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">operations</span><span class="p">:</span> <span class="nb">list</span>
+    <span class="n">parameter_names</span><span class="p">:</span> <span class="nb">list</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Properties</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Number of free (symbolic) parameters."""</span>
+        <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter_names</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># to_circuit</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="CircuitTemplate.to_circuit">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.CircuitTemplate.to_circuit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_circuit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the raw (possibly symbolic) circuit dict.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            ``{"n_qubits": ..., "operations": [...]}`` with string params</span>
+<span class="sd">            left as symbolic names.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"n_qubits"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span> <span class="s2">"operations"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">operations</span><span class="p">)}</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># bind</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="CircuitTemplate.bind">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.CircuitTemplate.bind">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bind</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">list</span><span class="p">,</span> <span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a concrete circuit dict with all symbolic params bound.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        values:</span>
+<span class="sd">            - If a **list**: positionally bind ``parameter_names[i]`` to</span>
+<span class="sd">              ``values[i]``.  Length must equal :attr:`n_parameters`.</span>
+<span class="sd">            - If a **dict**: map from parameter name to float value.  All</span>
+<span class="sd">              symbolic names must be present.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            ``{"n_qubits": ..., "operations": [...]}`` with every string</span>
+<span class="sd">            param replaced by its float value.  Ready for</span>
+<span class="sd">            :meth:`~quantx_engine.primitives.Estimator.run`.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        TemplateError</span>
+<span class="sd">            If list length doesn't match, or a required key is missing.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_parameters</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Expected </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_parameters</span><span class="si">}</span><span class="s2"> parameter values, "</span>
+                    <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+            <span class="n">pv</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parameter_names</span><span class="p">,</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="p">]))</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+            <span class="n">pv</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">parameter_names</span> <span class="k">if</span> <span class="n">n</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">pv</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">missing</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Missing parameter values for: </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"values must be a list or dict, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+
+        <span class="n">bound_ops</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">operations</span><span class="p">:</span>
+            <span class="n">new_op</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">"params"</span> <span class="ow">in</span> <span class="n">op</span><span class="p">:</span>
+                <span class="n">new_params</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">op</span><span class="p">[</span><span class="s2">"params"</span><span class="p">]:</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                        <span class="k">if</span> <span class="n">p</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">pv</span><span class="p">:</span>
+                            <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+                                <span class="sa">f</span><span class="s2">"Parameter </span><span class="si">{</span><span class="n">p</span><span class="si">!r}</span><span class="s2"> not found in provided values."</span>
+                            <span class="p">)</span>
+                        <span class="n">new_params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pv</span><span class="p">[</span><span class="n">p</span><span class="p">])</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">new_params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">p</span><span class="p">))</span>
+                <span class="n">new_op</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
+                <span class="n">new_op</span><span class="p">[</span><span class="s2">"params"</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_params</span>
+            <span class="n">bound_ops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_op</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"n_qubits"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span> <span class="s2">"operations"</span><span class="p">:</span> <span class="n">bound_ops</span><span class="p">}</span></div>
+</div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># Helpers</span>
+<span class="c1"># ===========================================================================</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">min_val</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">n_qubits</span> <span class="o">&lt;</span> <span class="n">min_val</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"n_qubits must be an integer &gt;= </span><span class="si">{</span><span class="n">min_val</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">!r}</span><span class="s2">."</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_positive_int</span><span class="p">(</span><span class="n">val</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">val</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">val</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be a positive integer &gt;= 1, got </span><span class="si">{</span><span class="n">val</span><span class="si">!r}</span><span class="s2">."</span>
+        <span class="p">)</span>
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># Hardware-Efficient Ansatz (HEA)</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="hardware_efficient_ansatz">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.hardware_efficient_ansatz">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">hardware_efficient_ansatz</span><span class="p">(</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="n">rotation</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ry"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Hardware-efficient ansatz (HEA).</span>
+
+<span class="sd">    Structure per layer:</span>
+<span class="sd">    1. Single-qubit rotation (rx/ry/rz) on every qubit.</span>
+<span class="sd">    2. Entangling CNOT ladder: CX(0,1), CX(1,2), …, CX(n-2, n-1).</span>
+
+<span class="sd">    Repeated ``n_layers`` times, followed by a final rotation layer.</span>
+
+<span class="sd">    Total parameters: ``n_qubits * (n_layers + 1)``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Number of qubits (&gt;= 1).</span>
+<span class="sd">    n_layers:</span>
+<span class="sd">        Number of rotation + entangling layers (&gt;= 1).</span>
+<span class="sd">    rotation:</span>
+<span class="sd">        Single-qubit rotation gate: ``"rx"``, ``"ry"``, or ``"rz"``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CircuitTemplate</span>
+<span class="sd">    """</span>
+    <span class="n">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)</span>
+    <span class="n">_check_positive_int</span><span class="p">(</span><span class="n">n_layers</span><span class="p">,</span> <span class="s2">"n_layers"</span><span class="p">)</span>
+    <span class="n">rotation</span> <span class="o">=</span> <span class="n">rotation</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">rotation</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"rx"</span><span class="p">,</span> <span class="s2">"ry"</span><span class="p">,</span> <span class="s2">"rz"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"rotation must be 'rx', 'ry', or 'rz', got </span><span class="si">{</span><span class="n">rotation</span><span class="si">!r}</span><span class="s2">."</span>
+        <span class="p">)</span>
+
+    <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">param_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">param_idx</span> <span class="o">=</span> <span class="mi">0</span>
+
+    <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_layers</span><span class="p">):</span>
+        <span class="c1"># Rotation layer</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+            <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"theta_</span><span class="si">{</span><span class="n">layer</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pname</span><span class="p">)</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">rotation</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">pname</span><span class="p">]})</span>
+        <span class="c1"># Entangling CNOT ladder</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">,</span> <span class="n">q</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]})</span>
+
+    <span class="c1"># Final rotation layer</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+        <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"theta_</span><span class="si">{</span><span class="n">n_layers</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pname</span><span class="p">)</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="n">rotation</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">pname</span><span class="p">]})</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_qubits</span> <span class="o">*</span> <span class="p">(</span><span class="n">n_layers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">CircuitTemplate</span><span class="p">(</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">operations</span><span class="o">=</span><span class="n">ops</span><span class="p">,</span>
+        <span class="n">parameter_names</span><span class="o">=</span><span class="n">param_names</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"HardwareEfficientAnsatz"</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n_layers</span><span class="si">}</span><span class="s2">-layer hardware-efficient ansatz with </span><span class="si">{</span><span class="n">rotation</span><span class="si">}</span><span class="s2"> rotations "</span>
+            <span class="sa">f</span><span class="s2">"on </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits."</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># IQP Circuit</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="iqp_circuit">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.iqp_circuit">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">iqp_circuit</span><span class="p">(</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Instantaneous Quantum Polynomial (IQP) circuit.</span>
+
+<span class="sd">    Structure (repeated ``depth`` times):</span>
+<span class="sd">    1. H on every qubit.</span>
+<span class="sd">    2. Diagonal phase layer: RZZ(theta_i_j) on random qubit pairs, then</span>
+<span class="sd">       RZ(phi_i) on each qubit.</span>
+
+<span class="sd">    Useful for quantum advantage demonstrations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Number of qubits (&gt;= 2).</span>
+<span class="sd">    depth:</span>
+<span class="sd">        Number of H + diagonal-phase repetitions (&gt;= 1).</span>
+<span class="sd">    seed:</span>
+<span class="sd">        Random seed for choosing which qubit pairs get RZZ interactions.</span>
+<span class="sd">        Makes the structure reproducible.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CircuitTemplate</span>
+<span class="sd">    """</span>
+    <span class="n">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="n">min_val</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">_check_positive_int</span><span class="p">(</span><span class="n">depth</span><span class="p">,</span> <span class="s2">"depth"</span><span class="p">)</span>
+
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+    <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">param_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Enumerate all pairs (i,j) with i &lt; j deterministically for reproducibility</span>
+    <span class="n">all_pairs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">)]</span>
+
+    <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">depth</span><span class="p">):</span>
+        <span class="c1"># Hadamard layer</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"h"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">]})</span>
+
+        <span class="c1"># Diagonal ZZ phase layer: choose a random subset of pairs</span>
+        <span class="n">n_pairs</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_pairs</span><span class="p">)))</span>
+        <span class="n">chosen_pairs</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">all_pairs</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">n_pairs</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">all_pairs</span><span class="p">)))</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">qi</span><span class="p">,</span> <span class="n">qj</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chosen_pairs</span><span class="p">):</span>
+            <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"theta_</span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pname</span><span class="p">)</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rzz"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">qi</span><span class="p">,</span> <span class="n">qj</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">pname</span><span class="p">]})</span>
+
+        <span class="c1"># Single-qubit diagonal Z phase layer</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+            <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"phi_</span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pname</span><span class="p">)</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rz"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">pname</span><span class="p">]})</span>
+
+    <span class="k">return</span> <span class="n">CircuitTemplate</span><span class="p">(</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">operations</span><span class="o">=</span><span class="n">ops</span><span class="p">,</span>
+        <span class="n">parameter_names</span><span class="o">=</span><span class="n">param_names</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"IQPCircuit"</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Depth-</span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2"> IQP circuit on </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits."</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># QAOA Circuit</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="qaoa_circuit">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.qaoa_circuit">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">qaoa_circuit</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">p_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""QAOA ansatz for MaxCut on a ring graph.</span>
+
+<span class="sd">    Alternating cost (ZZ Ising) and mixer (RX) layers.</span>
+
+<span class="sd">    Cost layer: RZZ(2*gamma_k, i, i+1) for all ring edges (i, i+1 mod n).</span>
+<span class="sd">    Mixer layer: RX(2*beta_k, i) for all qubits.</span>
+
+<span class="sd">    Total parameters: ``2 * p_layers`` (gamma_0…gamma_{p-1}, beta_0…beta_{p-1}).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Number of qubits (&gt;= 2).</span>
+<span class="sd">    p_layers:</span>
+<span class="sd">        Number of QAOA rounds (&gt;= 1).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CircuitTemplate</span>
+<span class="sd">    """</span>
+    <span class="n">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="n">min_val</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="n">_check_positive_int</span><span class="p">(</span><span class="n">p_layers</span><span class="p">,</span> <span class="s2">"p_layers"</span><span class="p">)</span>
+
+    <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">param_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># Initial superposition</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"h"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">]})</span>
+
+    <span class="c1"># Ring edges: (0,1), (1,2), ..., (n-2, n-1), (n-1, 0)</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">[(</span><span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">n_qubits</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)]</span>
+
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">p_layers</span><span class="p">):</span>
+        <span class="n">gamma_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"gamma_</span><span class="si">{</span><span class="n">p</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">beta_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"beta_</span><span class="si">{</span><span class="n">p</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">gamma_name</span><span class="p">)</span>
+        <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beta_name</span><span class="p">)</span>
+
+        <span class="c1"># Cost layer: RZZ(2*gamma, i, j) for each edge</span>
+        <span class="c1"># We use a fixed numeric factor by embedding 2* into the param binding.</span>
+        <span class="c1"># Since we can't do arithmetic in the param name, we implement the</span>
+        <span class="c1"># scaling by emitting RZZ ops with params=[gamma_name] and document</span>
+        <span class="c1"># that the QAOA convention uses RZZ(gamma) for the cost Hamiltonian</span>
+        <span class="c1"># (i.e. the factor-of-2 is absorbed into gamma's meaning).</span>
+        <span class="c1"># Alternatively, we use a helper approach: store param as-is and the</span>
+        <span class="c1"># user passes gamma = actual_gamma.</span>
+        <span class="c1">#</span>
+        <span class="c1"># To faithfully implement RZZ(2*gamma), we decompose:</span>
+        <span class="c1">#   RZZ(2*gamma) via CNOT + RZ(2*gamma) + CNOT</span>
+        <span class="c1"># But since primitives.py supports rzz directly, we use it and note</span>
+        <span class="c1"># the user should pass the full angle.</span>
+        <span class="k">for</span> <span class="p">(</span><span class="n">qi</span><span class="p">,</span> <span class="n">qj</span><span class="p">)</span> <span class="ow">in</span> <span class="n">edges</span><span class="p">:</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rzz"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">qi</span><span class="p">,</span> <span class="n">qj</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">gamma_name</span><span class="p">]})</span>
+
+        <span class="c1"># Mixer layer: RX(2*beta) for each qubit</span>
+        <span class="c1"># Same convention: store beta_name, user passes 2*beta directly.</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">beta_name</span><span class="p">]})</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">param_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p_layers</span>
+
+    <span class="k">return</span> <span class="n">CircuitTemplate</span><span class="p">(</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">operations</span><span class="o">=</span><span class="n">ops</span><span class="p">,</span>
+        <span class="n">parameter_names</span><span class="o">=</span><span class="n">param_names</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"QAOACircuit"</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">p_layers</span><span class="si">}</span><span class="s2">-layer QAOA on </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">-qubit ring MaxCut. "</span>
+            <span class="s2">"Parameters: gamma_0..gamma_{p-1} (cost), beta_0..beta_{p-1} (mixer)."</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># GHZ Circuit</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="ghz_circuit">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.ghz_circuit">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ghz_circuit</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""GHZ state preparation circuit.</span>
+
+<span class="sd">    Applies H on qubit 0 followed by a CNOT ladder:</span>
+<span class="sd">    CX(0,1), CX(1,2), …, CX(n-2, n-1).</span>
+
+<span class="sd">    No free parameters.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Number of qubits (&gt;= 2).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CircuitTemplate</span>
+<span class="sd">    """</span>
+    <span class="n">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="n">min_val</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"h"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">]}]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]})</span>
+
+    <span class="k">return</span> <span class="n">CircuitTemplate</span><span class="p">(</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">operations</span><span class="o">=</span><span class="n">ops</span><span class="p">,</span>
+        <span class="n">parameter_names</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"GHZCircuit"</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="sa">f</span><span class="s2">"GHZ state preparation on </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits."</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># Quantum Fourier Transform</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="quantum_fourier_transform">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.quantum_fourier_transform">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">quantum_fourier_transform</span><span class="p">(</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">inverse</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Quantum Fourier Transform (QFT) or its inverse on n qubits.</span>
+
+<span class="sd">    Implements the standard recursive QFT decomposition:</span>
+<span class="sd">    H gate + controlled-phase gates + SWAP network.</span>
+
+<span class="sd">    Controlled-Rz decomposition (no native CRZ gate in the simulator):</span>
+
+<span class="sd">    .. code-block:: text</span>
+
+<span class="sd">        CRZ(theta, ctrl, tgt):</span>
+<span class="sd">            RZ(theta/2, tgt)</span>
+<span class="sd">            CX(ctrl, tgt)</span>
+<span class="sd">            RZ(-theta/2, tgt)</span>
+<span class="sd">            CX(ctrl, tgt)</span>
+
+<span class="sd">    No free parameters (fully fixed circuit).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Number of qubits (&gt;= 1).</span>
+<span class="sd">    inverse:</span>
+<span class="sd">        If ``True``, return the inverse QFT (IQFT).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CircuitTemplate</span>
+<span class="sd">    """</span>
+    <span class="n">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">crz_ops</span><span class="p">(</span><span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">ctrl</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">tgt</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Decompose CRZ(theta, ctrl, tgt) into RZ + CX gates."""</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rz"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">tgt</span><span class="p">],</span>  <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">]},</span>
+            <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">tgt</span><span class="p">]},</span>
+            <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rz"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">tgt</span><span class="p">],</span>  <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">]},</span>
+            <span class="p">{</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">tgt</span><span class="p">]},</span>
+        <span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">qft_ops</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Build forward QFT ops on qubits 0..n-1."""</span>
+        <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"h"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">j</span><span class="p">]})</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+                <span class="c1"># Controlled-R_k: phase = 2*pi / 2^(k-j+1)</span>
+                <span class="n">angle</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="p">(</span><span class="n">k</span> <span class="o">-</span> <span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
+                <span class="n">ops</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">crz_ops</span><span class="p">(</span><span class="n">angle</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">k</span><span class="p">))</span>
+        <span class="c1"># Bit-reversal SWAP network</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span> <span class="o">//</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"swap"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">i</span><span class="p">]})</span>
+        <span class="k">return</span> <span class="n">ops</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">inverse</span><span class="p">:</span>
+        <span class="n">ops</span> <span class="o">=</span> <span class="n">qft_ops</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="s2">"QFT"</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"Quantum Fourier Transform on </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits."</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># Inverse QFT = reverse + conjugate of forward QFT</span>
+        <span class="c1"># Equivalent to reversing the forward circuit and negating angles</span>
+        <span class="n">forward_ops</span> <span class="o">=</span> <span class="n">qft_ops</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)</span>
+        <span class="n">rev_ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="nb">reversed</span><span class="p">(</span><span class="n">forward_ops</span><span class="p">):</span>
+            <span class="n">new_op</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
+            <span class="k">if</span> <span class="s2">"params"</span> <span class="ow">in</span> <span class="n">op</span> <span class="ow">and</span> <span class="n">op</span><span class="p">[</span><span class="s2">"params"</span><span class="p">]:</span>
+                <span class="n">new_op</span><span class="p">[</span><span class="s2">"params"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="n">p</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">op</span><span class="p">[</span><span class="s2">"params"</span><span class="p">]]</span>
+            <span class="n">rev_ops</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_op</span><span class="p">)</span>
+        <span class="n">ops</span> <span class="o">=</span> <span class="n">rev_ops</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="s2">"IQFT"</span>
+        <span class="n">description</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"Inverse Quantum Fourier Transform on </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits."</span>
+
+    <span class="k">return</span> <span class="n">CircuitTemplate</span><span class="p">(</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">operations</span><span class="o">=</span><span class="n">ops</span><span class="p">,</span>
+        <span class="n">parameter_names</span><span class="o">=</span><span class="p">[],</span>
+        <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="n">description</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ===========================================================================</span>
+<span class="c1"># UCCSD-inspired Ansatz</span>
+<span class="c1"># ===========================================================================</span>
+
+<div class="viewcode-block" id="uccsd_ansatz">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.templates.html#quantx_engine.templates.uccsd_ansatz">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">uccsd_ansatz</span><span class="p">(</span><span class="n">n_electrons</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CircuitTemplate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Minimal UCCSD-inspired ansatz for quantum chemistry.</span>
+
+<span class="sd">    Structure:</span>
+<span class="sd">    1. **Hartree-Fock reference**: X gates on the first ``n_electrons`` qubits</span>
+<span class="sd">       (occupying the lowest orbitals).</span>
+<span class="sd">    2. **Single excitations**: For each pair (p, q) with p &lt; n_electrons and</span>
+<span class="sd">       q &gt;= n_electrons, a parameterized RY rotation that mixes occupied and</span>
+<span class="sd">       virtual orbitals.</span>
+<span class="sd">    3. **Double excitations** (simplified): For each pair of single-excitation</span>
+<span class="sd">       pairs ((p, q), (r, s)) taken in order, a CNOT + RZ + CNOT sequence on</span>
+<span class="sd">       qubits q and s (the virtual orbitals).</span>
+
+<span class="sd">    This is a simplified approximation suitable for testing/demonstration,</span>
+<span class="sd">    not a rigorous UCCSD implementation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_electrons:</span>
+<span class="sd">        Number of electrons (occupied orbitals). Must satisfy</span>
+<span class="sd">        ``1 &lt;= n_electrons &lt; n_qubits``.</span>
+<span class="sd">    n_qubits:</span>
+<span class="sd">        Total number of spin-orbital modes (qubits). Must be &gt;= 2.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    CircuitTemplate</span>
+<span class="sd">    """</span>
+    <span class="n">_check_n_qubits</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="n">min_val</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">n_electrons</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">n_electrons</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"n_electrons must be a positive integer, got </span><span class="si">{</span><span class="n">n_electrons</span><span class="si">!r}</span><span class="s2">."</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">n_electrons</span> <span class="o">&gt;=</span> <span class="n">n_qubits</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">TemplateError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"n_electrons (</span><span class="si">{</span><span class="n">n_electrons</span><span class="si">}</span><span class="s2">) must be &lt; n_qubits (</span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">) "</span>
+            <span class="s2">"to have at least one virtual orbital."</span>
+        <span class="p">)</span>
+
+    <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">param_names</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># 1. Hartree-Fock reference state</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_electrons</span><span class="p">):</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"x"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">]})</span>
+
+    <span class="c1"># Occupied orbitals: 0..n_electrons-1</span>
+    <span class="c1"># Virtual  orbitals: n_electrons..n_qubits-1</span>
+    <span class="n">occupied</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_electrons</span><span class="p">))</span>
+    <span class="n">virtual</span>  <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n_electrons</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">))</span>
+
+    <span class="c1"># 2. Single excitations</span>
+    <span class="n">singles</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">occupied</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">virtual</span><span class="p">:</span>
+            <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"theta_s_</span><span class="si">{</span><span class="n">p</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pname</span><span class="p">)</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"ry"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">pname</span><span class="p">]})</span>
+            <span class="n">singles</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="p">))</span>
+
+    <span class="c1"># 3. Double excitations (simplified)</span>
+    <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">singles</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+        <span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span> <span class="o">=</span> <span class="n">singles</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+        <span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">s</span><span class="p">)</span> <span class="o">=</span> <span class="n">singles</span><span class="p">[</span><span class="n">idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"theta_d_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">param_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pname</span><span class="p">)</span>
+        <span class="c1"># Simplified double: CNOT(q, s) + RZ(theta, s) + CNOT(q, s)</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">,</span> <span class="n">s</span><span class="p">]})</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"rz"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">s</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">pname</span><span class="p">]})</span>
+        <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">,</span> <span class="n">s</span><span class="p">]})</span>
+
+    <span class="k">return</span> <span class="n">CircuitTemplate</span><span class="p">(</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">operations</span><span class="o">=</span><span class="n">ops</span><span class="p">,</span>
+        <span class="n">parameter_names</span><span class="o">=</span><span class="n">param_names</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">"UCCSDansatz"</span><span class="p">,</span>
+        <span class="n">description</span><span class="o">=</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"UCCSD-inspired ansatz: </span><span class="si">{</span><span class="n">n_electrons</span><span class="si">}</span><span class="s2"> electrons in "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> spin-orbital modes."</span>
+        <span class="p">),</span>
+    <span class="p">)</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

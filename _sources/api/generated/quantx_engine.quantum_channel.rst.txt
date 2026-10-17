@@ -1,0 +1,7 @@
+quantx\_engine.quantum\_channel module
+======================================
+
+.. automodule:: quantx_engine.quantum_channel
+   :members:
+   :show-inheritance:
+   :undoc-members:

@@ -1,0 +1,7 @@
+quantx\_engine.qiskit\_compat module
+====================================
+
+.. automodule:: quantx_engine.qiskit_compat
+   :members:
+   :show-inheritance:
+   :undoc-members:

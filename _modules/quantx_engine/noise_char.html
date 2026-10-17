@@ -1,0 +1,905 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+
+    <!-- Generated with Sphinx 9.1.0 and Furo 2025.12.19 -->
+        <title>quantx_engine.noise_char - QuantX Engine 0.1.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.1.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.1.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.lanczos.html">quantx_engine.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.trotter.html">quantx_engine.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mclachlan.html">quantx_engine.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.noise.html">quantx_engine.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mitigation.html">quantx_engine.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.lindblad.html">quantx_engine.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.adapters.html">quantx_engine.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.transpiler.html">quantx_engine.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qasm.html">quantx_engine.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.templates.html">quantx_engine.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.hardware.html">quantx_engine.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ibm.html">quantx_engine.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.many_body.html">quantx_engine.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.finite_size.html">quantx_engine.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mps_simulator.html">quantx_engine.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tensor_network.html">quantx_engine.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tdmrg.html">quantx_engine.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.spectral.html">quantx_engine.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.chemistry.html">quantx_engine.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.advanced_chemistry.html">quantx_engine.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.oovqe.html">quantx_engine.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.noise_vqe.html">quantx_engine.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qaoa_optim.html">quantx_engine.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qec.html">quantx_engine.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.fault_tolerant.html">quantx_engine.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ft_tgate.html">quantx_engine.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.clifford_sim.html">quantx_engine.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.clifford_t.html">quantx_engine.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ftqc_pipeline.html">quantx_engine.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qldpc.html">quantx_engine.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.bosonic.html">quantx_engine.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_walk.html">quantx_engine.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qsp_qsvt.html">quantx_engine.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.excited_state.html">quantx_engine.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dynamic.html">quantx_engine.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.sweep.html">quantx_engine.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mbqc.html">quantx_engine.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_network.html">quantx_engine.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_protocols.html">quantx_engine.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.pulse.html">quantx_engine.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.optimal_control.html">quantx_engine.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dyndecouple.html">quantx_engine.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.crosstalk.html">quantx_engine.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.gpu.html">quantx_engine.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.ray_sim.html">quantx_engine.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qml.html">quantx_engine.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.qbm.html">quantx_engine.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.quantum_kernel.html">quantx_engine.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.rb_qv.html">quantx_engine.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.noise_char.html">quantx_engine.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.xeb.html">quantx_engine.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tomography.html">quantx_engine.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.floquet.html">quantx_engine.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.neqdyn.html">quantx_engine.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.rydberg.html">quantx_engine.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.pennylane_plugin.html">quantx_engine.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.primitives.html">quantx_engine.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.jupyter_widgets.html">quantx_engine.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.circuit.html">quantx_engine.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.statevector.html">quantx_engine.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.noise_char</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Noise Characterization Pipeline — M87.</span>
+
+<span class="sd">Fits a parametric noise model from RB, XEB, and/or process-tomography</span>
+<span class="sd">benchmark data.  All fitting is pure NumPy; no SciPy is required.</span>
+
+<span class="sd">Quick reference::</span>
+
+<span class="sd">    from quantx_engine.noise_char import NoiseCharacterizer</span>
+<span class="sd">    from quantx_engine.rb_qv import StandardRB</span>
+
+<span class="sd">    rb_result = StandardRB(p_error=0.02, seed=0).run([1, 5, 10, 20, 50])</span>
+<span class="sd">    nc = NoiseCharacterizer(gate_time=0.1)</span>
+<span class="sd">    cn = nc.fit_from_rb(rb_result)</span>
+<span class="sd">    print(cn.depolarizing_prob)   # ≈ 0.02 (2 × the error per Clifford)</span>
+<span class="sd">    noise = cn.to_noise_model()   # DepolarizingNoise instance</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Magesan, E. et al. (2012). Efficient measurement of quantum gate error</span>
+<span class="sd">       by interleaved randomized benchmarking.</span>
+<span class="sd">       *Phys. Rev. Lett.* 109, 080505.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevLett.109.080505</span>
+
+<span class="sd">.. [2] Chuang, I. L. &amp; Nielsen, M. A. (1997). Prescription for experimental</span>
+<span class="sd">       determination of the dynamics of a quantum black box.</span>
+<span class="sd">       *J. Mod. Opt.* 44, 2455.</span>
+<span class="sd">       https://doi.org/10.1080/09500349708231894</span>
+
+<span class="sd">.. [3] Blume-Kohout, R. et al. (2017). Demonstration of qubit operations below</span>
+<span class="sd">       a rigorous fault tolerance threshold with gate set tomography.</span>
+<span class="sd">       *Nat. Commun.* 8, 14485. https://doi.org/10.1038/ncomms14485</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="n">_HAS_NUMPY</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>  <span class="c1"># pragma: no cover</span>
+    <span class="n">_HAS_NUMPY</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.noise</span><span class="w"> </span><span class="kn">import</span> <span class="n">DepolarizingNoise</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"NoiseCharError"</span><span class="p">,</span>
+    <span class="s2">"CharacterizedNoise"</span><span class="p">,</span>
+    <span class="s2">"NoiseCharacterizer"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Exception</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="NoiseCharError">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NoiseCharError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised for invalid inputs to noise characterization routines."""</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_numpy</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">_HAS_NUMPY</span><span class="p">:</span>  <span class="c1"># pragma: no cover</span>
+        <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span><span class="s2">"NumPy is required for noise characterization."</span><span class="p">)</span>
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># Result dataclass</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="CharacterizedNoise">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.CharacterizedNoise">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CharacterizedNoise</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of noise characterization.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    depolarizing_prob:</span>
+<span class="sd">        Per-gate depolarizing probability, clamped to [0, 1].</span>
+<span class="sd">    t1_estimate:</span>
+<span class="sd">        Estimated T1 in gate-time units.  ``None`` if not available.</span>
+<span class="sd">    t2_estimate:</span>
+<span class="sd">        Estimated T2 in gate-time units.  ``None`` if not available.</span>
+<span class="sd">    epc:</span>
+<span class="sd">        Error Per Clifford from RB.  ``None`` if RB was not used.</span>
+<span class="sd">    xeb_fidelity:</span>
+<span class="sd">        Mean XEB fidelity.  ``None`` if XEB was not used.</span>
+<span class="sd">    process_infidelity:</span>
+<span class="sd">        1 - process_fidelity from process tomography.  ``None`` if tomography</span>
+<span class="sd">        was not used.</span>
+<span class="sd">    confidence:</span>
+<span class="sd">        Heuristic confidence in the fit, in [0, 1].</span>
+<span class="sd">    sources:</span>
+<span class="sd">        List of data sources used (e.g. ``['rb', 'xeb']``).</span>
+<span class="sd">    """</span>
+
+    <span class="n">depolarizing_prob</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">t1_estimate</span><span class="p">:</span> <span class="s2">"float | None"</span>
+    <span class="n">t2_estimate</span><span class="p">:</span> <span class="s2">"float | None"</span>
+    <span class="n">epc</span><span class="p">:</span> <span class="s2">"float | None"</span>
+    <span class="n">xeb_fidelity</span><span class="p">:</span> <span class="s2">"float | None"</span>
+    <span class="n">process_infidelity</span><span class="p">:</span> <span class="s2">"float | None"</span>
+    <span class="n">confidence</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">sources</span><span class="p">:</span> <span class="s2">"list[str]"</span>
+
+<div class="viewcode-block" id="CharacterizedNoise.to_noise_model">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.CharacterizedNoise.to_noise_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_noise_model</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DepolarizingNoise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Convert to :class:`~quantx_engine.noise.DepolarizingNoise`.</span>
+
+<span class="sd">        Returns a ``DepolarizingNoise`` instance suitable for use with the</span>
+<span class="sd">        ``Estimator``, ``Sampler``, and ``DynamicSimulator`` primitives.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="n">DepolarizingNoise</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">depolarizing_prob</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="c1"># ---------------------------------------------------------------------------</span>
+<span class="c1"># NoiseCharacterizer</span>
+<span class="c1"># ---------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="NoiseCharacterizer">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharacterizer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NoiseCharacterizer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Fit a parametric noise model from experimental benchmark data.</span>
+
+<span class="sd">    Supports fitting from:</span>
+
+<span class="sd">    * :meth:`fit_from_rb`   — Randomized Benchmarking results</span>
+<span class="sd">    * :meth:`fit_from_xeb`  — Cross-Entropy Benchmarking results</span>
+<span class="sd">    * :meth:`fit_from_process_tomography` — process chi matrices</span>
+<span class="sd">    * :meth:`fit`           — combine all available sources</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gate_time:</span>
+<span class="sd">        Physical gate duration in microseconds, used when estimating T1/T2</span>
+<span class="sd">        relaxation times from the fitted depolarizing probability.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="NoiseCharacterizer.__init__">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharacterizer.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gate_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">_require_numpy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">gate_time</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"gate_time must be positive, got </span><span class="si">{</span><span class="n">gate_time</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gate_time</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">gate_time</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># fit_from_rb</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="NoiseCharacterizer.fit_from_rb">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharacterizer.fit_from_rb">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_from_rb</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rb_result</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CharacterizedNoise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Extract a noise model from a Randomized Benchmarking result.</span>
+
+<span class="sd">        Uses the single-qubit approximation::</span>
+
+<span class="sd">            p_dep = 2 * EPC</span>
+
+<span class="sd">        which is exact for a 1-qubit depolarizing channel where</span>
+<span class="sd">        ``EPC = (d-1)/d * (1-p)`` with d=2.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rb_result:</span>
+<span class="sd">            An :class:`~quantx_engine.rb_qv.RBResult` instance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        CharacterizedNoise</span>
+<span class="sd">        """</span>
+        <span class="n">_require_numpy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_rb_result</span><span class="p">(</span><span class="n">rb_result</span><span class="p">)</span>
+
+        <span class="n">epc</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rb_result</span><span class="o">.</span><span class="n">epc</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">epc</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"rb_result.epc must be in [0, 1], got </span><span class="si">{</span><span class="n">epc</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Standard single-qubit approximation: p_dep = 2 * EPC</span>
+        <span class="n">p_dep</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">epc</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+
+        <span class="c1"># Heuristic T1 estimate: p_dep ≈ gate_time / T1 for small p_dep</span>
+        <span class="n">t1_est</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">p_dep</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">t1_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gate_time</span> <span class="o">/</span> <span class="n">p_dep</span>
+
+        <span class="k">return</span> <span class="n">CharacterizedNoise</span><span class="p">(</span>
+            <span class="n">depolarizing_prob</span><span class="o">=</span><span class="n">p_dep</span><span class="p">,</span>
+            <span class="n">t1_estimate</span><span class="o">=</span><span class="n">t1_est</span><span class="p">,</span>
+            <span class="n">t2_estimate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">epc</span><span class="o">=</span><span class="n">epc</span><span class="p">,</span>
+            <span class="n">xeb_fidelity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">process_infidelity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">confidence</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">sources</span><span class="o">=</span><span class="p">[</span><span class="s2">"rb"</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># fit_from_xeb</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="NoiseCharacterizer.fit_from_xeb">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharacterizer.fit_from_xeb">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_from_xeb</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">xeb_result</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CharacterizedNoise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Extract a noise model from a Cross-Entropy Benchmarking result.</span>
+
+<span class="sd">        Fits the exponential decay model ``F_XEB(d) = A * r^d`` via</span>
+<span class="sd">        log-linear regression (``np.polyfit``) and estimates::</span>
+
+<span class="sd">            p_dep ≈ 1 - r</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        xeb_result:</span>
+<span class="sd">            An :class:`~quantx_engine.xeb.XEBResult` instance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        CharacterizedNoise</span>
+<span class="sd">        """</span>
+        <span class="n">_require_numpy</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_validate_xeb_result</span><span class="p">(</span><span class="n">xeb_result</span><span class="p">)</span>
+
+        <span class="n">depths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">xeb_result</span><span class="o">.</span><span class="n">depths</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">fidelities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">xeb_result</span><span class="o">.</span><span class="n">xeb_fidelities</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">depths</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="s2">"fit_from_xeb requires at least 2 depth points for regression."</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Clamp fidelities to a small positive value before taking log</span>
+        <span class="n">fidelities_clamped</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">fidelities</span><span class="p">,</span> <span class="mf">1e-10</span><span class="p">)</span>
+        <span class="n">log_fid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">fidelities_clamped</span><span class="p">)</span>
+
+        <span class="c1"># Fit log(F) = log(A) + d * log(r)  =&gt;  polyfit degree-1</span>
+        <span class="n">coeffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">polyfit</span><span class="p">(</span><span class="n">depths</span><span class="p">,</span> <span class="n">log_fid</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">log_r</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">coeffs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>  <span class="c1"># slope = log(r)</span>
+
+        <span class="n">r</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_r</span><span class="p">))</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+
+        <span class="n">p_dep</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">r</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+        <span class="n">mean_fidelity</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">fidelities</span><span class="p">))</span>
+
+        <span class="n">t1_est</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">p_dep</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">t1_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gate_time</span> <span class="o">/</span> <span class="n">p_dep</span>
+
+        <span class="k">return</span> <span class="n">CharacterizedNoise</span><span class="p">(</span>
+            <span class="n">depolarizing_prob</span><span class="o">=</span><span class="n">p_dep</span><span class="p">,</span>
+            <span class="n">t1_estimate</span><span class="o">=</span><span class="n">t1_est</span><span class="p">,</span>
+            <span class="n">t2_estimate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">epc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">xeb_fidelity</span><span class="o">=</span><span class="n">mean_fidelity</span><span class="p">,</span>
+            <span class="n">process_infidelity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">confidence</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">sources</span><span class="o">=</span><span class="p">[</span><span class="s2">"xeb"</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># fit_from_process_tomography</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="NoiseCharacterizer.fit_from_process_tomography">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharacterizer.fit_from_process_tomography">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit_from_process_tomography</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">process_result</span><span class="p">,</span>
+        <span class="n">process_target_result</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CharacterizedNoise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Extract a noise model from process tomography chi matrices.</span>
+
+<span class="sd">        Uses the relation between process infidelity and the depolarizing</span>
+<span class="sd">        probability for an n-qubit system (d = 2^n)::</span>
+
+<span class="sd">            p_dep = d**2 / (d**2 - 1) * process_infidelity</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        process_result:</span>
+<span class="sd">            Either a ``ProcessTomography`` instance (whose :meth:`chi_matrix`</span>
+<span class="sd">            will be used with a provided target), or a ``numpy.ndarray``</span>
+<span class="sd">            representing a chi matrix directly.</span>
+<span class="sd">        process_target_result:</span>
+<span class="sd">            Target chi matrix as ``numpy.ndarray``, or ``None``.  If</span>
+<span class="sd">            ``process_result`` is a ``numpy.ndarray``, this argument is the</span>
+<span class="sd">            target chi matrix used to compute process infidelity.  Passing</span>
+<span class="sd">            ``None`` assumes the target is an ideal (identity-like) process</span>
+<span class="sd">            and uses ``process_infidelity = 1 - Tr(chi)``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        CharacterizedNoise</span>
+<span class="sd">        """</span>
+        <span class="n">_require_numpy</span><span class="p">()</span>
+
+        <span class="n">chi_actual</span><span class="p">,</span> <span class="n">chi_target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_resolve_chi_matrices</span><span class="p">(</span>
+            <span class="n">process_result</span><span class="p">,</span> <span class="n">process_target_result</span>
+        <span class="p">)</span>
+
+        <span class="c1"># process_fidelity = Tr(chi_actual @ chi_target†)</span>
+        <span class="n">f_proc</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">chi_actual</span> <span class="o">@</span> <span class="n">chi_target</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">)))</span>
+        <span class="n">f_proc</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">f_proc</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+        <span class="n">process_infidelity</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="n">f_proc</span>
+
+        <span class="c1"># Determine n_qubits from chi matrix size: chi is (4^n x 4^n)</span>
+        <span class="n">n_ops</span> <span class="o">=</span> <span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># 4^n</span>
+        <span class="n">n_qubits</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">n_ops</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">d</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">n_qubits</span>  <span class="c1"># 2^n</span>
+
+        <span class="c1"># The depolarizing channel (1 - p)rho + p I/d has process fidelity</span>
+        <span class="c1"># 1 - p (d^2 - 1)/d^2, so p = d^2/(d^2 - 1) * process infidelity. (This used</span>
+        <span class="c1"># (d + 1)/d, the factor that links average-gate and process infidelity: it read</span>
+        <span class="c1"># DepolarizingNoise(0.1) back as 0.1125.)</span>
+        <span class="n">p_dep</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">d</span> <span class="o">*</span> <span class="n">d</span> <span class="o">/</span> <span class="p">(</span><span class="n">d</span> <span class="o">*</span> <span class="n">d</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">process_infidelity</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+
+        <span class="n">t1_est</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">p_dep</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">t1_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gate_time</span> <span class="o">/</span> <span class="n">p_dep</span>
+
+        <span class="k">return</span> <span class="n">CharacterizedNoise</span><span class="p">(</span>
+            <span class="n">depolarizing_prob</span><span class="o">=</span><span class="n">p_dep</span><span class="p">,</span>
+            <span class="n">t1_estimate</span><span class="o">=</span><span class="n">t1_est</span><span class="p">,</span>
+            <span class="n">t2_estimate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">epc</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">xeb_fidelity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">process_infidelity</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">process_infidelity</span><span class="p">),</span>
+            <span class="n">confidence</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">sources</span><span class="o">=</span><span class="p">[</span><span class="s2">"process_tomography"</span><span class="p">],</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># fit (combine multiple sources)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="NoiseCharacterizer.fit">
+<a class="viewcode-back" href="../../api/ml_characterization.html#quantx_engine.NoiseCharacterizer.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">rb_result</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">xeb_result</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">process_chi</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+        <span class="n">target_chi</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CharacterizedNoise</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Combine all available data sources into a single noise estimate.</span>
+
+<span class="sd">        If multiple sources are provided, the final ``depolarizing_prob`` is</span>
+<span class="sd">        a weighted average of per-source estimates (uniform weights).</span>
+<span class="sd">        The ``confidence`` is the fraction of sources whose estimates agree</span>
+<span class="sd">        within a factor of 2 of the mean estimate.</span>
+
+<span class="sd">        At least one source must be provided.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        rb_result:</span>
+<span class="sd">            Optional :class:`~quantx_engine.rb_qv.RBResult`.</span>
+<span class="sd">        xeb_result:</span>
+<span class="sd">            Optional :class:`~quantx_engine.xeb.XEBResult`.</span>
+<span class="sd">        process_chi:</span>
+<span class="sd">            Optional chi matrix (``numpy.ndarray``) from process tomography.</span>
+<span class="sd">        target_chi:</span>
+<span class="sd">            Optional target chi matrix (``numpy.ndarray``).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        CharacterizedNoise</span>
+<span class="sd">        """</span>
+        <span class="n">_require_numpy</span><span class="p">()</span>
+
+        <span class="n">estimates</span><span class="p">:</span> <span class="s2">"list[float]"</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">sources</span><span class="p">:</span> <span class="s2">"list[str]"</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">epc</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">xeb_fidelity</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">process_infidelity</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">if</span> <span class="n">rb_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cn_rb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit_from_rb</span><span class="p">(</span><span class="n">rb_result</span><span class="p">)</span>
+            <span class="n">estimates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cn_rb</span><span class="o">.</span><span class="n">depolarizing_prob</span><span class="p">)</span>
+            <span class="n">sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"rb"</span><span class="p">)</span>
+            <span class="n">epc</span> <span class="o">=</span> <span class="n">cn_rb</span><span class="o">.</span><span class="n">epc</span>
+
+        <span class="k">if</span> <span class="n">xeb_result</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cn_xeb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit_from_xeb</span><span class="p">(</span><span class="n">xeb_result</span><span class="p">)</span>
+            <span class="n">estimates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cn_xeb</span><span class="o">.</span><span class="n">depolarizing_prob</span><span class="p">)</span>
+            <span class="n">sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"xeb"</span><span class="p">)</span>
+            <span class="n">xeb_fidelity</span> <span class="o">=</span> <span class="n">cn_xeb</span><span class="o">.</span><span class="n">xeb_fidelity</span>
+
+        <span class="k">if</span> <span class="n">process_chi</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">cn_proc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fit_from_process_tomography</span><span class="p">(</span><span class="n">process_chi</span><span class="p">,</span> <span class="n">target_chi</span><span class="p">)</span>
+            <span class="n">estimates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cn_proc</span><span class="o">.</span><span class="n">depolarizing_prob</span><span class="p">)</span>
+            <span class="n">sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"process_tomography"</span><span class="p">)</span>
+            <span class="n">process_infidelity</span> <span class="o">=</span> <span class="n">cn_proc</span><span class="o">.</span><span class="n">process_infidelity</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">estimates</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="s2">"fit() requires at least one of: rb_result, xeb_result, "</span>
+                <span class="s2">"process_chi."</span>
+            <span class="p">)</span>
+
+        <span class="n">p_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">estimates</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">p_mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">p_arr</span><span class="p">))</span>
+        <span class="n">p_dep</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">p_mean</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">))</span>
+
+        <span class="c1"># Confidence = fraction of estimates within 2x of the mean</span>
+        <span class="k">if</span> <span class="n">p_mean</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">ratios</span> <span class="o">=</span> <span class="n">p_arr</span> <span class="o">/</span> <span class="n">p_mean</span>
+            <span class="n">n_agree</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">ratios</span> <span class="o">&gt;=</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">ratios</span> <span class="o">&lt;=</span> <span class="mf">2.0</span><span class="p">)))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># All estimates are zero — perfect agreement</span>
+            <span class="n">n_agree</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">estimates</span><span class="p">)</span>
+        <span class="n">confidence</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">n_agree</span><span class="p">)</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">estimates</span><span class="p">))</span>
+
+        <span class="n">t1_est</span><span class="p">:</span> <span class="s2">"float | None"</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">p_dep</span> <span class="o">&gt;</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="n">t1_est</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gate_time</span> <span class="o">/</span> <span class="n">p_dep</span>
+
+        <span class="k">return</span> <span class="n">CharacterizedNoise</span><span class="p">(</span>
+            <span class="n">depolarizing_prob</span><span class="o">=</span><span class="n">p_dep</span><span class="p">,</span>
+            <span class="n">t1_estimate</span><span class="o">=</span><span class="n">t1_est</span><span class="p">,</span>
+            <span class="n">t2_estimate</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">epc</span><span class="o">=</span><span class="n">epc</span><span class="p">,</span>
+            <span class="n">xeb_fidelity</span><span class="o">=</span><span class="n">xeb_fidelity</span><span class="p">,</span>
+            <span class="n">process_infidelity</span><span class="o">=</span><span class="n">process_infidelity</span><span class="p">,</span>
+            <span class="n">confidence</span><span class="o">=</span><span class="n">confidence</span><span class="p">,</span>
+            <span class="n">sources</span><span class="o">=</span><span class="n">sources</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Private helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_rb_result</span><span class="p">(</span><span class="n">rb_result</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise NoiseCharError if rb_result is not a valid RBResult-like object."""</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"epc"</span><span class="p">,</span> <span class="s2">"survival_probs"</span><span class="p">,</span> <span class="s2">"sequence_lengths"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">required</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">rb_result</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"rb_result must have attribute '</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">'. "</span>
+                    <span class="sa">f</span><span class="s2">"Got type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">rb_result</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rb_result</span><span class="o">.</span><span class="n">survival_probs</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="s2">"rb_result.survival_probs must not be empty."</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rb_result</span><span class="o">.</span><span class="n">sequence_lengths</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="s2">"rb_result.sequence_lengths must not be empty."</span>
+            <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_validate_xeb_result</span><span class="p">(</span><span class="n">xeb_result</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Raise NoiseCharError if xeb_result is not a valid XEBResult-like object."""</span>
+        <span class="n">required</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"depths"</span><span class="p">,</span> <span class="s2">"xeb_fidelities"</span><span class="p">,</span> <span class="s2">"mean_fidelity"</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">attr</span> <span class="ow">in</span> <span class="n">required</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">xeb_result</span><span class="p">,</span> <span class="n">attr</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"xeb_result must have attribute '</span><span class="si">{</span><span class="n">attr</span><span class="si">}</span><span class="s2">'. "</span>
+                    <span class="sa">f</span><span class="s2">"Got type </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">xeb_result</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">xeb_result</span><span class="o">.</span><span class="n">depths</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span><span class="s2">"xeb_result.depths must not be empty."</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">xeb_result</span><span class="o">.</span><span class="n">xeb_fidelities</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="s2">"xeb_result.xeb_fidelities must not be empty."</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">xeb_result</span><span class="o">.</span><span class="n">depths</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">xeb_result</span><span class="o">.</span><span class="n">xeb_fidelities</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="s2">"xeb_result.depths and xeb_result.xeb_fidelities must have "</span>
+                <span class="s2">"the same length."</span>
+            <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_chi_matrices</span><span class="p">(</span>
+        <span class="n">process_result</span><span class="p">,</span>
+        <span class="n">process_target_result</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"tuple[np.ndarray, np.ndarray]"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return (chi_actual, chi_target) as numpy arrays.</span>
+
+<span class="sd">        Accepts either:</span>
+<span class="sd">        - A numpy array for ``process_result`` (chi matrix directly), with an</span>
+<span class="sd">          optional numpy array for ``process_target_result``.</span>
+<span class="sd">        - Any object that is not an ndarray is rejected with NoiseCharError.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_HAS_NUMPY</span><span class="p">:</span>  <span class="c1"># pragma: no cover</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span><span class="s2">"NumPy is required."</span><span class="p">)</span>
+
+        <span class="c1"># Resolve actual chi</span>
+        <span class="n">chi_actual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">process_result</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">chi_actual</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"process_result must be a square 2-D array, "</span>
+                <span class="sa">f</span><span class="s2">"got shape </span><span class="si">{</span><span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="n">n_ops</span> <span class="o">=</span> <span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># Check that n_ops is a power of 4 (= 4^n for some n &gt;= 1)</span>
+        <span class="n">log4</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">log2</span><span class="p">(</span><span class="n">n_ops</span><span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span>
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">log4</span> <span class="o">-</span> <span class="nb">round</span><span class="p">(</span><span class="n">log4</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mf">1e-9</span> <span class="ow">or</span> <span class="nb">round</span><span class="p">(</span><span class="n">log4</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Chi matrix size must be 4^n for n &gt;= 1, got </span><span class="si">{</span><span class="n">n_ops</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Resolve target chi</span>
+        <span class="k">if</span> <span class="n">process_target_result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Default target: diagonal matrix with 1/n_ops on the diagonal</span>
+            <span class="c1"># (identity process in Pauli basis: chi = I/n_ops^2 normalised</span>
+            <span class="c1"># to have Tr = 1, equivalent to identity unitary).</span>
+            <span class="c1"># For identity unitary U=I: c_m = Tr(P_m I)/d = Tr(P_m)/d.</span>
+            <span class="c1"># Tr(I) = d, Tr(other Paulis) = 0  =&gt; c_I = 1, others = 0</span>
+            <span class="c1"># =&gt; chi = outer([1, 0, ...], [1, 0, ...]) = diag([1,0,...])</span>
+            <span class="n">chi_target</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_ops</span><span class="p">,</span> <span class="n">n_ops</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+            <span class="n">chi_target</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">chi_target</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">process_target_result</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">chi_target</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">NoiseCharError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"process_target_result shape </span><span class="si">{</span><span class="n">chi_target</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> does not "</span>
+                    <span class="sa">f</span><span class="s2">"match process_result shape </span><span class="si">{</span><span class="n">chi_actual</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span>
+                <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">chi_actual</span><span class="p">,</span> <span class="n">chi_target</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=38b66d78"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

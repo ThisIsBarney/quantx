@@ -1,0 +1,31 @@
+﻿quantx\_engine.noise
+====================
+
+.. automodule:: quantx_engine.noise
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      native_channels
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      AmplitudeDampingChannel
+      AmplitudeDampingNoise
+      CompositeNoise
+      DepolarizingChannel
+      DepolarizingNoise
+      NoiseModel
+      ReadoutNoise
+      ThermalRelaxationNoise
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      NoiseModelError
+   
