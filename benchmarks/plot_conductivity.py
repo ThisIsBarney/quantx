@@ -59,6 +59,19 @@ def sigma(series):
     return out
 S = {b: sigma(C[b]) for b in betas}
 
+# The numbers docs/universal_mpo.md quotes: the peak frequency and, for Hubbard, the share
+# of the (positive) weight below the U = 4 Mott gap, 1.287 (Lieb-Wu). The window above
+# suppresses late times, so these summaries are not a check that C(t) itself converged.
+MOTT_GAP_U4 = 1.287
+for b in sorted(betas):
+    pos = [max(v, 0.0) for v in S[b]]
+    peak = omegas[max(range(len(omegas)), key=lambda m: S[b][m])]
+    line = f"beta={b:g}: peak omega {peak:.2f}"
+    if MODEL == "hubbard":
+        below = sum(p for w, p in zip(omegas, pos) if w < MOTT_GAP_U4) / sum(pos)
+        line += f", weight below the Mott gap {100 * below:.1f}%"
+    print(line)
+
 # --- SVG ---------------------------------------------------------------------
 W, H = 780, 500
 L, R, TOP, BOT = 70, 170, 70, 70
