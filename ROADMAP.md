@@ -53,7 +53,7 @@ verified capabilities in users' hands.
 | M6 | Finite-temperature spectroscopy from Python | S(k, ω, T) and σ(ω, T) for the M4 models, against exact diagonalisation | ⬜ |
 | M7 | A smaller product surface | The README describes the engine (#200); the pure-Python modules move to `quantx_engine.contrib`, marked experimental (planned for 0.2) | 🔄 |
 | M8 | Referee feasibility | A one-page assessment of a classical baseline for SU(2) lattice gauge-theory dynamics (60 sites, conserved charge): the bond dimension and error needed, against the published tensor-network baseline | 🔄 |
-| M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference | ⬜ |
+| M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference. The scripts run anywhere, each with a quick check ([benchmarks/REPRODUCING.md](benchmarks/REPRODUCING.md), #220); the notebooks are next | 🔄 |
 | **G1** | **Gate: installable and usable** | After `pip install`, 20 lines of Python give a Hubbard ground state, a finite-temperature spectral function and an HVA circuit, each matching its exact reference | ⬜ |
 
 ## Phase 2 (2027-01 to 2027-06): from one-shot solvers to a composable library
