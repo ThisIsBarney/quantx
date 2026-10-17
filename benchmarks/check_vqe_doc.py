@@ -28,6 +28,13 @@ L = load("vqe_ladder.csv", ("Lx", "p"))            # part D: ladder at its own o
 C = list(csv.DictReader(open(os.path.join(DOCS, "vqe_transfer_check.csv"))))
 doc = open(os.path.join(DOCS, "universal_mpo.md"), encoding="utf-8",
            errors="surrogateescape").read()
+# The public Results page repeats CSV-derived figures AND claims this script protects
+# them. That claim was false for the page itself: only universal_mpo.md was ever read, so
+# regenerating a CSV could leave the published page stale with qx_vqe_doc_figures still
+# green. A page that advertises enforcement has to be inside it.
+RES_PATH = os.path.join(DOCS, "source", "results.rst")
+res = (open(RES_PATH, encoding="utf-8", errors="surrogateescape").read()
+       if os.path.exists(RES_PATH) else None)
 
 fails = []
 
@@ -49,6 +56,17 @@ def fit_loglin_f(xs, ys):
 def expect(label, text):
     if text not in doc:
         fails.append(f"{label}\n    expected in doc: {text}")
+
+
+def expect_res(label, text):
+    """Assert against docs/source/results.rst -- the page the docs site publishes."""
+    if res is None:
+        # once, not once per call: 13 identical lines would bury the real report
+        msg = "docs/source/results.rst is missing, but the docs site publishes it"
+        if msg not in fails:
+            fails.append(msg)
+    elif text not in res:
+        fails.append(f"results page: {label}\n    expected in results.rst: {text}")
 
 def S(n, p):                                        # part B first, part A as fallback
     r = B.get((n, p)) or A[(n, p)]
@@ -551,6 +569,149 @@ if len(cyl_even) != 1:
     fails.append(f"part F: the cylinder now has {len(cyl_even)} even-n size points "
                  f"({sorted(cyl_even)}); the doc says one, so its framing needs rewriting")
 
+# ---- the published Results page ---------------------------------------------
+# Only values this script can DERIVE are asserted. The page also quotes the GPU margins,
+# which live in docs/gpu_acceleration_report.md rather than a CSV, and the Haldane and
+# Lieb-Wu reference values, which are external constants -- those are checked below only
+# where a CSV can reproduce them.
+if res is None:
+    # NOT a skip. The block below is wrapped in `res is not None`, so a missing page made
+    # every check vanish and the script still printed success -- the same silently-skipping
+    # guard this project has been bitten by before. The docs site publishes this page; if
+    # it is gone, that is a failure, not a reason to check less.
+    fails.append("docs/source/results.rst is missing, but docs.yml publishes it and this "
+                 "script is what keeps its figures honest")
+else:
+    # part E: the width scan's correlation-energy row, as the page states it
+    pw_ = max(p for (_, p) in Wd)
+    for w_ in sorted({w for (w, _) in Wd}):
+        r_ = Wd.get((w_, pw_))
+        if r_:
+            expect_res(f"W={w_} correlation energy at p={pw_}",
+                       format(float(r_["frac"]), ".1%").replace("%", " %"))
+    # part F: the cylinder/chain gradient-variance band, both normalisations
+    if F:
+        pf_ = sorted({p for (_, p) in F})
+        rr = [float(F[(3, p_)]["var_frac"]) / float(F[(1, p_)]["var_frac"])
+              for p_ in pf_ if (3, p_) in F and (1, p_) in F]
+        rw = [float(F[(3, p_)]["var_raw"]) / float(F[(1, p_)]["var_raw"])
+              for p_ in pf_ if (3, p_) in F and (1, p_) in F]
+        if rr:
+            expect_res("cylinder/chain band, dimensionless cost",
+                       f"\u00d7{min(rr):.2f}\u2013{max(rr):.2f}")
+        if rw:
+            expect_res("cylinder/chain band, raw gradient",
+                       f"\u00d7{min(rw):.2f}\u2013{max(rw):.2f}")
+        floor_ = float(next(iter(F.values()))["floor"])
+        expect_res("noise floor", f"{floor_:.1e}".replace("e-0", "e-"))
+        snr_ = min(float(r_["snr"]) for r_ in F.values())
+        expect_res("worst snr", f"{snr_:.1e} \u00d7".replace("e+0", "e"))
+    # the Lieb-Wu table: engine, exact and the difference, per U
+    LW = {}
+    lw_path = os.path.join(DOCS, "hubbard_lieb_wu.csv")
+    if os.path.exists(lw_path):
+        for r_ in csv.DictReader(open(lw_path)):
+            LW.setdefault(float(r_["U"]), []).append(r_)
+        for U_ in sorted(LW):
+            big = max(LW[U_], key=lambda r_: int(r_["N"]))
+            eng, ex = float(big["e_bulk_incremental"]), float(big["e_liebwu"])
+            expect_res(f"Lieb-Wu U={U_:g} engine", f"{eng:.8f}".replace("-", "\u2212"))
+            expect_res(f"Lieb-Wu U={U_:g} exact", f"{ex:.8f}".replace("-", "\u2212"))
+            expect_res(f"Lieb-Wu U={U_:g} difference",
+                       f"{abs(eng - ex):.1e}".replace("e-0", "e-"))
+    # the J1-J2 truncation-sensitivity row the page tabulates
+    jj_path = os.path.join(DOCS, "j1j2_dimerization.csv")
+    if os.path.exists(jj_path):
+        J = {f"{float(r_['j2']):.2f}": r_ for r_ in csv.DictReader(open(jj_path))}
+        for key in ("0.00", "0.45", "0.49", "0.51", "0.55"):
+            r_ = J.get(key)
+            if r_:
+                expect_res(f"J1-J2 gap at j2={key}",
+                           f"{float(r_['gap_per_site']):.1e}".replace("e-0", "e-"))
+        mg = J.get("0.49")
+        if mg:
+            expect_res("J1-J2 energy at the MG straddle",
+                       f"{float(mg['E_per_site']):.5f}".replace("-", "\u2212"))
+        gaps = [float(r_["gap_per_site"]) for r_ in J.values()]
+        expect_res("J1-J2 collapse factor", f"\u00d7{max(gaps)/min(gaps):.0f}")
+    # the cylinder/chain 2-sigma on the Results page. Codex found the page quoting a single
+    # +/-0.05 while the data spans +/-0.049..0.061 -- the page rounded the error bar DOWN,
+    # i.e. claimed more precision than measured, and nothing here checked it.
+    if F:
+        sig2r = []
+        for p_ in sorted({p for (_, p) in F}):
+            if (3, p_) in F and (1, p_) in F:
+                v3, v1 = float(F[(3, p_)]["var_frac"]), float(F[(1, p_)]["var_frac"])
+                e3, e1 = float(F[(3, p_)]["se_frac"]), float(F[(1, p_)]["se_frac"])
+                r_ = v3 / v1
+                sig2r.append(2 * r_ * math.sqrt((e3 / v3) ** 2 + (e1 / v1) ** 2))
+        if sig2r:
+            expect_res("cylinder/chain 2-sigma",
+                       f"2σ of ±{min(sig2r):.2f}–{max(sig2r):.2f}")
+    # The J1-J2 energy the page quotes is the J2 = 0.49 row, and it must say so: the CSV
+    # skips the exact Majumdar-Ghosh point, and attributing -1.50021 to MG made the engine
+    # look wrong exactly where chi = 8 is exact by construction.
+    jj2 = os.path.join(DOCS, "j1j2_dimerization.csv")
+    if os.path.exists(jj2):
+        J2 = {f"{float(r_['j2']):.2f}": r_ for r_ in csv.DictReader(open(jj2))}
+        if "0.50" in J2:
+            fails.append("results page: j1j2 CSV now has a J2 = 0.50 row, so the page's "
+                         "'the scan samples the two points straddling it' is stale")
+        elif "0.49" in J2:
+            expect_res("J1-J2 straddling energy attributed to J2 = 0.49/0.51",
+                       "J2 = 0.49 and 0.51,\nwhose energies are "
+                       + f"{float(J2['0.49']['E_per_site']):.5f}".replace("-", "−"))
+    # Every figure on the page names where its numbers come from -- the page promises it in
+    # its first paragraph, and the README repeats the promise. The GPU figure broke it, so
+    # the promise is now structural: each `.. image::` must be followed, before the next
+    # image or section heading, by a line starting "Data:".
+    _lines = res.split("\n")
+    for _i, _ln in enumerate(_lines):
+        if not _ln.startswith(".. image:: "):
+            continue
+        _fig = _ln.split("/")[-1]
+        _ok = False
+        # grouped figures may share one Data: line (the two Haldane figures do), so
+        # scan to the next SECTION, not the next image
+        for _nx in _lines[_i + 1:]:
+            if _nx.startswith("----"):
+                break
+            if _nx.startswith("Data:"):
+                _ok = True
+                break
+        if not _ok:
+            fails.append(f"results page: figure {_fig} has no 'Data:' line naming its "
+                         f"source, though the page promises one for every figure")
+    # The HVA-vs-state-vector bound the page states must not be tighter than the bound the
+    # README states and CI enforces. The page said 1e-12 against a measured 2.7e-12.
+    _rm = open(os.path.join(HERE, "..", "README.md"), encoding="utf-8").read()
+    import re as _re2
+    _pg = _re2.search(r"independent state-vector simulator to \*\*(1e-\d+)\*\*", res)
+    _rd = _re2.search(r"state-vector simulation: energy and entropies to (1e-\d+)", _rm)
+    if _pg and _rd and float(_pg.group(1)) < float(_rd.group(1)):
+        fails.append(f"results page: claims HVA agreement to {_pg.group(1)}, tighter than "
+                     f"the {_rd.group(1)} the README states and CI enforces")
+    elif not _pg:
+        fails.append("results page: the HVA-vs-state-vector precision sentence is gone or "
+                     "reworded, so its bound can no longer be checked against the README")
+
+    # the stripe demonstration's stated size
+    st_path = os.path.join(DOCS, "hubbard_stripes.csv")
+    if os.path.exists(st_path):
+        S_ = list(csv.DictReader(open(st_path)))
+        nx = max(int(r_["x"]) for r_ in S_) + 1
+        ny = max(int(r_["y"]) for r_ in S_) + 1
+        expect_res("stripe lattice size", f"{nx}\u00d7{ny}")
+    # and every figure the page embeds must be a file that exists, so a fresh checkout
+    # cannot deploy a broken image -- the failure that reached review on this very page
+    import re as _re
+    for m in _re.findall(r"\.\./([A-Za-z0-9_.]+\.svg)", res):
+        if not os.path.exists(os.path.join(DOCS, m)):
+            fails.append(f"results page: embeds ../{m}, which is not in docs/")
+    for m in _re.findall(r"``docs/([A-Za-z0-9_.]+\.csv)``", res):
+        if not os.path.exists(os.path.join(DOCS, m)):
+            fails.append(f"results page: cites docs/{m}, which does not exist")
+
 if fails:
     # The doc uses -, x, sigma and superscripts, so the report itself contains non-ASCII.
     # On a GBK console `print` then raises UnicodeEncodeError and the operator sees a
@@ -564,8 +725,8 @@ if fails:
         except UnicodeEncodeError:
             print(line.encode(enc, "backslashreplace").decode(enc, "replace"))
 
-    say(f"{len(fails)} MISMATCH(es) between docs/universal_mpo.md and the CSVs:\n")
+    say(f"{len(fails)} MISMATCH(es) between the docs and the CSVs:\n")
     for f in fails:
         say("  " + f)
     sys.exit(1)
-print("all quoted VQE figures in docs/universal_mpo.md reproduce from the CSVs")
+print("all quoted figures in docs/universal_mpo.md and docs/source/results.rst reproduce from the CSVs")
