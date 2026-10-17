@@ -11,11 +11,38 @@ bug-fixes and packaging corrections only.
 
 ## [Unreleased]
 
-*(No changes yet)*
+### Added
+
+- **`quantx_engine.thermal`** (M6): finite temperature from Python, by ancilla
+  purification on the block-sparse engine, for the XXZ, spin-1 Heisenberg and Hubbard
+  chains. `thermal.statics` gives the energy, the local values, the correlations and
+  the susceptibility from β = 0 up; `thermal.structure_factor(...).spectrum()` the
+  dynamical structure factor S(k, ω, T); and
+  `thermal.current_correlation(...).conductivity()` the optical conductivity
+  Re σ(ω, T), by the Kubo formula. The ensemble is grand canonical, and the conventions
+  are those of `quantx_engine.models` (S = σ/2). It is gated against an exact
+  diagonalisation of the whole Hilbert space (`test_thermal_ed.py`): every quantity to
+  the second-order Trotter error of the steps, below 1e-3 at the default step 0.05 and
+  falling by 4 at half the step, and the Fourier transforms against Lehmann sums to
+  1e-8. J1-J2 and the Hubbard lattices have no purified form in the engine yet, and are
+  refused. The C API entry point is `qx_thermal`.
+
+### Fixed
+
+- **The finite-temperature current correlator ⟨J(t) J⟩_β lost weight at every time
+  step.** It applied J to the evolving state and compressed the product back to the
+  bond cap, with a first sweep that truncated against a part of the chain that was not
+  orthonormal: 3e-2 on a 4-site Hubbard chain at the exact bond dimension, whatever the
+  step. It is now contracted exactly, as an MPO sandwich, and compressing an applied
+  MPO (as for J|ψ⟩, also in the zero-temperature conductivity) brings the state to
+  canonical form before it truncates.
+- The zero-temperature dynamics entry points (`qx_tdvp_evolve`, `qx_spectral`,
+  `qx_loschmidt` and `qx_conductivity`) accept the type `"xxz"`, as their error messages
+  always said; they took only `"heisenberg"`.
 
 ---
 
-## [0.1.0] — unreleased  *(first public release, in preparation)*
+## [0.1.0] — 2026-10-16  *(first public release)*
 
 The first version published to PyPI. The native engine is now installable; what it can
 do from Python is gated against exact references.
@@ -163,9 +190,9 @@ Version numbers restart here, so the API stability guarantee of the internal 1.0
 ## Development history before the first public release
 
 The versions below were internal milestones of the project. None was published to PyPI,
-and none has a release tag, apart from an old `v0.2.0` tag that corresponds to no
-published package. They are kept as a record of what was built and when. Version
-numbering restarts at 0.1.0 with the first public release.
+and none has a release tag (an old `v0.2.0` tag, which published nothing, was deleted
+before the first release). They are kept as a record of what was built and when.
+Version numbering restarts at 0.1.0 with the first public release.
 
 ### 1.0.0 (internal) — 2026-05-25  *(Phase 2 complete)*
 

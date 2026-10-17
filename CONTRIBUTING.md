@@ -51,6 +51,9 @@ work.) The existing gates show the pattern:
   an exact diagonalisation written separately from the engine, to 1e-10.
 - `python/quantx_engine/tests/test_hva_statevector.py`: HVA circuits against an
   independent Fock-space simulator: energies and entanglement entropies.
+- `python/quantx_engine/tests/test_thermal_ed.py`: the finite-temperature statics and
+  correlators against an exact diagonalisation of the whole Hilbert space, to the
+  Trotter error of the steps, which must fall by 4 at half the step.
 - `python/quantx_engine/tests/test_noise.py`: the noise-model rules against the native
   circuit backend.
 
@@ -133,14 +136,15 @@ in that configuration too.
 | What | Command |
 |---|---|
 | Python package (pure-Python mode) | `pytest python/quantx_engine/tests -q` |
-| Engine gates (needs the library) | `QX_REQUIRE_NATIVE=1 QUANTX_LIB_PATH=... pytest python/quantx_engine/tests/test_models_ed.py python/quantx_engine/tests/test_hva_statevector.py python/quantx_engine/tests/test_noise.py` |
+| Engine gates (needs the library) | `QX_REQUIRE_NATIVE=1 QUANTX_LIB_PATH=... pytest python/quantx_engine/tests/test_models_ed.py python/quantx_engine/tests/test_hva_statevector.py python/quantx_engine/tests/test_thermal_ed.py python/quantx_engine/tests/test_noise.py` |
 | C++ tests | `ctest --test-dir build --output-on-failure` |
 | Tutorial notebooks | `pip install -r notebooks/requirements.txt nbmake && pytest --nbmake notebooks/` |
 | REST server | `pip install fastapi httpx anyio pydantic aiosqlite pytest-asyncio prometheus_client && pytest server/tests` |
 
-Some C++ suites are long: `qx_hubbard_test` takes tens of minutes. Run the ones your
+Some C++ suites are long: `qx_hubbard_test` takes about an hour. Run the ones your
 change touches while you work (`ctest -R <name>`), and the full set before asking for a
-review. Run the Python suite with the library loaded as well, so the engine paths are
+review. CI runs the fast suites on every push (the Windows benchmark gate) and the whole
+set, `qx_hubbard_test` included, every night (the C++ long tests workflow). Run the Python suite with the library loaded as well, so the engine paths are
 exercised.
 
 ## Pull requests
@@ -178,3 +182,13 @@ agree that it is licensed under the same terms, and you certify the
 [Developer Certificate of Origin 1.1](https://developercertificate.org/): sign off each
 commit with `git commit -s`, which adds a `Signed-off-by: Your Name <you@example.com>`
 line.
+
+The sign-off is required. A DCO check runs on every pull request and fails if any
+commit lacks a `Signed-off-by:` line with the email of that commit's author (merge
+commits are exempt). To sign off commits you have already made, run
+`git rebase --signoff origin/master` and force-push the branch. Run the same check
+locally before you push:
+
+```bash
+scripts/check_dco.sh origin/master HEAD
+```

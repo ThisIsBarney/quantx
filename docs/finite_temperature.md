@@ -1,27 +1,74 @@
-# Finite-temperature spectroscopy (KF2)
+# Finite-temperature spectroscopy
 
-QuantX computes **finite-temperature dynamical response functions** of spin chains
-by ancilla purification + real-time block-TEBD on the GPU-accelerated block-sparse
-engine — the same engine that produces the T=0 dynamics, with no new symmetry code.
-The pipeline goes from a Hamiltonian to the experimentally relevant observables:
+QuantX computes the thermal state of a chain and its **dynamical response** by
+ancilla purification and real-time block TEBD on the block-sparse engine, the same
+engine that runs the T=0 dynamics. From Python, `quantx_engine.thermal` covers the
+XXZ, spin-1 Heisenberg and Fermi-Hubbard chains of `quantx_engine.models`:
 
-| observable | what it is | routine |
+| Python | what it gives | C++ routine |
 |---|---|---|
-| `E(T)`, `⟨Z_cZ_j⟩`, `χ_zz(T)` | static thermodynamics | `run_thermal_blocks` (F0) |
-| **`S(k,ω,T)`** | dynamical structure factor | `run_spectral_thermal_blocks` (F1) |
-| **`σ(ω,T)`** | optical / spin conductivity | `run_conductivity_thermal_blocks` (F2) |
+| `thermal.statics(model, beta)` | E(β), ⟨S^z_j⟩ (⟨n_j⟩ for Hubbard), ⟨O_c O_j⟩ and the uniform susceptibility (the compressibility for Hubbard), on a grid from β = 0 | `run_thermal_blocks` |
+| `thermal.structure_factor(...)`, then `.spectrum()` | C_j(t) = ⟨S^z_j(t) S^z_c⟩_β, then the dynamical structure factor **S(k, ω, T)** | `run_spectral_thermal_blocks` |
+| `thermal.current_correlation(...)`, then `.conductivity()` | ⟨J(t) J⟩_β, then the optical conductivity **Re σ(ω, T)** per site | `run_conductivity_thermal_blocks` |
 
-All three are XXZ-general (anisotropy Δ) and validated against exact
-diagonalization at every temperature.
+```python
+from quantx_engine import thermal
+from quantx_engine.models import HubbardChain, XXZChain
+
+st = thermal.statics(XXZChain(L=16), beta=2.0)       # seconds
+st.energy[-1], st.susceptibility[-1]                 # at beta = 2
+
+sf = thermal.structure_factor(XXZChain(L=12), beta=1.0, t_max=4.0)
+k, w, S = sf.spectrum()                              # S(k, omega, T)
+
+cc = thermal.current_correlation(HubbardChain(L=6, U=4.0, mu=2.0), beta=1.0,
+                                 t_max=3.0, max_bond=256)
+w, sigma = cc.conductivity()                         # Re sigma(omega, T), omega >= 0
+```
+
+**The bond dimension.** `max_bond` (default 128) caps the purified states, and the
+real-time evolution reaches it within a few steps, so raise it until the result
+stops moving. The spin chains need far less than Hubbard: the XXZ structure factor
+above moves by 1e-5 between `max_bond` 128 and 256, while the Hubbard conductivity
+moves by 1% of its peak (and the late-time ⟨J(t)J⟩ by 5%), at the local dimension
+d = 4. `max_bond` and `bond_dims` in the results say how full the bonds got.
+
+**Conventions.** Those of `quantx_engine.models`: spins S = σ/2, open chains. The
+ensemble is grand canonical, over every S^z sector and, for Hubbard, every particle
+number; `mu` sets the filling (`mu = U/2` is half filling at every temperature). The
+current is that of the conserved charge, from the continuity equation: for the spin
+chains J = Σ_l (iJ/2)(S⁺_l S⁻_{l+1} − h.c.), and for Hubbard the particle current
+J = Σ_{l,s} i t (c†_{l+1,s} c_{l,s} − h.c.). The structure factor of the Hubbard
+chain is the spin one, S^z = (n↑ − n↓)/2.
+
+**The spectra.** `spectrum()` is S(k, ω) = Σ_r e^{−ikr} ∫dt e^{iωt} C_{c+r}(t),
+with the negative times from C(−t) = C(t)*, and a Gaussian window e^{−(ηt)²/2}
+(default η = 3/t_max) against the cut at the last time. On an open chain the momentum
+is measured from the central source, and the extension C(−t) = C(t)* is exact for the
+local correlation (H is real) and at every k on an odd chain, whose centre is a
+mirror point; on an even chain it is the usual open-chain approximation. At β > 0
+both signs of ω carry weight, related by detailed balance, S(k, −ω) = e^{−βω} S(k, ω),
+up to the window's broadening.
+
+`conductivity()` is the Kubo formula,
+Re σ(ω) = (1 − e^{−βω})/(2Lω) ∫dt e^{iωt} ⟨J(t) J⟩_β, which tends to
+β/(2L) ∫dt ⟨J(t) J⟩_β at ω → 0. It is computed on ω ≥ 0 only: Re σ is even, and below
+zero the factor grows as e^{β|ω|}, against a windowed transform that is not
+exponentially small there.
+
+J1-J2 and the Hubbard lattices have no purified form in the engine yet, and are
+refused.
 
 ## How it works
 
 The Gibbs state `ρ(β) = e^{−βH}/Z` is represented as a **pure state**
 `|ψ(β)⟩ = e^{−βH/2}|ψ0⟩` on an **interleaved 2N chain** — physical sites at even
-positions, ancillas at odd. `|ψ0⟩` is a product of singlet Bell pairs (the β=0
-infinite-temperature state); cooling is imaginary-time TEBD with **swap-and-carry**
-gates that ferry physical neighbours together. This keeps the engine's `d=2` /
-±1-charge-shift block structure exactly intact — zero engine changes (see
+positions, ancillas at odd. `|ψ0⟩` is a product of maximally entangled pairs, one per
+site, each of fixed total charge (a singlet for spin 1/2; for Hubbard every pair holds
+two electrons at S^z = 0), which is the β=0 infinite-temperature state. Cooling is
+imaginary-time TEBD with **swap-and-carry** gates that ferry physical neighbours
+together, so the engine's block structure stays intact: local dimension d = 2, 3 and
+4 for spin 1/2, spin 1 and Hubbard (see
 [finite_temperature_plan.md](finite_temperature_plan.md) for the design pivot from
 the originally-planned `d=4` composite site).
 
@@ -31,12 +78,35 @@ evolve **both** the unsourced and sourced states — the finite-T bra is not
 stationary, unlike T=0. The **Karrasch–Bardarson–Moore backward-ancilla
 disentangler** cancels the real-time entanglement growth of the unsourced state (a
 true unitary gauge, exact to ~1e-13; a compute win — see
-[disentangler figure](disentangler_bond_growth.svg)).
+[disentangler figure](disentangler_bond_growth.svg)). The current correlator
+⟨A(t)|J|B(t)⟩ is contracted exactly at every step, as an MPO sandwich.
 
 ## Validation
 
-Every routine is checked against dense ED at small N (the exact thermal trace /
-Lehmann representation), on three SVD backends (Eigen-CPU, cuSOLVER-GPU, LAPACK):
+**The Python gate** (`python/quantx_engine/tests/test_thermal_ed.py`) compares
+everything `quantx_engine.thermal` returns with an exact diagonalisation of the whole
+Hilbert space, written independently of the engine: the Gibbs state over every sector,
+its exact real-time evolution, and the operators in the conventions above (for
+Hubbard, Jordan-Wigner fermions). It runs the XXZ chain (L = 6, Δ = 0.7), the spin-1
+chain (L = 4) and the Hubbard chain (L = 4, U = 3, μ = 0.9, off half filling): the
+statics on the whole grid up to β = 2, and both correlators at β = 1 up to t = 2. The
+bond dimension holds each purified state whole, so the only error is the
+second-order Trotter error of the steps: below 1e-3 at dβ = dt = 0.05 (measured
+4.2e-4 at most, on the Hubbard current, whose C(0) is 3.8), and falling by 3.9 to
+4.0 at half the step (the gate requires at least 3). A slip in a unit conversion would be
+0.1 or more, and would not move with the step. The gate also checks the Fourier
+transforms, `spectrum()` and `conductivity()`, on exact correlations against the
+Lehmann sums they approximate, to 1e-8, without the engine.
+
+That gate found a bug in the C++ current correlator, fixed with it: it used to apply J
+to the evolving state and compress the product back to the bond cap at every step,
+with a first sweep that truncated against a part of the chain that was not
+orthonormal. It lost 3e-2 of ⟨J(t)J⟩ on the 4-site Hubbard chain at the exact bond
+dimension, at every step size.
+
+The C++ tests check every routine against dense ED at small N (the exact thermal
+trace / Lehmann representation), on three SVD backends (Eigen-CPU, cuSOLVER-GPU,
+LAPACK):
 
 | test | reference | worst error |
 |---|---|---|

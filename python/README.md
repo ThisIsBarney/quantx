@@ -20,6 +20,7 @@ pure-Python package without the engine, and `quantx_engine.backend_info()["nativ
 | Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a chosen symmetry sector | `dmrg.ground_state` with `models.XXZChain`, `J1J2Chain`, `Spin1Chain`, `HubbardChain` | exact diagonalisation to 1e-10 |
 | Hubbard on ladders, strips and cylinders | `dmrg.ground_state(models.HubbardLattice(...))` | exact diagonalisation on a ladder and a cylinder, to 1e-10 |
 | Fermionic HVA circuits on chains, ladders, strips and cylinders | `hva.circuit`, `hva.layout` | an independent state vector: energy and entanglement entropies to 1e-10 from a product start; to 1e-6 from the default U = 0 start (about 1e-8 measured) |
+| Finite-temperature statics, S(k, ω, T) and σ(ω, T) of the XXZ, spin-1 and Hubbard chains | `thermal.statics`, `thermal.structure_factor`, `thermal.current_correlation` | exact diagonalisation of the whole Hilbert space, to the second-order Trotter error of the steps (below 1e-3 at the default step, falling by 4 at half the step) |
 
 ```python
 from quantx_engine.models import HubbardChain, HubbardLattice
@@ -37,8 +38,9 @@ r.energy, r.entropy_max, r.truncation_error, r.init_energy_error
 # moves by 3e-3 at 1024): raise max_bond until the energy stops moving.
 ```
 
-Spin models use S = σ/2, and every chain is open. A solver works in one symmetry sector,
-and an unreachable sector is an error rather than a silent default. The gates run on a
+Spin models use S = σ/2, and every chain is open. A ground-state solver works in one
+symmetry sector, and an unreachable sector is an error rather than a silent default;
+finite temperature is grand canonical, over every sector. The gates run on a
 Linux build in CI; the macOS and Windows wheels are checked for loading the engine.
 
 ## Experimental

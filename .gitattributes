@@ -1,0 +1,3 @@
+# Shell scripts keep LF line endings in every checkout: bash, Git Bash on Windows included,
+# reads a CRLF script as commands ending in a stray carriage return.
+*.sh text eol=lf
