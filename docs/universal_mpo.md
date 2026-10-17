@@ -544,7 +544,7 @@ states need charge sectors the product seed does not touch.
 *Honest scope note:* at U=8, δ=1/8 the true W=4-cylinder ground state has
 **filled λ=8 stripes**, with the λ=4 pattern found here a close metastable
 competitor — separating them takes χ well past 10⁴ plus extrapolation (Zheng et
-al., Science 355, 1155 (2017)). This figure demonstrates the stripe *machinery*
+al., Science 358, 1155 (2017)). This figure demonstrates the stripe *machinery*
 (doped sectors + pinning + profiles + mixer convergence on 64 sites at χ=1024 in
 51 min), not a resolution of the λ=4/λ=8 energetics.
 
