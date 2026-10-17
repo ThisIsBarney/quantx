@@ -14,6 +14,9 @@ concurrency:
 jobs:
   windows-benchmark-gate:
     runs-on: windows-latest
+    # It used to build serially and run the whole C++ suite: 40 minutes of build, then a
+    # Test step that did not finish before the next push to master cancelled it.
+    timeout-minutes: 120
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,10 +54,12 @@ jobs:
       # chi=4096) ran past its 90-minute ctest timeout while the other 17 tests passed,
       # and benchmark numbers from an unoptimised build measure nothing.
       - name: Build
-        run: cmake --build build-vs --config Release
+        run: cmake --build build-vs --config Release --parallel
 
+      # qx_hubbard_test takes about an hour on a 20-thread desktop and several on this
+      # runner; cpp-long-tests.yml runs it, with the rest of the suite, every night.
       - name: Test
-        run: ctest --test-dir build-vs -C Release --output-on-failure
+        run: ctest --test-dir build-vs -C Release --output-on-failure -E qx_hubbard_test --timeout 1800
 
       - name: CLI Argument Contract
         shell: pwsh
