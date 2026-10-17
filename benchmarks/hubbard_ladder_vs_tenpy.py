@@ -22,6 +22,7 @@ for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
 _NCORE = str(os.cpu_count() or 8)
 
 import json, re, subprocess, sys, time
+import _native                  # benchmarks/_native.py
 
 U        = 8.0
 LX       = int(os.environ.get("BENCH_LX", "16"))
@@ -32,9 +33,7 @@ if os.environ.get("BENCH_PLAN"):
     PLAN = [int(c) for c in os.environ["BENCH_PLAN"].split(",")]
 
 _here = os.path.dirname(__file__)
-QX_BENCH = os.environ.get("QX_HUB_SHOWCASE",
-                          os.path.join(_here, "..", "build-cuda-blas", "Release", "qx_hubbard_showcase.exe"))
-QX_DLL_DIR = os.environ.get("QX_DLL_DIR", r"C:\ProgramData\miniforge3\envs\qxblas\Library\bin")
+QX_BENCH = None                 # found in main(): benchmarks/_native.py
 
 
 def _min_of(fn, reps):
@@ -71,8 +70,7 @@ print("RESULT", w, info["E"])
 
 
 def quantx(chi):
-    env = dict(os.environ)
-    env["PATH"] = QX_DLL_DIR + os.pathsep + env.get("PATH", "")
+    env = _native.env()             # QX_DLL_DIR first on PATH, if set
     for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[_v] = _NCORE
     # site-split (period-2 d=4) formulation by default -- the performance mapping
@@ -87,9 +85,8 @@ def quantx(chi):
 
 
 def main():
-    for p, what in ((QX_BENCH, "qx_hubbard_showcase"),):
-        if not os.path.exists(p):
-            sys.exit(f"{what} not found at {p}")
+    global QX_BENCH
+    QX_BENCH = _native.program("qx_hubbard_showcase", "QX_HUB_SHOWCASE")
     import tenpy
     print(f"2-leg Hubbard LADDER GS DMRG  Lx={LX} (2x{LX} sites) U={U:g} half filling "
           f"reps={REPS}(min) | tenpy {tenpy.__version__} (Ladder lattice, best of "

@@ -1,5 +1,9 @@
 # Benchmark Harness
 
+To rerun the comparisons with TeNPy and ITensor that the reports in `docs/` publish, see
+[REPRODUCING.md](REPRODUCING.md). This page describes the older accuracy and noise
+suites.
+
 Current suites:
 
 1. `circuit_accuracy_smoke`

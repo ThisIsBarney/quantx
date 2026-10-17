@@ -30,6 +30,7 @@ for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
 _NCORE = str(os.cpu_count() or 8)
 
 import json, re, subprocess, sys, time
+import _native                  # benchmarks/_native.py
 
 DT       = float(os.environ.get("BENCH_DT", "0.05"))
 REPS     = int(os.environ.get("BENCH_REPS", "2"))
@@ -42,9 +43,7 @@ if os.environ.get("BENCH_PLAN"):   # e.g. "256:40,512:40"
     PLAN = [(int(c), int(s)) for c, s in (p.split(":") for p in os.environ["BENCH_PLAN"].split(","))]
 
 _here = os.path.dirname(__file__)
-QX_BENCH = os.environ.get("QX_TEBD_BENCH",
-                          os.path.join(_here, "..", "build-cuda-blas", "Release", "qx_tebd_bench.exe"))
-QX_DLL_DIR = os.environ.get("QX_DLL_DIR", r"C:\ProgramData\miniforge3\envs\qxblas\Library\bin")
+QX_BENCH = None                 # found in main(): benchmarks/_native.py
 
 
 def _min_of(fn, reps):
@@ -73,8 +72,7 @@ def tenpy_hubbard(chi, steps):
 
 
 def quantx(chi, steps, gpu):
-    env = dict(os.environ)
-    env["PATH"] = QX_DLL_DIR + os.pathsep + env.get("PATH", "")
+    env = _native.env()             # QX_DLL_DIR first on PATH, if set
     for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[_v] = _NCORE          # QuantX native multi-thread (its optimum)
     if gpu:
@@ -90,8 +88,8 @@ def quantx(chi, steps, gpu):
 
 
 def main():
-    if not os.path.exists(QX_BENCH):
-        sys.exit(f"qx_tebd_bench not found at {QX_BENCH}")
+    global QX_BENCH
+    QX_BENCH = _native.program("qx_tebd_bench", "QX_TEBD_BENCH")
     import tenpy
     print(f"Hubbard (d=4, U={U:g}) TEBD  N={N} dt={DT} cutoff={CUTOFF} reps={REPS}(min) | "
           f"tenpy {tenpy.__version__} (single-thread, N+Sz) | QuantX (multi-thread, N+Sz packed)\n",

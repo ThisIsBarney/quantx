@@ -6,14 +6,14 @@ the time-dependent ground-state correlations::
     C_{j,l0}(t) = <psi0| sigma^z_j  e^{-i(H-E0) t}  sigma^z_{l0} |psi0>
 
 for a central source site ``l0`` of a spin-1/2 Heisenberg chain -- DMRG for the
-ground state, block-sparse (Sz-symmetric) real-time TDVP2 for the evolution, and
+ground state, block-sparse (Sz-symmetric) real-time TEBD for the evolution, and
 a block two-MPS overlap for the measurement. A space+time Fourier transform turns
 C into the dynamical structure factor
 
     S(k, omega) = sum_{r,t} e^{-i k r} e^{i omega t} C_r(t).
 
 This is distinct from ``quantx_engine.spectral`` (Lehmann/Krylov spectral
-functions on dense/sparse Hamiltonians); this module is the MPS/TDVP route that
+functions on dense/sparse Hamiltonians); this module is the MPS route that
 scales to large chains.
 
 Example
