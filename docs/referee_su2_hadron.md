@@ -13,7 +13,9 @@ dimension the physical observable needs. The vacuum-subtracted fermion number af
 last step is n_f(20) = 0.12 ± 0.04: 0.630 at χ = 400, 0.154 at χ = 800 and 0.116 at
 χ = 1600, where quimb's fidelity estimate reaches 0.995, the error bar being the last
 doubling's change. All three published classical values lie above it, by 0.13 to 0.29,
-and the QPU's −0.077 lies 0.19 below. A QuantX run would add an exactly conserved
+and the QPU's −0.077 lies 0.19 below. That is no scatter around the answer: step by step,
+the scan is exact through step 14, and every classical method already drifts above it
+there, by up to 0.16. A QuantX run would add an exactly conserved
 charge: it would refine a classical result, not provide a new one. And this is the
 tracker's only instance with a conserved U(1) charge, so the tracker gives the
 block-sparse engine little leverage today.
@@ -27,7 +29,7 @@ block-sparse engine little leverage today.
 | Size | 60 sites on 120 qubits, two per site |
 | Circuit | first-order Trotter, step 0.0015, 20 steps; two-qubit depth 259. As published it is transpiled: 11,840 CX, 10,720 RZ, 4,720 H, 2,462 X and 2,330 SWAP (meson circuit) |
 | Conserved | the total charge Q = Σ(n_i + n_o) = 60 |
-| Value submitted | Q itself: 59.994 ± 0.006 from the QPU at step 20 |
+| Value tracked | Q: every entry, the QPU's included, submitted the conserved charge (59.994 ± 0.006 from the QPU), though the instance's README names n_f(20) its tracker-facing observable |
 | Physical observable | the vacuum-subtracted fermion density n_f(t) |
 
 ## The published baselines, at step 20
@@ -94,6 +96,28 @@ How the circuits are read:
   the fidelity estimates agree to 2e-4. χ = 400 takes 15 min there, against 85 min on
   two CPU threads.
 
+## Step by step: the classical methods drift from the exact values
+
+![n_f(t) of the SU(2) hadron circuits at every Trotter step: the MPS, exact through step 14, against the tensor network, both Pauli propagations and the QPU; below, each method minus the MPS](referee_su2_hadron_nf_t.svg)
+
+The circuits are 20 blocks of 1,602 gates, one per Trotter step. After each of the first
+19 blocks the SWAP gates have returned the qubits to their initial layout; the last block
+lacks its final SWAP layer, which is the permutation above. So
+`su2_hadron_quimb.py trajectory` reads n_f after every step, and the tracker's README
+lists every method at every step
+([referee_su2_hadron_nf_t.csv](referee_su2_hadron_nf_t.csv) holds both).
+
+- **Exact through step 14.** At χ = 800 the truncations leave the norm at 1 to 5e-5
+  in both circuits, and χ = 400 agrees with it to 4e-4.
+- **Step 1 checks the reading.** The MPS gives 1.8253, as both Pauli propagations do.
+  The tensor network's 1.8242 evolves the Hamiltonian, not the circuit.
+- **Every classical method drifts above the exact values from step 2 on.** By step 10,
+  Pauli propagation on the CPU is 0.157 above, on the GPU 0.071, and the tensor network
+  0.051; at step 14 they are 0.11, 0.05 and 0.04 above, and at step 20 0.29, 0.13 and 0.16.
+  Part of the tensor network's difference is the circuit's Trotter error, which it does
+  not simulate; the Pauli propagations run the circuit itself.
+- **The QPU swings both ways,** by up to 0.32 (step 7).
+
 ## What a QuantX run would add, and what it needs
 
 - **An exact charge.** The circuit conserves Q, and a U(1) block-sparse MPS keeps
@@ -127,10 +151,11 @@ exploit either.
 
 ## Recommendation
 
-1. **Offer the tracker n_f(20) = 0.12 ± 0.04, with this scan.** It is the first value of
-   the physical observable with an error bar, and every published classical value lies
-   outside that bar. It refines the classical side of the record. It does not refute the
-   advantage claim, which rests on Q.
+1. **Offer the tracker n_f(20) = 0.12 ± 0.04, with this scan and the step-by-step
+   comparison.** It is the first value of the physical observable with an error bar, and
+   every published classical value lies outside that bar. The value the tracker records,
+   Q, cannot separate the methods: a charge-conserving simulation gives exactly 60. This
+   refines the classical side of the record; it does not refute the advantage claim.
 2. **M16 keeps the SU(2) instance, with a narrower claim:** an exactly charge-conserving
    simulation of n_f(t), not a refutation of an advantage claim. The work is the
    QASM-to-block converter, which M14 (the CUDA-Q backend) needs too.
@@ -164,6 +189,9 @@ exploit either.
   (quimb 1.11.2; CuPy 14 for the GPU runs), its runs in
   [referee_su2_hadron_nf.csv](referee_su2_hadron_nf.csv), measured 2026-10-18. Its inputs
   are the two QASM files at the tracker's commit a62dc46 (2026-07-07), which the script
-  downloads and checks by SHA-256.
+  downloads and checks by SHA-256. The step-by-step values are in
+  [referee_su2_hadron_nf_t.csv](referee_su2_hadron_nf_t.csv), with the published ones from
+  the instance's README; [`benchmarks/plot_su2_hadron.py`](../benchmarks/plot_su2_hadron.py)
+  draws the figure and computes the drifts quoted above.
 - The other instances: [circuit-models.json](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/blob/main/data/observable-estimations/circuit-models.json)
   and each family's README.
