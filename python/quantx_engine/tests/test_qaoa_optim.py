@@ -5,7 +5,7 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.qaoa_optim import (
+from quantx_engine.contrib.qaoa_optim import (
     CVaRQAOAError,
     QAOAResult,
     MaxCutProblem,
@@ -107,7 +107,7 @@ class TestMaxCutMethods:
         assert ratio == 0.0
 
     def test_cost_hamiltonian_returns_hamiltonian(self):
-        from quantx_engine.chemistry import PauliHamiltonian
+        from quantx_engine.contrib.chemistry import PauliHamiltonian
         mc = _triangle_graph()
         ham = mc.cost_hamiltonian()
         assert isinstance(ham, PauliHamiltonian)
@@ -184,7 +184,7 @@ class TestTSPMethods:
         assert diag[0] > 0.0  # should have penalty
 
     def test_cost_hamiltonian(self):
-        from quantx_engine.chemistry import PauliHamiltonian
+        from quantx_engine.contrib.chemistry import PauliHamiltonian
         tsp = TSPProblem(_sym_dist(2))
         ham = tsp.cost_hamiltonian()
         assert isinstance(ham, PauliHamiltonian)

@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.floquet import (
+from quantx_engine.contrib.floquet import (
     BlochFloquetSolver,
     FloquetError,
     FloquetResult,
@@ -408,35 +408,3 @@ class TestDrivenTwoLevel:
         result = driven_two_level(omega0, 0.0, omega_drive, n_steps=200)
         qe = np.sort(np.real(result.quasi_energies))
         np.testing.assert_allclose(qe, [-omega0 / 2, omega0 / 2], atol=1e-3)
-
-
-# ── __init__ re-exports ────────────────────────────────────────────────────────
-
-class TestFloquetInit:
-    def test_floquet_error_exported(self):
-        from quantx_engine import FloquetError as FE
-        assert FE is FloquetError
-
-    def test_floquet_system_exported(self):
-        from quantx_engine import FloquetSystem as FS
-        assert FS is FloquetSystem
-
-    def test_floquet_result_exported(self):
-        from quantx_engine import FloquetResult as FR
-        assert FR is FloquetResult
-
-    def test_bloch_floquet_solver_exported(self):
-        from quantx_engine import BlochFloquetSolver as BFS
-        assert BFS is BlochFloquetSolver
-
-    def test_floquet_spectrum_exported(self):
-        from quantx_engine import floquet_spectrum as fs
-        assert fs is floquet_spectrum
-
-    def test_floquet_effective_hamiltonian_exported(self):
-        from quantx_engine import floquet_effective_hamiltonian as feh
-        assert feh is floquet_effective_hamiltonian
-
-    def test_driven_two_level_exported(self):
-        from quantx_engine import driven_two_level as dtl
-        assert dtl is driven_two_level

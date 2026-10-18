@@ -84,7 +84,7 @@ async def floquet_driven_two_level(req: FloquetDrivenTwoLevelRequest) -> dict[st
 
     Returns quasi-energies ε ∈ (−ω/2, ω/2] and the effective Hamiltonian H_eff.
     """
-    from quantx_engine.floquet import driven_two_level, FloquetError
+    from quantx_engine.contrib.floquet import driven_two_level, FloquetError
     try:
         result = driven_two_level(
             omega0=req.omega_0,
@@ -123,8 +123,8 @@ async def tdmrg_evolve(req: TDMRGEvolveRequest) -> dict[str, Any]:
     Returns the entanglement entropy profile at the final time step and the
     energy expectation value history.
     """
-    from quantx_engine.tdmrg import real_time_evolve, TDMRGError
-    from quantx_engine.tensor_network import MPO, TensorNetworkError
+    from quantx_engine.contrib.tdmrg import real_time_evolve, TDMRGError
+    from quantx_engine.contrib.tensor_network import MPO, TensorNetworkError
     import numpy as np
 
     model = req.model.lower()
@@ -179,8 +179,8 @@ async def noise_aware_vqe(req: NoiseAwareVQERequest) -> dict[str, Any]:
     Accepts the Hamiltonian as a 2^n × 2^n real (+ optional imaginary) matrix.
     Returns the ground-state energy estimate and converged parameters.
     """
-    from quantx_engine.noise_vqe import NoiseAwareVQE, NoiseVQEError
-    from quantx_engine.noise import DepolarizingNoise
+    from quantx_engine.contrib.noise_vqe import NoiseAwareVQE, NoiseVQEError
+    from quantx_engine.contrib.noise import DepolarizingNoise
     import numpy as np
 
     dim = 2 ** req.n_qubits
@@ -241,7 +241,7 @@ async def logical_qubit_error_rate(req: LogicalQubitRequest) -> dict[str, Any]:
     The distance-d repetition code can correct up to ⌊(d−1)/2⌋ bit-flip errors.
     Returns the simulated logical error rate via Monte Carlo sampling.
     """
-    from quantx_engine.fault_tolerant import LogicalQubit, FTError
+    from quantx_engine.contrib.fault_tolerant import LogicalQubit, FTError
     try:
         lq = LogicalQubit(
             distance=req.distance,
@@ -272,7 +272,7 @@ async def magic_state_distillation(req: MagicStateRequest) -> dict[str, Any]:
     ``p_out ≈ 35 · p_in³``.  Returns the measured output error rate and
     theoretical prediction.
     """
-    from quantx_engine.fault_tolerant import MagicStateDistillery, FTError
+    from quantx_engine.contrib.fault_tolerant import MagicStateDistillery, FTError
     try:
         distillery = MagicStateDistillery(p_in=req.p_physical, rng_seed=req.seed)
         result = distillery.distill(n_attempts=req.n_attempts)

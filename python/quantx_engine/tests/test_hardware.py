@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 
 # ── module under test ─────────────────────────────────────────────────────────
-from quantx_engine.hardware import (
+from quantx_engine.contrib.hardware import (
     HardwareError,
     BackendCalibration,
     HardwareJobResult,
@@ -147,7 +147,7 @@ class TestBackendCalibrationMeanT1T2(unittest.TestCase):
 
 class TestBackendCalibrationToNoiseModel(unittest.TestCase):
     def test_returns_thermal_relaxation_noise(self):
-        from quantx_engine.noise import ThermalRelaxationNoise
+        from quantx_engine.contrib.noise import ThermalRelaxationNoise
         cal = _make_cal()
         nm = cal.to_noise_model()
         self.assertIsInstance(nm, ThermalRelaxationNoise)
@@ -180,7 +180,7 @@ class TestBackendCalibrationToNoiseModel(unittest.TestCase):
         self.assertGreater(nm.T2, 0)
 
     def test_t_gate_override(self):
-        from quantx_engine.noise import ThermalRelaxationNoise
+        from quantx_engine.contrib.noise import ThermalRelaxationNoise
         cal = _make_cal()
         nm = cal.to_noise_model(t_gate_ns=99.0)
         self.assertAlmostEqual(nm.t_gate, 99.0)
@@ -198,7 +198,7 @@ class TestBackendCalibrationToNoiseModel(unittest.TestCase):
 
 class TestBackendCalibrationToCouplingMap(unittest.TestCase):
     def test_returns_coupling_map(self):
-        from quantx_engine.transpiler import CouplingMap
+        from quantx_engine.contrib.transpiler import CouplingMap
         cal = _make_cal()
         cm = cal.to_coupling_map()
         self.assertIsInstance(cm, CouplingMap)
@@ -488,7 +488,7 @@ class TestIonQBackendSubmit(unittest.TestCase):
 
     def test_submit_returns_hardware_job(self):
         backend = IonQBackend(token="key")
-        with patch("quantx_engine.hardware._ionq_request") as mock_req:
+        with patch("quantx_engine.contrib.hardware._ionq_request") as mock_req:
             mock_req.return_value = {"id": "ionq-job-123"}
             job = backend.submit(self._circuit(), shots=1000)
         self.assertIsInstance(job, HardwareJob)
@@ -496,7 +496,7 @@ class TestIonQBackendSubmit(unittest.TestCase):
 
     def test_submit_uses_correct_endpoint(self):
         backend = IonQBackend(token="key", base_url="https://api.ionq.co/v0.3")
-        with patch("quantx_engine.hardware._ionq_request") as mock_req:
+        with patch("quantx_engine.contrib.hardware._ionq_request") as mock_req:
             mock_req.return_value = {"id": "j1"}
             backend.submit(self._circuit())
         args, kwargs = mock_req.call_args
@@ -505,14 +505,14 @@ class TestIonQBackendSubmit(unittest.TestCase):
 
     def test_submit_missing_id_raises(self):
         backend = IonQBackend(token="key")
-        with patch("quantx_engine.hardware._ionq_request") as mock_req:
+        with patch("quantx_engine.contrib.hardware._ionq_request") as mock_req:
             mock_req.return_value = {}  # no "id" field
             with self.assertRaises(HardwareError):
                 backend.submit(self._circuit())
 
     def test_run_circuit_blocks_and_returns_result(self):
         backend = IonQBackend(token="key")
-        with patch("quantx_engine.hardware._ionq_request") as mock_req:
+        with patch("quantx_engine.contrib.hardware._ionq_request") as mock_req:
             # First call: submit POST → job id
             # Second call: GET status → completed
             # Third call: GET result → histogram
@@ -618,7 +618,7 @@ class TestIonQBackendCalibration(unittest.TestCase):
             "fidelity": {"1q": 0.999, "2q": 0.995},
             "timing": {"T1": 10000.0, "T2": 5000.0},
         }
-        with patch("quantx_engine.hardware._ionq_request", return_value=resp):
+        with patch("quantx_engine.contrib.hardware._ionq_request", return_value=resp):
             cal = backend.fetch_calibration()
         self.assertEqual(cal.n_qubits, 25)
         self.assertIn((0, 1), cal.coupling_edges)
@@ -634,7 +634,7 @@ class TestIonQBackendCalibration(unittest.TestCase):
             "fidelity": {},
             "timing": {"T1": 100.0, "T2": 50.0},  # µs
         }
-        with patch("quantx_engine.hardware._ionq_request", return_value=resp):
+        with patch("quantx_engine.contrib.hardware._ionq_request", return_value=resp):
             cal = backend.fetch_calibration()
         # 100µs = 100_000 ns
         self.assertAlmostEqual(cal.t1[0], 100_000.0, delta=1.0)
@@ -643,7 +643,7 @@ class TestIonQBackendCalibration(unittest.TestCase):
     def test_calibration_api_error_returns_empty(self):
         """If IonQ /backends endpoint errors, fall back to empty calibration."""
         backend = self._backend()
-        with patch("quantx_engine.hardware._ionq_request",
+        with patch("quantx_engine.contrib.hardware._ionq_request",
                    side_effect=HardwareError("404")):
             cal = backend.fetch_calibration()
         self.assertEqual(cal.n_qubits, 0)
@@ -718,20 +718,20 @@ class TestIBMHardwareBackendConstruction(unittest.TestCase):
 
     def test_construction_stores_backend_name(self):
         mock_cls, mock_inst = self._mock_ibm_backend_cls()
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok", backend_name="ibm_kyoto")
         self.assertEqual(hw.backend_name, "ibm_kyoto")
 
     def test_repr_contains_backend_name(self):
         mock_cls, mock_inst = self._mock_ibm_backend_cls()
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok", backend_name="ibm_kyoto")
         r = repr(hw)
         self.assertIn("ibm_kyoto", r)
 
     def test_backend_name_property(self):
         mock_cls, mock_inst = self._mock_ibm_backend_cls()
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok", backend_name="test_be")
         self.assertEqual(hw.backend_name, "test_be")
 
@@ -752,7 +752,7 @@ class TestIBMHardwareBackendRunCircuit(unittest.TestCase):
             "raw_ibm_result": {},
         }
         mock_cls.return_value = mock_inst
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok", backend_name=backend_name)
         hw._base = mock_inst
         return hw
@@ -809,7 +809,7 @@ class TestIBMHardwareBackendFetchCalibration(unittest.TestCase):
         mock_inst._instance = "ibm-q/open/main"
         mock_cls.return_value = mock_inst
 
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok", backend_name="ibm_sherbrooke")
         hw._base = mock_inst
         return hw
@@ -852,7 +852,7 @@ class TestIBMHardwareBackendFetchCalibration(unittest.TestCase):
         mock_inst._backend = None
         mock_inst._instance = "ibm-q/open/main"
         mock_cls.return_value = mock_inst
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok")
         hw._base = mock_inst
         with self.assertRaises(HardwareError):
@@ -870,7 +870,7 @@ class TestIBMHardwareBackendListBackends(unittest.TestCase):
         mock_inst._backend = MagicMock()
         mock_inst._instance = "ibm-q/open/main"
         mock_cls.return_value = mock_inst
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok")
         hw._base = mock_inst
         return hw
@@ -888,7 +888,7 @@ class TestIBMHardwareBackendListBackends(unittest.TestCase):
         mock_inst._backend = MagicMock()
         mock_inst._instance = "ibm-q/open/main"
         mock_cls.return_value = mock_inst
-        with patch("quantx_engine.ibm.IBMQuantumBackend", mock_cls):
+        with patch("quantx_engine.contrib.ibm.IBMQuantumBackend", mock_cls):
             hw = IBMHardwareBackend(token="tok")
         hw._base = mock_inst
         with self.assertRaises(HardwareError):
@@ -952,7 +952,7 @@ class TestGoogleBackendSimulatorPath(unittest.TestCase):
         cirq_mock, _ = self._make_cirq_mock()
         g = GoogleBackend(project_id="proj")
 
-        with patch("quantx_engine.hardware.cirq", cirq_mock, create=True):
+        with patch("quantx_engine.contrib.hardware.cirq", cirq_mock, create=True):
             with patch.object(g, "_to_cirq_circuit") as mock_convert:
                 mock_circuit = MagicMock()
                 mock_circuit.all_qubits.return_value = []
@@ -1023,7 +1023,7 @@ class TestCirqResultToCounts(unittest.TestCase):
 
 class TestCalibrationToNoiseModel(unittest.TestCase):
     def test_small_gate_error_returns_thermal(self):
-        from quantx_engine.noise import ThermalRelaxationNoise
+        from quantx_engine.contrib.noise import ThermalRelaxationNoise
         cal = BackendCalibration(
             "b", 2,
             t1={0: 100_000.0},
@@ -1034,7 +1034,7 @@ class TestCalibrationToNoiseModel(unittest.TestCase):
         self.assertIsInstance(nm, ThermalRelaxationNoise)
 
     def test_large_gate_error_returns_composite(self):
-        from quantx_engine.noise import CompositeNoise
+        from quantx_engine.contrib.noise import CompositeNoise
         cal = BackendCalibration(
             "b", 2,
             t1={0: 100_000.0},
@@ -1045,7 +1045,7 @@ class TestCalibrationToNoiseModel(unittest.TestCase):
         self.assertIsInstance(nm, CompositeNoise)
 
     def test_no_gate_errors_returns_thermal(self):
-        from quantx_engine.noise import ThermalRelaxationNoise
+        from quantx_engine.contrib.noise import ThermalRelaxationNoise
         cal = BackendCalibration("b", 2)
         nm = calibration_to_noise_model(cal)
         self.assertIsInstance(nm, ThermalRelaxationNoise)
@@ -1056,7 +1056,7 @@ class TestCalibrationToNoiseModel(unittest.TestCase):
         self.assertAlmostEqual(nm.t_gate, 200.0)
 
     def test_composite_contains_depolarizing(self):
-        from quantx_engine.noise import CompositeNoise, DepolarizingNoise
+        from quantx_engine.contrib.noise import CompositeNoise, DepolarizingNoise
         cal = BackendCalibration(
             "b", 2,
             t1={0: 100_000.0},
@@ -1069,7 +1069,7 @@ class TestCalibrationToNoiseModel(unittest.TestCase):
 
     @staticmethod
     def _depolarizing_p(nm):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         return next(c for c in nm.models if isinstance(c, DepolarizingNoise)).prob
 
     def test_one_qubit_error_maps_to_its_channel(self):
@@ -1155,48 +1155,6 @@ class TestAvailableBackends(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             result = available_backends()
         self.assertIn("qpu.aria-1", result["ionq"])
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# __init__ re-exports
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestInitExports(unittest.TestCase):
-    def test_hardware_error_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "HardwareError"))
-
-    def test_backend_calibration_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "BackendCalibration"))
-
-    def test_hardware_job_result_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "HardwareJobResult"))
-
-    def test_hardware_job_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "HardwareJob"))
-
-    def test_ibm_hardware_backend_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "IBMHardwareBackend"))
-
-    def test_ionq_backend_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "IonQBackend"))
-
-    def test_google_backend_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "GoogleBackend"))
-
-    def test_calibration_to_noise_model_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "calibration_to_noise_model"))
-
-    def test_available_backends_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "available_backends"))
 
 
 if __name__ == "__main__":

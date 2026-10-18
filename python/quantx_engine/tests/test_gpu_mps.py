@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 import warnings
 
-from quantx_engine.mps_simulator import (
+from quantx_engine.contrib.mps_simulator import (
     MPSSimulator,
     MPSSimulatorError,
     GpuBenchmarkResult,
@@ -122,7 +122,7 @@ class TestMPSSimulatorBackend:
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")
             sim = MPSSimulator(n_qubits=3, backend="cuda")
-        from quantx_engine.tensor_network import MPS
+        from quantx_engine.contrib.tensor_network import MPS
         mps = sim.to_mps()
         assert isinstance(mps, MPS)
         for t in mps.tensors:
@@ -199,7 +199,7 @@ class TestGpuBenchmarkResult:
 
     def test_truncation_errors_match_cpu_run(self):
         """cpu_truncation_error must match a standalone mps_benchmark call."""
-        from quantx_engine.mps_simulator import mps_benchmark
+        from quantx_engine.contrib.mps_simulator import mps_benchmark
         ref = mps_benchmark(n_qubits=6, circuit_depth=2, max_bond=4, seed=42)
         result = gpu_mps_benchmark(n_qubits=6, circuit_depth=2, max_bond=4, seed=42)
         assert result.cpu_truncation_error == pytest.approx(ref.truncation_error, rel=1e-6)
@@ -246,7 +246,7 @@ def test_cpu_compare_mps_sv_unchanged():
 
 def test_adaptive_truncation_duck_typing_with_numpy():
     """AdaptiveTruncation.truncate uses duck-typed .sum() — verify no regression."""
-    from quantx_engine.mps_simulator import AdaptiveTruncation
+    from quantx_engine.contrib.mps_simulator import AdaptiveTruncation
     at = AdaptiveTruncation(max_bond=4, eps=0.1)
     S = np.array([3.0, 2.0, 0.1, 0.01])
     U = np.eye(4)

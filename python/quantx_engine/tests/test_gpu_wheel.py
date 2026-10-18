@@ -51,7 +51,7 @@ def _cupy_absent():
 
 def test_gpu_info_returns_dict():
     """gpu_info() always returns a dict with the expected keys."""
-    from quantx_engine.gpu import gpu_info
+    from quantx_engine.contrib.gpu import gpu_info
     info = gpu_info()
     assert isinstance(info, dict)
     assert "cupy_available" in info
@@ -60,17 +60,17 @@ def test_gpu_info_returns_dict():
 
 def test_gpu_info_without_cupy():
     """gpu_info() reports cupy_available=False when CuPy is absent."""
-    from quantx_engine import gpu as gpu_module
+    from quantx_engine.contrib import gpu as gpu_module
     with patch.object(gpu_module, "_HAS_CUPY", False), \
          patch.object(gpu_module, "cp", None):
-        from quantx_engine.gpu import gpu_info
+        from quantx_engine.contrib.gpu import gpu_info
         info = gpu_info()
         assert info["cupy_available"] is False
 
 
 def test_gpu_info_with_mock_cupy():
     """gpu_info() reports device count and version when CuPy is present (mocked)."""
-    from quantx_engine import gpu as gpu_module
+    from quantx_engine.contrib import gpu as gpu_module
     mock_cp = MagicMock()
     mock_cp.__version__ = "13.0.0"
     mock_cp.cuda.runtime.getDeviceCount.return_value = 2
@@ -82,7 +82,7 @@ def test_gpu_info_with_mock_cupy():
 
     with patch.object(gpu_module, "_HAS_CUPY", True), \
          patch.object(gpu_module, "cp", mock_cp):
-        from quantx_engine.gpu import gpu_info
+        from quantx_engine.contrib.gpu import gpu_info
         info = gpu_info()
     assert info["cupy_available"] is True
     assert info.get("cupy_version") == "13.0.0"
@@ -95,7 +95,7 @@ def test_gpu_info_with_mock_cupy():
 
 def test_gpu_backend_numpy_always_works():
     """GpuBackend('numpy') succeeds regardless of whether CuPy is installed."""
-    from quantx_engine.gpu import GpuBackend
+    from quantx_engine.contrib.gpu import GpuBackend
     b = GpuBackend("numpy")
     assert b.name == "numpy"
     assert not b.is_gpu()
@@ -104,10 +104,10 @@ def test_gpu_backend_numpy_always_works():
 
 def test_gpu_backend_auto_falls_back_to_numpy_without_cupy():
     """GpuBackend('auto') resolves to numpy when CuPy is absent."""
-    from quantx_engine import gpu as gpu_module
+    from quantx_engine.contrib import gpu as gpu_module
     with patch.object(gpu_module, "_HAS_CUPY", False), \
          patch.object(gpu_module, "cp", None):
-        from quantx_engine.gpu import GpuBackend
+        from quantx_engine.contrib.gpu import GpuBackend
         b = GpuBackend("auto")
     assert b.name == "numpy"
     assert not b.is_gpu()
@@ -115,25 +115,25 @@ def test_gpu_backend_auto_falls_back_to_numpy_without_cupy():
 
 def test_gpu_backend_cupy_raises_without_cupy():
     """GpuBackend('cupy') raises GpuError when CuPy is not installed."""
-    from quantx_engine import gpu as gpu_module
-    from quantx_engine.gpu import GpuError
+    from quantx_engine.contrib import gpu as gpu_module
+    from quantx_engine.contrib.gpu import GpuError
     with patch.object(gpu_module, "_HAS_CUPY", False), \
          patch.object(gpu_module, "cp", None):
-        from quantx_engine.gpu import GpuBackend
+        from quantx_engine.contrib.gpu import GpuBackend
         with pytest.raises(GpuError, match="CuPy is not installed"):
             GpuBackend("cupy")
 
 
 def test_gpu_backend_unknown_name_raises():
     """GpuBackend with an unknown name raises GpuError."""
-    from quantx_engine.gpu import GpuBackend, GpuError
+    from quantx_engine.contrib.gpu import GpuBackend, GpuError
     with pytest.raises(GpuError, match="Unknown backend"):
         GpuBackend("tpu")
 
 
 def test_gpu_backend_array_numpy():
     """GpuBackend('numpy').array() returns a numpy ndarray."""
-    from quantx_engine.gpu import GpuBackend
+    from quantx_engine.contrib.gpu import GpuBackend
     b = GpuBackend("numpy")
     arr = b.array([1, 2, 3], dtype=complex)
     assert isinstance(arr, np.ndarray)
@@ -142,7 +142,7 @@ def test_gpu_backend_array_numpy():
 
 def test_gpu_backend_zeros_numpy():
     """GpuBackend('numpy').zeros() returns a zero numpy array."""
-    from quantx_engine.gpu import GpuBackend
+    from quantx_engine.contrib.gpu import GpuBackend
     b = GpuBackend("numpy")
     z = b.zeros((4,), dtype=complex)
     assert isinstance(z, np.ndarray)
@@ -151,7 +151,7 @@ def test_gpu_backend_zeros_numpy():
 
 def test_gpu_backend_to_dict():
     """GpuBackend.to_dict() returns expected keys."""
-    from quantx_engine.gpu import GpuBackend
+    from quantx_engine.contrib.gpu import GpuBackend
     b = GpuBackend("numpy")
     d = b.to_dict()
     assert "backend" in d
@@ -161,7 +161,7 @@ def test_gpu_backend_to_dict():
 
 def test_gpu_backend_to_numpy_passthrough():
     """to_numpy() on a numpy array returns the same array."""
-    from quantx_engine.gpu import GpuBackend
+    from quantx_engine.contrib.gpu import GpuBackend
     b = GpuBackend("numpy")
     arr = np.array([1.0 + 0j, 0.0 + 1j])
     result = b.to_numpy(arr)
@@ -174,13 +174,13 @@ def test_gpu_backend_to_numpy_passthrough():
 
 def test_gpu_backend_auto_uses_cupy_when_available():
     """GpuBackend('auto') resolves to cupy when CuPy is mocked as present."""
-    from quantx_engine import gpu as gpu_module
+    from quantx_engine.contrib import gpu as gpu_module
     mock_cp = MagicMock()
     mock_cp.__version__ = "13.0.0"
 
     with patch.object(gpu_module, "_HAS_CUPY", True), \
          patch.object(gpu_module, "cp", mock_cp):
-        from quantx_engine.gpu import GpuBackend
+        from quantx_engine.contrib.gpu import GpuBackend
         b = GpuBackend("auto")
     assert b.name == "cupy"
     assert b.is_gpu()
@@ -188,7 +188,7 @@ def test_gpu_backend_auto_uses_cupy_when_available():
 
 def test_gpu_backend_to_numpy_converts_cupy_array():
     """to_numpy() calls cp.asnumpy when CuPy array is present (mocked)."""
-    from quantx_engine import gpu as gpu_module
+    from quantx_engine.contrib import gpu as gpu_module
     mock_cp = MagicMock()
     mock_cp.__version__ = "13.0.0"
     expected = np.array([1.0, 2.0])
@@ -201,7 +201,7 @@ def test_gpu_backend_to_numpy_converts_cupy_array():
 
     with patch.object(gpu_module, "_HAS_CUPY", True), \
          patch.object(gpu_module, "cp", mock_cp):
-        from quantx_engine.gpu import GpuBackend
+        from quantx_engine.contrib.gpu import GpuBackend
         b = GpuBackend("cupy")
         result = b.to_numpy(fake_arr)
     mock_cp.asnumpy.assert_called_once_with(fake_arr)
@@ -214,7 +214,7 @@ def test_gpu_backend_to_numpy_converts_cupy_array():
 
 def test_gpu_statevector_numpy_backend_initialises():
     """GpuStatevector works on the numpy backend (CPU fallback)."""
-    from quantx_engine.gpu import GpuStatevector
+    from quantx_engine.contrib.gpu import GpuStatevector
     sv = GpuStatevector(n_qubits=2, backend="numpy")
     assert sv.n_qubits == 2
     assert sv.backend == "numpy"
@@ -222,7 +222,7 @@ def test_gpu_statevector_numpy_backend_initialises():
 
 def test_gpu_statevector_numpy_state_is_zero():
     """GpuStatevector starts in |0...0> (first amplitude = 1)."""
-    from quantx_engine.gpu import GpuStatevector
+    from quantx_engine.contrib.gpu import GpuStatevector
     sv = GpuStatevector(n_qubits=2, backend="numpy")
     state = sv.state()
     assert abs(state[0] - 1.0) < 1e-12
@@ -231,7 +231,7 @@ def test_gpu_statevector_numpy_state_is_zero():
 
 def test_gpu_statevector_norm_preserved_after_h():
     """Applying H to qubit 0 preserves norm on numpy backend."""
-    from quantx_engine.gpu import GpuStatevector
+    from quantx_engine.contrib.gpu import GpuStatevector
     sv = GpuStatevector(n_qubits=2, backend="numpy")
     sv.apply_gate("H", qubits=0)
     state = sv.state()
@@ -283,7 +283,7 @@ def test_real_cupy_backend():
     except ImportError:
         pytest.skip("cupy not installed")
 
-    from quantx_engine.gpu import GpuBackend
+    from quantx_engine.contrib.gpu import GpuBackend
     b = GpuBackend("cupy")
     assert b.is_gpu()
     arr = b.array(np.ones(4, dtype=complex))
@@ -303,7 +303,7 @@ def test_real_gpu_info_device_count():
     except ImportError:
         pytest.skip("cupy not installed")
 
-    from quantx_engine.gpu import gpu_info
+    from quantx_engine.contrib.gpu import gpu_info
     info = gpu_info()
     assert info["cupy_available"] is True
     assert info.get("n_devices", 0) >= 1, "Expected at least one CUDA device"
@@ -317,7 +317,7 @@ def test_real_gpu_statevector_bell_state():
     except ImportError:
         pytest.skip("cupy not installed")
 
-    from quantx_engine.gpu import GpuStatevector
+    from quantx_engine.contrib.gpu import GpuStatevector
     sv = GpuStatevector(n_qubits=2, backend="cupy")
     sv.apply_gate("H", qubits=0)
     sv.apply_gate("CNOT", qubits=[0, 1])

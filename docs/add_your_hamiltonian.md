@@ -57,7 +57,7 @@ from __future__ import annotations
 import numpy as np
 import scipy.sparse as sp
 
-from quantx_engine.lanczos import LanczosSolver
+from quantx_engine.contrib.lanczos import LanczosSolver
 
 
 def xx_hamiltonian(n_sites: int, J: float = 1.0) -> sp.csr_matrix:

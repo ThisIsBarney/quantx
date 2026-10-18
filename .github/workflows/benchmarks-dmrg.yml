@@ -9,7 +9,7 @@ on:
       - "src/dmrg_blocks.cpp"
       - "src/dmrg_capi.cpp"
       - "python/quantx_engine/dmrg.py"
-      - "python/quantx_engine/cached_dmrg.py"
+      - "python/quantx_engine/contrib/cached_dmrg.py"
       - "benchmarks/dmrg_vs_itensor.py"
       - ".github/workflows/benchmarks-dmrg.yml"
   pull_request:
@@ -19,7 +19,7 @@ on:
       - "src/dmrg_blocks.cpp"
       - "src/dmrg_capi.cpp"
       - "python/quantx_engine/dmrg.py"
-      - "python/quantx_engine/cached_dmrg.py"
+      - "python/quantx_engine/contrib/cached_dmrg.py"
       - "benchmarks/dmrg_vs_itensor.py"
       - ".github/workflows/benchmarks-dmrg.yml"
   workflow_dispatch:

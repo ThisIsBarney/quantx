@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import pytest
 
-from quantx_engine.quantum_protocols import (
+from quantx_engine.contrib.quantum_protocols import (
     ProtocolError,
     BB84Result,
     BB84Protocol,
@@ -453,7 +453,7 @@ class TestIntegration:
         Uses the one-way BB84 bound R = 1 − h₂((1−F)/2) already stored in
         NetworkResult.secret_key_rate to confirm the two modules interoperate.
         """
-        from quantx_engine.quantum_network import simulate_repeater_chain
+        from quantx_engine.contrib.quantum_network import simulate_repeater_chain
         net_result = simulate_repeater_chain(
             n_hops=0,
             segment_length_km=5,
@@ -469,7 +469,7 @@ class TestIntegration:
 
     def test_teleportation_over_repeater_channel(self):
         """Teleportation fidelity using repeater-chain output fidelity."""
-        from quantx_engine.quantum_network import simulate_repeater_chain
+        from quantx_engine.contrib.quantum_network import simulate_repeater_chain
         net_result = simulate_repeater_chain(
             n_hops=1,
             segment_length_km=10,

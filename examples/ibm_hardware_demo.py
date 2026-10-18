@@ -109,7 +109,7 @@ def run_demo(
     int
         0 on success, non-zero on error.
     """
-    from quantx_engine.ibm import circuit_to_qasm3
+    from quantx_engine.contrib.ibm import circuit_to_qasm3
 
     print("=" * 60)
     print("QuantX IBM Quantum Hardware Round-Trip Demo (M169)")
@@ -139,7 +139,7 @@ def run_demo(
         return 1
 
     try:
-        from quantx_engine.hardware import IBMHardwareBackend, HardwareError
+        from quantx_engine.contrib.hardware import IBMHardwareBackend, HardwareError
     except ImportError as exc:
         print(f"ERROR: Could not import QuantX hardware module: {exc}")
         return 1

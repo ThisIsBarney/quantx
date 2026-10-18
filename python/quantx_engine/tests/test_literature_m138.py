@@ -23,7 +23,7 @@ class TestQLDPCLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.qldpc import ClassicalCode, HypergraphProductCode
+            from quantx_engine.contrib.qldpc import ClassicalCode, HypergraphProductCode
             self.ClassicalCode = ClassicalCode
             self.HypergraphProductCode = HypergraphProductCode
         except ImportError:
@@ -66,7 +66,7 @@ class TestBosonicLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.bosonic import CatQubit, GKPState
+            from quantx_engine.contrib.bosonic import CatQubit, GKPState
             self.CatQubit = CatQubit
             self.GKPState = GKPState
         except ImportError:

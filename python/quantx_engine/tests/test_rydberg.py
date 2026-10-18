@@ -5,7 +5,7 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.rydberg import (
+from quantx_engine.contrib.rydberg import (
     RydbergError,
     RydbergAtom,
     RydbergHamiltonian,

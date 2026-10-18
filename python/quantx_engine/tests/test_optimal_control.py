@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.optimal_control import (
+from quantx_engine.contrib.optimal_control import (
     CRABResult,
     CRABSolver,
     GRAPEResult,
@@ -354,17 +354,3 @@ class TestCRABPhysics:
         r_a = solver_a.run(n_iterations=20)
         r_b = solver_b.run(n_iterations=20)
         assert np.allclose(r_a.controls, r_b.controls, atol=1e-10)
-
-
-# ===========================================================================
-# __init__ re-exports
-# ===========================================================================
-
-class TestOptimalControlInit:
-    def test_grape_exported(self):
-        from quantx_engine import GRAPESolver as GS
-        assert GS is GRAPESolver
-
-    def test_crab_exported(self):
-        from quantx_engine import CRABSolver as CS
-        assert CS is CRABSolver

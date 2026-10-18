@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.pulse import (
+from quantx_engine.contrib.pulse import (
     ArbitraryWaveform,
     ConstantWaveform,
     ControlChannel,
@@ -521,35 +521,3 @@ class TestRecordStates:
         assert r.states_at_times is not None
         p0_init = abs(r.states_at_times[0, 0]) ** 2
         assert p0_init == pytest.approx(1.0, abs=0.01)
-
-
-# ── __init__ re-exports ────────────────────────────────────────────────────────
-
-class TestPulseInit:
-    def test_pulse_simulator_exported(self):
-        from quantx_engine import PulseSimulator as PS
-        assert PS is PulseSimulator
-
-    def test_pulse_schedule_exported(self):
-        from quantx_engine import PulseSchedule as Sched
-        assert Sched is PulseSchedule
-
-    def test_qubit_system_exported(self):
-        from quantx_engine import QubitSystem as QS
-        assert QS is QubitSystem
-
-    def test_pulse_result_exported(self):
-        from quantx_engine import PulseResult as PR
-        assert PR is PulseResult
-
-    def test_drive_channel_exported(self):
-        from quantx_engine import DriveChannel as DC
-        assert DC is DriveChannel
-
-    def test_gaussian_waveform_exported(self):
-        from quantx_engine import GaussianWaveform as GW
-        assert GW is GaussianWaveform
-
-    def test_pulse_error_exported(self):
-        from quantx_engine import PulseError as PE
-        assert PE is PulseError

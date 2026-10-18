@@ -424,22 +424,3 @@ class TestQuantumVolumeRun:
         results = qv.run(max_qubits=2, n_trials=10)
         for r in results:
             assert 0.0 <= r.heavy_output_prob <= 1.0 + 1e-8
-
-
-# ===========================================================================
-# Public package exports
-# ===========================================================================
-
-def test_rb_qv_importable_from_package():
-    from quantx_engine import (
-        RBQVError as E,
-        RBResult as RR,
-        StandardRB as SRB,
-        QVResult as QVR,
-        QuantumVolume as QV,
-    )
-    assert E is RBQVError
-    assert RR is RBResult
-    assert SRB is StandardRB
-    assert QVR is QVResult
-    assert QV is QuantumVolume

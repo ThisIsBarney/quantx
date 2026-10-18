@@ -916,7 +916,8 @@ n = 6 sites and 12 qubits for each, χ = 4³ = 64 lossless for each, the balance
 bond 2 for each, and each is optimised at its **own** optimum with an identical
 protocol. Only the connectivity graph changes. The site-split ladder is pinned against
 the independent rung-fused builder to **1.3e-14**, and the circuit itself against a
-dense state-vector reference at all three widths (2.7e-12 / 3.6e-13 / 2.7e-13), over
+dense state-vector reference at all three widths (1.2e-12 / 1.8e-15 / 2.7e-14, as
+`qx_hubbard_test` prints them since its reference applies each gate in closed form), over
 four layers two of which skip a bond group outright — the case that broke the gauge.
 
 At depth 8:

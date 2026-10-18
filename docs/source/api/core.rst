@@ -14,41 +14,41 @@ Engine
 Lanczos Eigensolver
 --------------------
 
-.. automodule:: quantx_engine.lanczos
+.. automodule:: quantx_engine.contrib.lanczos
    :members:
    :show-inheritance:
 
 Trotter / Product-formula Evolution
 -------------------------------------
 
-.. automodule:: quantx_engine.trotter
+.. automodule:: quantx_engine.contrib.trotter
    :members:
    :show-inheritance:
 
 McLachlan Variational Integration
 -----------------------------------
 
-.. automodule:: quantx_engine.mclachlan
+.. automodule:: quantx_engine.contrib.mclachlan
    :members:
    :show-inheritance:
 
 Noise Channels
 ---------------
 
-.. automodule:: quantx_engine.noise
+.. automodule:: quantx_engine.contrib.noise
    :members:
    :show-inheritance:
 
 Error Mitigation
 -----------------
 
-.. automodule:: quantx_engine.mitigation
+.. automodule:: quantx_engine.contrib.mitigation
    :members:
    :show-inheritance:
 
 Lindblad Master Equation
 --------------------------
 
-.. automodule:: quantx_engine.lindblad
+.. automodule:: quantx_engine.contrib.lindblad
    :members:
    :show-inheritance:

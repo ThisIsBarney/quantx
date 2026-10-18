@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.templates import (
+from quantx_engine.contrib.templates import (
     CircuitTemplate,
     TemplateError,
     ghz_circuit,
@@ -16,7 +16,7 @@ from quantx_engine.templates import (
     quantum_fourier_transform,
     uccsd_ansatz,
 )
-from quantx_engine.primitives import Estimator, Sampler
+from quantx_engine.contrib.primitives import Estimator, Sampler
 
 
 # ===========================================================================
@@ -523,37 +523,3 @@ class TestUCCSDansatz:
     def test_invalid_n_qubits_one(self):
         with pytest.raises(TemplateError):
             uccsd_ansatz(n_electrons=1, n_qubits=1)
-
-
-# ===========================================================================
-# __init__ re-exports
-# ===========================================================================
-
-class TestTemplatesInit:
-    def test_template_error_exported(self):
-        from quantx_engine import TemplateError as TE
-        assert TE is TemplateError
-
-    def test_circuit_template_exported(self):
-        from quantx_engine import CircuitTemplate as CT
-        assert CT is CircuitTemplate
-
-    def test_hardware_efficient_ansatz_exported(self):
-        from quantx_engine import hardware_efficient_ansatz as hea
-        assert hea is hardware_efficient_ansatz
-
-    def test_qaoa_circuit_exported(self):
-        from quantx_engine import qaoa_circuit as qc
-        assert qc is qaoa_circuit
-
-    def test_ghz_circuit_exported(self):
-        from quantx_engine import ghz_circuit as gc
-        assert gc is ghz_circuit
-
-    def test_quantum_fourier_transform_exported(self):
-        from quantx_engine import quantum_fourier_transform as qft
-        assert qft is quantum_fourier_transform
-
-    def test_uccsd_ansatz_exported(self):
-        from quantx_engine import uccsd_ansatz as ua
-        assert ua is uccsd_ansatz

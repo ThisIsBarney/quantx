@@ -60,7 +60,7 @@ def reset_state() -> None:
 # ── Solver dispatch table ─────────────────────────────────────────────────────
 
 def _run_network_repeater(payload: dict) -> dict:
-    from quantx_engine.quantum_network import simulate_repeater_chain
+    from quantx_engine.contrib.quantum_network import simulate_repeater_chain
     r = simulate_repeater_chain(
         n_hops=payload.get("n_hops", 0),
         segment_length_km=payload.get("segment_length_km", 10.0),
@@ -81,7 +81,7 @@ def _run_network_repeater(payload: dict) -> dict:
 
 
 def _run_protocols_bb84(payload: dict) -> dict:
-    from quantx_engine.quantum_protocols import BB84Protocol
+    from quantx_engine.contrib.quantum_protocols import BB84Protocol
     proto = BB84Protocol(
         channel_error_rate=payload.get("channel_error_rate", 0.01),
         eve_intercept_fraction=payload.get("eve_intercept_fraction", 0.0),
@@ -101,8 +101,8 @@ def _run_protocols_bb84(payload: dict) -> dict:
 
 def _run_many_body_otoc(payload: dict) -> dict:
     import numpy as np
-    from quantx_engine.many_body import compute_otoc
-    from quantx_engine.trotter import ising_trotter
+    from quantx_engine.contrib.many_body import compute_otoc
+    from quantx_engine.contrib.trotter import ising_trotter
     n = payload.get("n_qubits", 4)
     t = payload.get("t", 1.0)
     sim = ising_trotter(n=n, J=payload.get("J", 1.0), h=payload.get("h", 0.5))

@@ -5,7 +5,7 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.qiskit_compat import (
+from quantx_engine.contrib.qiskit_compat import (
     QiskitCompatError,
     BitArray,
     DataBin,
@@ -429,7 +429,7 @@ class TestEstimatorV2ExpectationValues:
 
     def test_pauli_hamiltonian_observable(self):
         """PauliHamiltonian observable on |0⟩."""
-        from quantx_engine.chemistry import PauliHamiltonian, PauliTerm
+        from quantx_engine.contrib.chemistry import PauliHamiltonian, PauliTerm
         ham = PauliHamiltonian(
             terms=[PauliTerm(coeff=-0.5+0j, ops={0: "Z"})],
             n_qubits=1,
@@ -512,7 +512,7 @@ class TestQiskitCompatRegressions:
         ImportError branch fires, triggering the |0⟩ fallback.
         """
         import sys
-        import quantx_engine.qiskit_compat as _compat
+        import quantx_engine.contrib.qiskit_compat as _compat
 
         n = 3  # 3-qubit circuit
 
@@ -542,7 +542,7 @@ class TestQiskitCompatRegressions:
         fell through to an 'Unsupported observable type' error.
         """
         try:
-            from quantx_engine.primitives import SparsePauliOp
+            from quantx_engine.contrib.primitives import SparsePauliOp
         except ImportError:
             pytest.skip("primitives module not available")
 
@@ -562,7 +562,7 @@ class TestQiskitCompatRegressions:
         leaving only 0.5·Z and returning -0.5 instead of -1.0.
         """
         try:
-            from quantx_engine.primitives import SparsePauliOp
+            from quantx_engine.contrib.primitives import SparsePauliOp
         except ImportError:
             pytest.skip("primitives module not available")
 

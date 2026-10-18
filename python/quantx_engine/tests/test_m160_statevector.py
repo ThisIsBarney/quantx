@@ -20,7 +20,7 @@ from collections import Counter
 import numpy as np
 import pytest
 
-from quantx_engine.statevector import StatevectorSimulator
+from quantx_engine.contrib.statevector import StatevectorSimulator
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -32,18 +32,6 @@ def _fidelity(a: np.ndarray, b: np.ndarray) -> float:
 
 def _norm(v: np.ndarray) -> float:
     return float(np.linalg.norm(v))
-
-
-# ── 1. Public API export ──────────────────────────────────────────────────────
-
-class TestPublicExport:
-    def test_importable_from_quantx_engine(self):
-        from quantx_engine import StatevectorSimulator as SS  # noqa: F401
-        assert SS is StatevectorSimulator
-
-    def test_in_all(self):
-        import quantx_engine
-        assert "StatevectorSimulator" in quantx_engine.__all__
 
 
 # ── 2. Initialisation ─────────────────────────────────────────────────────────

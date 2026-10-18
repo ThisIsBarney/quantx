@@ -9,7 +9,7 @@ Floquet Systems
 
 Periodic driving, quasi-energy spectrum, Floquet Hamiltonian.
 
-.. automodule:: quantx_engine.floquet
+.. automodule:: quantx_engine.contrib.floquet
    :members:
    :show-inheritance:
 
@@ -18,7 +18,7 @@ Non-Equilibrium Dynamics
 
 Kibble-Zurek mechanism, quantum quenches, work statistics.
 
-.. automodule:: quantx_engine.neqdyn
+.. automodule:: quantx_engine.contrib.neqdyn
    :members:
    :show-inheritance:
 
@@ -27,7 +27,7 @@ Rydberg Atom Arrays (M121)
 
 Rydberg blockade Hamiltonian, 2D atom array, phase diagram simulation.
 
-.. automodule:: quantx_engine.rydberg
+.. automodule:: quantx_engine.contrib.rydberg
    :members:
    :show-inheritance:
 

@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from quantx_engine.quantum_network import (
+from quantx_engine.contrib.quantum_network import (
     NetworkError,
     QuantumNode,
     QuantumChannel,
@@ -686,27 +686,6 @@ class TestSimulateRepeaterChain(unittest.TestCase):
         r = simulate_repeater_chain(n_hops=0, segment_length_km=1.0,
                                     attenuation_db_km=0.0)
         self.assertTrue(r.is_useful())
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# __init__ re-exports
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestInitExports(unittest.TestCase):
-    def _check(self, name: str):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, name), f"Missing: {name}")
-
-    def test_all_exports(self):
-        names = [
-            "NetworkError", "QuantumNode", "QuantumChannel",
-            "QuantumNetwork", "BellPairGenerator", "EntanglementSwapper",
-            "QuantumRepeater", "NetworkResult",
-            "fidelity_after_dephasing", "fidelity_after_swapping",
-            "fidelity_after_purification", "simulate_repeater_chain",
-        ]
-        for name in names:
-            self._check(name)
 
 
 if __name__ == "__main__":

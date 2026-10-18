@@ -5,7 +5,7 @@ import math
 
 import pytest
 
-from quantx_engine.fault_tolerant import (
+from quantx_engine.contrib.fault_tolerant import (
     DistillationResult,
     FTError,
     FaultTolerantCircuit,
@@ -377,27 +377,3 @@ class TestUtilityFunctions:
     def test_t_gate_cost_invalid_p_target(self):
         with pytest.raises(FTError):
             t_gate_cost(3, 0.01, p_target=0.0)
-
-
-# ── __init__ re-exports ────────────────────────────────────────────────────────
-
-class TestFTInit:
-    def test_logical_qubit_exported(self):
-        from quantx_engine import LogicalQubit as LQ
-        assert LQ is LogicalQubit
-
-    def test_magic_state_distillery_exported(self):
-        from quantx_engine import MagicStateDistillery as MSD
-        assert MSD is MagicStateDistillery
-
-    def test_fault_tolerant_circuit_exported(self):
-        from quantx_engine import FaultTolerantCircuit as FTC
-        assert FTC is FaultTolerantCircuit
-
-    def test_ft_error_exported(self):
-        from quantx_engine import FTError as FTE
-        assert FTE is FTError
-
-    def test_distillation_result_exported(self):
-        from quantx_engine import DistillationResult as DR
-        assert DR is DistillationResult

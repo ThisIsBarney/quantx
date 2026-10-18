@@ -65,7 +65,7 @@ def solver():
     """LindbladSolver backed by Engine (native if available, pure-Python fallback)."""
     try:
         from quantx_engine import Engine
-        from quantx_engine.lindblad import LindbladSolver
+        from quantx_engine.contrib.lindblad import LindbladSolver
         return LindbladSolver(Engine())
     except (ImportError, FileNotFoundError, OSError) as e:
         pytest.skip(f"LindbladSolver not available: {e}")
@@ -80,7 +80,7 @@ def solver():
 @pytest.fixture()
 def JumpOp():
     """Import JumpOperator."""
-    from quantx_engine.lindblad import JumpOperator
+    from quantx_engine.contrib.lindblad import JumpOperator
     return JumpOperator
 
 
@@ -308,29 +308,29 @@ class TestPauliLabelParsing:
     """Verify the indexed→plain Pauli label converter added in M173 P1 fix."""
 
     def test_indexed_single(self):
-        from quantx_engine.lindblad import _parse_pauli_label
+        from quantx_engine.contrib.lindblad import _parse_pauli_label
         assert _parse_pauli_label("X0", 2) == "XI"
         assert _parse_pauli_label("Z1", 3) == "IZI"
         assert _parse_pauli_label("Y2", 3) == "IIY"
 
     def test_indexed_multi(self):
-        from quantx_engine.lindblad import _parse_pauli_label
+        from quantx_engine.contrib.lindblad import _parse_pauli_label
         assert _parse_pauli_label("X0X1", 2) == "XX"
         assert _parse_pauli_label("Z0Z1", 3) == "ZZI"
         assert _parse_pauli_label("X0Y2", 3) == "XIY"
 
     def test_plain_passthrough(self):
-        from quantx_engine.lindblad import _parse_pauli_label
+        from quantx_engine.contrib.lindblad import _parse_pauli_label
         assert _parse_pauli_label("XZI", 3) == "XZI"
         assert _parse_pauli_label("XX", 2)  == "XX"
 
     def test_plain_padded(self):
-        from quantx_engine.lindblad import _parse_pauli_label
+        from quantx_engine.contrib.lindblad import _parse_pauli_label
         # Short plain string padded with I
         assert _parse_pauli_label("X", 3) == "XII"
 
     def test_identity_string(self):
-        from quantx_engine.lindblad import _parse_pauli_label
+        from quantx_engine.contrib.lindblad import _parse_pauli_label
         assert _parse_pauli_label("I", 2) == "II"
         assert _parse_pauli_label("II", 2) == "II"
 
@@ -349,7 +349,7 @@ class TestSparseRouting:
         the solver raises LindbladError for a different reason (n > limit),
         which still satisfies the negative-path contract.
         """
-        from quantx_engine.lindblad import LindbladError
+        from quantx_engine.contrib.lindblad import LindbladError
         with pytest.raises(LindbladError) as exc_info:
             solver.solve(
                 n_qubits=11,

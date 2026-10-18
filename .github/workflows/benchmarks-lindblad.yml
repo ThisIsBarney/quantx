@@ -9,14 +9,14 @@ on:
     branches: ["master", "main"]
     paths:
       - "src/lindblad_sparse.cpp"
-      - "python/quantx_engine/lindblad.py"
+      - "python/quantx_engine/contrib/lindblad.py"
       - "benchmarks/lindblad_vs_qutip.py"
       - ".github/workflows/benchmarks-lindblad.yml"
   pull_request:
     branches: ["master", "main"]
     paths:
       - "src/lindblad_sparse.cpp"
-      - "python/quantx_engine/lindblad.py"
+      - "python/quantx_engine/contrib/lindblad.py"
       - "benchmarks/lindblad_vs_qutip.py"
   workflow_dispatch:
     inputs:

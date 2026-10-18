@@ -341,15 +341,6 @@ class TestMWPMLogicalErrorRate:
 
 
 # ===========================================================================
-# Exported from __init__
-# ===========================================================================
-
-def test_mwpm_importable_from_package():
-    from quantx_engine import MWPMDecoder as M
-    assert M is MWPMDecoder
-
-
-# ===========================================================================
 # Greedy fallback triggered by max_exact=0-like logic
 # ===========================================================================
 

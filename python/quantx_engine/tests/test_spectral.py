@@ -15,13 +15,13 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required")
 
-from quantx_engine.spectral import (
+from quantx_engine.contrib.spectral import (
     KrylovEvolver,
     KrylovResult,
     SpectralError,
     SpectralResult,
 )
-from quantx_engine.lanczos import LanczosSolver, SparseHamiltonian
+from quantx_engine.contrib.lanczos import LanczosSolver, SparseHamiltonian
 
 
 # ===========================================================================

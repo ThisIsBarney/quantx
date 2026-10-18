@@ -12,7 +12,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required")
 
-from quantx_engine.clifford_t import (
+from quantx_engine.contrib.clifford_t import (
     GateSequence,
     CliffordGroup,
     SolovayKitaev,
@@ -266,14 +266,14 @@ class TestCodexFixes:
 
     def test_to_matrix_cnot_correct_n_qubits(self):
         """CNOT with n_qubits=2 should succeed."""
-        from quantx_engine.clifford_t import CNOT_GATE
+        from quantx_engine.contrib.clifford_t import CNOT_GATE
         seq = GateSequence(["CNOT"], n_qubits=2)
         mat = seq.to_matrix()
         np.testing.assert_allclose(mat, CNOT_GATE, atol=1e-10)
 
     def test_identify_non_square_returns_none(self):
         """P2: identify should return None for non-2x2 input."""
-        from quantx_engine.clifford_t import CNOT_GATE
+        from quantx_engine.contrib.clifford_t import CNOT_GATE
         result = CliffordGroup.identify(CNOT_GATE)
         assert result is None
 

@@ -17,7 +17,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required")
 
-from quantx_engine.gpu import (
+from quantx_engine.contrib.gpu import (
     GpuError, GpuBackend, GpuStatevector, GpuLanczos, GpuBatchedCircuit,
     gpu_info, to_gpu, to_cpu,
 )
@@ -177,7 +177,7 @@ def test_gpu_lanczos_dense():
 
 
 def test_gpu_lanczos_sparse():
-    from quantx_engine.lanczos import SparseHamiltonian
+    from quantx_engine.contrib.lanczos import SparseHamiltonian
     H = SparseHamiltonian.ising_1d(n_sites=4, J=1.0, h=0.0)
     solver = GpuLanczos(k=2, backend="numpy", seed=1)
     result = solver.solve(H)
@@ -185,7 +185,7 @@ def test_gpu_lanczos_sparse():
 
 
 def test_gpu_lanczos_result_type():
-    from quantx_engine.lanczos import EigenResult
+    from quantx_engine.contrib.lanczos import EigenResult
     H = np.eye(4)
     solver = GpuLanczos(k=1, backend="numpy", seed=2)
     result = solver.solve(H)

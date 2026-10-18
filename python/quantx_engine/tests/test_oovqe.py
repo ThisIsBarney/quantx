@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.oovqe import (
+from quantx_engine.contrib.oovqe import (
     OOVQEError,
     OOVQEResult,
     OOVQESolver,

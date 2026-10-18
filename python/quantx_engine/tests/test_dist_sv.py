@@ -9,7 +9,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.ray_sim import (
+from quantx_engine.contrib.ray_sim import (
     DistSVError,
     DistSVResult,
     DistributedSVSimulator,

@@ -44,7 +44,7 @@ except ImportError:
     _PYBIND_MODULE = None
 
 if TYPE_CHECKING:  # pragma: no cover
-    from quantx_engine.lindblad import JumpOperator, LindbladResult
+    from quantx_engine.contrib.lindblad import JumpOperator, LindbladResult
 
 
 class QuantXNativeUnavailable(RuntimeError):
@@ -220,7 +220,7 @@ class Engine:
     Pure-Python transpiler — no native library call. The returned dict can be
     passed directly to run_circuit().
     """
-    from quantx_engine.qasm import parse_qasm_to_circuit
+    from quantx_engine.contrib.qasm import parse_qasm_to_circuit
     return parse_qasm_to_circuit(qasm_source, shots=shots, seed=seed,
                                   parameter_map=parameter_map)
 
@@ -1013,9 +1013,9 @@ class Engine:
       dt: float = 0.01,
       entanglement_cut: int = 0,
   ) -> "LindbladResult":
-      """Run the Lindblad master equation and return a :class:`~quantx_engine.lindblad.LindbladResult`.
+      """Run the Lindblad master equation and return a :class:`~quantx_engine.contrib.lindblad.LindbladResult`.
 
-      Convenience wrapper around :class:`~quantx_engine.lindblad.LindbladSolver`.
+      Convenience wrapper around :class:`~quantx_engine.contrib.lindblad.LindbladSolver`.
 
       Parameters
       ----------
@@ -1024,7 +1024,7 @@ class Engine:
       hamiltonian_terms:
           Coherent Hamiltonian as ``[(coeff, "Z0Z1"), ...]``.
       jump_operators:
-          List of :class:`~quantx_engine.lindblad.JumpOperator`.
+          List of :class:`~quantx_engine.contrib.lindblad.JumpOperator`.
       total_time:
           Total evolution time.
       dt:
@@ -1036,7 +1036,7 @@ class Engine:
       -------
       LindbladResult
       """
-      from quantx_engine.lindblad import LindbladSolver
+      from quantx_engine.contrib.lindblad import LindbladSolver
       return LindbladSolver(self).solve(
           n_qubits=n_qubits,
           hamiltonian_terms=hamiltonian_terms,

@@ -688,5 +688,5 @@ def test_adapters_importable_from_package():
     """All adapter symbols are exported from quantx_engine."""
     import quantx_engine  # noqa: F401
     # Only check the AdapterError since the rest require the lazy imports
-    from quantx_engine.adapters import AdapterError
+    from quantx_engine.contrib.adapters import AdapterError
     assert AdapterError is not None

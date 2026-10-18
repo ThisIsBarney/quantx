@@ -32,6 +32,21 @@ bug-fixes and packaging corrections only.
   environment, and `test_quickstart.py` recomputes the three answers (two exact
   diagonalisations and a state vector) and checks the example against them.
 
+### Changed
+
+- **The experimental modules moved to `quantx_engine.contrib`** (M7). The 63 modules
+  outside the engine API (all but `engine`, `dmrg`, `models`, `hva`, `thermal`, `tdvp` and
+  `structure_factor`) import as `quantx_engine.contrib.<module>`, and
+  `import quantx_engine` loads the engine API alone. `__all__` lists `Engine`,
+  `CircuitError`, `QuantXNativeUnavailable`, `backend_info` and `__version__`, so
+  `from quantx_engine import *` no longer brings the experimental names. The old paths
+  work until 0.4.0, with a `DeprecationWarning` at the caller's line:
+  `import quantx_engine.qec` gives `quantx_engine.contrib.qec` itself, and each of the 369
+  names the package exported (`from quantx_engine import SurfaceCode`) resolves to the
+  object it named. To migrate, import from the contrib module:
+  `from quantx_engine.contrib.qec import SurfaceCode`. The PennyLane device's entry point
+  moved with it; `qml.device("quantx.statevector")` is unchanged.
+
 ### Fixed
 
 - **The finite-temperature current correlator ⟨J(t) J⟩_β lost weight at every time

@@ -1,4 +1,4 @@
-"""Tests for quantx_engine.lindblad (M71: Lindblad open-system solver).
+"""Tests for quantx_engine.contrib.lindblad (M71: Lindblad open-system solver).
 
 All tests run without a compiled native library by using mock Engine
 objects.  Physics-level tests (T1 decay, steady state, concurrence) verify
@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from quantx_engine.lindblad import (
+from quantx_engine.contrib.lindblad import (
     EntanglementTrace,
     JumpOperator,
     LindbladError,

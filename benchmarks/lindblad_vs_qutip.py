@@ -80,7 +80,7 @@ def build_heisenberg_ham(n: int) -> list[tuple[float, str]]:
 
 
 def build_boundary_jumps(n: int):
-    from quantx_engine.lindblad import JumpOperator
+    from quantx_engine.contrib.lindblad import JumpOperator
     return [
         JumpOperator("amplitude_damping", qubit=0,     rate=GAMMA),
         JumpOperator("amplitude_damping", qubit=n - 1, rate=GAMMA),
@@ -90,7 +90,7 @@ def build_boundary_jumps(n: int):
 def run_quantx(n: int) -> dict[str, Any]:
     """Run QuantX LindbladSolver and return timing + memory."""
     from quantx_engine import Engine
-    from quantx_engine.lindblad import LindbladSolver
+    from quantx_engine.contrib.lindblad import LindbladSolver
 
     ham  = build_heisenberg_ham(n)
     jops = build_boundary_jumps(n)

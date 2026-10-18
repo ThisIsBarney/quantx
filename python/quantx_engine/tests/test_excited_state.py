@@ -5,8 +5,8 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.chemistry import PauliHamiltonian, PauliTerm
-from quantx_engine.excited_state import (
+from quantx_engine.contrib.chemistry import PauliHamiltonian, PauliTerm
+from quantx_engine.contrib.excited_state import (
     ExcitedStateError,
     ExcitedStateResult,
     ExcitedStateVQE,

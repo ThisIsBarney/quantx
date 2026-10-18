@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.many_body import (
+from quantx_engine.contrib.many_body import (
     ManyBodyError,
     OTOCResult,
     OTOCSweepResult,
@@ -35,7 +35,7 @@ def _is_hermitian(M: np.ndarray, atol: float = 1e-10) -> bool:
 class TestComputeOTOC:
     def _ising_H(self, n=4, J=1.0, h=0.5):
         """Transverse-field Ising Hamiltonian as dense matrix."""
-        from quantx_engine.trotter import ising_trotter
+        from quantx_engine.contrib.trotter import ising_trotter
         sim = ising_trotter(n=n, J=J, h=h)
         return sim.hamiltonian
 
@@ -112,7 +112,7 @@ class TestComputeOTOC:
 
     def test_two_qubit_system(self):
         """Minimal 2-qubit OTOC — just ensure no crash."""
-        from quantx_engine.trotter import heisenberg_trotter
+        from quantx_engine.contrib.trotter import heisenberg_trotter
         H = heisenberg_trotter(n=2).hamiltonian
         r = compute_otoc(H, "X", "Z", 0, 1, t=0.5, n_qubits=2)
         assert isinstance(r.otoc_value, float)
@@ -128,7 +128,7 @@ class TestComputeOTOC:
 
 class TestOTOCSweep:
     def _H(self):
-        from quantx_engine.trotter import ising_trotter
+        from quantx_engine.contrib.trotter import ising_trotter
         return ising_trotter(n=4, J=1.0, h=0.5).hamiltonian
 
     def test_returns_sweep_result(self):
@@ -452,15 +452,7 @@ class TestDMRG2D:
 
 class TestExports:
     def test_importable_from_module(self):
-        from quantx_engine.many_body import (
-            ManyBodyError, OTOCResult, OTOCSweepResult,
-            SYKResult, SYKModel, DMRG2DResult, SnakeMapper,
-            compute_otoc, otoc_sweep, syk_hamiltonian, dmrg_2d,
-        )
-        assert SYKModel is not None
-
-    def test_exported_from_package(self):
-        from quantx_engine import (
+        from quantx_engine.contrib.many_body import (
             ManyBodyError, OTOCResult, OTOCSweepResult,
             SYKResult, SYKModel, DMRG2DResult, SnakeMapper,
             compute_otoc, otoc_sweep, syk_hamiltonian, dmrg_2d,

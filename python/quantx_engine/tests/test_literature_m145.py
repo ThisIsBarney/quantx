@@ -23,7 +23,7 @@ class TestCliffordSimLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.clifford_sim import CliffordSimulator, StabilizerState
+            from quantx_engine.contrib.clifford_sim import CliffordSimulator, StabilizerState
             self.CliffordSimulator = CliffordSimulator
             self.StabilizerState = StabilizerState
         except ImportError:
@@ -76,7 +76,7 @@ class TestMBQCLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.mbqc import GraphState, MBQCPattern
+            from quantx_engine.contrib.mbqc import GraphState, MBQCPattern
             self.GraphState = GraphState
             self.MBQCPattern = MBQCPattern
         except ImportError:

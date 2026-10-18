@@ -28,7 +28,7 @@ class TestBB84Literature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.quantum_protocols import BB84Protocol
+            from quantx_engine.contrib.quantum_protocols import BB84Protocol
             self.BB84Protocol = BB84Protocol
         except ImportError:
             pytest.skip("quantum_protocols not available")
@@ -71,7 +71,7 @@ class TestTeleportationLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.quantum_protocols import TeleportationProtocol
+            from quantx_engine.contrib.quantum_protocols import TeleportationProtocol
             self.TeleportationProtocol = TeleportationProtocol
         except ImportError:
             pytest.skip("TeleportationProtocol not available")

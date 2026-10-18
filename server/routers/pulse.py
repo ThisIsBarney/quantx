@@ -58,7 +58,7 @@ async def pulse_simulate(req: PulseSimulateRequest) -> dict[str, Any]:
     constant envelopes) and returns the final Bloch vector for each qubit and
     the density matrix.
     """
-    from quantx_engine.pulse import (
+    from quantx_engine.contrib.pulse import (
         PulseError,
         DriveChannel,
         MeasureChannel,
@@ -176,7 +176,7 @@ async def pi_pulse_area_endpoint(req: PiPulseRequest) -> dict[str, Any]:
     The π-pulse area is Ω_R · σ · √(2π).  This endpoint computes and returns
     the total rotation angle in radians for a given σ.
     """
-    from quantx_engine.pulse import pi_pulse_area, PulseError
+    from quantx_engine.contrib.pulse import pi_pulse_area, PulseError
     try:
         area = pi_pulse_area(req.sigma)
     except PulseError as exc:

@@ -69,10 +69,10 @@ Changelog = "https://github.com/ThisIsBarney/quantx/blob/master/CHANGELOG.md"
 Issues = "https://github.com/ThisIsBarney/quantx/issues"
 
 [project.entry-points."pennylane.plugins"]
-"quantx.statevector" = "quantx_engine.pennylane_plugin:QuantXDevice"
+"quantx.statevector" = "quantx_engine.contrib.pennylane_plugin:QuantXDevice"
 
 [tool.setuptools]
-packages = ["quantx_engine"]
+packages = ["quantx_engine", "quantx_engine.contrib"]
 
 [tool.setuptools.dynamic]
 # One version, in quantx_engine/__init__.py. pyproject used to say 1.0.0 while the package
