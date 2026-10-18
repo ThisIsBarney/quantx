@@ -78,6 +78,8 @@ __all__ = [
     "FTQCPipeline",
     "threshold_curve",
     "threshold_crossing",
+    "ResourceEstimate",
+    "FTQCResourceEstimator",
 ]
 
 
