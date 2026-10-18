@@ -16,8 +16,9 @@ stays at its starting value 2 for every bond dimension.
     python benchmarks/su2_hadron_quimb.py run --chi 800 --gpu      # one bond dimension
     python benchmarks/su2_hadron_quimb.py table                    # every saved run
 
-Needs quimb (1.11), and CuPy for --gpu. The QASM files are downloaded from the tracker into
---qasm-dir the first time. --gpu keeps the MPS in complex128 on the GPU and splits each gate
+Needs quimb (1.11), and CuPy for --gpu. The QASM files are downloaded into --qasm-dir the
+first time, from the tracker's commit a62dc46 (2026-07-07, the files' last change), and
+every run checks their SHA-256 against the files the published scan used. --gpu keeps the MPS in complex128 on the GPU and splits each gate
 by an eigendecomposition of the Gram matrix (quimb's method "eig"), which cuSOLVER does far
 faster than an SVD; it agrees with the CPU's SVD to 3e-3 in n_f(20) at chi = 200. On the CPU,
 --threads caps BLAS.
@@ -25,6 +26,7 @@ faster than an SVD; it agrees with the CPU's SVD to 3e-3 in n_f(20) at chi = 200
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import pathlib
@@ -34,9 +36,14 @@ import time
 import urllib.request
 
 N_SITES = 60
+TRACKER_COMMIT = "a62dc4663f47e2c5503e07392479ec14a139d590"
 URL = ("https://raw.githubusercontent.com/quantum-advantage-tracker/"
-       "quantum-advantage-tracker.github.io/main/data/observable-estimations/circuit-models/"
-       "su2_hadron_dynamics_lsh/x_100_{}.qasm")
+       "quantum-advantage-tracker.github.io/" + TRACKER_COMMIT + "/data/observable-estimations/"
+       "circuit-models/su2_hadron_dynamics_lsh/x_100_{}.qasm")
+SHA256 = {
+    "meson": "28b3d82a2572dac60110c94a0f58a945a117d414e94446866e0d87cc5121b4f9",
+    "SCV": "af269dd7aeacfe6c9fef00bdab3bd1d0a641f5ee99be67c56ebf73a15791b6da",
+}
 CIRCUITS = ("meson", "SCV")
 
 
@@ -46,6 +53,10 @@ def qasm_path(qasm_dir: pathlib.Path, name: str) -> pathlib.Path:
         qasm_dir.mkdir(parents=True, exist_ok=True)
         print(f"downloading {URL.format(name)}", flush=True)
         urllib.request.urlretrieve(URL.format(name), path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    if digest != SHA256[name]:
+        sys.exit(f"{path}: SHA-256 {digest} is not the published scan's {SHA256[name]}; "
+                 "delete it to download the pinned version")
     return path
 
 

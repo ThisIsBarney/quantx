@@ -162,6 +162,8 @@ exploit either.
   [#227](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/issues/227).
 - The scan: [`benchmarks/su2_hadron_quimb.py`](../benchmarks/su2_hadron_quimb.py)
   (quimb 1.11.2; CuPy 14 for the GPU runs), its runs in
-  [referee_su2_hadron_nf.csv](referee_su2_hadron_nf.csv), measured 2026-10-18.
+  [referee_su2_hadron_nf.csv](referee_su2_hadron_nf.csv), measured 2026-10-18. Its inputs
+  are the two QASM files at the tracker's commit a62dc46 (2026-07-07), which the script
+  downloads and checks by SHA-256.
 - The other instances: [circuit-models.json](https://github.com/quantum-advantage-tracker/quantum-advantage-tracker.github.io/blob/main/data/observable-estimations/circuit-models.json)
   and each family's README.
