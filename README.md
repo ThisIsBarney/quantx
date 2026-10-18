@@ -112,7 +112,8 @@ against an exact answer computed without the engine. CI runs it on every wheel.
   [docs/gpu_acceleration_report.md](docs/gpu_acceleration_report.md).
 
 The comparisons with TeNPy in those reports depend on hardware, bond dimension and build
-options. Read them there, with their caveats, rather than as a single number.
+options. Read them there, with their caveats, rather than as a single number;
+[benchmarks/REPRODUCING.md](benchmarks/REPRODUCING.md) says how to rerun each one.
 
 ## Experimental
 

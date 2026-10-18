@@ -294,7 +294,7 @@ plain identity. Everything is ED-validated (grand canonical, all 4^n states):
 | F2 current-current `⟨J(t)J(0)⟩_β` (fermionic charge current) | 6.1e-4 |
 
 ![Hubbard S(k,w,T)](skw_hubbard_b2.0.svg)
-![Hubbard optical conductivity](conductivity_hubbard_sigma.svg)
+![Hubbard current spectral function](conductivity_hubbard_sigma.svg)
 
 The demo figures run at the **particle-hole symmetric point** `μ = U/2`, which pins
 `⟨n⟩ = 1` at *every* temperature — the honest half-filled Mott ensemble. (The first
@@ -303,9 +303,22 @@ filling drifts below 1 on cooling and the low-ω response is a doped-carrier Dru
 caught because the σ(ω) spectral weight sat below the Mott gap, contradicting the
 intended caption.) At μ=U/2 the physics is textbook: `S_spin(k,ω,T)` stays gapless at
 k=π (spinons at the superexchange scale, `C(0)=0.8045` at T=0.5 vs 0.806 at T=0 —
-half filling pinned to 3 digits), while `σ(ω,T)` puts its weight **above the Mott gap**
-(peak at ω≈3.2 ~ the upper Hubbard band; the below-gap fraction drops 26% → 15% → **8%**
-as T cools 2 → 1 → 0.5 — thermal in-gap carriers freezing out).
+half filling pinned to 3 digits), while the current spectral function (∝ σ(ω,T), not
+Kubo-reweighted) puts most of its weight **above the Mott gap**: at T = 1 and 0.5 it
+peaks at ω ≈ 3.4 and 3.2, the upper Hubbard band, and the share of its weight below the
+gap (Δ_c = 1.287 at U = 4, Lieb–Wu; of all the weight the time step resolves) drops
+24% → 14% → **7%** as T cools 2 → 1 → 0.5 —
+thermal in-gap carriers freezing out. (At T = 2 the largest single peak is the thermal one
+at ω ≈ 0.25.) `benchmarks/plot_conductivity.py` prints these numbers.
+
+**How far to trust that figure.** Its data is the fixed current correlator (#215) at
+χ = 1024, from `benchmarks/hubbard_finite_t_conductivity.py`; the earlier figure came from
+a version that lost weight at every step. At N = 16 the correlator is converged in χ only
+to t ≈ 1.2–1.5: χ = 512 and 1024 differ by more than 1% of C(0) after that, and by up to
+5%. The figure's Gaussian window (width 0.4 t_max) suppresses those times, which is why
+its summaries move by less than 0.1 in ω and under a point in the below-gap share between
+χ = 512, χ = 1024 and the old data. That stability is the window's, and it is not evidence
+that the correlator itself has converged.
 
 ### Performance vs TeNPy (fermionic Hubbard real-time TEBD)
 
@@ -532,7 +545,7 @@ states need charge sectors the product seed does not touch.
 *Honest scope note:* at U=8, δ=1/8 the true W=4-cylinder ground state has
 **filled λ=8 stripes**, with the λ=4 pattern found here a close metastable
 competitor — separating them takes χ well past 10⁴ plus extrapolation (Zheng et
-al., Science 355, 1155 (2017)). This figure demonstrates the stripe *machinery*
+al., Science 358, 1155 (2017)). This figure demonstrates the stripe *machinery*
 (doped sectors + pinning + profiles + mixer convergence on 64 sites at χ=1024 in
 51 min), not a resolution of the λ=4/λ=8 energetics.
 

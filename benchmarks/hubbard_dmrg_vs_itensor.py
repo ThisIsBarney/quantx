@@ -15,7 +15,8 @@ Run (needs julia + ITensors/ITensorMPS installed):
   python benchmarks/hubbard_dmrg_vs_itensor.py
 """
 from __future__ import annotations
-import json, os, re, subprocess, sys, time
+import json, os, re, shutil, subprocess, sys, time
+import _native                  # benchmarks/_native.py
 
 U        = 4.0
 N        = int(os.environ.get("BENCH_N", "64"))
@@ -27,12 +28,21 @@ if os.environ.get("BENCH_PLAN"):
 _NCORE = str(os.cpu_count() or 8)
 
 _here = os.path.dirname(__file__)
-JULIA = os.environ.get("JULIA_EXE",
-                       os.path.expandvars(r"%LOCALAPPDATA%\Programs\Julia-1.12.6\bin\julia.exe"))
+JULIA = None                    # found in main(): JULIA_EXE, else julia on PATH
 JL_SCRIPT = os.path.join(_here, "itensor_hubbard_dmrg.jl")
-QX_BENCH = os.environ.get("QX_HUB_SHOWCASE",
-                          os.path.join(_here, "..", "build-cuda-blas", "Release", "qx_hubbard_showcase.exe"))
-QX_DLL_DIR = os.environ.get("QX_DLL_DIR", r"C:\ProgramData\miniforge3\envs\qxblas\Library\bin")
+
+
+def _find_julia():
+    """JULIA_EXE (a path, or a name on PATH), else julia on PATH, else the Windows default."""
+    exe = os.environ.get("JULIA_EXE", "julia")
+    found = shutil.which(exe) or (exe if os.path.isfile(exe) else None)
+    if not found and "JULIA_EXE" not in os.environ and os.name == "nt":
+        guess = os.path.expandvars(r"%LOCALAPPDATA%\Programs\Julia-1.12.6\bin\julia.exe")
+        found = guess if os.path.isfile(guess) else None
+    if not found:
+        sys.exit(f"julia not found ({exe}): put it on PATH or set JULIA_EXE to its path")
+    return found
+QX_BENCH = None                 # found in main(): benchmarks/_native.py
 
 
 def _min_of(fn, reps):
@@ -55,8 +65,7 @@ def itensor(chi, nthreads):
 
 
 def quantx(chi):
-    env = dict(os.environ)
-    env["PATH"] = QX_DLL_DIR + os.pathsep + env.get("PATH", "")
+    env = _native.env()             # QX_DLL_DIR first on PATH, if set
     for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         env[_v] = _NCORE
     env["QX_HUB_BENCH"] = f"{N} {chi}"; env["QX_HUB_U"] = str(U)
@@ -68,9 +77,9 @@ def quantx(chi):
 
 
 def main():
-    for p, what in ((JULIA, "julia"), (QX_BENCH, "qx_hubbard_showcase")):
-        if not os.path.exists(p):
-            sys.exit(f"{what} not found at {p}")
+    global QX_BENCH, JULIA
+    QX_BENCH = _native.program("qx_hubbard_showcase", "QX_HUB_SHOWCASE")
+    JULIA = _find_julia()
     print(f"Hubbard GS DMRG  N={N} U={U:g} half-filling reps={REPS}(min) | "
           f"ITensor (JIT excluded, best of 1/{_NCORE} BLAS threads, N+Sz) | "
           f"QuantX (multi-thread, N+Sz packed)\n", flush=True)
