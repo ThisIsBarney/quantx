@@ -50,10 +50,10 @@ verified capabilities in users' hands.
 | M3 | Gradient-variance study | Barren plateaus versus width, published with its caveats (#193) | ✅ |
 | M4 | General models from Python | XXZ, J1-J2, spin-1 and Hubbard ground states from Python, against exact diagonalisation to 1e-10 (#196) | ✅ |
 | M5 | Fermionic circuits from Python | HVA circuits on chains, ladders, strips and cylinders, against a state vector (#197) | ✅ |
-| M6 | Finite-temperature spectroscopy from Python | S(k, ω, T) and σ(ω, T) for the M4 models, against exact diagonalisation | ⬜ |
+| M6 | Finite-temperature spectroscopy from Python | S(k, ω, T) and σ(ω, T) for the M4 models, against exact diagonalisation. Done for the XXZ, spin-1 and Hubbard chains, against a full-space ED (#215); J1-J2, whose next-nearest coupling has no purified form in the engine yet, is left for later | ✅ |
 | M7 | A smaller product surface | The README describes the engine (#200); the pure-Python modules move to `quantx_engine.contrib`, marked experimental (planned for 0.2) | 🔄 |
-| M8 | Referee feasibility | A one-page assessment of a classical baseline for SU(2) lattice gauge-theory dynamics (60 sites, conserved charge): the bond dimension and error needed, against the published tensor-network baseline | 🔄 |
-| M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference. The scripts run anywhere, each with a quick check ([benchmarks/REPRODUCING.md](benchmarks/REPRODUCING.md), #220); the notebooks are next | 🔄 |
+| M8 | Referee feasibility | A one-page assessment of a classical baseline for SU(2) lattice gauge-theory dynamics (60 sites, conserved charge): the bond dimension and error needed, against the published tensor-network baseline. The one-pager is in, [docs/referee_su2_hadron.md](docs/referee_su2_hadron.md) (#217): the instance is already matched classically (an MPS at χ = 800, under an hour on a laptop, converged by its submitter's comparison), and it is the tracker's only one with a conserved U(1) charge. Left: the measured bond dimension and error | 🔄 |
+| M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference. The scripts run anywhere, each with a quick check ([benchmarks/REPRODUCING.md](benchmarks/REPRODUCING.md), #220); the notebooks check the engine against exact diagonalisation and the Lieb–Wu solution ([notebooks/engine/](notebooks/engine/), #221) | ✅ |
 | **G1** | **Gate: installable and usable** | After `pip install`, 20 lines of Python give a Hubbard ground state, a finite-temperature spectral function and an HVA circuit, each matching its exact reference | ⬜ |
 
 ## Phase 2 (2027-01 to 2027-06): from one-shot solvers to a composable library
@@ -65,7 +65,7 @@ verified capabilities in users' hands.
 | M13 | Adjoint gradients | The full gradient of an HVA circuit costs the same regardless of the number of parameters, and matches central differences to 1e-8 | ⬜ |
 | M14 | CUDA-Q backend | An NVQIR plugin (`--target quantx`), starting with particle-number-conserving circuits; CUDA-Q examples match a state vector | ⬜ |
 | M15 | PennyLane device on the engine | The `quantx.statevector` device runs on the native engine, plus an MPS device; PennyLane's own examples run | ⬜ |
-| M16 | First classical-referee submission | A classical result and its run time submitted for a symmetric quantum-advantage candidate, and listed publicly | ⬜ |
+| M16 | First classical-referee submission | A classical result and its run time submitted for a symmetric quantum-advantage candidate, and listed publicly. First target, after M8: the SU(2) hadron instance, with the charge conserved exactly and an error bar on the physical observable | ⬜ |
 | **G2** | **Gate: part of the ecosystem** | No slower than TeNPy at small χ; CUDA-Q can select QuantX; one public referee submission | ⬜ |
 
 ## Phase 3 (2027-07 to 2028-03): the symmetric engine as infrastructure

@@ -212,6 +212,84 @@ int main() {
               json::object(), "y_periodic needs W >= 3",
               "hva: y_periodic below W=3 is refused");
 
+    // ---- finite temperature (M6) --------------------------------------------------
+    // The physics is gated against ED in python/quantx_engine/tests/test_thermal_ed.py;
+    // this pins the contract: the output keys, the beta = 0 values that are exact (the
+    // infinite-temperature state), and the refusals.
+    std::printf("\nqx_thermal and type xxz in the T=0 dynamics\n");
+    {
+        // The T = 0 dynamics entry points take "xxz", as their messages always said.
+        const json xxz = {{"type", "xxz"}, {"n_sites", 4}, {"J", 1.0}, {"delta", 0.5}};
+        json t = call(qx_tdvp_evolve, xxz, evo);
+        check(t.value("ok", false), "qx_tdvp_evolve: type xxz", t);
+        for (const Entry& e : block_only) {
+            json r = call(e.fn, xxz, dyn);
+            check(r.value("ok", false), (std::string(e.name) + ": type xxz").c_str(), r);
+        }
+    }
+    auto thermal = [&](const json& prob, const json& opts) { return call(qx_thermal, prob, opts); };
+    const json xxz6 = {{"type", "xxz"}, {"n_sites", 6}, {"J", 0.25}, {"delta", 0.5}};
+    {
+        // beta = 0 is the maximally mixed state: Tr H = 0 for the Pauli XXZ chain,
+        // <Z_j> = 0, <Z_c Z_j> = delta_cj and no susceptibility.
+        json r = thermal(xxz6, {{"quantity", "statics"}, {"beta", 0.5}, {"dbeta", 0.1}});
+        bool ok = r.value("ok", false) && r["betas"].size() == 6 && r.value("center", -1) == 3;
+        if (ok) {
+            ok = std::abs(r["betas"][0].get<double>()) < 1e-15 &&
+                 std::abs(r["betas"][5].get<double>() - 0.5) < 1e-12 &&
+                 std::abs(r["energy"][0].get<double>()) < 1e-12 &&
+                 std::abs(r["susceptibility"][0].get<double>()) < 1e-15;
+            for (int j = 0; j < 6; ++j)
+                ok = ok && std::abs(r["O"][0][j].get<double>()) < 1e-12 &&
+                     std::abs(r["OO"][0][j].get<double>() - (j == 3 ? 1.0 : 0.0)) < 1e-12;
+        }
+        check(ok, "statics xxz: beta grid, and the exact beta = 0 values", r);
+        // Hubbard: <n_j> = 1, <n_c n_j> = 1 + delta_cj / 2, E = L (U/4 - mu) at beta = 0.
+        json h = thermal({{"type", "hubbard"}, {"n_sites", 4}, {"t", 1.0}, {"U", 2.0},
+                          {"mu", 0.3}}, {{"quantity", "statics"}, {"beta", 0.2}});
+        ok = h.value("ok", false) && h.value("center", -1) == 2 &&
+             std::abs(h["energy"][0].get<double>() - 0.8) < 1e-12;
+        for (int j = 0; ok && j < 4; ++j)
+            ok = std::abs(h["O"][0][j].get<double>() - 1.0) < 1e-12 &&
+                 std::abs(h["OO"][0][j].get<double>() - (j == 2 ? 1.5 : 1.0)) < 1e-12;
+        check(ok, "statics hubbard: the exact beta = 0 values", h);
+    }
+    {
+        // C_{c,c}(0) = <Z_c^2> = 1 at any beta; dt and t_max set the time grid.
+        json r = thermal(xxz6, {{"quantity", "structure_factor"}, {"beta", 1.0}, {"dt", 0.1},
+                                {"t_max", 0.5}});
+        check(r.value("ok", false) && r["times"].size() == 6 && r.value("source", -1) == 3 &&
+              std::abs(r["C_re"][0][3].get<double>() - 1.0) < 1e-12 &&
+              std::abs(r["C_im"][0][3].get<double>()) < 1e-12 && r["bond_t"].size() == 6,
+              "structure_factor: the time grid, C_cc(0) = 1", r);
+        json c = thermal(xxz6, {{"quantity", "current"}, {"beta", 1.0}, {"dt", 0.1},
+                                {"t_max", 0.3}, {"disentangle", false}});
+        check(c.value("ok", false) && c["times"].size() == 4 && c.value("n_sites", 0) == 6 &&
+              c["C_re"][0].get<double>() > 0 && std::abs(c["C_im"][0].get<double>()) < 1e-12,
+              "current: <J J> > 0 and real at t = 0", c);
+    }
+    auto thermal_error = [&](const json& prob, const json& opts, const char* text,
+                             const char* what) {
+        json r = thermal(prob, opts);
+        check(!r.value("ok", true) &&
+              r.value("error", std::string()).find(text) != std::string::npos, what, r);
+    };
+    const json st = {{"quantity", "statics"}, {"beta", 1.0}};
+    thermal_error({{"type", "j1j2"}, {"n_sites", 6}}, st, "thermal supports",
+                  "thermal: a model with no purified form is refused");
+    thermal_error({{"type", "xxz"}, {"n_sites", 2}}, st, "n_sites >= 3",
+                  "thermal: n_sites = 2 is refused");
+    thermal_error(xxz6, {{"beta", 1.0}}, "needs options.quantity",
+                  "thermal: a missing quantity is refused");
+    thermal_error(xxz6, {{"quantity", "entropy"}, {"beta", 1.0}}, "unknown quantity",
+                  "thermal: an unknown quantity is refused");
+    thermal_error(xxz6, {{"quantity", "statics"}, {"beta", 0.0}}, "beta > 0",
+                  "thermal: beta = 0 is refused");
+    thermal_error(xxz6, {{"quantity", "current"}, {"beta", 1.0}, {"dt", 0.0}}, "dt > 0",
+                  "thermal: dt = 0 is refused");
+    thermal_error(xxz6, {{"quantity", "structure_factor"}, {"beta", 1.0}, {"t_max", -1.0}},
+                  "t_max >= 0", "thermal: a negative t_max is refused");
+
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");
     return failures ? 1 : 0;
 }

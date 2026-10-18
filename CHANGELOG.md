@@ -11,7 +11,41 @@ bug-fixes and packaging corrections only.
 
 ## [Unreleased]
 
-*(No changes yet)*
+### Added
+
+- **`quantx_engine.thermal`** (M6): finite temperature from Python, by ancilla
+  purification on the block-sparse engine, for the XXZ, spin-1 Heisenberg and Hubbard
+  chains. `thermal.statics` gives the energy, the local values, the correlations and
+  the susceptibility from β = 0 up; `thermal.structure_factor(...).spectrum()` the
+  dynamical structure factor S(k, ω, T); and
+  `thermal.current_correlation(...).conductivity()` the optical conductivity
+  Re σ(ω, T), by the Kubo formula. The ensemble is grand canonical, and the conventions
+  are those of `quantx_engine.models` (S = σ/2). It is gated against an exact
+  diagonalisation of the whole Hilbert space (`test_thermal_ed.py`): every quantity to
+  the second-order Trotter error of the steps, below 1e-3 at the default step 0.05 and
+  falling by 4 at half the step, and the Fourier transforms against Lehmann sums to
+  1e-8. J1-J2 and the Hubbard lattices have no purified form in the engine yet, and are
+  refused. The C API entry point is `qx_thermal`.
+
+### Fixed
+
+- **The finite-temperature current correlator ⟨J(t) J⟩_β lost weight at every time
+  step.** It applied J to the evolving state and compressed the product back to the
+  bond cap, with a first sweep that truncated against a part of the chain that was not
+  orthonormal: 3e-2 on a 4-site Hubbard chain at the exact bond dimension, whatever the
+  step. It is now contracted exactly, as an MPO sandwich, and compressing an applied
+  MPO (as for J|ψ⟩, also in the zero-temperature conductivity) brings the state to
+  canonical form before it truncates.
+- The zero-temperature dynamics entry points (`qx_tdvp_evolve`, `qx_spectral`,
+  `qx_loschmidt` and `qx_conductivity`) accept the type `"xxz"`, as their error messages
+  always said; they took only `"heisenberg"`.
+- The exact Lieb–Wu energies in `docs/hubbard_lieb_wu.csv`, against which the Hubbard
+  chain's DMRG is compared, were off in the 7th digit (1.8e-7, 3.6e-7 and 7.3e-7 at
+  U = 2, 4 and 8): the trapezoid rule that made them left an endpoint error from the
+  integrand's slope at ω = 0. They are made with Simpson's rule now, and
+  `test_reference_data.py` recomputes them independently, with the strong-coupling
+  series checking its normalisation. The DMRG energies at N = 64 sit 8.4e-5, 4.6e-5
+  and 2.6e-5 from them.
 
 ---
 
