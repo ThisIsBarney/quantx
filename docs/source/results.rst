@@ -191,6 +191,31 @@ S(k, ω, T) for the Hubbard chain at β = 2, from a 16-site purified chain:
 
 Data: ``docs/skw_hubbard_b2.0.csv``.
 
+**Charge transport at finite temperature.** The same purification, applied to the charge
+current: ⟨J(t)J(0)⟩_β of the half-filled Hubbard chain (16 sites, U = 4, χ = 1024),
+Fourier-transformed into the current spectral function. That is proportional to σ(ω, T),
+but it is the raw transform, not the Kubo-reweighted conductivity. As the chain cools
+through T = 2, 1 and 0.5, the share of its weight below the Mott gap (1.287 at U = 4, from
+Lieb–Wu) falls 24 % → 14 % → 7 %: thermal carriers inside the gap freezing out. At T = 1
+and 0.5 the spectrum peaks at ω ≈ 3.4 and 3.2, in the upper Hubbard band; at T = 2 its
+largest peak is the thermal one at ω ≈ 0.25.
+
+.. image:: ../conductivity_hubbard_sigma.svg
+   :alt: Current spectral function of the half-filled Hubbard chain at three temperatures
+   :width: 100%
+
+Data: ``docs/cond_hubbard_correlator.csv``, written by
+``benchmarks/hubbard_finite_t_conductivity.py``; ``benchmarks/plot_conductivity.py`` draws
+the figure and prints the numbers above.
+
+*A demonstration with a gated method.* The function that computed it,
+``quantx_engine.thermal.current_correlation``, is checked in CI against full exact
+diagonalisation of a 4-site Hubbard chain (``python/quantx_engine/tests/test_thermal_ed.py``).
+This 16-site run has no exact answer of its own, and it is converged in χ only to
+t ≈ 1.2–1.5: beyond that, χ = 512 and 1024 disagree. The numbers above barely move between
+the two because the plot's Gaussian window suppresses late times, so that stability
+belongs to the window, not to the correlator.
+
 **Stripe order in the doped Hubbard model.** On a 16×4 cylinder at U = 8 and 1/8 hole
 doping, the engine finds hole-rich rings around the cylinder about every 4 sites, and the
 antiferromagnetic order changes sign across each one — the π phase shift that is the
