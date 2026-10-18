@@ -28,9 +28,9 @@ pip install quantx-engine        # from 0.1.0
 ```
 
 Documentation: **<https://thisisbarney.github.io/quantx/>** — including
-[Results](https://thisisbarney.github.io/quantx/results.html), which collects the
-figures with the exact answer each was checked against and the data file each was
-rendered from.
+[Results](https://thisisbarney.github.io/quantx/results.html), which groups the figures
+by how strong a check is behind each (exact answers, published values, a convergence
+study, demonstrations and a benchmark) and names the data file each was rendered from.
 
 Wheels carry the native engine for Linux x86_64, macOS 10.15+ (arm64 and x86_64) and
 Windows AMD64, on any CPython 3.10 or later. On other platforms pip installs a

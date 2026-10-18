@@ -706,6 +706,17 @@ else:
             expect_res("J1-J2 straddling energy attributed to J2 = 0.49/0.51",
                        "J2 = 0.49 and 0.51,\nwhose energies are "
                        + f"{float(J2['0.49']['E_per_site']):.5f}".replace("-", "−"))
+            # "its two smallest samples straddle the point": the minimum is inferred from
+            # the two grid points either side of 0.50, not sampled at it
+            _lo = max(float(k_) for k_ in J2 if float(k_) < 0.5)
+            _hi = min(float(k_) for k_ in J2 if float(k_) > 0.5)
+            _two = sorted(J2, key=lambda k_: float(J2[k_]["gap_per_site"]))[:2]
+            if sorted(float(k_) for k_ in _two) != [_lo, _hi]:
+                fails.append(f"results page: the two smallest J1-J2 gaps are at J2 = {_two}, "
+                             f"not the samples either side of 0.50")
+            else:
+                expect_res("J1-J2 minimum straddles MG",
+                           f"two smallest samples, at J2 = {_lo:.2f} and {_hi:.2f}, straddle")
     # Every figure on the page names where its numbers come from -- the page promises it in
     # its first paragraph, and the README repeats the promise. The GPU figure broke it, so
     # the promise is now structural: each `.. image::` must be followed, before the next
@@ -789,6 +800,21 @@ else:
         expect_res("Haldane agreement", f"about **{_dh:.0e}**".replace("e-0", "e-"))
     else:
         fails.append("results page: the Haldane reference value or its CSV is gone")
+    # The string order: the page says it levels off, at what value, and on which chain. It
+    # once also claimed an exponentially decaying spin-spin correlation that nothing in the
+    # repository measures (and that a trivial gapped phase shares anyway).
+    _so = [(int(r_["r"]), float(r_["O"]))
+           for r_ in csv.DictReader(open(os.path.join(DOCS, "spin1_string_order.csv")))]
+    _tail = [o_ for r_, o_ in _so if r_ >= _so[-1][0] // 2]
+    _m = re.search(r"const int N = (\d+), i0 = \d+;",
+                   open(os.path.join(HERE, "..", "src", "spin1_showcase.cpp"),
+                        encoding="utf-8").read())
+    if (max(_tail) - min(_tail)) > 0.02 * (sum(_tail) / len(_tail)) or not _m:
+        fails.append("results page: the string order no longer levels off over the second "
+                     "half of its range, or its chain length moved in spin1_showcase.cpp")
+    else:
+        expect_res("string order level", f"On a {_m.group(1)}-site chain the string order "
+                                         f"parameter levels off at about {_so[-1][1]:.2f}")
 
     # The Performance section. Its numbers have no CSV, but they have one source: the values
     # plot_margin_vs_chi.py hard-codes from docs/gpu_acceleration_report.md. Read them as

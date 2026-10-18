@@ -4,8 +4,8 @@ Results
 Everything below is produced by code in this repository, and every figure names the data
 file it was rendered from. The sections are ordered by how strong the comparison is, and
 each one says which kind it is — because "agrees with an exact solution", "agrees with a
-published number" and "shows the expected behaviour at this size" are three different
-claims and should not be read as one.
+published number" and "shows the expected behaviour at this size" are different claims
+and should not be read as one.
 
 **Lossless** below means the bond dimension χ was at or above the full Hilbert-space
 bound, so the result carries no truncation error and an agreement figure measures the
@@ -111,9 +111,9 @@ labelled separately for that reason.
 **The spin-1 Heisenberg chain and the Haldane phase.** The gapped Haldane ground state is
 the standard hard case for a spin chain. By N = 96 the engine reproduces the energy
 density **−1.401484039 J** per site — the accepted DMRG value, White and Huse (1993) — to
-about **2e-8**. The string order parameter saturates while the spin-spin correlation
-decays exponentially, the two signatures that separate the Haldane phase from a trivial
-gapped one.
+about **2e-8**. On a 40-site chain the string order parameter levels off at about 0.37
+instead of decaying to zero. That hidden order is what separates the Haldane phase from a
+trivial gapped one, where it vanishes.
 
 .. image:: ../spin1_haldane.svg
    :alt: Spin-1 Heisenberg energy per site converging to the Haldane value
@@ -161,8 +161,9 @@ E(χ = 8) − E(χ = 128) per site:
 
 Data: ``docs/j1j2_dimerization.csv``. The collapse is ×1313 from J2 = 0 to the
 points straddling Majumdar-Ghosh. This is a truncation-sensitivity curve, not an order
-parameter: it measures how much entanglement the state carries, which is why it bottoms
-out exactly where the ground state becomes a bond-dimension-2 product.
+parameter: it measures how much entanglement the state carries, which is why its two
+smallest samples, at J2 = 0.49 and 0.51, straddle the point where the ground state becomes
+a bond-dimension-2 product. That point itself is not sampled.
 
 Demonstrations
 --------------
