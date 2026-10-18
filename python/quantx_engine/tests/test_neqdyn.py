@@ -5,7 +5,7 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.neqdyn import (
+from quantx_engine.contrib.neqdyn import (
     NonEquilError,
     KeldyshResult,
     KeldyshSolver,

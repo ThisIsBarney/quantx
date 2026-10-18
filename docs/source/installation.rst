@@ -39,10 +39,10 @@ These serve the experimental modules.
      - What it adds
      - Install command
    * - ``pennylane``
-     - the :class:`~quantx_engine.pennylane_plugin.QuantXDevice` plugin for PennyLane
+     - the :class:`~quantx_engine.contrib.pennylane_plugin.QuantXDevice` plugin for PennyLane
      - ``pip install "quantx-engine[pennylane]"``
    * - ``gpu``
-     - CuPy (CUDA 12), for the GPU statevector of :mod:`quantx_engine.gpu`
+     - CuPy (CUDA 12), for the GPU statevector of :mod:`quantx_engine.contrib.gpu`
      - ``pip install "quantx-engine[gpu]"``
    * - ``distributed``
      - Ray, for distributed runs

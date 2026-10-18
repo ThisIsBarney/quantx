@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.crosstalk import (
+from quantx_engine.contrib.crosstalk import (
     CouplingGraph,
     CrosstalkError,
     CrosstalkModel,
@@ -14,7 +14,7 @@ from quantx_engine.crosstalk import (
     echo_sequence,
     zz_routing_cost,
 )
-from quantx_engine.pulse import QubitSystem, PulseSimulator, PulseSchedule, DriveChannel, ConstantWaveform
+from quantx_engine.contrib.pulse import QubitSystem, PulseSimulator, PulseSchedule, DriveChannel, ConstantWaveform
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -345,27 +345,3 @@ class TestEchoSequence:
         # Full ZZ cancellation: simulate with PulseSimulator including echo X-pulses
         # (simplified: just verify the ZZ accumulation was non-zero without echo)
         assert abs(bx_no_echo) < 0.99   # ZZ caused decoherence of ⟨X⟩
-
-
-# ── __init__ re-exports ────────────────────────────────────────────────────────
-
-class TestCrosstalkInit:
-    def test_coupling_graph_exported(self):
-        from quantx_engine import CouplingGraph as CG
-        assert CG is CouplingGraph
-
-    def test_crosstalk_model_exported(self):
-        from quantx_engine import CrosstalkModel as CM
-        assert CM is CrosstalkModel
-
-    def test_crosstalk_error_exported(self):
-        from quantx_engine import CrosstalkError as CE
-        assert CE is CrosstalkError
-
-    def test_zz_routing_cost_exported(self):
-        from quantx_engine import zz_routing_cost as zrc
-        assert zrc is zz_routing_cost
-
-    def test_echo_sequence_exported(self):
-        from quantx_engine import echo_sequence as es
-        assert es is echo_sequence

@@ -5,7 +5,7 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.bosonic import (
+from quantx_engine.contrib.bosonic import (
     BosonicError,
     CatNoiseModel,
     CatQubit,

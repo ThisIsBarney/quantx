@@ -12,7 +12,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required")
 
-from quantx_engine.qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
+from quantx_engine.contrib.qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
 
 
 # ── RBM ───────────────────────────────────────────────────────────────────────

@@ -19,16 +19,16 @@ on:
     branches: ["master", "main"]
     tags: ["v*"]
     paths:
-      - "python/quantx_engine/gpu.py"
-      - "python/quantx_engine/mps_simulator.py"
-      - "python/quantx_engine/lanczos.py"
+      - "python/quantx_engine/contrib/gpu.py"
+      - "python/quantx_engine/contrib/mps_simulator.py"
+      - "python/quantx_engine/contrib/lanczos.py"
       - "python/quantx_engine/tests/test_gpu_wheel.py"
       - "python/pyproject.toml"
       - ".github/workflows/gpu-wheels.yml"
   pull_request:
     branches: ["master", "main"]
     paths:
-      - "python/quantx_engine/gpu.py"
+      - "python/quantx_engine/contrib/gpu.py"
       - "python/quantx_engine/tests/test_gpu_wheel.py"
       - ".github/workflows/gpu-wheels.yml"
   workflow_dispatch:
@@ -143,7 +143,7 @@ jobs:
       - name: Verify gpu_info() runs without error
         run: |
           python - <<'EOF'
-          from quantx_engine.gpu import gpu_info, GpuBackend, GpuError
+          from quantx_engine.contrib.gpu import gpu_info, GpuBackend, GpuError
           info = gpu_info()
           print("gpu_info():", info)
           assert "cupy_available" in info
@@ -193,7 +193,7 @@ jobs:
       - name: Run gpu_info() on real hardware
         run: |
           python - <<'EOF'
-          from quantx_engine.gpu import gpu_info, GpuBackend
+          from quantx_engine.contrib.gpu import gpu_info, GpuBackend
           info = gpu_info()
           print("GPU info:", info)
           assert info["cupy_available"], "CuPy not available on GPU runner"

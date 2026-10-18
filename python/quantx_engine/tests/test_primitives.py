@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.primitives import (
+from quantx_engine.contrib.primitives import (
     Estimator,
     EstimatorResult,
     PrimitiveError,
@@ -70,7 +70,7 @@ class TestSparsePauliOp:
         assert b.terms == a.terms
 
     def test_from_pauli_hamiltonian(self):
-        from quantx_engine.chemistry import PauliHamiltonian, PauliTerm
+        from quantx_engine.contrib.chemistry import PauliHamiltonian, PauliTerm
         ham = PauliHamiltonian(
             terms=[PauliTerm(coeff=1.0, ops={0: "Z"})], n_qubits=1
         )
@@ -114,31 +114,31 @@ class TestSparsePauliOp:
 
 class TestGateMatrices:
     def test_h_unitary(self):
-        from quantx_engine.primitives import _get_gate_matrix
+        from quantx_engine.contrib.primitives import _get_gate_matrix
         H = _get_gate_matrix("h", None)
         assert np.allclose(H @ H.conj().T, np.eye(2), atol=1e-12)
 
     def test_cx_is_cnot(self):
-        from quantx_engine.primitives import _get_gate_matrix
+        from quantx_engine.contrib.primitives import _get_gate_matrix
         cx = _get_gate_matrix("cx", None)
         # |10⟩ → |11⟩: row 3 (|11⟩) should be 1 at column 2 (|10⟩)
         assert cx[3, 2] == pytest.approx(1.0)
         assert cx[2, 3] == pytest.approx(1.0)
 
     def test_rx_pi_equals_x(self):
-        from quantx_engine.primitives import _get_gate_matrix
+        from quantx_engine.contrib.primitives import _get_gate_matrix
         Rx = _get_gate_matrix("rx", [math.pi])
         X  = _get_gate_matrix("x", None)
         # RX(π) = −i·X (global phase only)
         assert np.allclose(np.abs(Rx), np.abs(X), atol=1e-10)
 
     def test_unknown_gate(self):
-        from quantx_engine.primitives import _get_gate_matrix
+        from quantx_engine.contrib.primitives import _get_gate_matrix
         with pytest.raises(PrimitiveError, match="Unknown gate"):
             _get_gate_matrix("foo", None)
 
     def test_rzz_diagonal(self):
-        from quantx_engine.primitives import _get_gate_matrix
+        from quantx_engine.contrib.primitives import _get_gate_matrix
         R = _get_gate_matrix("rzz", [math.pi / 2])
         # Should be diagonal
         off = R - np.diag(np.diag(R))
@@ -288,7 +288,7 @@ class TestEstimatorErrors:
 
 class TestEstimatorNoisy:
     def test_depolarizing_reduces_purity(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         noise = DepolarizingNoise(0.1)
         r_clean = Estimator().run([_x_circuit()], ["Z"])
         r_noisy = Estimator(noise_model=noise).run([_x_circuit()], ["Z"])
@@ -296,7 +296,7 @@ class TestEstimatorNoisy:
         assert abs(r_noisy.values[0]) < abs(r_clean.values[0])
 
     def test_zero_noise_matches_exact(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         noise = DepolarizingNoise(0.0)
         r_exact = Estimator().run([_bell_circuit()], ["ZZ"])
         r_noisy = Estimator(noise_model=noise).run([_bell_circuit()], ["ZZ"])
@@ -419,7 +419,7 @@ class TestSamplerShots:
 
 class TestSamplerNoisy:
     def test_noisy_bell_state_blurs_distribution(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         noise = DepolarizingNoise(0.2)
         r_clean = Sampler().run([_bell_circuit()])
         r_noisy = Sampler(noise_model=noise).run([_bell_circuit()])
@@ -427,7 +427,7 @@ class TestSamplerNoisy:
         assert len(r_noisy.quasi_dists[0]) > len(r_clean.quasi_dists[0])
 
     def test_noisy_probabilities_sum_to_one(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         noise = DepolarizingNoise(0.05)
         r = Sampler(noise_model=noise).run([_bell_circuit()])
         assert sum(r.quasi_dists[0].values()) == pytest.approx(1.0, abs=1e-8)
@@ -449,21 +449,3 @@ class TestSamplerParametric:
         r = Sampler().run([circ], [{"phi": 1.2}])
         qd = r.quasi_dists[0]
         assert qd.get(0, 0.0) == pytest.approx(1.0, abs=1e-10)
-
-
-# ---------------------------------------------------------------------------
-# __init__ re-exports
-# ---------------------------------------------------------------------------
-
-class TestPrimitivesInit:
-    def test_estimator_exported(self):
-        from quantx_engine import Estimator as E
-        assert E is Estimator
-
-    def test_sampler_exported(self):
-        from quantx_engine import Sampler as S
-        assert S is Sampler
-
-    def test_sparse_pauli_op_exported(self):
-        from quantx_engine import SparsePauliOp as SPO
-        assert SPO is SparsePauliOp

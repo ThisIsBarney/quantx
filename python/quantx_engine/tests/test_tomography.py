@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.tomography import (
+from quantx_engine.contrib.tomography import (
     ProcessTomography,
     StateTomography,
     TomographyError,
@@ -353,17 +353,3 @@ class TestAverageGateFidelity:
         # F_avg = (d*F_proc + 1)/(d+1): for d=2, F_avg > F_proc when F_proc < 1
         if f_proc < 1.0:
             assert f_avg > f_proc
-
-
-# ===========================================================================
-# __init__ re-exports
-# ===========================================================================
-
-class TestTomographyInit:
-    def test_state_tomography_exported(self):
-        from quantx_engine import StateTomography as ST
-        assert ST is StateTomography
-
-    def test_process_tomography_exported(self):
-        from quantx_engine import ProcessTomography as PT
-        assert PT is ProcessTomography

@@ -41,7 +41,7 @@ class TestLanczosPhysics:
         finding an exact invariant subspace (b < 1e-14), even though the
         eigenvalue is exact.  We therefore validate via the residual norm.
         """
-        from quantx_engine.lanczos import SparseHamiltonian, LanczosSolver
+        from quantx_engine.contrib.lanczos import SparseHamiltonian, LanczosSolver
 
         H = SparseHamiltonian.heisenberg_1d(n_sites=2, J=1.0)
         solver = LanczosSolver(k=1, max_iter=100, tol=1e-12, seed=42)
@@ -58,7 +58,7 @@ class TestLanczosPhysics:
         (singlet sector of the Heisenberg chain).  We cross-validate using
         exact dense diagonalization as the reference.
         """
-        from quantx_engine.lanczos import SparseHamiltonian, LanczosSolver
+        from quantx_engine.contrib.lanczos import SparseHamiltonian, LanczosSolver
 
         H = SparseHamiltonian.heisenberg_1d(n_sites=4, J=1.0)
         # Exact reference via dense diagonalization
@@ -83,7 +83,7 @@ class TestLanczosPhysics:
         exponentially small gap due to quasi-degenerate ground states from
         spontaneous symmetry breaking — that phase is deliberately excluded.
         """
-        from quantx_engine.lanczos import SparseHamiltonian, LanczosSolver
+        from quantx_engine.contrib.lanczos import SparseHamiltonian, LanczosSolver
 
         n = 8
         H_disorder = SparseHamiltonian.ising_1d(n_sites=n, J=1.0, h=3.0)  # h >> J: big gap
@@ -102,7 +102,7 @@ class TestLanczosPhysics:
 
     def test_ground_state_vector_is_normalized(self):
         """Lanczos ground-state eigenvector must have unit norm."""
-        from quantx_engine.lanczos import SparseHamiltonian, LanczosSolver
+        from quantx_engine.contrib.lanczos import SparseHamiltonian, LanczosSolver
 
         H = SparseHamiltonian.heisenberg_1d(n_sites=4, J=1.0)
         solver = LanczosSolver(k=1, max_iter=200, tol=1e-12, seed=1)
@@ -122,7 +122,7 @@ class TestTrotterPhysics:
     def _make_single_qubit_sim(self, omega: float) -> "tuple":
         """H = omega * Z for a single qubit; exact solution: exp(-iωtZ) rotates
         around the Bloch sphere Z-axis."""
-        from quantx_engine.trotter import TrotterTerm, TrotterSimulator
+        from quantx_engine.contrib.trotter import TrotterTerm, TrotterSimulator
 
         terms = [TrotterTerm(omega, "Z")]
         psi0 = np.array([1.0, 1.0], dtype=complex) / math.sqrt(2.0)  # |+⟩
@@ -136,7 +136,7 @@ class TestTrotterPhysics:
         |ψ(t)⟩ = (e^{-iωt}|0⟩ + e^{+iωt}|1⟩)/√2.
         We compare the Trotter state to numpy exact and verify convergence.
         """
-        from quantx_engine.trotter import TrotterTerm, TrotterSimulator
+        from quantx_engine.contrib.trotter import TrotterTerm, TrotterSimulator
 
         omega = 0.5
         t = 1.0
@@ -168,7 +168,7 @@ class TestTrotterPhysics:
         exp(-i J ZZ t)|ψ⟩ only shifts phases, so all measurement probabilities
         are constant — a fundamental symmetry check.
         """
-        from quantx_engine.trotter import TrotterTerm, TrotterSimulator
+        from quantx_engine.contrib.trotter import TrotterTerm, TrotterSimulator
 
         # Start from a superposition state
         psi0 = np.array([1, 1, 1, 1], dtype=complex) / 2.0
@@ -186,7 +186,7 @@ class TestTrotterPhysics:
 
         H = 0.5·XX + 0.3·ZZ on 2 qubits; non-commuting terms test accuracy.
         """
-        from quantx_engine.trotter import TrotterTerm, TrotterSimulator
+        from quantx_engine.contrib.trotter import TrotterTerm, TrotterSimulator
         try:
             import scipy  # noqa: F401
         except ImportError:
@@ -222,7 +222,7 @@ class TestMcLachlanPhysics:
 
         Imaginary-time McLachlan starting from |+⟩ should converge to E₀ = -1.
         """
-        from quantx_engine.mclachlan import McLachlanSolver
+        from quantx_engine.contrib.mclachlan import McLachlanSolver
 
         H = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=complex)  # Z matrix: E_0 = -1
 
@@ -260,7 +260,7 @@ class TestMcLachlanPhysics:
         Variational real-time dynamics preserves energy when the ansatz is
         sufficiently expressive (parameter manifold contains the exact trajectory).
         """
-        from quantx_engine.mclachlan import McLachlanSolver
+        from quantx_engine.contrib.mclachlan import McLachlanSolver
 
         H = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=complex)
 
@@ -300,7 +300,7 @@ class TestMitigationPhysics:
         If E(λ) = E₀ + a·λ, then the 2-point Richardson extrapolation at
         λ=1 and λ=3 gives exactly E(0) = E₀.
         """
-        from quantx_engine.mitigation import RichardsonExtrapolator
+        from quantx_engine.contrib.mitigation import RichardsonExtrapolator
 
         E0, a = 0.75, 0.1
         scale_factors = [1.0, 3.0]
@@ -316,7 +316,7 @@ class TestMitigationPhysics:
 
         E(λ) = E₀ + a·λ + b·λ²  →  extrapolated value = E₀.
         """
-        from quantx_engine.mitigation import RichardsonExtrapolator
+        from quantx_engine.contrib.mitigation import RichardsonExtrapolator
 
         E0, a, b = 0.5, 0.05, 0.02
         scale_factors = [1.0, 3.0, 5.0]
@@ -332,7 +332,7 @@ class TestMitigationPhysics:
 
         This tests the core premise of ZNE: mitigation reduces bias.
         """
-        from quantx_engine.mitigation import RichardsonExtrapolator
+        from quantx_engine.contrib.mitigation import RichardsonExtrapolator
 
         E0, a = 1.0, 0.2
         scale_factors = [1.0, 3.0, 5.0]
@@ -361,7 +361,7 @@ class TestQuantumProtocolsPhysics:
         the four correlations are: E(a,b) = -cos(θ_ab).
         Optimal angles: θ₀₀=45°, θ₀₁=0°, θ₁₀=22.5°, θ₁₁=67.5°.
         """
-        from quantx_engine.quantum_protocols import chsh_inequality_value
+        from quantx_engine.contrib.quantum_protocols import chsh_inequality_value
 
         # Tsirelson-optimal correlations: each |E(a,b)| = 1/√2 with signs chosen
         # so S = E(0,0) - E(0,1) + E(1,0) + E(1,1) = 4/√2 = 2√2.
@@ -379,7 +379,7 @@ class TestQuantumProtocolsPhysics:
 
     def test_chsh_classical_bound(self):
         """Classical correlations obey |S| ≤ 2."""
-        from quantx_engine.quantum_protocols import chsh_inequality_value
+        from quantx_engine.contrib.quantum_protocols import chsh_inequality_value
 
         # A classical deterministic strategy: Alice outputs a, Bob outputs b=a
         # All correlations E = +1 → S = 2
@@ -389,7 +389,7 @@ class TestQuantumProtocolsPhysics:
 
     def test_bb84_key_rate_zero_qber(self):
         """At QBER = 0, the Shor–Preskill key rate is 1 (full key rate)."""
-        from quantx_engine.quantum_protocols import bb84_key_rate
+        from quantx_engine.contrib.quantum_protocols import bb84_key_rate
 
         r = bb84_key_rate(0.0)
         assert r == pytest.approx(1.0, abs=1e-10)
@@ -399,7 +399,7 @@ class TestQuantumProtocolsPhysics:
 
         The Shor–Preskill formula r = 1 - 2·h₂(QBER) gives r ≈ 0 at QBER ≈ 11%.
         """
-        from quantx_engine.quantum_protocols import bb84_key_rate
+        from quantx_engine.contrib.quantum_protocols import bb84_key_rate
 
         # At QBER = 0.11: h₂(0.11) ≈ 0.500 → raw formula ≈ 0 (clamped to 0)
         r = bb84_key_rate(0.11)
@@ -413,7 +413,7 @@ class TestQuantumProtocolsPhysics:
 
     def test_bb84_key_rate_monotone_decreasing(self):
         """Key rate must be monotonically decreasing with QBER."""
-        from quantx_engine.quantum_protocols import bb84_key_rate
+        from quantx_engine.contrib.quantum_protocols import bb84_key_rate
 
         qbers = [0.0, 0.02, 0.05, 0.08, 0.10]
         rates = [bb84_key_rate(q) for q in qbers]
@@ -436,7 +436,7 @@ class TestQECPhysics:
         must recover the original logical bit.  This tests the core correction
         guarantee of a distance-3 code.
         """
-        from quantx_engine.qec import RepetitionCode
+        from quantx_engine.contrib.qec import RepetitionCode
 
         code = RepetitionCode(n=3)  # API: RepetitionCode(n) not RepetitionCode(distance=n)
 
@@ -453,7 +453,7 @@ class TestQECPhysics:
 
     def test_repetition_distance_property(self):
         """Minimum Hamming distance must equal n for the repetition code."""
-        from quantx_engine.qec import RepetitionCode
+        from quantx_engine.contrib.qec import RepetitionCode
 
         for n in [3, 5, 7]:
             code = RepetitionCode(n=n)
@@ -473,7 +473,7 @@ class TestQuantumWalkPhysics:
 
         The CTQW is unitary, so summing |⟨j|e^{-iHt}|0⟩|² over all j = 1.
         """
-        from quantx_engine.quantum_walk import ContinuousTimeQuantumWalk
+        from quantx_engine.contrib.quantum_walk import ContinuousTimeQuantumWalk
 
         # 5-node path graph adjacency matrix
         n = 5
@@ -499,7 +499,7 @@ class TestQuantumWalkPhysics:
             P(0→0, t) = cos²(γ·t)
             P(0→1, t) = sin²(γ·t)
         """
-        from quantx_engine.quantum_walk import ContinuousTimeQuantumWalk, ctqw_transfer_probability
+        from quantx_engine.contrib.quantum_walk import ContinuousTimeQuantumWalk, ctqw_transfer_probability
 
         gamma = 1.0
         t = math.pi / 4  # 45° rotation: P(0→0) = P(0→1) = 0.5
@@ -531,7 +531,7 @@ class TestTensorNetworkPhysics:
         keeps the state renormalised, so norm() should remain 1 after
         each step.
         """
-        from quantx_engine.tensor_network import MPS, TEBD
+        from quantx_engine.contrib.tensor_network import MPS, TEBD
 
         # 6-site MPS in |000000⟩ state
         n = 6
@@ -549,7 +549,7 @@ class TestTensorNetworkPhysics:
     def test_mps_inner_product_normalized_state(self):
         """A product-state MPS initialized from a computational basis state
         must have ⟨ψ|ψ⟩ = 1 exactly (norm = 1.0)."""
-        from quantx_engine.tensor_network import MPS
+        from quantx_engine.contrib.tensor_network import MPS
 
         for n in [2, 4, 6]:
             mps = MPS.product_state([0] * n, d=2)  # API: d=2
@@ -574,7 +574,7 @@ class TestFiniteSizePhysics:
 
         The key testable property is: U_ordered > U_disordered.
         """
-        from quantx_engine.finite_size import binder_cumulant
+        from quantx_engine.contrib.finite_size import binder_cumulant
 
         # Use a large fixed-seed ensemble to reduce statistical fluctuations
         rng = np.random.default_rng(12345)

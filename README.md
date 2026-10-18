@@ -110,12 +110,15 @@ options. Read them there, with their caveats, rather than as a single number;
 
 ## Experimental
 
-Everything else in the package is experimental: its API may change, and the checks above
-do not cover it. That is more than 50 pure-Python modules that do not use the engine
-(VQE and quantum chemistry, quantum error correction and decoders, noise models and
-error mitigation, quantum walks, bosonic codes, an IBM Quantum connector, a PennyLane
-device, and more), plus a few older interfaces to parts of the engine. The pure-Python
-modules may move to a separate `quantx_engine.contrib` namespace. The tutorial notebooks
+Everything else in the package is experimental, and lives in `quantx_engine.contrib`: its
+API may change, and the checks above do not cover it. That is 63 modules, almost all pure
+Python without the engine (VQE and quantum chemistry, quantum error correction and
+decoders, noise models and error mitigation, quantum walks, bosonic codes, an IBM Quantum
+connector, a PennyLane device, and more); `lindblad` and `cached_dmrg` are older
+interfaces to parts of the engine. Import them from there, as in
+`from quantx_engine.contrib.qec import SurfaceCode`. Their old paths
+(`import quantx_engine.qec`, `from quantx_engine import SurfaceCode`) still work until
+0.4.0, with a `DeprecationWarning`. The tutorial notebooks
 in [`notebooks/`](notebooks/) use several of them, and run in CI. The two in
 [`notebooks/engine/`](notebooks/engine/) run the engine itself against exact references:
 Hubbard ground states against exact diagonalisation and the Lieb–Wu solution, and

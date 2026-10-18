@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from quantx_engine.ibm import circuit_to_qasm3, IBMConnectorError, IBMQuantumBackend
+from quantx_engine.contrib.ibm import circuit_to_qasm3, IBMConnectorError, IBMQuantumBackend
 
 
 # ── circuit_to_qasm3 ──────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ def test_unknown_gate_raises():
 
 def test_roundtrip_qasm_parse():
     """circuit_to_qasm3 output should be re-parseable by parse_qasm_to_circuit."""
-    from quantx_engine.qasm import parse_qasm_to_circuit
+    from quantx_engine.contrib.qasm import parse_qasm_to_circuit
     circuit = {
         "qubits": 2, "clbits": 2, "shots": 500, "seed": 42,
         "operations": [
@@ -115,7 +115,7 @@ def test_ibm_backend_properties():
 
 def test_all_standard_gates_convert():
     """Every gate in _QX_TO_QASM should produce valid QASM output."""
-    from quantx_engine.ibm import _QX_TO_QASM
+    from quantx_engine.contrib.ibm import _QX_TO_QASM
     single_qubit = {"H","X","Y","Z","S","T","Sdg","Tdg","I","SX","SXdg","RX","RY","RZ","P"}
     two_qubit = {"CNOT","CY","CZ","SWAP","ISWAP"}
     three_qubit = {"CCX"}

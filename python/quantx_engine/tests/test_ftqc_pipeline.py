@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 import pytest
 
-from quantx_engine.ftqc_pipeline import (
+from quantx_engine.contrib.ftqc_pipeline import (
     FTQCPipeline,
     FTQCPipelineError,
     PipelineResult,

@@ -84,7 +84,7 @@ def bench_lanczos_quantx() -> BenchResult:
     benchmark, backend = "lanczos_ground_state", "quantx"
     params = {"n_sites": N_LANCZOS, "k": 1}
     try:
-        from quantx_engine.lanczos import LanczosSolver
+        from quantx_engine.contrib.lanczos import LanczosSolver
         with timer() as elapsed:
             solver = LanczosSolver(k=1, max_iter=500, tol=1e-10)
             # Use the native Heisenberg solver: routes through the C++ backend
@@ -151,7 +151,7 @@ def bench_lindblad_quantx() -> BenchResult:
     params = {"n_qubits": N_LINDBLAD, "steps": N_STEPS_LINDBLAD, "dt": DT_LINDBLAD}
     try:
         from quantx_engine import Engine
-        from quantx_engine.lindblad import LindbladSolver, JumpOperator
+        from quantx_engine.contrib.lindblad import LindbladSolver, JumpOperator
         # Transverse-field Ising Hamiltonian: H = 0.5 * sum_i Z_i
         hamiltonian_terms = [(0.5, f"Z{i}") for i in range(N_LINDBLAD)]
         # Single-qubit amplitude-damping collapse operators (rate 0.01 per qubit)
@@ -225,8 +225,8 @@ def bench_dmrg_quantx() -> BenchResult:
     benchmark, backend = "dmrg_ground_state", "quantx"
     params = {"n_sites": N_DMRG, "bond_dim": CHI_DMRG}
     try:
-        from quantx_engine.tensor_network import MPO
-        from quantx_engine.mps_simulator import CachedDMRG
+        from quantx_engine.contrib.tensor_network import MPO
+        from quantx_engine.contrib.mps_simulator import CachedDMRG
         mpo = MPO.heisenberg(N_DMRG)
         solver = CachedDMRG(mpo=mpo, max_chi=CHI_DMRG, n_sweeps=10)
         with timer() as elapsed:
@@ -259,7 +259,7 @@ def bench_tebd_quantx() -> BenchResult:
     benchmark, backend = "tebd_time_evolution", "quantx"
     params = {"n_sites": N_TEBD, "bond_dim": CHI_TEBD, "steps": N_STEPS_TEBD, "dt": DT_TEBD}
     try:
-        from quantx_engine.mps_simulator import MPSSimulator
+        from quantx_engine.contrib.mps_simulator import MPSSimulator
         # TFIM Hamiltonian: H = -sum_{i} Z_i Z_{i+1} - sum_i X_i
         hamiltonian_terms = []
         for i in range(N_TEBD - 1):

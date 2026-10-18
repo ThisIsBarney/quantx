@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import pytest
-from quantx_engine.qasm import parse_qasm_to_circuit, ParseError
+from quantx_engine.contrib.qasm import parse_qasm_to_circuit, ParseError
 
 
 def test_empty_program():

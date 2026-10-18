@@ -1,0 +1,34 @@
+﻿quantx\_engine.contrib.mitigation
+=================================
+
+.. automodule:: quantx_engine.contrib.mitigation
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      fold_gates
+      make_sv_executor
+      pec_mitigate
+      zne_mitigate
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      ExpExtrapolator
+      ExtrapolationResult
+      Extrapolator
+      PECResult
+      PolyExtrapolator
+      QuasiProbabilityDecomposition
+      RichardsonExtrapolator
+      ZNEResult
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      MitigationError
+   

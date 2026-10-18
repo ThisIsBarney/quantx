@@ -11,7 +11,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required")
 
-from quantx_engine.lanczos import (
+from quantx_engine.contrib.lanczos import (
     LanczosSolver,
     ArnoldiSolver,
     SparseHamiltonian,

@@ -28,7 +28,7 @@ N_QUBITS = 2
 def bench_quantx_oovqe() -> BenchResult:
     """OO-VQE on a 2-orbital H2 core Hamiltonian."""
     try:
-        from quantx_engine.oovqe import OOVQESolver
+        from quantx_engine.contrib.oovqe import OOVQESolver
         solver = OOVQESolver(
             h_core=H2_H_CORE,
             n_orb=2,
@@ -52,9 +52,9 @@ def bench_quantx_oovqe() -> BenchResult:
 def bench_quantx_noise_vqe() -> BenchResult:
     """Noise-aware VQE on the 2-qubit H2 Hamiltonian."""
     try:
-        from quantx_engine.noise_vqe import NoiseAwareVQE
-        from quantx_engine.advanced_chemistry import build_hamiltonian_matrix
-        from quantx_engine.chemistry import PauliHamiltonian, PauliTerm
+        from quantx_engine.contrib.noise_vqe import NoiseAwareVQE
+        from quantx_engine.contrib.advanced_chemistry import build_hamiltonian_matrix
+        from quantx_engine.contrib.chemistry import PauliHamiltonian, PauliTerm
         # Minimal H2 Pauli Hamiltonian: H = -1.05 I + 0.39 Z0 - 0.39 Z1 + 0.18 X0X1
         ham = PauliHamiltonian([
             PauliTerm(-1.05, {}),

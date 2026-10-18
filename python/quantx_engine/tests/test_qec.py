@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from quantx_engine.qec import (
+from quantx_engine.contrib.qec import (
     RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError,
 )
 

@@ -22,7 +22,7 @@ SIZES = [4, 6, 8, 10]
 
 def bench_quantx(n: int) -> BenchResult:
     try:
-        from quantx_engine.trotter import ising_trotter
+        from quantx_engine.contrib.trotter import ising_trotter
         ts = ising_trotter(n=n, J=1.0, h=0.5)
         with timer() as elapsed:
             result = ts.run(t=1.0, n_steps=100, order=2)

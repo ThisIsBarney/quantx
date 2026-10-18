@@ -21,7 +21,7 @@ class TestQuantumChannelLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.quantum_channel import QuantumChannel, SteadyStateSolver
+            from quantx_engine.contrib.quantum_channel import QuantumChannel, SteadyStateSolver
             self.QuantumChannel = QuantumChannel
             self.SteadyStateSolver = SteadyStateSolver
         except ImportError:
@@ -73,7 +73,7 @@ class TestQuantumChannelLiterature:
     def test_steady_state_solver_eigenvalue_zero(self):
         """Steady state: L*rho_ss = 0 [Lindblad1976, Gorini1976]."""
         try:
-            from quantx_engine.lindblad import JumpOperator
+            from quantx_engine.contrib.lindblad import JumpOperator
             sigma_minus = np.array([[0, 0], [1, 0]], dtype=complex)
             H = np.zeros((2, 2), dtype=complex)
             jump_ops = [JumpOperator(np.sqrt(0.5) * sigma_minus)]

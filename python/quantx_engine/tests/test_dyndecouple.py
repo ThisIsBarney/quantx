@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.dyndecouple import (
+from quantx_engine.contrib.dyndecouple import (
     DDError,
     DDSequence,
     DynamicalDecoupling,

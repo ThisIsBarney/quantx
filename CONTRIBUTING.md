@@ -35,8 +35,8 @@ The package has two parts, held to different bars:
 
 | Part | What it is | Bar |
 |---|---|---|
-| The engine | The C++ core in `src/` and `include/qx/`, its C API (`include/qx/c_api.h`), and the Python modules that drive it: `models`, `dmrg`, `hva`, `tdvp`, `structure_factor` | A new capability comes with a gate (next section). Today `dmrg.ground_state` and `hva` are gated; `tdvp`, `structure_factor` and the SU(2) path of `DMRGSolver` are validated in the C++ tests but have no Python gate yet. Changes to `c_api.h` keep existing callers working. |
-| Experimental modules | The pure-Python modules that do not use the engine (VQE, error correction, noise, quantum walks, connectors, ...) | Tests for what they claim. Their API may change, and they may move to a separate `quantx_engine.contrib` namespace. |
+| The engine | The C++ core in `src/` and `include/qx/`, its C API (`include/qx/c_api.h`), and the Python modules that drive it: `models`, `dmrg`, `hva`, `thermal`, `tdvp`, `structure_factor` | A new capability comes with a gate (next section). Today `dmrg.ground_state`, `hva` and `thermal` are gated; `tdvp`, `structure_factor` and the SU(2) path of `DMRGSolver` are validated in the C++ tests but have no Python gate yet. Changes to `c_api.h` keep existing callers working. |
+| Experimental modules | `quantx_engine.contrib`: mostly pure-Python modules that do not use the engine (VQE, error correction, noise, quantum walks, connectors, ...) | Tests for what they claim. Their API may change. They are frozen: fixes are welcome, new features go to the engine. |
 
 ## The verification standard
 

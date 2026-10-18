@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.qsp_qsvt import (
+from quantx_engine.contrib.qsp_qsvt import (
     QSPAnglesFinder,
     QSPError,
     QSVTCircuit,

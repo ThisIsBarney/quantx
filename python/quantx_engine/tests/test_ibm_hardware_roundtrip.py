@@ -107,7 +107,7 @@ def _make_hardware_job(ibm_job, always_completed: bool = True):
         that HardwareJob.fetch() returns immediately without sleeping.  Set to
         False to use the real iterated status from the mock fixture.
     """
-    from quantx_engine.hardware import HardwareJob, HardwareJobResult
+    from quantx_engine.contrib.hardware import HardwareJob, HardwareJobResult
 
     def _status_fn(jid: str) -> str:
         if always_completed:
@@ -169,7 +169,7 @@ def test_bell_circuit_structure(bell_circuit_dict):
 
 def test_bell_circuit_qasm3(bell_circuit_dict):
     """circuit_to_qasm3 produces valid QASM 3.0 for the Bell circuit."""
-    from quantx_engine.ibm import circuit_to_qasm3
+    from quantx_engine.contrib.ibm import circuit_to_qasm3
     qasm = circuit_to_qasm3(bell_circuit_dict)
     assert "OPENQASM 3.0" in qasm
     assert "qubit[2] q;" in qasm
@@ -182,7 +182,7 @@ def test_bell_circuit_qasm3(bell_circuit_dict):
 
 def test_bell_circuit_qasm3_is_string(bell_circuit_dict):
     """circuit_to_qasm3 always returns a non-empty string."""
-    from quantx_engine.ibm import circuit_to_qasm3
+    from quantx_engine.contrib.ibm import circuit_to_qasm3
     qasm = circuit_to_qasm3(bell_circuit_dict)
     assert isinstance(qasm, str)
     assert len(qasm) > 20
@@ -203,7 +203,7 @@ def test_hardware_job_initial_status(mock_ibm_job):
 
 def test_hardware_job_fetch_returns_result(mock_ibm_job):
     """HardwareJob.fetch() returns a HardwareJobResult after job completes."""
-    from quantx_engine.hardware import HardwareJobResult
+    from quantx_engine.contrib.hardware import HardwareJobResult
     hw_job = _make_hardware_job(mock_ibm_job)
     result = hw_job.fetch()
     assert isinstance(result, HardwareJobResult)
@@ -242,7 +242,7 @@ def test_hardware_job_has_job_id(mock_ibm_job):
 
 def test_submit_returns_hardware_job():
     """IBMHardwareBackend.submit returns a HardwareJob without real network."""
-    from quantx_engine.hardware import HardwareJob, HardwareJobResult
+    from quantx_engine.contrib.hardware import HardwareJob, HardwareJobResult
 
     mock_result = HardwareJobResult(
         job_id="fake-001",
@@ -281,10 +281,10 @@ def test_submit_returns_hardware_job():
 
 def test_submit_with_no_token_returns_hardware_error():
     """IBMHardwareBackend raises HardwareError when token is absent and Qiskit is mocked."""
-    from quantx_engine.hardware import IBMHardwareBackend, HardwareError
+    from quantx_engine.contrib.hardware import IBMHardwareBackend, HardwareError
 
     # Patch the internal IBMQuantumBackend to simulate missing token
-    with patch("quantx_engine.hardware.IBMHardwareBackend.__init__") as mock_init:
+    with patch("quantx_engine.contrib.hardware.IBMHardwareBackend.__init__") as mock_init:
         mock_init.side_effect = HardwareError(
             "Backend not connected. Provide token= or QISKIT_IBM_TOKEN."
         )
@@ -294,7 +294,7 @@ def test_submit_with_no_token_returns_hardware_error():
 
 def test_submit_when_qiskit_missing_raises_hardware_error():
     """submit() raises HardwareError when qiskit is not installed."""
-    from quantx_engine.hardware import IBMHardwareBackend, HardwareError
+    from quantx_engine.contrib.hardware import IBMHardwareBackend, HardwareError
 
     backend = IBMHardwareBackend.__new__(IBMHardwareBackend)
     backend._backend_name = "ibmq_qasm_simulator"
@@ -323,7 +323,7 @@ def test_submit_when_qiskit_missing_raises_hardware_error():
 
 def test_hardware_job_result_fields():
     """HardwareJobResult stores all expected fields."""
-    from quantx_engine.hardware import HardwareJobResult
+    from quantx_engine.contrib.hardware import HardwareJobResult
     r = HardwareJobResult(
         job_id="j-001",
         backend="ibmq_qasm_simulator",
@@ -342,7 +342,7 @@ def test_hardware_job_result_fields():
 
 def test_hardware_job_result_empty_counts():
     """HardwareJobResult tolerates empty counts dict (e.g. no measurements)."""
-    from quantx_engine.hardware import HardwareJobResult
+    from quantx_engine.contrib.hardware import HardwareJobResult
     r = HardwareJobResult(
         job_id="j-002", backend="sim",
         counts={}, probabilities={}, shots=0, metadata={}
@@ -411,9 +411,9 @@ def test_real_ibm_round_trip_bell():
         pytest.skip("QISKIT_IBM_TOKEN not set — skipping real hardware test")
 
     try:
-        from quantx_engine.hardware import IBMHardwareBackend
+        from quantx_engine.contrib.hardware import IBMHardwareBackend
     except ImportError:
-        pytest.skip("quantx_engine.hardware not importable")
+        pytest.skip("quantx_engine.contrib.hardware not importable")
 
     circuit = {
         "qubits": 2, "clbits": 2, "shots": 1024, "seed": 42,

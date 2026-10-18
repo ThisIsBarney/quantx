@@ -13,8 +13,8 @@ from collections import Counter
 import numpy as np
 import pytest
 
-from quantx_engine import QuantumCircuit, CircuitResult
-from quantx_engine.circuit import Symbol, _GateOp, _fmt_angle, _parse_angle
+from quantx_engine.contrib.circuit import QuantumCircuit, CircuitResult
+from quantx_engine.contrib.circuit import Symbol, _GateOp, _fmt_angle, _parse_angle
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -623,7 +623,7 @@ def test_copy_ops_list_is_independent():
 def test_parse_angle_uses_ast_not_eval():
     """_parse_angle must not be reachable via dunder traversal (P1 security fix)."""
     import ast as _ast
-    from quantx_engine.circuit import _parse_angle as _pa
+    from quantx_engine.contrib.circuit import _parse_angle as _pa
     import inspect
     src = inspect.getsource(_pa)
     # Confirm the implementation uses ast.parse / ast module, not eval
@@ -632,14 +632,14 @@ def test_parse_angle_uses_ast_not_eval():
 
 def test_parse_angle_rejects_dunder_attack():
     """Crafted dunder-traversal strings must not execute."""
-    from quantx_engine.circuit import _parse_angle as _pa
+    from quantx_engine.contrib.circuit import _parse_angle as _pa
     with pytest.raises((ValueError, SyntaxError)):
         _pa("().__class__.__bases__[0].__subclasses__()")
 
 
 def test_parse_angle_rejects_function_call():
     """Unknown function calls in angle expressions must raise ValueError."""
-    from quantx_engine.circuit import _parse_angle as _pa
+    from quantx_engine.contrib.circuit import _parse_angle as _pa
     with pytest.raises((ValueError, SyntaxError)):
         _pa("os.system('echo hi')")
 
@@ -772,28 +772,3 @@ def test_qft_1qubit_equals_hadamard():
     qft = _build_qft(1)
     sv_qft = qft.run().statevector
     np.testing.assert_allclose(np.abs(sv_qft), np.abs(sv_h), atol=1e-10)
-
-
-# ── Public API exports ────────────────────────────────────────────────────────
-
-
-def test_quantumcircuit_exported_from_package():
-    from quantx_engine import QuantumCircuit as QC
-    assert QC is QuantumCircuit
-
-
-def test_circuitresult_exported_from_package():
-    from quantx_engine import CircuitResult as CR
-    assert CR is CircuitResult
-
-
-def test_symbol_exported_from_package():
-    from quantx_engine import Symbol as S
-    assert S is Symbol
-
-
-def test_in_dunder_all():
-    import quantx_engine
-    assert "QuantumCircuit" in quantx_engine.__all__
-    assert "CircuitResult" in quantx_engine.__all__
-    assert "Symbol" in quantx_engine.__all__

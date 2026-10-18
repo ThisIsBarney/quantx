@@ -39,7 +39,7 @@ class TestFaultTolerantPhysics:
         d=3 should have lower logical rate than d=5, which should be lower than
         a single physical qubit error (the d=1 baseline).
         """
-        from quantx_engine.fault_tolerant import logical_error_rate_vs_distance
+        from quantx_engine.contrib.fault_tolerant import logical_error_rate_vs_distance
 
         p = 5e-4  # well below threshold
         results = logical_error_rate_vs_distance(
@@ -64,7 +64,7 @@ class TestFaultTolerantPhysics:
         At p = 0.3 (well above the ~1% surface-code threshold),
         the syndrome decoding fails and the logical error rate stays large.
         """
-        from quantx_engine.fault_tolerant import logical_error_rate_vs_distance
+        from quantx_engine.contrib.fault_tolerant import logical_error_rate_vs_distance
 
         p = 0.3  # well above threshold
         results = logical_error_rate_vs_distance(
@@ -94,7 +94,7 @@ class TestFloquetPhysics:
         Ω_R = A (drive amplitude), and quasi-energies are ±A/2.
         These come in ±pairs by particle-hole symmetry of the Floquet Hamiltonian.
         """
-        from quantx_engine.floquet import driven_two_level
+        from quantx_engine.contrib.floquet import driven_two_level
 
         omega0 = 2.0
         A = 0.5
@@ -118,7 +118,7 @@ class TestFloquetPhysics:
 
         This is the defining property of quasi-energies in the Floquet-Brillouin zone.
         """
-        from quantx_engine.floquet import driven_two_level
+        from quantx_engine.contrib.floquet import driven_two_level
 
         omega_d = 3.0
         result = driven_two_level(
@@ -136,7 +136,7 @@ class TestFloquetPhysics:
         rotating-wave approximation is block-diagonal with eigenvalues ±A/2.
         The two quasi-energies must sum to zero (by particle-hole symmetry).
         """
-        from quantx_engine.floquet import driven_two_level
+        from quantx_engine.contrib.floquet import driven_two_level
 
         omega0 = 2.0
         A = 0.5
@@ -158,14 +158,14 @@ class TestQuantumNetworkPhysics:
 
     def test_dephasing_identity_at_zero_noise(self):
         """fidelity_after_dephasing with p=0 must return F unchanged."""
-        from quantx_engine.quantum_network import fidelity_after_dephasing
+        from quantx_engine.contrib.quantum_network import fidelity_after_dephasing
 
         for F in [0.5, 0.75, 0.9, 1.0]:
             assert fidelity_after_dephasing(F, p_deph=0.0) == pytest.approx(F, abs=1e-12)
 
     def test_dephasing_at_full_noise_gives_maximally_mixed(self):
         """fidelity_after_dephasing with p=1 must give F'=1/4 for any input F."""
-        from quantx_engine.quantum_network import fidelity_after_dephasing
+        from quantx_engine.contrib.quantum_network import fidelity_after_dephasing
 
         for F in [0.5, 0.75, 1.0]:
             F_out = fidelity_after_dephasing(F, p_deph=1.0)
@@ -177,7 +177,7 @@ class TestQuantumNetworkPhysics:
         Ref: Werner-state p-parameter: p_out = p_A * p_B.
         If p_A = 1 (F_A=1): p_out = p_B → F_out = F_B.
         """
-        from quantx_engine.quantum_network import fidelity_after_swapping
+        from quantx_engine.contrib.quantum_network import fidelity_after_swapping
 
         for F_B in [0.6, 0.8, 0.95, 1.0]:
             F_out = fidelity_after_swapping(F_A=1.0, F_B=F_B, F_gate=1.0)
@@ -185,7 +185,7 @@ class TestQuantumNetworkPhysics:
 
     def test_swapping_maximally_mixed_is_fixed_point(self):
         """fidelity_after_swapping with F_A=F_B=1/4 must give F_out=1/4."""
-        from quantx_engine.quantum_network import fidelity_after_swapping
+        from quantx_engine.contrib.quantum_network import fidelity_after_swapping
 
         F_out = fidelity_after_swapping(F_A=0.25, F_B=0.25, F_gate=1.0)
         assert F_out == pytest.approx(0.25, abs=1e-10)
@@ -196,7 +196,7 @@ class TestQuantumNetworkPhysics:
         Ref: Bennett et al. 1996, DEJMPS; Deutsch et al. 1996.
         fidelity_after_purification(F) > F for F ∈ (0.5, 1.0).
         """
-        from quantx_engine.quantum_network import fidelity_after_purification
+        from quantx_engine.contrib.quantum_network import fidelity_after_purification
 
         for F in [0.6, 0.75, 0.9]:
             F_out = fidelity_after_purification(F, n_rounds=1)
@@ -212,7 +212,7 @@ class TestQuantumProtocolsPhysics2:
 
     def test_teleportation_fidelity_perfect_channel(self):
         """teleportation_fidelity(F=1) = 1 (perfect channel → perfect fidelity)."""
-        from quantx_engine.quantum_protocols import teleportation_fidelity
+        from quantx_engine.contrib.quantum_protocols import teleportation_fidelity
 
         assert teleportation_fidelity(1.0) == pytest.approx(1.0, abs=1e-12)
 
@@ -221,7 +221,7 @@ class TestQuantumProtocolsPhysics2:
 
         Ref: Horodecki et al. (1999), Eq. (3).
         """
-        from quantx_engine.quantum_protocols import teleportation_fidelity
+        from quantx_engine.contrib.quantum_protocols import teleportation_fidelity
 
         for F in [0.0, 0.25, 0.5, 0.75, 1.0]:
             expected = (2.0 * F + 1.0) / 3.0
@@ -229,7 +229,7 @@ class TestQuantumProtocolsPhysics2:
 
     def test_teleportation_fidelity_minimum(self):
         """At F=0 (anti-correlated channel), f = 1/3 (classical guessing = 1/3)."""
-        from quantx_engine.quantum_protocols import teleportation_fidelity
+        from quantx_engine.contrib.quantum_protocols import teleportation_fidelity
 
         # F=0: f = (2*0+1)/3 = 1/3
         assert teleportation_fidelity(0.0) == pytest.approx(1.0 / 3.0, abs=1e-12)
@@ -248,7 +248,7 @@ class TestCliffordSimPhysics:
         The stabilizers of |Φ+⟩ = (|00⟩+|11⟩)/√2 are XX and ZZ.
         Measuring qubit 0 collapses both qubits to the same value.
         """
-        from quantx_engine.clifford_sim import CliffordSimulator
+        from quantx_engine.contrib.clifford_sim import CliffordSimulator
 
         outcomes_00_or_11 = 0
         n_trials = 100
@@ -268,7 +268,7 @@ class TestCliffordSimPhysics:
 
         With N=200 shots, the fraction should be in [0.35, 0.65] with high probability.
         """
-        from quantx_engine.clifford_sim import CliffordSimulator
+        from quantx_engine.contrib.clifford_sim import CliffordSimulator
 
         zeros = 0
         n = 200
@@ -281,7 +281,7 @@ class TestCliffordSimPhysics:
 
     def test_ghz_state_all_correlated(self):
         """GHZ state: H+CNOT chain on 5 qubits → all qubits correlated."""
-        from quantx_engine.clifford_sim import CliffordSimulator
+        from quantx_engine.contrib.clifford_sim import CliffordSimulator
 
         n = 5
         for seed in range(50):
@@ -309,7 +309,7 @@ class TestMPSSimulatorPhysics:
         The exact GHZ = (|0…0⟩ + |1…1⟩)/√2 requires only bond dimension 2.
         With max_bond=2, the MPS representation is exact.
         """
-        from quantx_engine.mps_simulator import ghz_fidelity
+        from quantx_engine.contrib.mps_simulator import ghz_fidelity
 
         for n in [4, 6, 8]:
             F = ghz_fidelity(n_qubits=n, max_bond=2)
@@ -319,7 +319,7 @@ class TestMPSSimulatorPhysics:
 
     def test_ghz_fidelity_decreases_with_truncation(self):
         """Truncating bond dimension below 2 degrades GHZ fidelity."""
-        from quantx_engine.mps_simulator import ghz_fidelity
+        from quantx_engine.contrib.mps_simulator import ghz_fidelity
 
         F_exact = ghz_fidelity(n_qubits=6, max_bond=2)
         F_trunc = ghz_fidelity(n_qubits=6, max_bond=1)
@@ -340,7 +340,7 @@ class TestNeqdynPhysics:
         For the 1D TFIM, defect density n_d ∝ v^{1/2} where v is the quench rate.
         A faster quench (larger v) must create strictly more defects.
         """
-        from quantx_engine.neqdyn import KibbleZurekScaling
+        from quantx_engine.contrib.neqdyn import KibbleZurekScaling
 
         kz = KibbleZurekScaling(n_sites=6, J=1.0, n_steps=30)
         result = kz.sweep(quench_rates=[0.5, 1.0, 2.0], h_i=2.0, h_f=0.1)
@@ -355,7 +355,7 @@ class TestNeqdynPhysics:
 
         n_d ∝ v^exponent with exponent = ν/(1+νz) > 0 (for 1D TFIM: ν=z=1, so exponent=0.5).
         """
-        from quantx_engine.neqdyn import KibbleZurekScaling
+        from quantx_engine.contrib.neqdyn import KibbleZurekScaling
 
         kz = KibbleZurekScaling(n_sites=6, J=1.0, n_steps=30)
         result = kz.sweep(h_i=2.0, h_f=0.1)  # uses default log-spaced rates
@@ -369,7 +369,7 @@ class TestNeqdynPhysics:
         Domain-wall density cannot exceed 0.5 (maximum disorder in the paramagnetic
         fully-disordered state of the 1D Ising model).
         """
-        from quantx_engine.neqdyn import KibbleZurekScaling
+        from quantx_engine.contrib.neqdyn import KibbleZurekScaling
 
         kz = KibbleZurekScaling(n_sites=8, J=1.0, n_steps=20)
         result = kz.sweep(quench_rates=[0.5, 2.0], h_i=2.0, h_f=0.1)
@@ -391,7 +391,7 @@ class TestManyBodyPhysics:
         This is a fundamental constraint: the Jordan-Wigner mapping of real-valued
         couplings between Majorana operators must produce a Hermitian matrix.
         """
-        from quantx_engine.many_body import SYKModel
+        from quantx_engine.contrib.many_body import SYKModel
 
         model = SYKModel(N=8, q=4, seed=42)
         H = model.hamiltonian
@@ -399,7 +399,7 @@ class TestManyBodyPhysics:
 
     def test_syk_spectrum_is_real(self):
         """All eigenvalues of the SYK Hamiltonian must be real."""
-        from quantx_engine.many_body import SYKModel
+        from quantx_engine.contrib.many_body import SYKModel
 
         model = SYKModel(N=6, q=4, seed=7)
         H = model.hamiltonian
@@ -415,7 +415,7 @@ class TestManyBodyPhysics:
         For q=4 SYK at even N, the spectrum is symmetric around 0 by the
         particle-hole symmetry.  The ground state energy E₀ < 0.
         """
-        from quantx_engine.many_body import SYKModel
+        from quantx_engine.contrib.many_body import SYKModel
 
         model = SYKModel(N=8, q=4, seed=123)
         H = model.hamiltonian
@@ -429,7 +429,7 @@ class TestManyBodyPhysics:
         For fixed q=4, the ratio σ²(N=8) / σ²(N=6) should be roughly (8/6)^3 ≈ 2.37.
         We just test that variance increases with N.
         """
-        from quantx_engine.many_body import SYKModel
+        from quantx_engine.contrib.many_body import SYKModel
 
         model6 = SYKModel(N=6, q=4, seed=11)
         model8 = SYKModel(N=8, q=4, seed=22)
@@ -453,7 +453,7 @@ class TestRydbergPhysics:
         RydbergSimulator takes atom_positions (x,y) in 2D.
         The Hamiltonian must be a 4×4 Hermitian matrix for 2 atoms.
         """
-        from quantx_engine.rydberg import RydbergSimulator
+        from quantx_engine.contrib.rydberg import RydbergSimulator
 
         # Two atoms separated by 5 μm (2D positions)
         sim = RydbergSimulator(
@@ -473,7 +473,7 @@ class TestRydbergPhysics:
 
         Two atoms with large C₆/r⁶: |rr⟩ diagonal element should include V = C₆/r⁶.
         """
-        from quantx_engine.rydberg import RydbergSimulator
+        from quantx_engine.contrib.rydberg import RydbergSimulator
 
         r = 3.0   # small separation → large blockade energy (2D)
         C6 = 1000.0

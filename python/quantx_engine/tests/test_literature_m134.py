@@ -103,7 +103,7 @@ class TestLanczosLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         pytest.importorskip("scipy")
-        from quantx_engine.lanczos import LanczosSolver
+        from quantx_engine.contrib.lanczos import LanczosSolver
         self.LanczosSolver = LanczosSolver
         # API: LanczosSolver(k=N_eigs) → .solve(H) → EigenResult
 
@@ -257,7 +257,7 @@ class TestTrotterLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         pytest.importorskip("scipy")
-        from quantx_engine.trotter import TrotterSimulator, TrotterTerm
+        from quantx_engine.contrib.trotter import TrotterSimulator, TrotterTerm
         self.TrotterSimulator = TrotterSimulator
         self.TrotterTerm = TrotterTerm
 
@@ -355,7 +355,7 @@ class TestMcLachlanLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.mclachlan import (
+            from quantx_engine.contrib.mclachlan import (
                 McLachlanSolver,
                 AnsatzCircuit,
             )
@@ -395,7 +395,7 @@ class TestMcLachlanLiterature:
     def test_mclachlan_metric_tensor_positive_semidefinite(self):
         """The McLachlan M matrix is real and positive semi-definite."""
         try:
-            from quantx_engine.mclachlan import build_metric_tensor
+            from quantx_engine.contrib.mclachlan import build_metric_tensor
         except ImportError:
             pytest.skip("build_metric_tensor not exported")
 

@@ -25,7 +25,7 @@ N_SHOTS    = 500
 
 def bench_quantx(distances: list[int], p_phys: float, n_shots: int) -> BenchResult:
     try:
-        from quantx_engine.fault_tolerant import logical_error_rate_vs_distance
+        from quantx_engine.contrib.fault_tolerant import logical_error_rate_vs_distance
         with timer() as elapsed:
             rates = logical_error_rate_vs_distance(
                 distances, p_phys, n_shots=n_shots, rng_seed=0

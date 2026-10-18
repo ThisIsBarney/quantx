@@ -21,7 +21,7 @@ class TestNoiseChannelsLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.noise import DepolarizingChannel, AmplitudeDampingChannel
+            from quantx_engine.contrib.noise import DepolarizingChannel, AmplitudeDampingChannel
             self.DepolarizingChannel = DepolarizingChannel
             self.AmplitudeDampingChannel = AmplitudeDampingChannel
         except ImportError:
@@ -64,7 +64,7 @@ class TestZNELiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.mitigation import RichardsonExtrapolation, ZNEMitigator
+            from quantx_engine.contrib.mitigation import RichardsonExtrapolation, ZNEMitigator
             self.RichardsonExtrapolation = RichardsonExtrapolation
             self.ZNEMitigator = ZNEMitigator
         except ImportError:
@@ -98,7 +98,7 @@ class TestLindbladLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.lindblad import LindbladSolver, JumpOperator
+            from quantx_engine.contrib.lindblad import LindbladSolver, JumpOperator
             self.LindbladSolver = LindbladSolver
             self.JumpOperator = JumpOperator
         except ImportError:

@@ -56,7 +56,7 @@ async def repeater_chain(req: RepeaterChainRequest) -> dict[str, Any]:
     DEJMPS purification. Returns fidelity at each hop and the asymptotic
     BB84 secret key rate.
     """
-    from quantx_engine.quantum_network import simulate_repeater_chain, NetworkError
+    from quantx_engine.contrib.quantum_network import simulate_repeater_chain, NetworkError
     try:
         result = simulate_repeater_chain(
             n_hops=req.n_hops,
@@ -86,7 +86,7 @@ async def repeater_chain(req: RepeaterChainRequest) -> dict[str, Any]:
 @router.post("/fidelity/dephasing", summary="Werner fidelity after dephasing")
 async def fidelity_dephasing(req: DephasingRequest) -> dict[str, Any]:
     """Compute F' = (1 − p)·F + p/4 (two-qubit depolarising noise)."""
-    from quantx_engine.quantum_network import fidelity_after_dephasing, NetworkError
+    from quantx_engine.contrib.quantum_network import fidelity_after_dephasing, NetworkError
     try:
         F_out = fidelity_after_dephasing(req.F, req.p_deph)
     except NetworkError as exc:
@@ -100,7 +100,7 @@ async def fidelity_swapping(req: SwappingRequest) -> dict[str, Any]:
 
     F_out = F_gate · (F_A·F_B + (1−F_A)(1−F_B)/3) + (1−F_gate)/4
     """
-    from quantx_engine.quantum_network import fidelity_after_swapping, NetworkError
+    from quantx_engine.contrib.quantum_network import fidelity_after_swapping, NetworkError
     try:
         F_out = fidelity_after_swapping(req.F_A, req.F_B, req.F_gate)
     except NetworkError as exc:
@@ -114,7 +114,7 @@ async def fidelity_purification(req: PurificationRequest) -> dict[str, Any]:
 
     Each round: F' = F² / (F² + (1−F)²/3).
     """
-    from quantx_engine.quantum_network import fidelity_after_purification, NetworkError
+    from quantx_engine.contrib.quantum_network import fidelity_after_purification, NetworkError
     try:
         F_out = fidelity_after_purification(req.F, req.n_rounds)
     except NetworkError as exc:

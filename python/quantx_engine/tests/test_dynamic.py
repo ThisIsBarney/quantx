@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.dynamic import (
+from quantx_engine.contrib.dynamic import (
     DynamicCircuit,
     DynamicCircuitError,
     DynamicResult,
@@ -322,7 +322,7 @@ class TestRepeatUntilSuccess:
 
 class TestNoisyDynamic:
     def test_noise_blurs_deterministic_circuit(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         noise = DepolarizingNoise(0.3)
         circ = DynamicCircuit(1, 1).x(0).measure(0, 0)
         r = DynamicSimulator(noise_model=noise, shots=500, seed=9).run(circ)
@@ -332,7 +332,7 @@ class TestNoisyDynamic:
         assert p1 > 0.5
 
     def test_noise_counts_sum_to_shots(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         noise = DepolarizingNoise(0.05)
         r = DynamicSimulator(noise_model=noise, shots=100, seed=0).run(_bell_dynamic())
         assert sum(r.counts.values()) == 100
@@ -361,21 +361,3 @@ class TestParametricGatesDynamic:
         r = DynamicSimulator(shots=1000, seed=13).run(circ)
         p0 = r.counts.get("0", 0) / r.n_shots
         assert abs(p0 - 0.5) < 0.07
-
-
-# ---------------------------------------------------------------------------
-# __init__ re-exports
-# ---------------------------------------------------------------------------
-
-class TestDynamicInit:
-    def test_dynamic_circuit_exported(self):
-        from quantx_engine import DynamicCircuit as DC
-        assert DC is DynamicCircuit
-
-    def test_dynamic_simulator_exported(self):
-        from quantx_engine import DynamicSimulator as DS
-        assert DS is DynamicSimulator
-
-    def test_dynamic_result_exported(self):
-        from quantx_engine import DynamicResult as DR
-        assert DR is DynamicResult

@@ -24,7 +24,7 @@ class TestCVaRQAOALiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.qaoa_optim import CVaRQAOA, MaxCutProblem
+            from quantx_engine.contrib.qaoa_optim import CVaRQAOA, MaxCutProblem
             self.CVaRQAOA = CVaRQAOA
             self.MaxCutProblem = MaxCutProblem
         except ImportError:
@@ -68,7 +68,7 @@ class TestQMLLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.qml import ZZFeatureMap, FidelityQuantumKernel
+            from quantx_engine.contrib.qml import ZZFeatureMap, FidelityQuantumKernel
             self.ZZFeatureMap = ZZFeatureMap
             self.FidelityQuantumKernel = FidelityQuantumKernel
         except ImportError:

@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.mbqc import (
+from quantx_engine.contrib.mbqc import (
     GraphState,
     MBQCError,
     MBQCPattern,

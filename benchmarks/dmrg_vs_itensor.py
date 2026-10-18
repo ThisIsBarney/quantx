@@ -84,7 +84,7 @@ class _NoNativeEngine:
 
 
 def run_quantx(n: int, chi: int, n_sweeps: int = 20) -> dict:
-    from quantx_engine.cached_dmrg import CachedDMRG
+    from quantx_engine.contrib.cached_dmrg import CachedDMRG
 
     # Use the native Engine when the shared library is available; otherwise
     # fall back to the pure-Python exact-diag path (viable for n ≤ 20).

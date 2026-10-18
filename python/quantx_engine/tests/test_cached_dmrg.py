@@ -28,7 +28,7 @@ def cached_solver():
     """CachedDMRG backed by Engine (native if available, exact-diag fallback)."""
     try:
         from quantx_engine import Engine
-        from quantx_engine.cached_dmrg import CachedDMRG
+        from quantx_engine.contrib.cached_dmrg import CachedDMRG
         return CachedDMRG(Engine())
     except (ImportError, FileNotFoundError, OSError) as e:
         pytest.skip(f"CachedDMRG not available: {e}")

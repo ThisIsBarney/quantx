@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.xeb import CrossEntropyBenchmarking, XEBError, XEBResult
+from quantx_engine.contrib.xeb import CrossEntropyBenchmarking, XEBError, XEBResult
 
 
 # ---------------------------------------------------------------------------
@@ -194,13 +194,3 @@ class TestXEBFidelityProperties:
         assert f_clean > f_noisy, (
             f"Noiseless F_XEB ({f_clean:.3f}) should exceed noisy ({f_noisy:.3f})"
         )
-
-
-# ---------------------------------------------------------------------------
-# __init__ re-exports
-# ---------------------------------------------------------------------------
-
-class TestXEBInit:
-    def test_exported_from_init(self):
-        from quantx_engine import CrossEntropyBenchmarking as CEB
-        assert CEB is CrossEntropyBenchmarking

@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from quantx_engine.noise_vqe import (
+from quantx_engine.contrib.noise_vqe import (
     NoiseVQEError,
     SPSAOptimizer,
     NoiseAwareVQEResult,
@@ -17,7 +17,7 @@ from quantx_engine.noise_vqe import (
     _expect_noisy,
     _nelder_mead,
 )
-from quantx_engine.primitives import SparsePauliOp
+from quantx_engine.contrib.primitives import SparsePauliOp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -377,7 +377,7 @@ class TestNoiseAwareVQERun(unittest.TestCase):
 
     def test_noise_model_applied(self):
         """With depolarizing noise, energy at optimal point is less negative."""
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         H = SparsePauliOp("Z")
         # For single-qubit H=Z, optimal angle is theta=pi (|1> state, energy=-1)
         theta_opt = np.array([math.pi])
@@ -401,7 +401,7 @@ class TestNoiseAwareVQERun(unittest.TestCase):
         self.assertIsInstance(result, NoiseAwareVQEResult)
 
     def test_result_noise_description_with_depol(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         H = SparsePauliOp("Z")
         result = NoiseAwareVQE(
             H, n_qubits=1, noise_model=DepolarizingNoise(prob=0.01),
@@ -468,7 +468,7 @@ class TestHardwareEfficientVQE(unittest.TestCase):
         self.assertTrue(math.isfinite(result.energy))
 
     def test_with_noise_model(self):
-        from quantx_engine.noise import DepolarizingNoise
+        from quantx_engine.contrib.noise import DepolarizingNoise
         H = SparsePauliOp("Z")
         result = hardware_efficient_vqe(
             H, n_qubits=1,
@@ -492,40 +492,6 @@ class TestHardwareEfficientVQE(unittest.TestCase):
         self.assertIsInstance(result, NoiseAwareVQEResult)
         # Energy should be ≤ 0 (somewhere below the max energy of +1)
         self.assertLessEqual(result.energy, 1.0)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# __init__ re-exports
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestInitExports(unittest.TestCase):
-    def test_noise_vqe_error_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "NoiseVQEError"))
-
-    def test_spsa_optimizer_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "SPSAOptimizer"))
-
-    def test_noise_aware_vqe_result_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "NoiseAwareVQEResult"))
-
-    def test_noise_aware_vqe_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "NoiseAwareVQE"))
-
-    def test_build_hea_circuit_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "build_hea_circuit"))
-
-    def test_hardware_efficient_vqe_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "hardware_efficient_vqe"))
-
-    def test_n_hea_params_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "n_hea_params"))
 
 
 if __name__ == "__main__":

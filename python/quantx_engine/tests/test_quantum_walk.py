@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.quantum_walk import (
+from quantx_engine.contrib.quantum_walk import (
     QuantumWalkError,
     WalkResult,
     GroverWalkResult,
@@ -536,7 +536,7 @@ class TestGroverWalkSearch:
 
 class TestExports:
     def test_all_classes_importable(self):
-        from quantx_engine.quantum_walk import (
+        from quantx_engine.contrib.quantum_walk import (
             QuantumWalkError,
             WalkResult,
             GroverWalkResult,
@@ -552,7 +552,7 @@ class TestExports:
         assert GroverWalk is not None
 
     def test_exported_from_package(self):
-        import quantx_engine.quantum_walk as qw
+        import quantx_engine.contrib.quantum_walk as qw
         assert hasattr(qw, "DiscreteTimeWalk")
         assert hasattr(qw, "ContinuousTimeQuantumWalk")
         assert hasattr(qw, "GroverWalk")

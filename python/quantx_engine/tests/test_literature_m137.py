@@ -37,7 +37,7 @@ class TestRepetitionCodeLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.qec import RepetitionCode
+            from quantx_engine.contrib.qec import RepetitionCode
             self.RepetitionCode = RepetitionCode
         except ImportError:
             pytest.skip("qec module not available")
@@ -80,7 +80,7 @@ class TestRepetitionCodeLiterature:
         Below the threshold, encoding reduces the error rate.
         """
         try:
-            from quantx_engine.qec import LogicalErrorSimulator, SurfaceCode
+            from quantx_engine.contrib.qec import LogicalErrorSimulator, SurfaceCode
             code = SurfaceCode(d=3)
             sim = LogicalErrorSimulator(code)
             p_phys = 0.01
@@ -106,11 +106,11 @@ class TestMagicStateDistillationLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.ft_tgate import MagicStateFactory
+            from quantx_engine.contrib.ft_tgate import MagicStateFactory
             self.MagicStateFactory = MagicStateFactory
         except ImportError:
             try:
-                from quantx_engine.fault_tolerant import MagicStateDistillery
+                from quantx_engine.contrib.fault_tolerant import MagicStateDistillery
                 self.MagicStateFactory = MagicStateDistillery
             except ImportError:
                 pytest.skip("Magic state classes not available")
@@ -154,7 +154,7 @@ class TestTCountLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.ft_tgate import TCountOptimizer
+            from quantx_engine.contrib.ft_tgate import TCountOptimizer
             self.TCountOptimizer = TCountOptimizer
         except ImportError:
             pytest.skip("TCountOptimizer not available")

@@ -28,7 +28,7 @@ under a phenomenological noise model with p_phys = 0.65% and p_meas = 0.65%,
 matching the reported Sycamore calibration numbers.
 
 ```python
-from quantx_engine import FTQCPipeline, FTQCResourceEstimator
+from quantx_engine.contrib.ftqc_pipeline import FTQCPipeline, FTQCResourceEstimator
 
 # ── Parameters from Google 2023 (Sycamore calibration) ──────────────────────
 P_PHYS = 0.0065   # physical 2-qubit gate error rate ≈ 0.65%
@@ -131,7 +131,7 @@ at current Sycamore calibration — consistent with published resource estimates
 ```bash
 cd python
 python -c "
-from quantx_engine import FTQCPipeline, FTQCResourceEstimator
+from quantx_engine.contrib.ftqc_pipeline import FTQCPipeline, FTQCResourceEstimator
 pipe = FTQCPipeline(code_distance=5, p_physical=0.0065, p_meas=0.0065)
 print('d=5 logical error rate:', pipe.logical_error_rate(n_shots=2000, n_rounds=25))
 "

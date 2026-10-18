@@ -7,7 +7,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.mclachlan import (
+from quantx_engine.contrib.mclachlan import (
     McLachlanError,
     McLachlanResult,
     McLachlanSolver,

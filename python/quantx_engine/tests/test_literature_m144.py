@@ -23,7 +23,7 @@ class TestRandomizedBenchmarkingLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.rb_qv import StandardRB
+            from quantx_engine.contrib.rb_qv import StandardRB
             self.StandardRB = StandardRB
         except ImportError:
             pytest.skip("rb_qv not available")
@@ -71,7 +71,7 @@ class TestQuantumVolumeLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.rb_qv import QuantumVolume
+            from quantx_engine.contrib.rb_qv import QuantumVolume
             self.QuantumVolume = QuantumVolume
         except ImportError:
             pytest.skip("QuantumVolume not available")
@@ -95,7 +95,7 @@ class TestXEBLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.xeb import CrossEntropyBenchmarking
+            from quantx_engine.contrib.xeb import CrossEntropyBenchmarking
             self.CrossEntropyBenchmarking = CrossEntropyBenchmarking
         except ImportError:
             pytest.skip("xeb not available")

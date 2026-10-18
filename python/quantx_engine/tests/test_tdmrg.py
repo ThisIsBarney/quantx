@@ -6,8 +6,8 @@ import unittest
 
 import numpy as np
 
-from quantx_engine.tensor_network import MPS, MPO, TensorNetworkError
-from quantx_engine.tdmrg import (
+from quantx_engine.contrib.tensor_network import MPS, MPO, TensorNetworkError
+from quantx_engine.contrib.tdmrg import (
     TDMRGError,
     TDMRGResult,
     TDMRGSolver,
@@ -648,32 +648,6 @@ class TestImaginaryTimeEvolve(unittest.TestCase):
         result = imaginary_time_evolve(mpo, dtau=0.05, n_steps=50, max_chi=8)
         # Maximum entropy across all bonds and all times should be positive
         self.assertGreater(result.max_entropy(), 0.0)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# __init__ re-exports
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestInitExports(unittest.TestCase):
-    def test_tdmrg_error_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "TDMRGError"))
-
-    def test_tdmrg_result_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "TDMRGResult"))
-
-    def test_tdmrg_solver_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "TDMRGSolver"))
-
-    def test_real_time_evolve_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "real_time_evolve"))
-
-    def test_imaginary_time_evolve_exported(self):
-        import quantx_engine
-        self.assertTrue(hasattr(quantx_engine, "imaginary_time_evolve"))
 
 
 if __name__ == "__main__":

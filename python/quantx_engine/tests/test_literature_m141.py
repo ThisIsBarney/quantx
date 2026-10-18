@@ -24,7 +24,7 @@ class TestFloquetLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.floquet import FloquetSystem
+            from quantx_engine.contrib.floquet import FloquetSystem
             self.FloquetSystem = FloquetSystem
         except ImportError:
             pytest.skip("floquet not available")
@@ -64,7 +64,7 @@ class TestKibbleZurekLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.neqdyn import KibbleZurekScaling
+            from quantx_engine.contrib.neqdyn import KibbleZurekScaling
             self.KibbleZurekScaling = KibbleZurekScaling
         except ImportError:
             pytest.skip("neqdyn not available")
@@ -90,7 +90,7 @@ class TestRydbergLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.rydberg import RydbergSimulator, blockade_radius
+            from quantx_engine.contrib.rydberg import RydbergSimulator, blockade_radius
             self.RydbergSimulator = RydbergSimulator
             self.blockade_radius = blockade_radius
         except ImportError:

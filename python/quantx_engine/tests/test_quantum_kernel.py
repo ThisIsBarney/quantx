@@ -519,26 +519,3 @@ class TestKernelAlignmentOnData:
         fa = frobenius_alignment(K, K_target)
         # Should be a valid float in [-1, 1]
         assert -1.0 - 1e-10 <= fa <= 1.0 + 1e-10
-
-
-# ===========================================================================
-# Public package exports
-# ===========================================================================
-
-def test_quantum_kernel_importable_from_package():
-    from quantx_engine import (
-        QKernelError as QKE,
-        ZZFeatureMap as ZZ,
-        FidelityQuantumKernel as FQK,
-        target_alignment as ta,
-        frobenius_alignment as fa,
-        QSVMResult as QR,
-        QSVM as QS,
-    )
-    assert QKE is QKernelError
-    assert ZZ is ZZFeatureMap
-    assert FQK is FidelityQuantumKernel
-    assert ta is target_alignment
-    assert fa is frobenius_alignment
-    assert QR is QSVMResult
-    assert QS is QSVM
