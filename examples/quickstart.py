@@ -4,8 +4,7 @@ With the engine installed this takes a few seconds on a desktop CPU:
 
     python examples/quickstart.py
 
-`quantx_engine.thermal` came after 0.1.0, the release on PyPI; until the next release,
-build the engine from this repository (the README's "Building from source").
+It needs quantx-engine 0.2.0 or later, for `quantx_engine.thermal`.
 
 Each assertion's value is an exact reference computed without the engine, by exact
 diagonalisation or a state vector; python/quantx_engine/tests/test_quickstart.py

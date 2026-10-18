@@ -11,6 +11,13 @@ bug-fixes and packaging corrections only.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-10-18
+
+The engine's finite-temperature methods reach Python, the experimental modules move to
+`quantx_engine.contrib`, and a quick start checks three engine features against exact
+answers on every platform wheel. The move keeps the old import paths working until
+0.4.0, with a `DeprecationWarning`.
+
 ### Added
 
 - **`quantx_engine.thermal`** (M6): finite temperature from Python, by ancilla
@@ -396,5 +403,6 @@ First internal milestone, covering M1–M118 (133 modules, 2000+ tests).
 
 ---
 
-[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ThisIsBarney/quantx/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ThisIsBarney/quantx/releases/tag/v0.2.0
 [0.1.0]: https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0

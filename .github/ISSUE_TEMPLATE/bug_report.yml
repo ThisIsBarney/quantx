@@ -17,7 +17,7 @@ body:
       label: QuantX version
       description: >
         Run `python -c "import quantx_engine; print(quantx_engine.__version__)"`.
-      placeholder: "0.1.0"
+      placeholder: "0.2.0"
     validations:
       required: true
 
