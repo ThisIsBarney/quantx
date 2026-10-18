@@ -131,6 +131,15 @@ jobs:
           assert info["version"] == __version__, (info["version"], __version__)
           print("Smoke test PASSED ✓")
           EOF
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: examples
+          path: src
+      - name: The quick start against its exact answers (gate G1)
+        # examples/quickstart.py: a Hubbard ground state, a finite-temperature spectral
+        # function and an HVA circuit, each asserted against an exact reference, run on
+        # this wheel in a clean venv (no source tree on the path).
+        run: smoke_venv/bin/python src/examples/quickstart.py
 
   # ── Publish to PyPI on version tags ─────────────────────────────────────────
   publish:

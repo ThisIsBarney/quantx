@@ -28,6 +28,8 @@ on:
       - "python/quantx_engine/tests/test_noise.py"
       - "python/quantx_engine/thermal.py"
       - "python/quantx_engine/tests/test_thermal_ed.py"
+      - "python/quantx_engine/tests/test_quickstart.py"
+      - "examples/quickstart.py"
       - "notebooks/engine/**"
   pull_request:
     branches: ["master", "main"]
@@ -49,6 +51,8 @@ on:
       - "python/quantx_engine/tests/test_noise.py"
       - "python/quantx_engine/thermal.py"
       - "python/quantx_engine/tests/test_thermal_ed.py"
+      - "python/quantx_engine/tests/test_quickstart.py"
+      - "examples/quickstart.py"
       - "notebooks/engine/**"
   workflow_dispatch:
 
@@ -144,6 +148,7 @@ jobs:
           python -m pytest python/quantx_engine/tests/test_models_ed.py \
                            python/quantx_engine/tests/test_hva_statevector.py \
                            python/quantx_engine/tests/test_thermal_ed.py \
+                           python/quantx_engine/tests/test_quickstart.py \
                            python/quantx_engine/tests/test_noise.py -v
 
       - name: Engine notebooks (M9) against this build's library
