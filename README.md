@@ -37,8 +37,7 @@ Windows AMD64, on any CPython 3.10 or later. On other platforms pip installs a
 pure-Python package without the engine, and `quantx_engine.backend_info()["native"]` is
 `False`. The wheels are CPU-only; the macOS ones also run without OpenMP.
 
-`quantx_engine.thermal` came after 0.1.0, the release on PyPI. Until the next release it
-needs a build from source (below).
+`quantx_engine.thermal` needs 0.2.0 or later.
 
 ## Quick start
 

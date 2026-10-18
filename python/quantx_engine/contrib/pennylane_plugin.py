@@ -35,6 +35,8 @@ from __future__ import annotations
 
 __all__ = ["QuantXDevice", "QuantXPluginError"]
 
+from quantx_engine import __version__ as _QUANTX_VERSION
+
 
 class QuantXPluginError(RuntimeError):
     """Raised for unsupported operations in the QuantX PennyLane device."""
@@ -71,7 +73,7 @@ if _HAS_PENNYLANE and _HAS_NUMPY:
         name = "QuantX Statevector"
         short_name = "quantx.statevector"
         pennylane_requires = ">=0.30.0"
-        version = "0.1.0"
+        version = _QUANTX_VERSION
         author = "QuantX"
 
         # Supported operations
