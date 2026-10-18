@@ -8,15 +8,15 @@ from typing import Any
 import numpy as np
 import pytest
 
-from quantx_engine.noise_char import (
+from quantx_engine.contrib.noise_char import (
     CharacterizedNoise,
     NoiseCharError,
     NoiseCharacterizer,
 )
-from quantx_engine.noise import DepolarizingNoise
-from quantx_engine.rb_qv import RBResult, StandardRB
-from quantx_engine.xeb import XEBResult, CrossEntropyBenchmarking
-from quantx_engine.tomography import ProcessTomography
+from quantx_engine.contrib.noise import DepolarizingNoise
+from quantx_engine.contrib.rb_qv import RBResult, StandardRB
+from quantx_engine.contrib.xeb import XEBResult, CrossEntropyBenchmarking
+from quantx_engine.contrib.tomography import ProcessTomography
 
 
 # ---------------------------------------------------------------------------

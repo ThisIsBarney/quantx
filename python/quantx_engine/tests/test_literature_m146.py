@@ -24,7 +24,7 @@ class TestPulseLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.pulse import PulseSchedule, PulseSimulator
+            from quantx_engine.contrib.pulse import PulseSchedule, PulseSimulator
             self.PulseSchedule = PulseSchedule
             self.PulseSimulator = PulseSimulator
         except ImportError:
@@ -54,7 +54,7 @@ class TestDynamicalDecouplingLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.dyndecouple import DynamicalDecoupling
+            from quantx_engine.contrib.dyndecouple import DynamicalDecoupling
             self.DynamicalDecoupling = DynamicalDecoupling
         except ImportError:
             pytest.skip("dyndecouple not available")

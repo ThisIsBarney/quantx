@@ -16,7 +16,7 @@ def bench_statevector(n_qubits: int, n_gates: int = 50, backends=("numpy",)):
     import time
     import random
     import math
-    from quantx_engine.gpu import GpuStatevector
+    from quantx_engine.contrib.gpu import GpuStatevector
 
     results = {}
     gate_names = ["H", "X", "RX", "RY", "RZ"]
@@ -60,7 +60,7 @@ def bench_statevector(n_qubits: int, n_gates: int = 50, backends=("numpy",)):
 def bench_batched(n_qubits: int, n_circuits: int, backends=("numpy",)):
     import time
     import numpy as np
-    from quantx_engine.gpu import GpuBatchedCircuit
+    from quantx_engine.contrib.gpu import GpuBatchedCircuit
 
     rng = np.random.default_rng(42)
     angles = rng.uniform(0, 2 * np.pi, n_circuits)
@@ -98,8 +98,8 @@ def bench_batched(n_qubits: int, n_circuits: int, backends=("numpy",)):
 
 def bench_lanczos(n_sites: int, k: int = 4, backends=("numpy",)):
     import time
-    from quantx_engine.gpu import GpuLanczos
-    from quantx_engine.lanczos import SparseHamiltonian
+    from quantx_engine.contrib.gpu import GpuLanczos
+    from quantx_engine.contrib.lanczos import SparseHamiltonian
 
     results = {}
     H = SparseHamiltonian.ising_1d(n_sites=n_sites, J=1.0, h=0.5)
@@ -131,7 +131,7 @@ def main():
     args = parser.parse_args()
 
     try:
-        from quantx_engine.gpu import GpuStatevector, GpuBatchedCircuit, GpuLanczos, gpu_info
+        from quantx_engine.contrib.gpu import GpuStatevector, GpuBatchedCircuit, GpuLanczos, gpu_info
     except ImportError:
         print("ERROR: quantx_engine not installed. Run from ~/coding/quantx/python/")
         sys.exit(1)

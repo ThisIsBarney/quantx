@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(
     reason="numpy and pennylane required",
 )
 
-from quantx_engine.pennylane_plugin import QuantXDevice, QuantXPluginError  # noqa: E402
+from quantx_engine.contrib.pennylane_plugin import QuantXDevice, QuantXPluginError  # noqa: E402
 
 
 # ---------------------------------------------------------------------------

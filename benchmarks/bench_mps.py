@@ -23,7 +23,7 @@ MAX_BOND  = 2      # exact for GHZ; higher bond tests compression overhead
 
 def bench_quantx(n: int, max_bond: int = MAX_BOND) -> BenchResult:
     try:
-        from quantx_engine.mps_simulator import ghz_fidelity
+        from quantx_engine.contrib.mps_simulator import ghz_fidelity
         with timer() as elapsed:
             fidelity = ghz_fidelity(n_qubits=n, max_bond=max_bond)
         return BenchResult(

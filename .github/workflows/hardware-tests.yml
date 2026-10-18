@@ -11,16 +11,16 @@ on:
     types: [labeled, unlabeled, opened, synchronize, reopened]
     paths:
       - "examples/ibm_hardware_demo.py"
-      - "python/quantx_engine/hardware.py"
-      - "python/quantx_engine/ibm.py"
+      - "python/quantx_engine/contrib/hardware.py"
+      - "python/quantx_engine/contrib/ibm.py"
       - "python/quantx_engine/tests/test_ibm_hardware_roundtrip.py"
       - ".github/workflows/hardware-tests.yml"
   push:
     branches: ["master", "main"]
     paths:
       - "examples/ibm_hardware_demo.py"
-      - "python/quantx_engine/hardware.py"
-      - "python/quantx_engine/ibm.py"
+      - "python/quantx_engine/contrib/hardware.py"
+      - "python/quantx_engine/contrib/ibm.py"
       - "python/quantx_engine/tests/test_ibm_hardware_roundtrip.py"
       - ".github/workflows/hardware-tests.yml"
   workflow_dispatch:

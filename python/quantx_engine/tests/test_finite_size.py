@@ -16,7 +16,7 @@ except ImportError:
 
 pytestmark = pytest.mark.skipif(not _HAS_NUMPY, reason="numpy required")
 
-from quantx_engine.finite_size import (
+from quantx_engine.contrib.finite_size import (
     EntanglementResult,
     FiniteSizeError,
     FiniteSizeScaling,
@@ -238,7 +238,7 @@ class TestEntanglementScaling:
         unreliable for small L.  This test only verifies that the function
         runs without error and returns a finite central-charge estimate.
         """
-        from quantx_engine.lanczos import LanczosSolver, SparseHamiltonian
+        from quantx_engine.contrib.lanczos import LanczosSolver, SparseHamiltonian
         L = 6
         H = SparseHamiltonian.heisenberg_1d(L, J=1.0)
         result_lanczos = LanczosSolver(k=1, seed=0).solve(H)

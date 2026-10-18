@@ -1,4 +1,25 @@
-"""Public Python SDK exports for QuantX."""
+"""QuantX: a tensor-network engine for quantum many-body physics.
+
+The engine's Python API:
+
+* :mod:`quantx_engine.models`: the lattice models;
+* :mod:`quantx_engine.dmrg`: ground states, by :func:`~quantx_engine.dmrg.ground_state`;
+* :mod:`quantx_engine.hva`: fermionic HVA circuits;
+* :mod:`quantx_engine.thermal`: finite temperature;
+* :mod:`quantx_engine.tdvp` and :mod:`quantx_engine.structure_factor`: zero-temperature
+  dynamics of the XXZ chain;
+* :class:`Engine`: the native library itself.
+
+Everything else is experimental and lives in :mod:`quantx_engine.contrib`. The old paths,
+such as ``import quantx_engine.qec`` or ``from quantx_engine import SurfaceCode``, still
+work until 0.4.0, with a ``DeprecationWarning``.
+"""
+
+import importlib as _importlib
+import importlib.abc as _abc
+import importlib.util as _util
+import sys as _sys
+import warnings as _warnings
 
 # The only place the version is written: pyproject.toml reads it from here.
 __version__ = "0.1.0"
@@ -71,860 +92,232 @@ def backend_info() -> dict:
             "max_qubits": None,
         }
 
-from .fault_tolerant import (
-    FTError,
-    LogicalQubit,
-    MagicStateDistillery,
-    DistillationResult,
-    FaultTolerantCircuit,
-    logical_error_rate_vs_distance,
-    t_gate_cost,
-)
-from .crosstalk import (
-    CrosstalkError,
-    CouplingGraph,
-    CrosstalkModel,
-    zz_routing_cost,
-    cheapest_path,
-    echo_sequence,
-)
-from .pulse import (
-    PulseError,
-    DriveChannel,
-    MeasureChannel,
-    ControlChannel,
-    ConstantWaveform,
-    GaussianWaveform,
-    DRAGWaveform,
-    FlatTopWaveform,
-    ArbitraryWaveform,
-    PulseSchedule,
-    PulseInstruction,
-    QubitSystem,
-    PulseResult,
-    PulseSimulator,
-    pi_pulse_area,
-)
-from .primitives import (
-    PrimitiveError,
-    SparsePauliOp,
-    EstimatorResult,
-    SamplerResult,
-    Estimator,
-    Sampler,
-)
-from .dynamic import (
-    DynamicCircuitError,
-    DynamicCircuit,
-    DynamicResult,
-    DynamicSimulator,
-)
-from .engine import CircuitError, Engine, QuantXNativeUnavailable
-from .qasm import ParseError, parse_qasm_to_circuit
-from .noise import (
-    NoiseModel,
-    DepolarizingNoise,
-    AmplitudeDampingNoise,
-    ThermalRelaxationNoise,
-    ReadoutNoise,
-    CompositeNoise,
-    NoiseModelError,
-)
-from .ibm import IBMQuantumBackend, IBMConnectorError, circuit_to_qasm3
-from .chemistry import (
-    PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
-)
-from .advanced_chemistry import (
-    AdvChemError,
-    build_hamiltonian_matrix,
-    hf_state,
-    UCCSDResult,
-    UCCSDSolver,
-    ADAPTVQEResult,
-    ADAPTVQESolver,
-    QAOAResult,
-    QAOASolver,
-    QITEResult,
-    QITESolver,
-)
-from .quantum_kernel import (
-    QKernelError,
-    QuantumFeatureMap,
-    ZZFeatureMap,
-    FidelityQuantumKernel,
-    target_alignment,
-    frobenius_alignment,
-    QSVMResult,
-    QSVM,
-)
-from .rb_qv import (
-    RBQVError,
-    RBResult,
-    StandardRB,
-    QVResult,
-    QuantumVolume,
-)
-from .qml import QuantumNeuralNetwork, QuantumClassifier, QMLError
-from .qec import RepetitionCode, SurfaceCode, LogicalErrorSimulator, ThresholdResult, QECError, MWPMDecoder
-from .tensor_network import MPS, MPO, TEBD, DMRGResult, DMRG, TensorNetworkError
-from .qbm import RBM, QuantumBoltzmannMachine, BoltzmannSampler, QBMError
-from .clifford_t import GateSequence, CliffordGroup, SolovayKitaev, TCountOptimizer, CliffordTError
-from .pennylane_plugin import QuantXDevice, QuantXPluginError
-from .lanczos import LanczosSolver, ArnoldiSolver, SparseHamiltonian, EigenResult, LanczosError
-from .sweep import ParameterSweep, SweepResult, SweepError, grid_sweep, list_sweep
-from .gpu import GpuBackend, GpuStatevector, GpuLanczos, GpuBatchedCircuit, GpuError, gpu_info, to_gpu, to_cpu
-from .lindblad import (
-    LindbladError,
-    JumpOperator,
-    LindbladFrame,
-    EntanglementTrace,
-    LindbladResult,
-    LindbladSolver,
-)
-from .spectral import (
-    SpectralError,
-    SpectralResult,
-    KrylovResult,
-    KrylovEvolver,
-)
-from .quantum_channel import (
-    ChannelError,
-    QuantumChannel,
-    SteadyStateSolver,
-)
-from .finite_size import (
-    FiniteSizeError,
-    ScalingResult,
-    EntanglementResult,
-    FiniteSizeScaling,
-    binder_cumulant,
-    entanglement_scaling,
-)
-from .mitigation import (
-    MitigationError,
-    fold_gates,
-    Extrapolator,
-    RichardsonExtrapolator,
-    PolyExtrapolator,
-    ExpExtrapolator,
-    ZNEResult,
-    zne_mitigate,
-    QuasiProbabilityDecomposition,
-    PECResult,
-    pec_mitigate,
-    make_sv_executor,
-)
-from .transpiler import (
-    TranspilerError,
-    GateOp,
-    CouplingMap,
-    TranspileResult,
-    HardwareTranspiler,
-)
-from .adapters import (
-    AdapterError,
-    to_cirq,
-    from_cirq,
-    to_braket,
-    from_braket,
-)
-from .xeb import (
-    XEBError,
-    XEBResult,
-    CrossEntropyBenchmarking,
-)
-from .tomography import (
-    TomographyError,
-    StateTomography,
-    ProcessTomography,
-)
-from .optimal_control import (
-    OCError,
-    GRAPEResult,
-    GRAPESolver,
-    CRABResult,
-    CRABSolver,
-)
-from .templates import (
-    TemplateError,
-    CircuitTemplate,
-    hardware_efficient_ansatz,
-    iqp_circuit,
-    qaoa_circuit,
-    ghz_circuit,
-    quantum_fourier_transform,
-    uccsd_ansatz,
-)
-from .noise_char import (
-    NoiseCharError,
-    CharacterizedNoise,
-    NoiseCharacterizer,
-)
-from .floquet import (
-    FloquetError,
-    FloquetSystem,
-    FloquetResult,
-    BlochFloquetSolver,
-    floquet_spectrum,
-    floquet_effective_hamiltonian,
-    driven_two_level,
-)
-from .hardware import (
-    HardwareError,
-    BackendCalibration,
-    HardwareJobResult,
-    HardwareJob,
-    IBMHardwareBackend,
-    IonQBackend,
-    GoogleBackend,
-    calibration_to_noise_model,
-    available_backends,
-)
-from .tdmrg import (
-    TDMRGError,
-    TDMRGResult,
-    TDMRGSolver,
-    real_time_evolve,
-    imaginary_time_evolve,
-)
-from .quantum_network import (
-    NetworkError,
-    QuantumNode,
-    QuantumChannel,
-    QuantumNetwork,
-    BellPairGenerator,
-    EntanglementSwapper,
-    QuantumRepeater,
-    NetworkResult,
-    fidelity_after_dephasing,
-    fidelity_after_swapping,
-    fidelity_after_purification,
-    simulate_repeater_chain,
-)
-from .quantum_protocols import (
-    ProtocolError,
-    BB84Result,
-    BB84Protocol,
-    E91Result,
-    E91Protocol,
-    TeleportationResult,
-    TeleportationProtocol,
-    DenseCodingResult,
-    DenseCodingProtocol,
-    bb84_key_rate,
-    chsh_inequality_value,
-    teleportation_fidelity,
-)
-from .noise_vqe import (
-    NoiseVQEError,
-    SPSAOptimizer,
-    NoiseAwareVQEResult,
-    NoiseAwareVQE,
-    build_hea_circuit,
-    hardware_efficient_vqe,
-    n_hea_params,
-)
-from .quantum_walk import (
-    QuantumWalkError,
-    WalkResult,
-    GroverWalkResult,
-    DiscreteTimeWalk,
-    ContinuousTimeQuantumWalk,
-    GroverWalk,
-    walk_spectrum,
-    ctqw_transfer_probability,
-)
-from .trotter import (
-    TrotterError,
-    TrotterTerm,
-    TrotterResult,
-    TrotterSimulator,
-    heisenberg_trotter,
-    ising_trotter,
-)
-from .many_body import (
-    ManyBodyError,
-    OTOCResult,
-    OTOCSweepResult,
-    SYKResult,
-    SYKModel,
-    DMRG2DResult,
-    SnakeMapper,
-    compute_otoc,
-    otoc_sweep,
-    syk_hamiltonian,
-    dmrg_2d,
-)
-from .mps_simulator import (
-    MPSSimulatorError,
-    AdaptiveTruncation,
-    MPSSimulator,
-    CachedDMRG,
-    BenchmarkResult,
-    ComparisonResult,
-    GpuBenchmarkResult,       # M109
-    mps_benchmark,
-    ghz_fidelity,
-    compare_mps_sv,
-    gpu_mps_benchmark,        # M109
-    get_backend_module,       # M109
-    is_gpu_available,         # M109
-)
-from .clifford_sim import (   # M110
-    CliffordError,
-    StabilizerState,
-    CliffordSimulator,
-    StimCircuit,
-    StimCircuitError,
-)
-from .ray_sim import (        # M111
-    DistSVError,
-    DistSVResult,
-    DistributedSVSimulator,
-    is_ray_available,
-    dist_sv_benchmark,
-)
-from .ftqc_pipeline import (  # M112 + M156
-    FTQCPipelineError,
-    PipelineResult,
-    ThresholdCurveResult,
-    FTQCPipeline,
-    threshold_curve,
-    threshold_crossing,
-    ResourceEstimate,         # M156
-    FTQCResourceEstimator,    # M156
-)
-from .excited_state import (  # M113
-    ExcitedStateError,
-    ExcitedStateResult,
-    ExcitedStateVQE,
-    ConicalIntersectionResult,
-    detect_conical_intersections,
-    pyscf_to_pauli_hamiltonian,
-)
-from .neqdyn import (  # M114
-    NonEquilError,
-    KeldyshResult,
-    KeldyshSolver,
-    EntanglementDynamicsResult,
-    EntanglementDynamics,
-    KibbleZurekResult,
-    KibbleZurekScaling,
-)
-from .qaoa_optim import (  # M115
-    CVaRQAOAError,
-    QAOAResult as CVaRQAOAResult,  # renamed to avoid clash with advanced_chemistry.QAOAResult
-    MaxCutProblem,
-    TSPProblem,
-    CVaRQAOA,
-    QAOALandscapeResult,
-    QAOALandscape,
-    warm_start_qaoa,
-)
-from .qiskit_compat import (  # M116
-    QiskitCompatError,
-    BitArray,
-    DataBin,
-    PubResult,
-    PrimitiveResult,
-    SamplerPUB,
-    EstimatorPUB,
-    QuantXSamplerV2,
-    QuantXEstimatorV2,
-)
-from .jupyter_widgets import (  # M117
-    WidgetError,
-    CircuitWidgetState,
-    CircuitWidget,
-    BlochSphereWidgetState,
-    BlochSphereWidget,
-    JobMonitorWidgetState,
-    JobMonitorWidget,
-)
-from .rydberg import (  # M118
-    RydbergError,
-    RydbergAtom,
-    RydbergHamiltonian,
-    RydbergResult,
-    RydbergSimulator,
-)
-from .bosonic import (  # M119
-    BosonicError,
-    CatNoiseModel,
-    CatQubit,
-    GKPState,
-    GKPDecoder,
-)
-from .dyndecouple import (  # M126
-    DDError,
-    DDSequence,
-    DynamicalDecoupling,
-    QuantumMemory,
-)
-from .mbqc import (  # M125
-    MBQCError,
-    GraphState,
-    MBQCPattern,
-)
-from .oovqe import (  # M124
-    OOVQEError,
-    OOVQEResult,
-    OOVQESolver,
-)
-from .qsp_qsvt import (  # M123
-    QSPError,
-    QSPAnglesFinder,
-    QSVTCircuit,
-)
-from .mclachlan import (  # M122
-    McLachlanError,
-    McLachlanResult,
-    McLachlanSolver,
-)
-from .qldpc import (  # M121
-    LDPCError,
-    ClassicalCode,
-    HypergraphProductCode,
-    LDPCDecoder,
-    bicycle_code,
-)
-from .ft_tgate import (  # M120
-    MagicStateError,
-    MagicStateFactory,
-    FTTGate,
-    FTCCXGate,
-    # TCountOptimizer lives in ft_tgate but is not re-exported here to
-    # avoid shadowing the existing quantx_engine.clifford_t.TCountOptimizer.
-    # Import it directly: from quantx_engine.ft_tgate import TCountOptimizer
-)
-from .statevector import StatevectorSimulator  # M160
-from .circuit import QuantumCircuit, CircuitResult, Symbol  # M161
 
-__all__ = [
-    # Fault-tolerant logical qubits (M91)
-    "FTError",
-    "LogicalQubit",
-    "MagicStateDistillery",
-    "DistillationResult",
-    "FaultTolerantCircuit",
-    "logical_error_rate_vs_distance",
-    "t_gate_cost",
-    # Crosstalk + ZZ coupling model (M90)
-    "CrosstalkError",
-    "CouplingGraph",
-    "CrosstalkModel",
-    "zz_routing_cost",
-    "cheapest_path",
-    "echo_sequence",
-    # Pulse-level simulator (M89)
-    "PulseError",
-    "DriveChannel",
-    "MeasureChannel",
-    "ControlChannel",
-    "ConstantWaveform",
-    "GaussianWaveform",
-    "DRAGWaveform",
-    "FlatTopWaveform",
-    "ArbitraryWaveform",
-    "PulseSchedule",
-    "PulseInstruction",
-    "QubitSystem",
-    "PulseResult",
-    "PulseSimulator",
-    "pi_pulse_area",
-    "__version__",
-    "CircuitError",
-    "Engine",
-    "QuantXNativeUnavailable",
-    "ParseError",
-    "parse_qasm_to_circuit",
-    "NoiseModel",
-    "DepolarizingNoise",
-    "AmplitudeDampingNoise",
-    "ThermalRelaxationNoise",
-    "ReadoutNoise",
-    "CompositeNoise",
-    "NoiseModelError",
-    "IBMQuantumBackend",
-    "IBMConnectorError",
-    "circuit_to_qasm3",
-    "PauliTerm",
-    "PauliHamiltonian",
-    "jordan_wigner",
-    "MolecularVQE",
-    "ChemistryError",
-    # Advanced chemistry solvers (M79)
-    "AdvChemError",
-    "build_hamiltonian_matrix",
-    "hf_state",
-    "UCCSDResult",
-    "UCCSDSolver",
-    "ADAPTVQEResult",
-    "ADAPTVQESolver",
-    "QAOAResult",
-    "QAOASolver",
-    "QITEResult",
-    "QITESolver",
-    # Quantum kernel methods + QSVM (M80)
-    "QKernelError",
-    "QuantumFeatureMap",
-    "ZZFeatureMap",
-    "FidelityQuantumKernel",
-    "target_alignment",
-    "frobenius_alignment",
-    "QSVMResult",
-    "QSVM",
-    # Randomized Benchmarking + Quantum Volume (M81)
-    "RBQVError",
-    "RBResult",
-    "StandardRB",
-    "QVResult",
-    "QuantumVolume",
-    "QuantumNeuralNetwork",
-    "QuantumClassifier",
-    "QMLError",
-    "RepetitionCode",
-    "SurfaceCode",
-    "LogicalErrorSimulator",
-    "ThresholdResult",
-    "QECError",
-    "MWPMDecoder",
-    "MPS",
-    "MPO",
-    "TEBD",
-    "DMRGResult",
-    "DMRG",
-    "TensorNetworkError",
-    "RBM",
-    "QuantumBoltzmannMachine",
-    "BoltzmannSampler",
-    "QBMError",
-    "GateSequence",
-    "CliffordGroup",
-    "SolovayKitaev",
-    "TCountOptimizer",
-    "CliffordTError",
-    "QuantXDevice",
-    "QuantXPluginError",
-    "LanczosSolver",
-    "ArnoldiSolver",
-    "SparseHamiltonian",
-    "EigenResult",
-    "LanczosError",
-    "ParameterSweep",
-    "SweepResult",
-    "SweepError",
-    "grid_sweep",
-    "list_sweep",
-    "GpuBackend",
-    "GpuStatevector",
-    "GpuLanczos",
-    "GpuBatchedCircuit",
-    "GpuError",
-    "gpu_info",
-    "to_gpu",
-    "to_cpu",
-    # Quantum channels + steady-state solver (M75)
-    "ChannelError",
-    "QuantumChannel",
-    "SteadyStateSolver",
-    # Finite-size scaling + quantum phase transitions (M74)
-    "FiniteSizeError",
-    "ScalingResult",
-    "EntanglementResult",
-    "FiniteSizeScaling",
-    "binder_cumulant",
-    "entanglement_scaling",
-    # Spectral functions + Krylov time evolution (M73)
-    "SpectralError",
-    "SpectralResult",
-    "KrylovResult",
-    "KrylovEvolver",
-    # Lindblad open-system solver (M71)
-    "LindbladError",
-    "JumpOperator",
-    "LindbladFrame",
-    "EntanglementTrace",
-    "LindbladResult",
-    "LindbladSolver",
-    # Error mitigation (M70)
-    "MitigationError",
-    "fold_gates",
-    "Extrapolator",
-    "RichardsonExtrapolator",
-    "PolyExtrapolator",
-    "ExpExtrapolator",
-    "ZNEResult",
-    "zne_mitigate",
-    "QuasiProbabilityDecomposition",
-    "PECResult",
-    "pec_mitigate",
-    "make_sv_executor",
-    # Hardware-aware transpilation (M76)
-    "TranspilerError",
-    "GateOp",
-    "CouplingMap",
-    "TranspileResult",
-    "HardwareTranspiler",
-    # Cirq + Braket adapters (M77)
-    "AdapterError",
-    "to_cirq",
-    "from_cirq",
-    "to_braket",
-    "from_braket",
-    # Cross-entropy benchmarking (M82)
-    "XEBError",
-    "XEBResult",
-    "CrossEntropyBenchmarking",
-    # State and process tomography (M83)
-    "TomographyError",
-    "StateTomography",
-    "ProcessTomography",
-    # Quantum optimal control — GRAPE and CRAB (M84)
-    "OCError",
-    "GRAPEResult",
-    "GRAPESolver",
-    "CRABResult",
-    "CRABSolver",
-    # Estimator + Sampler primitives (M85)
-    "PrimitiveError",
-    "SparsePauliOp",
-    "EstimatorResult",
-    "SamplerResult",
-    "Estimator",
-    "Sampler",
-    # Dynamic circuits (M86)
-    "DynamicCircuitError",
-    "DynamicCircuit",
-    "DynamicResult",
-    "DynamicSimulator",
-    # Circuit Templates Library (M88)
-    "TemplateError",
-    "CircuitTemplate",
-    "hardware_efficient_ansatz",
-    "iqp_circuit",
-    "qaoa_circuit",
-    "ghz_circuit",
-    "quantum_fourier_transform",
-    "uccsd_ansatz",
-    # Noise characterization pipeline (M87)
-    "NoiseCharError",
-    "CharacterizedNoise",
-    "NoiseCharacterizer",
-    # Floquet engineering + Bloch-Floquet band structure (M92)
-    "FloquetError",
-    "FloquetSystem",
-    "FloquetResult",
-    "BlochFloquetSolver",
-    "floquet_spectrum",
-    "floquet_effective_hamiltonian",
-    "driven_two_level",
-    # Quantum communication protocols (M97)
-    "ProtocolError",
-    "BB84Result",
-    "BB84Protocol",
-    "E91Result",
-    "E91Protocol",
-    "TeleportationResult",
-    "TeleportationProtocol",
-    "DenseCodingResult",
-    "DenseCodingProtocol",
-    "bb84_key_rate",
-    "chsh_inequality_value",
-    "teleportation_fidelity",
-    # Quantum network simulation (M96)
-    "NetworkError",
-    "QuantumNode",
-    "QuantumChannel",
-    "QuantumNetwork",
-    "BellPairGenerator",
-    "EntanglementSwapper",
-    "QuantumRepeater",
-    "NetworkResult",
-    "fidelity_after_dephasing",
-    "fidelity_after_swapping",
-    "fidelity_after_purification",
-    "simulate_repeater_chain",
-    # Noise-aware VQE + SPSA optimizer (M95)
-    "NoiseVQEError",
-    "SPSAOptimizer",
-    "NoiseAwareVQEResult",
-    "NoiseAwareVQE",
-    "build_hea_circuit",
-    "hardware_efficient_vqe",
-    "n_hea_params",
-    # Time-dependent DMRG (M94)
-    "TDMRGError",
-    "TDMRGResult",
-    "TDMRGSolver",
-    "real_time_evolve",
-    "imaginary_time_evolve",
-    # Real hardware backend integration (M93)
-    "HardwareError",
-    "BackendCalibration",
-    "HardwareJobResult",
-    "HardwareJob",
-    "IBMHardwareBackend",
-    "IonQBackend",
-    "GoogleBackend",
-    "calibration_to_noise_model",
-    "available_backends",
-    # Quantum walk algorithms (M100)
-    "QuantumWalkError",
-    "WalkResult",
-    "GroverWalkResult",
-    "DiscreteTimeWalk",
-    "ContinuousTimeQuantumWalk",
-    "GroverWalk",
-    "walk_spectrum",
-    "ctqw_transfer_probability",
-    # Suzuki-Trotter Hamiltonian simulation (M101)
-    "TrotterError",
-    "TrotterTerm",
-    "TrotterResult",
-    "TrotterSimulator",
-    "heisenberg_trotter",
-    "ising_trotter",
-    # Many-body physics enhancements (M102)
-    "ManyBodyError",
-    "OTOCResult",
-    "OTOCSweepResult",
-    "SYKResult",
-    "SYKModel",
-    "DMRG2DResult",
-    "SnakeMapper",
-    "compute_otoc",
-    "otoc_sweep",
-    "syk_hamiltonian",
-    "dmrg_2d",
-    # MPS simulator extension (M104)
-    "MPSSimulatorError",
-    "AdaptiveTruncation",
-    "MPSSimulator",
-    "CachedDMRG",
-    "BenchmarkResult",
-    "ComparisonResult",
-    "mps_benchmark",
-    "ghz_fidelity",
-    "compare_mps_sv",
-    # GPU-accelerated MPS (M109)
-    "GpuBenchmarkResult",
-    "gpu_mps_benchmark",
-    "get_backend_module",
-    "is_gpu_available",
-    # Large-scale Clifford simulation (M110)
-    "CliffordError",
-    "StabilizerState",
-    "CliffordSimulator",
-    "StimCircuit",
-    "StimCircuitError",
-    # Distributed statevector via Ray (M111)
-    "DistSVError",
-    "DistSVResult",
-    "DistributedSVSimulator",
-    "is_ray_available",
-    "dist_sv_benchmark",
-    # Fault-tolerant QC end-to-end pipeline (M112) + resource estimator (M156)
-    "FTQCPipelineError",
-    "PipelineResult",
-    "ThresholdCurveResult",
-    "FTQCPipeline",
-    "threshold_curve",
-    "threshold_crossing",
-    "ResourceEstimate",
-    "FTQCResourceEstimator",
-    # Excited-state quantum chemistry (M113)
-    "ExcitedStateError",
-    "ExcitedStateResult",
-    "ExcitedStateVQE",
-    "ConicalIntersectionResult",
-    "detect_conical_intersections",
-    "pyscf_to_pauli_hamiltonian",
-    # Non-equilibrium quantum dynamics (M114)
-    "NonEquilError",
-    "KeldyshResult",
-    "KeldyshSolver",
-    "EntanglementDynamicsResult",
-    "EntanglementDynamics",
-    "KibbleZurekResult",
-    "KibbleZurekScaling",
-    # CVaR-QAOA combinatorial optimisation (M115)
-    "CVaRQAOAError",
-    "CVaRQAOAResult",  # quantx_engine.qaoa_optim.QAOAResult aliased to avoid clash
-    "MaxCutProblem",
-    "TSPProblem",
-    "CVaRQAOA",
-    "QAOALandscapeResult",
-    "QAOALandscape",
-    "warm_start_qaoa",
-    # Qiskit 1.x Primitives V2 compatibility (M116)
-    "QiskitCompatError",
-    "BitArray",
-    "DataBin",
-    "PubResult",
-    "PrimitiveResult",
-    "SamplerPUB",
-    "EstimatorPUB",
-    "QuantXSamplerV2",
-    "QuantXEstimatorV2",
-    # Jupyter interactive widgets (M117)
-    "WidgetError",
-    "CircuitWidgetState",
-    "CircuitWidget",
-    "BlochSphereWidgetState",
-    "BlochSphereWidget",
-    "JobMonitorWidgetState",
-    "JobMonitorWidget",
-    # Neutral-atom Rydberg blockade simulator (M118)
-    "RydbergError",
-    "RydbergAtom",
-    "RydbergHamiltonian",
-    "RydbergResult",
-    "RydbergSimulator",
-    # Bosonic codes — cat qubits + GKP (M119)
-    "BosonicError",
-    "CatNoiseModel",
-    "CatQubit",
-    "GKPState",
-    "GKPDecoder",
-    # Fault-tolerant T gate via magic state injection (M120)
-    "MagicStateError",
-    "MagicStateFactory",
-    "FTTGate",
-    "FTCCXGate",
-    # Quantum memory + dynamical decoupling (M126)
-    "DDError",
-    "DDSequence",
-    "DynamicalDecoupling",
-    "QuantumMemory",
-    # Measurement-based quantum computation (M125)
-    "MBQCError",
-    "GraphState",
-    "MBQCPattern",
-    # Orbital-optimised VQE (M124)
-    "OOVQEError",
-    "OOVQEResult",
-    "OOVQESolver",
-    # Quantum signal processing + QSVT (M123)
-    "QSPError",
-    "QSPAnglesFinder",
-    "QSVTCircuit",
-    # McLachlan variational quantum dynamics (M122)
-    "McLachlanError",
-    "McLachlanResult",
-    "McLachlanSolver",
-    # Quantum LDPC codes — hypergraph product + bicycle (M121)
-    "LDPCError",
-    "ClassicalCode",
-    "HypergraphProductCode",
-    "LDPCDecoder",
-    "bicycle_code",
-    # Backend capability introspection (M153)
-    "backend_info",
-    # Pure-Python dense statevector simulator (M160)
-    "StatevectorSimulator",
-    # QuantumCircuit fluent builder API (M161)
-    "QuantumCircuit",
-    "CircuitResult",
-    "Symbol",
-]
+from .engine import CircuitError, Engine, QuantXNativeUnavailable  # noqa: E402
+
+__all__ = ["__version__", "backend_info", "Engine", "CircuitError", "QuantXNativeUnavailable"]
+
+
+# ── The old paths of the experimental modules ───────────────────────────────────────────
+# They moved to quantx_engine.contrib in 0.2.0. Until _REMOVED_IN, `import quantx_engine.qec`
+# gives quantx_engine.contrib.qec itself (the same module object), and the names this
+# package used to export resolve to the contrib objects; each warns once per call site.
+
+_REMOVED_IN = "0.4.0"
+
+_MOVED_MODULES = frozenset((
+    "adapters advanced_chemistry bosonic cached_dmrg chemistry circuit clifford_sim clifford_t "
+    "crosstalk dynamic dyndecouple excited_state fault_tolerant finite_size floquet ft_tgate "
+    "ftqc_pipeline gpu hardware ibm jupyter_widgets lanczos lindblad many_body mbqc mclachlan "
+    "mitigation mps_simulator neqdyn noise noise_char noise_vqe oovqe optimal_control "
+    "pennylane_plugin primitives pulse qaoa_optim qasm qbm qec qiskit_compat qldpc qml qsp_qsvt "
+    "quantum_channel quantum_kernel quantum_network quantum_protocols quantum_walk ray_sim rb_qv "
+    "rydberg spectral statevector sweep tdmrg templates tensor_network tomography transpiler "
+    "trotter xeb "
+).split())
+
+# The names this package exported before 0.2.0, by the contrib module that defines each.
+_OLD_EXPORTS = {
+    "adapters": "AdapterError to_cirq from_cirq to_braket from_braket",
+    "advanced_chemistry": (
+        "AdvChemError build_hamiltonian_matrix hf_state UCCSDResult UCCSDSolver ADAPTVQEResult "
+        "ADAPTVQESolver QAOAResult QAOASolver QITEResult QITESolver"
+    ),
+    "bosonic": "BosonicError CatNoiseModel CatQubit GKPState GKPDecoder",
+    "chemistry": "PauliTerm PauliHamiltonian jordan_wigner MolecularVQE ChemistryError",
+    "circuit": "QuantumCircuit CircuitResult Symbol",
+    "clifford_sim": "CliffordError StabilizerState CliffordSimulator StimCircuit StimCircuitError",
+    "clifford_t": "GateSequence CliffordGroup SolovayKitaev TCountOptimizer CliffordTError",
+    "crosstalk": (
+        "CrosstalkError CouplingGraph CrosstalkModel zz_routing_cost cheapest_path echo_sequence"
+    ),
+    "dynamic": "DynamicCircuitError DynamicCircuit DynamicResult DynamicSimulator",
+    "dyndecouple": "DDError DDSequence DynamicalDecoupling QuantumMemory",
+    "excited_state": (
+        "ExcitedStateError ExcitedStateResult ExcitedStateVQE ConicalIntersectionResult "
+        "detect_conical_intersections pyscf_to_pauli_hamiltonian"
+    ),
+    "fault_tolerant": (
+        "FTError LogicalQubit MagicStateDistillery DistillationResult FaultTolerantCircuit "
+        "logical_error_rate_vs_distance t_gate_cost"
+    ),
+    "finite_size": (
+        "FiniteSizeError ScalingResult EntanglementResult FiniteSizeScaling binder_cumulant "
+        "entanglement_scaling"
+    ),
+    "floquet": (
+        "FloquetError FloquetSystem FloquetResult BlochFloquetSolver floquet_spectrum "
+        "floquet_effective_hamiltonian driven_two_level"
+    ),
+    "ft_tgate": "MagicStateError MagicStateFactory FTTGate FTCCXGate",
+    "ftqc_pipeline": (
+        "FTQCPipelineError PipelineResult ThresholdCurveResult FTQCPipeline threshold_curve "
+        "threshold_crossing ResourceEstimate FTQCResourceEstimator"
+    ),
+    "gpu": (
+        "GpuBackend GpuStatevector GpuLanczos GpuBatchedCircuit GpuError gpu_info to_gpu to_cpu"
+    ),
+    "hardware": (
+        "HardwareError BackendCalibration HardwareJobResult HardwareJob IBMHardwareBackend "
+        "IonQBackend GoogleBackend calibration_to_noise_model available_backends"
+    ),
+    "ibm": "IBMQuantumBackend IBMConnectorError circuit_to_qasm3",
+    "jupyter_widgets": (
+        "WidgetError CircuitWidgetState CircuitWidget BlochSphereWidgetState BlochSphereWidget "
+        "JobMonitorWidgetState JobMonitorWidget"
+    ),
+    "lanczos": "LanczosSolver ArnoldiSolver SparseHamiltonian EigenResult LanczosError",
+    "lindblad": (
+        "LindbladError JumpOperator LindbladFrame EntanglementTrace LindbladResult LindbladSolver"
+    ),
+    "many_body": (
+        "ManyBodyError OTOCResult OTOCSweepResult SYKResult SYKModel DMRG2DResult SnakeMapper "
+        "compute_otoc otoc_sweep syk_hamiltonian dmrg_2d"
+    ),
+    "mbqc": "MBQCError GraphState MBQCPattern",
+    "mclachlan": "McLachlanError McLachlanResult McLachlanSolver",
+    "mitigation": (
+        "MitigationError fold_gates Extrapolator RichardsonExtrapolator PolyExtrapolator "
+        "ExpExtrapolator ZNEResult zne_mitigate QuasiProbabilityDecomposition PECResult "
+        "pec_mitigate make_sv_executor"
+    ),
+    "mps_simulator": (
+        "MPSSimulatorError AdaptiveTruncation MPSSimulator CachedDMRG BenchmarkResult "
+        "ComparisonResult GpuBenchmarkResult mps_benchmark ghz_fidelity compare_mps_sv "
+        "gpu_mps_benchmark get_backend_module is_gpu_available"
+    ),
+    "neqdyn": (
+        "NonEquilError KeldyshResult KeldyshSolver EntanglementDynamicsResult "
+        "EntanglementDynamics KibbleZurekResult KibbleZurekScaling"
+    ),
+    "noise": (
+        "NoiseModel DepolarizingNoise AmplitudeDampingNoise ThermalRelaxationNoise ReadoutNoise "
+        "CompositeNoise NoiseModelError"
+    ),
+    "noise_char": "NoiseCharError CharacterizedNoise NoiseCharacterizer",
+    "noise_vqe": (
+        "NoiseVQEError SPSAOptimizer NoiseAwareVQEResult NoiseAwareVQE build_hea_circuit "
+        "hardware_efficient_vqe n_hea_params"
+    ),
+    "oovqe": "OOVQEError OOVQEResult OOVQESolver",
+    "optimal_control": "OCError GRAPEResult GRAPESolver CRABResult CRABSolver",
+    "pennylane_plugin": "QuantXDevice QuantXPluginError",
+    "primitives": "PrimitiveError SparsePauliOp EstimatorResult SamplerResult Estimator Sampler",
+    "pulse": (
+        "PulseError DriveChannel MeasureChannel ControlChannel ConstantWaveform GaussianWaveform "
+        "DRAGWaveform FlatTopWaveform ArbitraryWaveform PulseSchedule PulseInstruction "
+        "QubitSystem PulseResult PulseSimulator pi_pulse_area"
+    ),
+    "qaoa_optim": (
+        "CVaRQAOAError MaxCutProblem TSPProblem CVaRQAOA QAOALandscapeResult QAOALandscape "
+        "warm_start_qaoa"
+    ),
+    "qasm": "ParseError parse_qasm_to_circuit",
+    "qbm": "RBM QuantumBoltzmannMachine BoltzmannSampler QBMError",
+    "qec": "RepetitionCode SurfaceCode LogicalErrorSimulator ThresholdResult QECError MWPMDecoder",
+    "qiskit_compat": (
+        "QiskitCompatError BitArray DataBin PubResult PrimitiveResult SamplerPUB EstimatorPUB "
+        "QuantXSamplerV2 QuantXEstimatorV2"
+    ),
+    "qldpc": "LDPCError ClassicalCode HypergraphProductCode LDPCDecoder bicycle_code",
+    "qml": "QuantumNeuralNetwork QuantumClassifier QMLError",
+    "qsp_qsvt": "QSPError QSPAnglesFinder QSVTCircuit",
+    "quantum_channel": "ChannelError SteadyStateSolver",
+    "quantum_kernel": (
+        "QKernelError QuantumFeatureMap ZZFeatureMap FidelityQuantumKernel target_alignment "
+        "frobenius_alignment QSVMResult QSVM"
+    ),
+    "quantum_network": (
+        "QuantumChannel NetworkError QuantumNode QuantumNetwork BellPairGenerator "
+        "EntanglementSwapper QuantumRepeater NetworkResult fidelity_after_dephasing "
+        "fidelity_after_swapping fidelity_after_purification simulate_repeater_chain"
+    ),
+    "quantum_protocols": (
+        "ProtocolError BB84Result BB84Protocol E91Result E91Protocol TeleportationResult "
+        "TeleportationProtocol DenseCodingResult DenseCodingProtocol bb84_key_rate "
+        "chsh_inequality_value teleportation_fidelity"
+    ),
+    "quantum_walk": (
+        "QuantumWalkError WalkResult GroverWalkResult DiscreteTimeWalk ContinuousTimeQuantumWalk "
+        "GroverWalk walk_spectrum ctqw_transfer_probability"
+    ),
+    "ray_sim": (
+        "DistSVError DistSVResult DistributedSVSimulator is_ray_available dist_sv_benchmark"
+    ),
+    "rb_qv": "RBQVError RBResult StandardRB QVResult QuantumVolume",
+    "rydberg": "RydbergError RydbergAtom RydbergHamiltonian RydbergResult RydbergSimulator",
+    "spectral": "SpectralError SpectralResult KrylovResult KrylovEvolver",
+    "statevector": "StatevectorSimulator",
+    "sweep": "ParameterSweep SweepResult SweepError grid_sweep list_sweep",
+    "tdmrg": "TDMRGError TDMRGResult TDMRGSolver real_time_evolve imaginary_time_evolve",
+    "templates": (
+        "TemplateError CircuitTemplate hardware_efficient_ansatz iqp_circuit qaoa_circuit "
+        "ghz_circuit quantum_fourier_transform uccsd_ansatz"
+    ),
+    "tensor_network": "MPS MPO TEBD DMRGResult DMRG TensorNetworkError",
+    "tomography": "TomographyError StateTomography ProcessTomography",
+    "transpiler": "TranspilerError GateOp CouplingMap TranspileResult HardwareTranspiler",
+    "trotter": (
+        "TrotterError TrotterTerm TrotterResult TrotterSimulator heisenberg_trotter ising_trotter"
+    ),
+    "xeb": "XEBError XEBResult CrossEntropyBenchmarking",
+}
+_MOVED_NAMES = {name: (module, name) for module, names in _OLD_EXPORTS.items()
+                for name in names.split()}
+_MOVED_NAMES.update({
+    "CVaRQAOAResult": ("qaoa_optim", "QAOAResult"),
+})
+
+
+def _moved(old, new):
+    _warnings.warn(f"{old} is now {new}: it is experimental, and the old name goes in "
+                   f"{_REMOVED_IN}.", DeprecationWarning, stacklevel=3)
+
+
+def __getattr__(name):
+    # `from quantx_engine import X` looks X up twice, first through hasattr() in the import
+    # system's _handle_fromlist; only the second lookup, the import itself, warns.
+    quiet = _sys._getframe(1).f_code.co_name == "_handle_fromlist"
+    if name in _MOVED_MODULES:
+        if not quiet:
+            _moved(f"{__name__}.{name}", f"{__name__}.contrib.{name}")
+        module = _importlib.import_module(f"{__name__}.contrib.{name}")
+        _sys.modules.setdefault(f"{__name__}.{name}", module)
+        return module
+    if name in _MOVED_NAMES:
+        module, attr = _MOVED_NAMES[name]
+        if not quiet:
+            _moved(f"{__name__}.{name}", f"{__name__}.contrib.{module}.{attr}")
+        return getattr(_importlib.import_module(f"{__name__}.contrib.{module}"), attr)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+class _OldPaths(_abc.MetaPathFinder, _abc.Loader):
+    """Imports quantx_engine.<m>, for a module that moved, as quantx_engine.contrib.<m>."""
+
+    _quantx_old_paths = True
+
+    def __init__(self):
+        self._specs = {}
+
+    def find_spec(self, fullname, path=None, target=None):
+        parent, _, name = fullname.rpartition(".")
+        if parent == __name__ and name in _MOVED_MODULES:
+            return _util.spec_from_loader(fullname, self)
+        return None
+
+    def create_module(self, spec):
+        new = f"{__name__}.contrib.{spec.name.rpartition('.')[2]}"
+        _moved(spec.name, new)
+        module = _importlib.import_module(new)
+        self._specs[spec.name] = module.__spec__
+        return module
+
+    def exec_module(self, module):
+        # module_from_spec() pointed the contrib module's __spec__ at the old name.
+        module.__spec__ = self._specs.pop(module.__spec__.name)
+
+
+# First in line: an editable install of an older checkout must not answer for these names.
+if not any(getattr(f, "_quantx_old_paths", False) for f in _sys.meta_path):
+    _sys.meta_path.insert(0, _OldPaths())

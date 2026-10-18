@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.mps_simulator import (
+from quantx_engine.contrib.mps_simulator import (
     MPSSimulatorError,
     AdaptiveTruncation,
     MPSSimulator,
@@ -17,7 +17,7 @@ from quantx_engine.mps_simulator import (
     compare_mps_sv,
     _ghz_mps,
 )
-from quantx_engine.tensor_network import MPS, MPO
+from quantx_engine.contrib.tensor_network import MPS, MPO
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -361,7 +361,7 @@ class TestCachedDMRG:
     def test_agrees_with_standard_dmrg(self):
         """CachedDMRG and standard DMRG should give the same energy."""
         mpo = MPO.heisenberg(n=6, J=1.0)
-        from quantx_engine.tensor_network import DMRG
+        from quantx_engine.contrib.tensor_network import DMRG
         ref = DMRG(mpo=mpo, max_chi=8, n_sweeps=6, seed=7).run()
         cached = CachedDMRG(mpo=mpo, max_chi=8, n_sweeps=6, seed=7).run()
         assert cached.energy == pytest.approx(ref.energy, abs=1e-3)
@@ -382,25 +382,3 @@ class TestCachedDMRG:
         max_bond_full = max(t.shape[2] for t in result_full.mps.tensors[:-1])
         max_bond_trimmed = max(t.shape[2] for t in result_trimmed.mps.tensors[:-1])
         assert max_bond_trimmed <= max_bond_full
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Exports
-# ─────────────────────────────────────────────────────────────────────────────
-
-class TestExports:
-    def test_importable_from_package(self):
-        from quantx_engine import (
-            MPSSimulatorError,
-            AdaptiveTruncation,
-            MPSSimulator,
-            CachedDMRG,
-            BenchmarkResult,
-            ComparisonResult,
-            mps_benchmark,
-            ghz_fidelity,
-            compare_mps_sv,
-        )
-        assert callable(mps_benchmark)
-        assert callable(ghz_fidelity)
-        assert callable(compare_mps_sv)

@@ -5,7 +5,7 @@ import math
 import pytest
 import numpy as np
 
-from quantx_engine.jupyter_widgets import (
+from quantx_engine.contrib.jupyter_widgets import (
     WidgetError,
     CircuitWidgetState,
     CircuitWidget,
@@ -184,26 +184,26 @@ class TestCircuitWidget:
 class TestBlochCoords:
     def test_zero_state_is_north_pole(self):
         """⟨Z⟩=1, so z=1 (north pole) for |0⟩."""
-        from quantx_engine.jupyter_widgets import _bloch_coords_from_sv
+        from quantx_engine.contrib.jupyter_widgets import _bloch_coords_from_sv
         x, y, z = _bloch_coords_from_sv(_zero_sv())
         assert abs(z - 1.0) < 1e-10
         assert abs(x) < 1e-10
         assert abs(y) < 1e-10
 
     def test_one_state_is_south_pole(self):
-        from quantx_engine.jupyter_widgets import _bloch_coords_from_sv
+        from quantx_engine.contrib.jupyter_widgets import _bloch_coords_from_sv
         x, y, z = _bloch_coords_from_sv(_one_sv())
         assert abs(z + 1.0) < 1e-10
 
     def test_plus_state_on_equator(self):
         """|+⟩ lies on the equator, x=1."""
-        from quantx_engine.jupyter_widgets import _bloch_coords_from_sv
+        from quantx_engine.contrib.jupyter_widgets import _bloch_coords_from_sv
         x, y, z = _bloch_coords_from_sv(_plus_sv())
         assert abs(x - 1.0) < 1e-10
         assert abs(z) < 1e-10
 
     def test_wrong_shape_raises(self):
-        from quantx_engine.jupyter_widgets import _bloch_coords_from_sv
+        from quantx_engine.contrib.jupyter_widgets import _bloch_coords_from_sv
         with pytest.raises(WidgetError):
             _bloch_coords_from_sv(np.array([1.0, 0.0, 0.0]))
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from quantx_engine.qldpc import (
+from quantx_engine.contrib.qldpc import (
     ClassicalCode,
     HypergraphProductCode,
     LDPCDecoder,

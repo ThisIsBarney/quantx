@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.trotter import (
+from quantx_engine.contrib.trotter import (
     TrotterError,
     TrotterTerm,
     TrotterResult,
@@ -632,14 +632,7 @@ class TestIsingTrotter:
 
 class TestExports:
     def test_importable_from_module(self):
-        from quantx_engine.trotter import (
-            TrotterError, TrotterTerm, TrotterResult,
-            TrotterSimulator, heisenberg_trotter, ising_trotter,
-        )
-        assert TrotterSimulator is not None
-
-    def test_exported_from_package(self):
-        from quantx_engine import (
+        from quantx_engine.contrib.trotter import (
             TrotterError, TrotterTerm, TrotterResult,
             TrotterSimulator, heisenberg_trotter, ising_trotter,
         )

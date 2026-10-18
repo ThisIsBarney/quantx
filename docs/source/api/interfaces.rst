@@ -22,14 +22,14 @@ Register QuantX as a PennyLane device (requires ``quantx-engine[pennylane]``):
 
    print(circuit())
 
-.. automodule:: quantx_engine.pennylane_plugin
+.. automodule:: quantx_engine.contrib.pennylane_plugin
    :members:
    :show-inheritance:
 
 Qiskit V2 Primitives
 ---------------------
 
-.. automodule:: quantx_engine.primitives
+.. automodule:: quantx_engine.contrib.primitives
    :members:
    :show-inheritance:
 
@@ -38,6 +38,6 @@ Jupyter Widgets
 
 Interactive visualisation widgets for Jupyter notebooks (requires ``ipywidgets``).
 
-.. automodule:: quantx_engine.jupyter_widgets
+.. automodule:: quantx_engine.contrib.jupyter_widgets
    :members:
    :show-inheritance:

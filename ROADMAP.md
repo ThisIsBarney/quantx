@@ -51,7 +51,7 @@ verified capabilities in users' hands.
 | M4 | General models from Python | XXZ, J1-J2, spin-1 and Hubbard ground states from Python, against exact diagonalisation to 1e-10 (#196) | ✅ |
 | M5 | Fermionic circuits from Python | HVA circuits on chains, ladders, strips and cylinders, against a state vector (#197) | ✅ |
 | M6 | Finite-temperature spectroscopy from Python | S(k, ω, T) and σ(ω, T) for the M4 models, against exact diagonalisation. Done for the XXZ, spin-1 and Hubbard chains, against a full-space ED (#215); J1-J2, whose next-nearest coupling has no purified form in the engine yet, is left for later | ✅ |
-| M7 | A smaller product surface | The README describes the engine (#200); the pure-Python modules move to `quantx_engine.contrib`, marked experimental (planned for 0.2) | 🔄 |
+| M7 | A smaller product surface | The README describes the engine (#200); the pure-Python modules move to `quantx_engine.contrib`, marked experimental (planned for 0.2). The 63 modules outside the engine API moved, and `import quantx_engine` loads the engine alone; the old paths warn until 0.4.0 | ✅ |
 | M8 | Referee feasibility | A one-page assessment of a classical baseline for SU(2) lattice gauge-theory dynamics (60 sites, conserved charge): the bond dimension and error needed, against the published tensor-network baseline. The one-pager is in, [docs/referee_su2_hadron.md](docs/referee_su2_hadron.md) (#217): the instance is already matched classically (an MPS at χ = 800, under an hour on a laptop, converged by its submitter's comparison), and it is the tracker's only one with a conserved U(1) charge. Left: the measured bond dimension and error | 🔄 |
 | M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference. The scripts run anywhere, each with a quick check ([benchmarks/REPRODUCING.md](benchmarks/REPRODUCING.md), #220); the notebooks check the engine against exact diagonalisation and the Lieb–Wu solution ([notebooks/engine/](notebooks/engine/), #221) | ✅ |
 | **G1** | **Gate: installable and usable** | After `pip install`, 20 lines of Python give a Hubbard ground state, a finite-temperature spectral function and an HVA circuit, each matching its exact reference | ⬜ |
@@ -85,8 +85,8 @@ verified capabilities in users' hands.
   QuantX aims to be a backend for them.
 - **Our own GPU kernels for block-sparse contraction.** Those go to cuTENSOR.
 - **New features in the pure-Python modules.** Error correction, quantum networks,
-  bosonic codes, MBQC, Clifford simulation and similar modules are frozen, with
-  minimal maintenance, on their way to `contrib`.
+  bosonic codes, MBQC, Clifford simulation and similar modules are frozen in
+  `quantx_engine.contrib`, with minimal maintenance.
 - **A quantum-chemistry DMRG stack.** block2 is the standard; at most an FCIDUMP
   reader and cross-checks against block2.
 - **PEPS, for now.** quimb and tenax have it, and the referee targets do not need it.

@@ -47,7 +47,7 @@ def build_heisenberg_matrix(n: int) -> np.ndarray:
 
 def bench_quantx(n: int) -> BenchResult:
     try:
-        from quantx_engine.lanczos import LanczosSolver
+        from quantx_engine.contrib.lanczos import LanczosSolver
         H = build_heisenberg_matrix(n)
         solver = LanczosSolver(k=1, max_iter=200, tol=1e-10)
         with timer() as elapsed:

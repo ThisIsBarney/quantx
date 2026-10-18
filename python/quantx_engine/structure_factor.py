@@ -12,7 +12,7 @@ C into the dynamical structure factor
 
     S(k, omega) = sum_{r,t} e^{-i k r} e^{i omega t} C_r(t).
 
-This is distinct from ``quantx_engine.spectral`` (Lehmann/Krylov spectral
+This is distinct from ``quantx_engine.contrib.spectral`` (Lehmann/Krylov spectral
 functions on dense/sparse Hamiltonians); this module is the MPS route that
 scales to large chains.
 

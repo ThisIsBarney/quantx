@@ -1,4 +1,4 @@
-"""Tests for quantx_engine.mitigation (M70: ZNE + PEC)."""
+"""Tests for quantx_engine.contrib.mitigation (M70: ZNE + PEC)."""
 from __future__ import annotations
 
 import math
@@ -6,7 +6,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.mitigation import (
+from quantx_engine.contrib.mitigation import (
     MitigationError,
     ExtrapolationResult,
     RichardsonExtrapolator,
@@ -95,7 +95,7 @@ class TestInvertOp:
 
     def test_s_inverse_gives_identity(self):
         """S · PhaseShift(-π/2) = I (statevector test)."""
-        from quantx_engine.gpu import GpuStatevector
+        from quantx_engine.contrib.gpu import GpuStatevector
         sv = GpuStatevector(n_qubits=1)
         sv.apply_gate("H", 0)  # create superposition
         state_before = sv.state().copy()
@@ -105,7 +105,7 @@ class TestInvertOp:
 
     def test_t_inverse_gives_identity(self):
         """T · PhaseShift(-π/4) = I (statevector test)."""
-        from quantx_engine.gpu import GpuStatevector
+        from quantx_engine.contrib.gpu import GpuStatevector
         sv = GpuStatevector(n_qubits=1)
         sv.apply_gate("H", 0)
         state_before = sv.state().copy()
@@ -177,7 +177,7 @@ class TestFoldGates:
 
     def test_folded_circuit_same_result_as_original(self):
         """G·G†·G = G for any unitary G: folded circuit = original circuit (statevector)."""
-        from quantx_engine.gpu import GpuStatevector
+        from quantx_engine.contrib.gpu import GpuStatevector
 
         ops = [_ry_op(0, 0.7), _ry_op(1, 1.3), _cnot_op(0, 1)]
         folded = fold_gates(ops, 3.0)
@@ -281,7 +281,7 @@ class TestExpExtrapolator:
         monkeypatch.setitem(sys.modules, "scipy.optimize", None)
         monkeypatch.setitem(sys.modules, "scipy", None)
         import importlib
-        import quantx_engine.mitigation as m
+        import quantx_engine.contrib.mitigation as m
         # Directly simulate the ImportError path by patching the import
         with pytest.raises((MitigationError, ImportError)):
             ExpExtrapolator().extrapolate([1.0, 2.0, 3.0], [0.9, 0.8, 0.7])
@@ -378,7 +378,7 @@ class TestZNEMitigate:
 
     def test_statevector_executor_zne(self):
         """ZNE with make_sv_executor recovers ideal result (noiseless sim: already ideal)."""
-        from quantx_engine.gpu import GpuStatevector
+        from quantx_engine.contrib.gpu import GpuStatevector
 
         # Single qubit: apply RY(π/2) → |+y⟩. Expectation <Z> = cos(π/2) = 0
         # For a noiseless executor, ZNE should return ~0 at all scale factors.

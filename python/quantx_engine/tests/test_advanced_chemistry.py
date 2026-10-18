@@ -507,34 +507,3 @@ class TestCrossMethodConsistency:
         adapt = ADAPTVQESolver(n_electrons=2, n_qubits=4)
         result = adapt.run(self.H, max_operators=5, n_iter_per_step=40)
         assert result.energy >= self.fci_energy - 1e-5
-
-
-# ===========================================================================
-# Public package exports
-# ===========================================================================
-
-def test_advanced_chemistry_importable_from_package():
-    from quantx_engine import (
-        AdvChemError as E,
-        build_hamiltonian_matrix as bh,
-        hf_state as hf,
-        UCCSDResult as UR,
-        UCCSDSolver as US,
-        ADAPTVQEResult as AR,
-        ADAPTVQESolver as AS,
-        QAOAResult as QR,
-        QAOASolver as QS,
-        QITEResult as QIR,
-        QITESolver as QIS,
-    )
-    assert E is AdvChemError
-    assert bh is build_hamiltonian_matrix
-    assert hf is hf_state
-    assert UR is UCCSDResult
-    assert US is UCCSDSolver
-    assert AR is ADAPTVQEResult
-    assert AS is ADAPTVQESolver
-    assert QR is QAOAResult
-    assert QS is QAOASolver
-    assert QIR is QITEResult
-    assert QIS is QITESolver

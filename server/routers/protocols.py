@@ -66,7 +66,7 @@ async def run_bb84(req: BB84Request) -> dict[str, Any]:
     asymptotic Shor–Preskill secure key rate. Returns the sifted key
     bits (without the error-check sample) and Eve-detection flag.
     """
-    from quantx_engine.quantum_protocols import BB84Protocol, ProtocolError
+    from quantx_engine.contrib.quantum_protocols import BB84Protocol, ProtocolError
     try:
         proto = BB84Protocol(
             channel_error_rate=req.channel_error_rate,
@@ -99,7 +99,7 @@ async def run_e91(req: E91Request) -> dict[str, Any]:
     fidelity). Returns the CHSH S-parameter, Bell violation flag, key
     bits extracted, and Shor–Preskill secure key rate.
     """
-    from quantx_engine.quantum_protocols import E91Protocol, ProtocolError
+    from quantx_engine.contrib.quantum_protocols import E91Protocol, ProtocolError
     try:
         proto = E91Protocol(
             bell_pair_fidelity=req.bell_pair_fidelity,
@@ -131,7 +131,7 @@ async def run_teleportation(req: TeleportationRequest) -> dict[str, Any]:
     after BSM imperfection. Returns per-protocol success rate vs the
     classical 2/3 fidelity limit.
     """
-    from quantx_engine.quantum_protocols import TeleportationProtocol, ProtocolError
+    from quantx_engine.contrib.quantum_protocols import TeleportationProtocol, ProtocolError
     try:
         proto = TeleportationProtocol(
             channel_fidelity=req.channel_fidelity,
@@ -161,7 +161,7 @@ async def run_dense_coding(req: DenseCodingRequest) -> dict[str, Any]:
     Returns the channel capacity (bits/qubit), message error rate, and
     total classical bits encoded.
     """
-    from quantx_engine.quantum_protocols import DenseCodingProtocol, ProtocolError
+    from quantx_engine.contrib.quantum_protocols import DenseCodingProtocol, ProtocolError
     try:
         proto = DenseCodingProtocol(
             channel_fidelity=req.channel_fidelity,
@@ -186,7 +186,7 @@ async def run_dense_coding(req: DenseCodingRequest) -> dict[str, Any]:
 @router.post("/utils/key-rate", summary="Compute Shor-Preskill BB84 key rate")
 async def compute_key_rate(req: KeyRateRequest) -> dict[str, Any]:
     """Return the asymptotic BB84 secure key rate: r = 1 − 2·h₂(QBER)."""
-    from quantx_engine.quantum_protocols import bb84_key_rate, ProtocolError
+    from quantx_engine.contrib.quantum_protocols import bb84_key_rate, ProtocolError
     try:
         rate = bb84_key_rate(req.qber)
     except ProtocolError as exc:
@@ -197,7 +197,7 @@ async def compute_key_rate(req: KeyRateRequest) -> dict[str, Any]:
 @router.post("/utils/teleportation-fidelity", summary="Compute teleportation average fidelity")
 async def compute_teleportation_fidelity(req: TeleportationFidelityRequest) -> dict[str, Any]:
     """Return average teleportation fidelity: f = (2F + 1) / 3."""
-    from quantx_engine.quantum_protocols import teleportation_fidelity, ProtocolError
+    from quantx_engine.contrib.quantum_protocols import teleportation_fidelity, ProtocolError
     try:
         f = teleportation_fidelity(req.channel_fidelity)
     except ProtocolError as exc:

@@ -18,7 +18,7 @@ import time
 
 import pytest
 
-from quantx_engine.clifford_sim import (
+from quantx_engine.contrib.clifford_sim import (
     CliffordError,
     CliffordSimulator,
     StabilizerState,
@@ -527,30 +527,30 @@ class TestGTable:
     """Verify the phase-lookup table against known Pauli products."""
 
     def test_identity_gives_zero(self):
-        from quantx_engine.clifford_sim import _g_table
+        from quantx_engine.contrib.clifford_sim import _g_table
         for x2 in (0, 1):
             for z2 in (0, 1):
                 assert _g_table(0, 0, x2, z2) == 0
 
     def test_xx_is_identity_phase_zero(self):
-        from quantx_engine.clifford_sim import _g_table
+        from quantx_engine.contrib.clifford_sim import _g_table
         # X·X = I → g=0
         assert _g_table(1, 0, 1, 0) == 0
 
     def test_xy_gives_i(self):
-        from quantx_engine.clifford_sim import _g_table
+        from quantx_engine.contrib.clifford_sim import _g_table
         # X·Y = iZ  (matrix: (i,0;0,-i) = iZ)
         # sigma(1,0)·sigma(1,1) = i^g · sigma(0,1), g=1
         assert _g_table(1, 0, 1, 1) == 1
 
     def test_yx_gives_minus_i(self):
-        from quantx_engine.clifford_sim import _g_table
+        from quantx_engine.contrib.clifford_sim import _g_table
         # Y·X = -iZ  (matrix: (-i,0;0,i) = -iZ)
         # sigma(1,1)·sigma(1,0) = i^g · sigma(0,1), g=3
         assert _g_table(1, 1, 1, 0) == 3
 
     def test_yy_is_identity_phase_zero(self):
-        from quantx_engine.clifford_sim import _g_table
+        from quantx_engine.contrib.clifford_sim import _g_table
         # Y·Y = I  →  i^g · sigma(0,0) = I  →  g=0
         assert _g_table(1, 1, 1, 1) == 0
 

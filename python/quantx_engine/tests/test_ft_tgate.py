@@ -15,7 +15,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.ft_tgate import (
+from quantx_engine.contrib.ft_tgate import (
     FTCCXGate,
     FTTGate,
     MagicStateError,

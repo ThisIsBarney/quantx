@@ -52,7 +52,7 @@ class TestMolecularVQELiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.chemistry import MolecularVQE
+            from quantx_engine.contrib.chemistry import MolecularVQE
             self.MolecularVQE = MolecularVQE
         except ImportError:
             pytest.skip("chemistry module not available")
@@ -64,7 +64,7 @@ class TestMolecularVQELiterature:
         if H is None:
             # Try alternate API
             try:
-                from quantx_engine.advanced_chemistry import build_hamiltonian_matrix
+                from quantx_engine.contrib.advanced_chemistry import build_hamiltonian_matrix
                 H = build_hamiltonian_matrix(problem.hamiltonian)
             except Exception:
                 pytest.skip("Could not build Hamiltonian matrix")
@@ -79,7 +79,7 @@ class TestMolecularVQELiterature:
         """
         problem = self.MolecularVQE.h2(bond_length=0.735)
         try:
-            from quantx_engine.advanced_chemistry import build_hamiltonian_matrix
+            from quantx_engine.contrib.advanced_chemistry import build_hamiltonian_matrix
             H = build_hamiltonian_matrix(problem.hamiltonian)
         except Exception:
             pytest.skip("Could not build H2 Hamiltonian matrix")
@@ -112,8 +112,8 @@ class TestQITELiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.advanced_chemistry import QITESolver, build_hamiltonian_matrix
-            from quantx_engine.chemistry import MolecularVQE
+            from quantx_engine.contrib.advanced_chemistry import QITESolver, build_hamiltonian_matrix
+            from quantx_engine.contrib.chemistry import MolecularVQE
             self.QITESolver = QITESolver
             self.build_H = build_hamiltonian_matrix
             self.MolecularVQE = MolecularVQE
@@ -170,7 +170,7 @@ class TestExcitedStateLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.excited_state import ExcitedStateVQE
+            from quantx_engine.contrib.excited_state import ExcitedStateVQE
             self.ExcitedStateVQE = ExcitedStateVQE
         except ImportError:
             pytest.skip("excited_state not available")

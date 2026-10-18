@@ -24,7 +24,7 @@ class TestQSPLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.qsp_qsvt import QSPAnglesFinder
+            from quantx_engine.contrib.qsp_qsvt import QSPAnglesFinder
             self.QSPAnglesFinder = QSPAnglesFinder
         except ImportError:
             pytest.skip("qsp_qsvt not available")
@@ -56,7 +56,7 @@ class TestQuantumWalkLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.quantum_walk import DiscreteTimeWalk, ContinuousTimeQuantumWalk
+            from quantx_engine.contrib.quantum_walk import DiscreteTimeWalk, ContinuousTimeQuantumWalk
             self.DiscreteTimeWalk = DiscreteTimeWalk
             self.ContinuousTimeQuantumWalk = ContinuousTimeQuantumWalk
         except ImportError:
@@ -95,7 +95,7 @@ class TestQuantumWalkLiterature:
         be significantly above 1/N after sqrt(N) ~ 10 steps.
         """
         try:
-            from quantx_engine.quantum_walk import GroverWalk
+            from quantx_engine.contrib.quantum_walk import GroverWalk
             N = 100
             walk = GroverWalk(n_nodes=N, marked=[0])
             result = walk.run(n_steps=int(N ** 0.5) + 2)

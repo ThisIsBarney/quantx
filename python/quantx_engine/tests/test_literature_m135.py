@@ -69,7 +69,7 @@ class TestMPSSimulatorLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.mps_simulator import MPSSimulator, ghz_fidelity
+            from quantx_engine.contrib.mps_simulator import MPSSimulator, ghz_fidelity
             self.MPSSimulator = MPSSimulator
             self.ghz_fidelity = ghz_fidelity
         except ImportError:
@@ -131,7 +131,7 @@ class TestDMRGLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.tensor_network import DMRG, MPO, MPS
+            from quantx_engine.contrib.tensor_network import DMRG, MPO, MPS
             self.DMRG = DMRG
             self.MPO = MPO
             self.MPS = MPS
@@ -167,7 +167,7 @@ class TestDMRGLiterature:
         so norm should be conserved to < 1e-10.
         """
         try:
-            from quantx_engine.tensor_network import TEBD, MPS
+            from quantx_engine.contrib.tensor_network import TEBD, MPS
         except ImportError:
             pytest.skip("TEBD not available")
 
@@ -199,7 +199,7 @@ class TestTDMRGLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.tdmrg import TDMRGSolver, imaginary_time_evolve
+            from quantx_engine.contrib.tdmrg import TDMRGSolver, imaginary_time_evolve
             self.TDMRGSolver = TDMRGSolver
             self.imaginary_time_evolve = imaginary_time_evolve
         except ImportError:
@@ -212,7 +212,7 @@ class TestTDMRGLiterature:
         toward the ground state, so energy E(tau) is non-increasing.
         """
         try:
-            from quantx_engine.tensor_network import MPO
+            from quantx_engine.contrib.tensor_network import MPO
             n = 4
             mpo = MPO.ising(n=n, J=1.0, h=0.5)
             result = self.imaginary_time_evolve(
@@ -229,7 +229,7 @@ class TestTDMRGLiterature:
     def test_real_time_norm_conservation(self):
         """Real-time tDMRG conserves state norm [Vidal2004]."""
         try:
-            from quantx_engine.tensor_network import MPO
+            from quantx_engine.contrib.tensor_network import MPO
             n = 4
             mpo = MPO.ising(n=n, J=1.0, h=0.5)
             result = self.TDMRGSolver(

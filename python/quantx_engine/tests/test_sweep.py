@@ -2,7 +2,7 @@
 from __future__ import annotations
 import math, time, pytest
 
-from quantx_engine.sweep import (
+from quantx_engine.contrib.sweep import (
     ParameterSweep, SweepResult, SweepError, grid_sweep, list_sweep
 )
 

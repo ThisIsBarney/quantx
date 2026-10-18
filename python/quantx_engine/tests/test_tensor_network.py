@@ -1,5 +1,5 @@
 """
-Tests for quantx_engine.tensor_network
+Tests for quantx_engine.contrib.tensor_network
 
 Covers MPS, MPO, TEBD, and DMRG functionality.
 Only requires numpy and pytest (no scipy).
@@ -10,7 +10,7 @@ import math
 import numpy as np
 import pytest
 
-from quantx_engine.tensor_network import (
+from quantx_engine.contrib.tensor_network import (
     TensorNetworkError,
     MPS,
     MPO,

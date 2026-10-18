@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import math
 import pytest
-from quantx_engine.chemistry import (
+from quantx_engine.contrib.chemistry import (
     PauliTerm, PauliHamiltonian, jordan_wigner, MolecularVQE, ChemistryError,
 )
 

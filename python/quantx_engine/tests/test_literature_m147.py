@@ -23,7 +23,7 @@ class TestManyBodyLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.many_body import SYKModel, syk_hamiltonian
+            from quantx_engine.contrib.many_body import SYKModel, syk_hamiltonian
             self.SYKModel = SYKModel
             self.syk_hamiltonian = syk_hamiltonian
         except ImportError:
@@ -58,7 +58,7 @@ class TestFiniteSizeLiterature:
     @pytest.fixture(autouse=True)
     def _import(self):
         try:
-            from quantx_engine.finite_size import FiniteSizeScaling, binder_cumulant
+            from quantx_engine.contrib.finite_size import FiniteSizeScaling, binder_cumulant
             self.FiniteSizeScaling = FiniteSizeScaling
             self.binder_cumulant = binder_cumulant
         except ImportError:
@@ -101,7 +101,7 @@ class TestSpectralLiterature:
     def _import(self):
         pytest.importorskip("scipy")
         try:
-            from quantx_engine.spectral import SpectralResult, KrylovEvolver
+            from quantx_engine.contrib.spectral import SpectralResult, KrylovEvolver
             self.SpectralResult = SpectralResult
             self.KrylovEvolver = KrylovEvolver
         except ImportError:
