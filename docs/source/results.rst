@@ -50,10 +50,13 @@ an open chain carries a 1/N term, and that term shrinks as U grows because the s
 velocity does. Fitting it out of the three longest chains removes most of the residual.
 
 **Ground states against independent exact diagonalisation.** For the XXZ, J1-J2, spin-1
-Heisenberg and Fermi-Hubbard chains, and for Hubbard ladders and cylinders where the
-fermion signs are physical, the Python API is checked against an exact diagonalisation
-written independently of the engine, to **1e-10**. These run in CI
-(``python/quantx_engine/tests/test_models_ed.py``).
+Heisenberg and Fermi-Hubbard chains, the Python API's ground states are checked against an
+exact diagonalisation written independently of the engine, to **1e-10**, in CI
+(``python/quantx_engine/tests/test_models_ed.py``). On an open chain the fermion signs are
+a pure gauge, so that gate cannot catch a consistent sign slip. Ladders and cylinders,
+where the signs are physical, are checked in the nightly C++ suite (``qx_hubbard_test``)
+against an explicit Jordan–Wigner diagonalisation: their Hamiltonians to 1e-12, and a
+half-filled cylinder's DMRG ground state to 1e-6.
 
 **Fermionic VQE circuits against a dense state vector.** Hamiltonian Variational Ansatz
 circuits are simulated *exactly*: every layer conserves particle number and spin, so the
@@ -230,11 +233,14 @@ min-of-2 runs:
 Data: the values are hard-coded in ``benchmarks/plot_margin_vs_chi.py`` from the
 measurements in ``docs/gpu_acceleration_report.md``; there is no CSV for this figure.
 
-The margin grows with χ because that is where the SVD dominates: the bare GPU SVD kernel
-is 45× the CPU one at χ = 1024. **Below χ ≈ 512 the engine is at parity or slower**, and
-that is reported rather than omitted. At N = 64, χ = 1024 the figure is 2.22× (2.66× FP32),
-consistent with the N = 32 measurement. Timings on this machine are thermally noisy, so
-the quoted numbers are minima over repeats.
+From χ = 256 to 1024 the margin grows with χ because that is where the SVD dominates: the
+bare GPU SVD kernel is 45× the CPU one at χ = 1024. **At χ = 256 the engine in FP64 is
+slower than TeNPy (0.91×; 0.79× at N = 64)**, and that is reported rather than omitted. At
+χ = 128 it is about 4.7× faster at N = 32 (measured in a separate session), but that is
+compiled code beating TeNPy's Python overhead rather than the GPU, which is why the figure
+notes it off-scale. At N = 64, χ = 1024 the figure is 2.22× (2.66× FP32), consistent with
+the N = 32 measurement. Timings on this machine are thermally noisy; the χ = 256–1024
+numbers are minima over two runs.
 
 The CUDA path requires a source build. **The published wheels are CPU-only**, so
 ``pip install quantx-engine`` does not give you these numbers.

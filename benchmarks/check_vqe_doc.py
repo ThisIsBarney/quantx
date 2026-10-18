@@ -11,7 +11,7 @@ present in the doc. Run it after regenerating any VQE data, before committing.
 
 Run: python benchmarks/check_vqe_doc.py   (exit 1 on any mismatch)
 """
-import csv, glob, math, os, re, subprocess, sys
+import ast, csv, glob, math, os, re, subprocess, sys
 
 HERE = os.path.dirname(__file__)
 DOCS = os.path.join(HERE, "..", "docs")
@@ -572,10 +572,10 @@ if len(cyl_even) != 1:
                  f"({sorted(cyl_even)}); the doc says one, so its framing needs rewriting")
 
 # ---- the published Results page ---------------------------------------------
-# Only values this script can DERIVE are asserted. The page also quotes the GPU margins,
-# which live in docs/gpu_acceleration_report.md rather than a CSV, and the Haldane and
-# Lieb-Wu reference values, which are external constants -- those are checked below only
-# where a CSV can reproduce them.
+# Only values this script can DERIVE are asserted. The GPU margins have no CSV, so they are
+# held to the values the figure's own script hard-codes from docs/gpu_acceleration_report.md;
+# the Haldane and Lieb-Wu reference values are external constants, checked only where a
+# CSV can reproduce them.
 if res is None:
     # NOT a skip. The block below is wrapped in `res is not None`, so a missing page made
     # every check vanish and the script still printed success -- the same silently-skipping
@@ -744,6 +744,95 @@ else:
         fails.append("README: the HVA state-vector bound sentence is gone or reworded, so "
                      "the Results page's bound can no longer be checked against it")
 
+    # The ED gates the page names, held to the tolerances those tests assert. The page once
+    # credited the Python chain gate with ladders and cylinders, which that file's own
+    # docstring says it cannot test (on an open chain the fermion signs are a gauge).
+    _ted = open(os.path.join(HERE, "..", "python", "quantx_engine", "tests",
+                             "test_models_ed.py"), encoding="utf-8").read()
+    _m = re.search(r"^TOL = (1e-\d+)$", _ted, re.M)
+    if not _m or "HubbardLattice" in _ted:
+        fails.append("results page: test_models_ed.py's tolerance moved, or it now covers "
+                     "HubbardLattice, so the ED paragraph needs re-reading")
+    else:
+        expect_res("Python ED gate tolerance",
+                   f"independently of the engine, to **{_m.group(1)}**, in CI")
+    _cpp = open(os.path.join(HERE, "..", "src", "hubbard_test.cpp"), encoding="utf-8").read()
+    _m = re.search(r"bool okg = eg2 < (1e-\d+) && eg3o < \1 && eg3c < \1 && e3 < (1e-\d+);",
+                   _cpp)
+    if not _m:
+        fails.append("results page: cannot find the width-W ED assertion in hubbard_test.cpp, "
+                     "so the ladder/cylinder tolerances on the page are unchecked")
+    else:
+        expect_res("C++ lattice ED tolerances",
+                   f"their Hamiltonians to {_m.group(1)}, and a half-filled cylinder's DMRG "
+                   f"ground state to {_m.group(2)}")
+    # The width scan's parameters per layer: the CSV's nangle is cumulative over layers.
+    _apl = {w: {int(r_["nangle"]) // p_ for (w_, p_), r_ in Wd.items() if w_ == w}
+            for w in {w for (w, _) in Wd}}
+    if any(len(v_) != 1 for v_ in _apl.values()):
+        fails.append(f"part E: angles per layer are not constant in depth ({_apl})")
+    else:
+        _a1 = _apl[min(_apl)].pop()
+        _aw = {v_.pop() for w_, v_ in _apl.items() if w_ != min(_apl)}
+        if len(_aw) == 1:
+            expect_res("angles per layer", f"({_aw.pop()} against the chain's {_a1})")
+        else:
+            fails.append(f"part E: the wider lattices no longer share one angle count ({_aw})")
+    # The Haldane figure: the page's quoted reference against the CSV's longest chain.
+    _hp = os.path.join(DOCS, "spin1_haldane.csv")
+    _m = re.search(r"\*\*−(1\.\d+) J\*\* per site", res)
+    if os.path.exists(_hp) and _m:
+        _H = {int(r_["N"]): r_ for r_ in csv.DictReader(open(_hp))}
+        _nh = max(_H)
+        _dh = abs(float(_H[_nh]["e_bulk_incremental"]) + float(_m.group(1)))
+        expect_res("Haldane size", f"By N = {_nh} the engine")
+        expect_res("Haldane agreement", f"about **{_dh:.0e}**".replace("e-0", "e-"))
+    else:
+        fails.append("results page: the Haldane reference value or its CSV is gone")
+
+    # The Performance section. Its numbers have no CSV, but they have one source: the values
+    # plot_margin_vs_chi.py hard-codes from docs/gpu_acceleration_report.md. Read them as
+    # literals -- running the script would rewrite the SVG -- and hold the page to them.
+    # Codex found "below chi ~ 512 the engine is at parity or slower" next to a figure that
+    # annotates a 4.7x win at chi = 128.
+    _gp_src = open(os.path.join(HERE, "plot_margin_vs_chi.py"), encoding="utf-8").read()
+    _lit = {}
+    for _node in ast.parse(_gp_src).body:
+        if (isinstance(_node, ast.Assign) and len(_node.targets) == 1
+                and isinstance(_node.targets[0], ast.Name)
+                and _node.targets[0].id in ("CHI", "SERIES")):
+            _lit[_node.targets[0].id] = ast.literal_eval(_node.value)
+    _ser = {s_[0]: s_[3] for s_ in _lit.get("SERIES", [])}
+    _g32, _f32 = _ser.get("N=32  GPU (FP64)"), _ser.get("N=32  GPU (FP32, opt-in)")
+    _g64, _f64 = _ser.get("N=64  GPU (FP64)"), _ser.get("N=64  GPU (FP32, opt-in)")
+    _chi = _lit.get("CHI")
+    _m128 = re.search(r"small χ \((\d+)\): ~([\d.]+)×", _gp_src)
+    if not (_chi and _g32 and _f32 and _g64 and _f64 and _m128):
+        fails.append("results page: cannot read the GPU figure's values from "
+                     "benchmarks/plot_margin_vs_chi.py, so the Performance section is unchecked")
+    else:
+        for c_, v_ in zip(_chi, _g32):
+            expect_res(f"GPU margin at chi={c_}", f"{v_:.2f}×")
+        expect_res("GPU FP32 margin, largest chi", f"({_f32[-1]:.2f}× with FP32)")
+        expect_res("N=64 margins, largest chi",
+                   f"{_g64[-1]:.2f}× ({_f64[-1]:.2f}× FP32)")
+        # "from chi = 256 to 1024 the margin grows", in every series the figure draws
+        if any(b_ <= a_ for v_ in _ser.values() for a_, b_ in zip(v_, v_[1:])):
+            fails.append("results page: a GPU series no longer grows with chi, so 'the "
+                         "margin grows with chi' is stale")
+        else:
+            expect_res("GPU growth range",
+                       f"From χ = {_chi[0]} to {_chi[-1]} the margin grows")
+        # every FP64 point below 1x is named with its value, at both sizes
+        for c_, v_, w_ in zip(_chi, _g32, _g64):
+            if v_ < 1:
+                expect_res(f"GPU slower at chi={c_}",
+                           f"At χ = {c_} the engine in FP64 is slower than TeNPy "
+                           f"({v_:.2f}×; {w_:.2f}× at N = 64)")
+        # and the small-chi win the figure annotates is stated, not denied
+        expect_res("GPU small-chi win", f"χ = {_m128.group(1)} it is about "
+                                        f"{_m128.group(2)}× faster")
+
     # The stripe demonstration. Its data line says the CSV is what plot_stripes.py writes
     # from the run's log, so the two must agree row for row; the page called a run the
     # showcase makes periodic in y a "strip", so the geometry is read from the showcase's
@@ -824,7 +913,8 @@ else:
             return rel in _tracked
         return os.path.exists(os.path.join(HERE, "..", rel))
 
-    for m in _re.findall(r"``((?:docs|benchmarks)/[A-Za-z0-9_.+-]+\.(?:csv|log))``", res):
+    for m in _re.findall(r"``((?:docs|benchmarks|python|src)/[A-Za-z0-9_./+-]+"
+                         r"\.(?:csv|log|py|md|cpp))``", res):
         if not _have(m):
             fails.append(f"results page: cites {m}, which is not committed")
     # A figure is reproducible only if the script that draws it runs on a fresh checkout.
