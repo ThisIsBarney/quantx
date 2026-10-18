@@ -816,6 +816,84 @@ else:
         expect_res("string order level", f"On a {_m.group(1)}-site chain the string order "
                                          f"parameter levels off at about {_so[-1][1]:.2f}")
 
+    # The finite-T current spectrum. Every number the page quotes is recomputed with the
+    # plotter's own functions from the committed correlator -- the numbers that came before
+    # #222 were quoted from no command at all -- and the committed figure must be exactly
+    # what the plotter draws from that CSV.
+    sys.path.insert(0, HERE)
+    import plot_conductivity as _pc
+    _cc = os.path.join(DOCS, "cond_hubbard_correlator.csv")
+    _T, _B, _C = _pc.load(_cc)
+    _sm = _pc.summaries(_T, _B, _C, "hubbard")
+    _bs = sorted(_sm)                                    # increasing beta: cooling
+    _ts = [f"{1 / b_:g}" for b_ in _bs]
+    _sh = [_sm[b_][1] for b_ in _bs]
+    _pk = [_sm[b_][0] for b_ in _bs]
+    _gap = _pc.MOTT_GAP_U4
+    expect_res("sigma: temperatures", f"cools through T = {', '.join(_ts[:-1])} and {_ts[-1]}")
+    expect_res("sigma: Mott gap", f"the Mott gap ({_gap} at U = 4")
+    if any(b_ >= a_ for a_, b_ in zip(_sh, _sh[1:])):
+        fails.append(f"results page: the below-gap share no longer falls on cooling "
+                     f"({_sh}), so 'thermal carriers freezing out' is stale")
+    else:
+        expect_res("sigma: below-gap shares",
+                   " → ".join(f"{100 * v_:.0f} %" for v_ in _sh))
+    # the hottest spectrum's largest peak sits inside the gap, the colder ones above it
+    if len(_pk) != 3 or not (_pk[0] < _gap < min(_pk[1:])):
+        fails.append(f"results page: the spectral peaks ({_pk}) no longer split into one "
+                     f"thermal peak inside the gap and two above it, as the page says")
+    else:
+        expect_res("sigma: cold peaks", f"At T = {_ts[1]} and {_ts[2]} the spectrum peaks "
+                                        f"at ω ≈ {_pk[1]:.1f} and {_pk[2]:.1f}")
+        expect_res("sigma: thermal peak", f"at T = {_ts[0]} its largest peak is the thermal "
+                                          f"one at ω ≈ {_pk[0]:.2f}")
+    _svg = open(os.path.join(DOCS, "conductivity_hubbard_sigma.svg"), encoding="utf-8").read()
+    if _svg != _pc.render(_T, _B, _C, "hubbard"):
+        fails.append("results page: docs/conductivity_hubbard_sigma.svg is not what "
+                     "plot_conductivity.py draws from docs/cond_hubbard_correlator.csv")
+    # It is the RAW current spectrum, not sigma: Re sigma = (1 - e^{-beta w})/(2 L w) S_J,
+    # a frequency-dependent factor (Codex, P1 -- the page, the figure's own axis and two
+    # docs all called the raw transform "proportional to sigma"). The page must say so,
+    # the method it points to for sigma must exist, and nothing may say "proportional".
+    expect_res("sigma: raw, not the conductivity",
+               "That is the raw transform, not the optical conductivity: "
+               "Re σ(ω, T) = (1 − e^(−βω))/(2Lω)")
+    if "def conductivity(" not in open(os.path.join(HERE, "..", "python", "quantx_engine",
+                                                    "thermal.py"), encoding="utf-8").read():
+        fails.append("results page: points to conductivity() for sigma, which "
+                     "quantx_engine/thermal.py no longer defines")
+    _ft = open(os.path.join(DOCS, "finite_temperature.md"), encoding="utf-8").read()
+    for _name, _txt in (("results.rst", res), ("universal_mpo.md", doc),
+                        ("finite_temperature.md", _ft), ("the Hubbard figure", _svg)):
+        if re.search(r"proportional to σ|∝ ?σ\(ω|&#8733; &#963;", _txt):
+            fails.append(f"{_name}: calls the raw current spectrum proportional to sigma; "
+                         f"the Kubo factor depends on omega, so it is not")
+    # the run's size, U and chi, from the generator's defaults
+    _gen = open(os.path.join(HERE, "hubbard_finite_t_conductivity.py"), encoding="utf-8").read()
+    _mL = re.search(r"^L = int\(sys\.argv\[1\]\) if len\(sys\.argv\) > 1 else (\d+)$", _gen, re.M)
+    _mX = re.search(r"^MAX_BOND = int\(sys\.argv\[2\]\) if len\(sys\.argv\) > 2 else (\d+)$",
+                    _gen, re.M)
+    _mU = re.search(r"^U = ([\d.]+)$", _gen, re.M)
+    if not (_mL and _mX and _mU):
+        fails.append("results page: cannot read the conductivity run's L, U and max_bond from "
+                     "benchmarks/hubbard_finite_t_conductivity.py")
+    else:
+        expect_res("sigma: the run", f"({_mL.group(1)} sites, U = {float(_mU.group(1)):g}, "
+                                     f"χ = {_mX.group(1)})")
+        expect_res("sigma: no ED of its own", f"This {_mL.group(1)}-site run has no exact "
+                                              f"answer of its own")
+    # and the gate it names: the same function, against full ED, on the size it states
+    _tte = open(os.path.join(HERE, "..", "python", "quantx_engine", "tests",
+                             "test_thermal_ed.py"), encoding="utf-8").read()
+    _mh = re.search(r'"hubbard": \(HubbardChain\(L=(\d+)', _tte)
+    if not _mh or "thermal.current_correlation(" not in _tte \
+            or "thermal.current_correlation(" not in _gen:
+        fails.append("results page: test_thermal_ed.py no longer gates current_correlation on "
+                     "a Hubbard chain, or the generator no longer calls it")
+    else:
+        expect_res("sigma: gate size", f"full exact diagonalisation of a {_mh.group(1)}-site "
+                                       f"Hubbard chain")
+
     # The Performance section. Its numbers have no CSV, but they have one source: the values
     # plot_margin_vs_chi.py hard-codes from docs/gpu_acceleration_report.md. Read them as
     # literals -- running the script would rewrite the SVG -- and hold the page to them.
