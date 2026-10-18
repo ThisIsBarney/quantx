@@ -13,14 +13,33 @@
 //   (d) the 2-site value matches the analytic E = (U - sqrt(U^2+16 t^2))/2.
 #include "dmrg_internal.hpp"
 #include <Eigen/Dense>
+#include <Eigen/Sparse>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <map>
+#include <chrono>
 #include <tuple>
 #include <vector>
 
 using namespace qx_dmrg;
+
+// A test that runs for an hour has to say where the hour went. Without this a CI timeout
+// reports only that qx_hubbard_test exceeded its limit -- ctest buffers the output, so a
+// timed-out run prints NOTHING and the 90 minutes are a single opaque gap in the log.
+// lap() names the section starting now and reports how long the previous one took, so a
+// timeout points at a section instead of at the whole suite.
+static std::chrono::steady_clock::time_point g_lap = std::chrono::steady_clock::now();
+static const char* g_lap_name = nullptr;
+static void lap(const char* what) {
+    auto now = std::chrono::steady_clock::now();
+    const double dt = std::chrono::duration<double>(now - g_lap).count();
+    if (g_lap_name) std::printf("   [%s took %.1f s]\n", g_lap_name, dt);
+    std::printf("== %s ==\n", what);
+    std::fflush(stdout);
+    g_lap = now;
+    g_lap_name = what;
+}
 
 // Set/clear an environment variable (portable): run_dmrg_blocks reads
 // QX_DMRG_NO_SINGLESITE per call, so the test can toggle the hybrid path.
@@ -33,6 +52,7 @@ static void set_env(const char* k, const char* v) {
 }
 using Cxd = std::complex<double>;
 using MatC = Eigen::MatrixXcd;
+using SpC = Eigen::SparseMatrix<Cxd>;
 
 static MatC kron(const MatC& A, const MatC& B) {
     MatC K(A.rows()*B.rows(), A.cols()*B.cols());
@@ -83,6 +103,77 @@ int main() {
             O = kron(O, k < i ? F : (k == i ? a : I4));
         return O;
     };
+
+    // ---- the same Jordan-Wigner operators, in SPARSE arithmetic -------------------
+    // The dense ferm() products above are 4^n x 4^n matrix multiplications, and the
+    // HVA gates below used to eigendecompose the result: at n = 6 that is a 4096^3
+    // eigensolve per bond group, which was 79 % of this test's runtime (measured: the
+    // four VQE sections took 2209 s of 2539 s). Both are unnecessary.
+    //
+    //  * A single fermionic hop has at most one nonzero per row in the occupation
+    //    basis, so building it as a sparse Kronecker product costs O(4^n), not O(4^n)^3.
+    //    ferm_sp is ferm() verbatim -- same F, same a, same "F left of i" rule -- with
+    //    sparse storage; section (q0) asserts the two agree, so this is the SAME
+    //    construction, not a second implementation of the signs.
+    //  * A single-SPIN hop g = -(a + a^dag), a = c^dag_{i s} c_{j s}, satisfies g^3 = g:
+    //    it acts as Pauli X on the two-state subspaces where n_{i s} != n_{j s} and
+    //    annihilates the rest. So its exponential is closed form,
+    //        exp(-i th t g) = I + (cos(th t) - 1) g^2 - i sin(th t) g,
+    //    and no eigensolver is needed at all.
+    //
+    // The identity holds PER SPIN, NOT for the up + dn sum. g_up and g_dn commute, but
+    // (g_up + g_dn)^3 != g_up + g_dn, so the closed form applied to the summed bond
+    // operator is simply wrong (residual 3.0 when tried). The two spins are applied as
+    // separate commuting factors.
+    auto kron_sp = [](const SpC& A, const SpC& B) {
+        std::vector<Eigen::Triplet<Cxd>> tr;
+        tr.reserve((size_t)A.nonZeros() * (size_t)B.nonZeros());
+        for (int ka = 0; ka < A.outerSize(); ++ka)
+            for (SpC::InnerIterator ia(A, ka); ia; ++ia)
+                for (int kb = 0; kb < B.outerSize(); ++kb)
+                    for (SpC::InnerIterator ib(B, kb); ib; ++ib)
+                        tr.emplace_back((int)(ia.row() * B.rows() + ib.row()),
+                                        (int)(ia.col() * B.cols() + ib.col()),
+                                        ia.value() * ib.value());
+        SpC K(A.rows() * B.rows(), A.cols() * B.cols());
+        K.setFromTriplets(tr.begin(), tr.end());
+        return K;
+    };
+    const SpC F_sp = F.sparseView(), I4_sp = I4.sparseView();
+    auto ferm_sp = [&](int n, int i, const MatC& a) {
+        const SpC a_sp = a.sparseView();
+        SpC O(1, 1); O.insert(0, 0) = Cxd(1, 0);
+        for (int k = 0; k < n; ++k)
+            O = kron_sp(O, k < i ? F_sp : (k == i ? a_sp : I4_sp));
+        return O;
+    };
+    // one bond, both spins, kept as separate single-spin generators
+    struct HopSp { SpC g[2]; };
+    auto make_hop = [&](int n, int i, int j) {
+        HopSp h;
+        const MatC* C[2] = {&Cup, &Cdn};
+        for (int s2 = 0; s2 < 2; ++s2) {
+            SpC a = ferm_sp(n, i, MatC(C[s2]->adjoint())) * ferm_sp(n, j, *C[s2]);
+            h.g[s2] = -(a + SpC(a.adjoint()));
+        }
+        return h;
+    };
+    // exp(-i th H_bond) v with H_bond = t (g_up + g_dn), as two commuting closed forms
+    auto apply_hop = [&](const HopSp& h, double t, double th, Eigen::VectorXcd v) {
+        const double c = std::cos(th * t) - 1.0, sn = std::sin(th * t);
+        for (int s2 = 0; s2 < 2; ++s2) {
+            Eigen::VectorXcd gv = h.g[s2] * v;
+            Eigen::VectorXcd ggv = h.g[s2] * gv;
+            v += c * ggv - Cxd(0, sn) * gv;
+        }
+        return v;
+    };
+    // <v| H_bond |v> for the energy, with H_bond = t (g_up + g_dn)
+    auto hop_expect = [&](const HopSp& h, double t, const Eigen::VectorXcd& v) {
+        Cxd e = 0;
+        for (int s2 = 0; s2 < 2; ++s2) e += v.dot(h.g[s2] * v);
+        return t * e.real();
+    };
     // Explicit fermionic Hubbard Hamiltonian (the ground truth). Memoised: the 4^n
     // matrices (n=6 -> 4096x4096) are reused by the dense and the half-filling checks.
     static std::map<std::tuple<int,long long,long long>, MatC> H_cache;
@@ -124,7 +215,7 @@ int main() {
     };
 
     // (a) MPO reconstructs the fermionic H exactly, and (d) the 2-site analytic value.
-    std::printf("== Hubbard (d=4) MPO reconstructs the Jordan-Wigner H ==\n");
+    lap("Hubbard (d=4) MPO reconstructs the Jordan-Wigner H");
     for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,0.0},{1.0,4.0},{1.0,8.0},{0.7,2.5}}) {
         for (int n : {2, 3, 4}) {
             MatC H_ed  = hubbard_ed_H(n, t, U);
@@ -148,7 +239,7 @@ int main() {
     }
 
     // (b) derive_mpo_sym reads the particle-number U(1) charges (must not throw).
-    std::printf("== Hubbard MPO is N-conserving (derive_mpo_sym) ==\n");
+    lap("Hubbard MPO is N-conserving (derive_mpo_sym)");
     {
         bool ok = true; std::vector<int> delta;
         try { auto sym = derive_mpo_sym(build_hubbard_mpo(6, 1.0, 4.0)); delta = sym.delta; }
@@ -162,7 +253,7 @@ int main() {
     // (c) the dense DMRG (arbitrary-d) ground state matches ED -- the engine runs the
     // fermionic MPO. (Dense DMRG finds the global GS, so no particle-number targeting
     // is needed here; the block-sparse path with N sectors is the next phase.)
-    std::printf("== Hubbard dense DMRG vs ED ==\n");
+    lap("Hubbard dense DMRG vs ED");
     for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,0.0},{1.0,4.0},{1.0,8.0}}) {
         for (int n : {2, 4}) {   // n<=4: brute ED (dense 4^n operator products) stays cheap
             double E_ed = Eigen::SelfAdjointEigenSolver<MatC>(hubbard_ed_H(n,t,U)).eigenvalues()(0);
@@ -180,7 +271,7 @@ int main() {
     // half-filling. The block engine conserves the particle-number U(1) (phys_charge
     // = {0,1,1,2}); we target the N=n sector and start from the singly-occupied
     // |up dn up dn ...> product (SDW-like, close to the repulsive-Hubbard GS).
-    std::printf("== Hubbard FAST block-sparse DMRG at half-filling (N=n) vs sector-ED ==\n");
+    lap("Hubbard FAST block-sparse DMRG at half-filling (N=n) vs sector-ED");
     for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,0.0},{1.0,4.0},{1.0,8.0}}) {
         for (int n : {4}) {   // block path needs n>=3; n=4 exercises sectors/SDW-init/JW signs
             double E_sec = hubbard_ed_halffill(n, t, U);
@@ -211,7 +302,7 @@ int main() {
     // it must track ED e^{-iHt}. Real-time also conserves energy; imaginary time cools the
     // CDW to the half-filling ground state. The Fermi statistics ride in the same MPO, so
     // TDVP2 (which applies the MPO's H_eff) runs the fermionic dynamics unchanged.
-    std::printf("== Hubbard DYNAMICS: block TDVP2 (real-time vs ED + imag->GS) ==\n");
+    lap("Hubbard DYNAMICS: block TDVP2 (real-time vs ED + imag->GS)");
     const int nof[4] = {0, 1, 1, 2};
     for (auto [t, U] : std::vector<std::pair<double,double>>{{1.0,4.0},{1.0,8.0}}) {
         const int n = 4;
@@ -374,7 +465,7 @@ int main() {
     // (truncation + single-site both active; the old bug corrupted this run to ~0).
     // No ED at this size -- the check is hybrid (warm-up -> single-site) vs pure
     // two-site: same variational optimum, and a sane (non-product-state) energy.
-    std::printf("== Hubbard single-site GS refinement at N=12 (hybrid vs two-site) ==\n");
+    lap("Hubbard single-site GS refinement at N=12 (hybrid vs two-site)");
     {
         const int n = 12; const double t = 1.0, U = 4.0;
         std::vector<int> cfg(n);
@@ -402,7 +493,7 @@ int main() {
     // carries + plain SWAP -- the cooling never exchanges two physical modes), so if
     // any fermion sign were misplaced, <H>_beta would miss the exact grand-canonical
     // Gibbs average sum_i E_i e^{-beta E_i} / Z over ALL 4^n states (mu = 0).
-    std::printf("== Hubbard finite-T via purification vs ED Gibbs (grand canonical) ==\n");
+    lap("Hubbard finite-T via purification vs ED Gibbs (grand canonical)");
     {
         const int np = 3; const double t = 1.0, U = 4.0, beta = 1.0;
         const MatC& H = hubbard_ed_H(np, t, U);
@@ -437,7 +528,7 @@ int main() {
     // structure factor's raw data. F2: C(t;T) = <J(t)J(0)>_beta with the fermionic
     // CHARGE current J = it sum_s (c^dag_{i s} c_{i+1 s} - h.c.) (JW form, so a
     // misplaced parity factor in the current MPO could not match ED).
-    std::printf("== Hubbard finite-T F1 S(k,w) + F2 <J(t)J(0)> vs ED (grand canonical) ==\n");
+    lap("Hubbard finite-T F1 S(k,w) + F2 <J(t)J(0)> vs ED (grand canonical)");
     {
         const int np = 3, l0v = np / 2; const double t = 1.0, U = 4.0, beta = 0.5, dt = 0.1;
         const int nst = 5;
@@ -508,7 +599,7 @@ int main() {
     // (JW order (x,a),(x,b),(x+1,a),...; leg hops have a string over the intervening
     // mode), and the fast block DMRG must hit the half-filling sector-ED energy AND
     // the Sz=1 sector (the spin gap) through the d=16 packed charges.
-    std::printf("== Hubbard 2-leg LADDER (rung-fused d=16) vs explicit-JW ED ==\n");
+    lap("Hubbard 2-leg LADDER (rung-fused d=16) vs explicit-JW ED");
     {
         const int Lx = 3, nm = 2 * Lx;   // 6 fermion modes -> 4^6 = 4096 ED
         const double t = 1.0, tp = 0.9, U = 4.0;
@@ -825,6 +916,7 @@ int main() {
         }
     }
 
+    lap("HVA circuit vs state vector (chain)");
     // (o) HVA (VQE) CIRCUIT vs a dense state-vector simulation of the SAME circuit.
     // The block-sparse circuit must reproduce, to machine precision, what a 4^n
     // state-vector simulator gets: same product initial state, same layer angles,
@@ -838,32 +930,16 @@ int main() {
             int dim = 1; for (int k = 0; k < n; ++k) dim *= 4;
             auto mpo = build_hubbard_mpo(n, t, U, /*two_u1*/true);
             // dense pieces: the even/odd hopping Hamiltonians and the on-site term
-            MatC Hev = MatC::Zero(dim, dim), Hod = MatC::Zero(dim, dim),
-                 Hu  = MatC::Zero(dim, dim);
-            for (int i = 0; i < n - 1; ++i) {
-                MatC hop = ferm(n,i,MatC(Cup.adjoint()))*ferm(n,i+1,Cup)
-                         + ferm(n,i,MatC(Cdn.adjoint()))*ferm(n,i+1,Cdn);
-                (i % 2 == 0 ? Hev : Hod) += -t * (hop + MatC(hop.adjoint()));
-            }
-            for (int i = 0; i < n; ++i) Hu += U * (ferm(n,i,Nu) * ferm(n,i,Nd));
-            // Diagonalise each generator ONCE: the angles vary per layer, the
-            // eigenbasis does not. (Doing it inside the layer loop cost 9 eigen-
-            // solves on 4096x4096 matrices at n=6 -- minutes of test time.) H_U is
-            // diagonal already, so it needs no solver at all.
-            struct Eig { MatC V; Eigen::VectorXd w; bool diag = false; };
-            auto prep = [&](const MatC& Hx, bool is_diag) {
-                Eig e; e.diag = is_diag;
-                if (is_diag) { e.w = Hx.diagonal().real(); return e; }
-                Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
-                e.V = es.eigenvectors(); e.w = es.eigenvalues();
-                return e;
-            };
-            const Eig Eev = prep(Hev, false), Eod = prep(Hod, false), Eu = prep(Hu, true);
-            auto apply = [&](const Eig& e, double th, Eigen::VectorXcd v) {
-                Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
-                if (e.diag) return Eigen::VectorXcd(ph * v.array());
-                return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
-            };
+            // The even and odd bond sets of a chain are matchings, so each layer is
+            // a product of per-bond closed forms (pinned by (q0)). An earlier fix
+            // hoisted the eigensolves out of the layer loop (9 -> 2 at n = 6); the
+            // closed form removes the remaining two, and the dense Hev/Hod builds.
+            std::vector<HopSp> ev_b, od_b;
+            for (int i = 0; i < n - 1; ++i)
+                (i % 2 == 0 ? ev_b : od_b).push_back(make_hop(n, i, i + 1));
+            Eigen::VectorXd Hu_d = Eigen::VectorXd::Zero(dim);
+            for (int i = 0; i < n; ++i)
+                Hu_d += U * SpC(ferm_sp(n,i,Nu) * ferm_sp(n,i,Nd)).diagonal().real();
             // Neel product state |up dn up dn ...>, index = sum_i state_i * 4^(n-1-i)
             std::vector<int> cfg(n);
             for (int i = 0; i < n; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
@@ -878,10 +954,14 @@ int main() {
                                                      {-0.13, 0.29, -0.31},
                                                      {0.19, 0.41, 0.23}};
             for (auto& L : ang) {
-                v = apply(Eev, L[0], v);
-                v = apply(Eod, L[1], v);
-                v = apply(Eu,  L[2], v);
+                for (auto& hb : ev_b) v = apply_hop(hb, t, L[0], v);
+                for (auto& hb : od_b) v = apply_hop(hb, t, L[1], v);
+                v = Eigen::VectorXcd((Cxd(0,-L[2]) * Hu_d.array().cast<Cxd>()).exp()
+                                     * v.array());
             }
+            // The observable stays the DENSE Hamiltonian, built by ferm() independently
+            // of the sparse generators above: the closed-form evolution is checked
+            // against an operator constructed the other way.
             const MatC& Hfull = hubbard_ed_H(n, t, U);
             double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
             // the same circuit on the block-sparse MPS (chi large enough = exact)
@@ -897,6 +977,7 @@ int main() {
         fails += cf;
     }
 
+    lap("HVA circuit on the rung-fused ladder");
     // (p) HVA CIRCUIT on the RUNG-FUSED LADDER (d=16) -- the first quasi-2D VQE
     // circuit, and the first whose on-site layer is a GENERAL one-site unitary: the
     // fused site's on-site block carries the rung hopping, which is off-diagonal
@@ -963,6 +1044,70 @@ int main() {
         fails += !okl;
     }
 
+    lap("closed-form gate exponential vs dense eigensolve (n=4)");
+    // (q0) THE PIN for everything below. Sections (q) and (r) apply gates through the
+    // sparse closed form instead of a dense 4^n eigensolve. That trade is only safe if
+    // the fast path provably computes the same thing, so it is checked here at n = 4,
+    // where the dense path is cheap, on near-neighbour AND long-range bonds and at
+    // several angles:
+    //   1. ferm_sp builds exactly the operator ferm() builds;
+    //   2. the per-spin closed form equals exp(-i th H_bond) from a dense eigensolve;
+    //   3. every bond group the lattice circuits use is a MATCHING -- no site repeated.
+    //      The closed form multiplies per-bond exponentials, which is exact only
+    //      because bonds in a group are disjoint and therefore commute. The old dense
+    //      path checked that implicitly by exponentiating each group as a whole; with
+    //      the product form it has to be asserted directly, or a non-matching group
+    //      would make the reference and the engine agree on the same wrong answer.
+    {
+        const int n = 4;
+        int dim4 = 1; for (int k = 0; k < n; ++k) dim4 *= 4;
+        double worst_build = 0, worst_exp = 0;
+        Eigen::VectorXcd r = Eigen::VectorXcd::Random(dim4);
+        r.normalize();
+        const int prs4[4][2] = {{0,1},{0,3},{1,3},{2,3}};
+        for (auto& pr : prs4) {
+            const int i0 = pr[0], j0 = pr[1];
+            for (int s2 = 0; s2 < 2; ++s2) {
+                const MatC& C = s2 ? Cdn : Cup;
+                MatC ad = ferm(n,i0,MatC(C.adjoint())) * ferm(n,j0,C);
+                SpC  as = ferm_sp(n,i0,MatC(C.adjoint())) * ferm_sp(n,j0,C);
+                worst_build = std::max(worst_build, (ad - MatC(as)).cwiseAbs().maxCoeff());
+            }
+            HopSp hp = make_hop(n, i0, j0);
+            MatC h = ferm(n,i0,MatC(Cup.adjoint()))*ferm(n,j0,Cup)
+                   + ferm(n,i0,MatC(Cdn.adjoint()))*ferm(n,j0,Cdn);
+            for (double th : {0.37, 1.9, -0.8}) {
+                for (double t : {1.0, 0.6}) {
+                    MatC hb = -t * (h + MatC(h.adjoint()));
+                    Eigen::SelfAdjointEigenSolver<MatC> es(hb);
+                    Eigen::ArrayXcd ph =
+                        (Cxd(0,-th) * es.eigenvalues().array().cast<Cxd>()).exp();
+                    Eigen::VectorXcd vd = es.eigenvectors() *
+                        (ph * (es.eigenvectors().adjoint() * r).array()).matrix();
+                    Eigen::VectorXcd vs = apply_hop(hp, t, th, r);
+                    worst_exp = std::max(worst_exp, (vd - vs).cwiseAbs().maxCoeff());
+                }
+            }
+        }
+        int bad_groups = 0, n_groups = 0;
+        for (int wsel = 1; wsel <= 3; ++wsel) {
+            for (auto& grp : hva_lattice_group_bonds(6 / wsel, wsel, wsel > 2)) {
+                ++n_groups;
+                std::vector<int> seen(64, 0);
+                for (auto& e : grp)
+                    if (seen[e.first]++ || seen[e.second]++) { ++bad_groups; break; }
+            }
+        }
+        bool ok0 = worst_build < 1e-14 && worst_exp < 1e-12 && bad_groups == 0;
+        std::printf("  CLOSED FORM: sparse vs dense build %.1e, closed form vs dense "
+                    "eigensolve %.1e over 4 bonds x 3 angles x 2 hoppings; %d/%d lattice "
+                    "bond groups are matchings  %s\n",
+                    worst_build, worst_exp, n_groups - bad_groups, n_groups,
+                    ok0 ? "OK" : "FAIL");
+        fails += !ok0;
+    }
+
+    lap("fermionic swap network");
     // (q) FERMIONIC SWAP NETWORK -- the primitive the width-W lattice circuits need.
     // Jordan-Wigner puts the lattice on a chain, so a width-W cylinder's x-hops are
     // range-W and cannot be applied as a two-site gate. The cure is to fswap the two
@@ -987,13 +1132,9 @@ int main() {
         for (auto& pr : prs) {
             const int i0 = pr[0], j0 = pr[1];
             const double th = 0.37;
-            MatC h = ferm(n,i0,MatC(Cup.adjoint()))*ferm(n,j0,Cup)
-                   + ferm(n,i0,MatC(Cdn.adjoint()))*ferm(n,j0,Cdn);
-            MatC hb = -t * (h + MatC(h.adjoint()));
-            Eigen::SelfAdjointEigenSolver<MatC> es(hb);
-            Eigen::ArrayXcd ph = (Cxd(0,-th) * es.eigenvalues().array().cast<Cxd>()).exp();
-            Eigen::VectorXcd v = es.eigenvectors() *
-                                 (ph * (es.eigenvectors().adjoint() * v0).array()).matrix();
+            // the same rotation, through the closed form pinned by (q0) -- this
+            // used to be a 4096^3 eigensolve per bond (445 s for the four)
+            Eigen::VectorXcd v = apply_hop(make_hop(n, i0, j0), t, th, v0);
             double E_ed = (v.adjoint() * Hpr * v).real()(0,0) / v.squaredNorm();
             double E_blk = hva_swap_probe(hop, probe, n, i0, j0, th, 4096,
                                           pack_q2(n, 0), cfg);
@@ -1005,6 +1146,7 @@ int main() {
         fails += !oksw;
     }
 
+    lap("lattice HVA circuits, W=1/2/3 vs state vector");
     // (r) LATTICE HVA CIRCUIT on a width-3 cylinder, through the swap network, vs a
     // dense state-vector reference. This is the whole circuit -- bond grouping, gate
     // ordering, swap networks for the range-3 x-hops and range-2 y-wrap, and the
@@ -1025,29 +1167,21 @@ int main() {
         auto groups = hva_lattice_group_bonds(L2c, W3c, yp);
         std::vector<int> cfg(nc);
         for (int i = 0; i < nc; ++i) cfg[i] = (i % 2 == 0) ? 1 : 2;
-        // dense: one Hamiltonian per group, plus the on-site term
-        std::vector<MatC> Hg;
+        // Each group's gate is a product of per-bond closed forms (pinned by (q0),
+        // which also asserts every group here is a matching, so the bonds commute and
+        // the product is exact). Built once, as sparse generators, and reused across
+        // every layer. This used to build a dense Hamiltonian per group and
+        // eigendecompose it -- eight 4096^3 eigensolves, 1170 s of the test.
+        std::vector<std::vector<HopSp>> gb;
         for (auto& g : groups) {
-            MatC Hx = MatC::Zero(dimc, dimc);
-            for (auto& e : g) {
-                MatC h = ferm(nc,e.first,MatC(Cup.adjoint()))*ferm(nc,e.second,Cup)
-                       + ferm(nc,e.first,MatC(Cdn.adjoint()))*ferm(nc,e.second,Cdn);
-                Hx += -t * (h + MatC(h.adjoint()));
-            }
-            Hg.push_back(Hx);
+            std::vector<HopSp> hs;
+            for (auto& e : g) hs.push_back(make_hop(nc, e.first, e.second));
+            gb.push_back(std::move(hs));
         }
-        MatC Hu = MatC::Zero(dimc, dimc);
-        for (int i = 0; i < nc; ++i) Hu += U * (ferm(nc,i,Nu) * ferm(nc,i,Nd));
-        struct EigL { MatC V; Eigen::VectorXd w; };
-        std::vector<EigL> eg;
-        for (auto& Hx : Hg) {
-            Eigen::SelfAdjointEigenSolver<MatC> es(Hx);
-            eg.push_back({es.eigenvectors(), es.eigenvalues()});
-        }
-        auto applyL = [&](const EigL& e, double th, Eigen::VectorXcd v) {
-            Eigen::ArrayXcd ph = (Cxd(0,-th) * e.w.array().cast<Cxd>()).exp();
-            return Eigen::VectorXcd(e.V * (ph * (e.V.adjoint() * v).array()).matrix());
-        };
+        // the on-site term is diagonal in the occupation basis
+        Eigen::VectorXd Hu_d = Eigen::VectorXd::Zero(dimc);
+        for (int i = 0; i < nc; ++i)
+            Hu_d += U * SpC(ferm_sp(nc,i,Nu) * ferm_sp(nc,i,Nd)).diagonal().real();
         Eigen::VectorXcd v = Eigen::VectorXcd::Zero(dimc);
         { int ix = 0; for (int i = 0; i < nc; ++i) ix = ix * 4 + cfg[i]; v(ix) = 1.0; }
         const int ng = (int)groups.size();
@@ -1071,12 +1205,19 @@ int main() {
             ang.push_back(a);
         }
         for (auto& a : ang) {
-            for (int g = 0; g < ng; ++g) v = applyL(eg[g], a[g], v);
-            Eigen::ArrayXcd phu = (Cxd(0,-a[ng]) * Hu.diagonal().real().array().cast<Cxd>()).exp();
+            // groups in order (they do not commute with each other); within a group the
+            // bonds commute, so their order does not matter
+            for (int g = 0; g < ng; ++g)
+                for (auto& hb : gb[g]) v = apply_hop(hb, t, a[g], v);
+            Eigen::ArrayXcd phu = (Cxd(0,-a[ng]) * Hu_d.array().cast<Cxd>()).exp();
             v = Eigen::VectorXcd(phu * v.array());
         }
-        MatC Hfull = Hu; for (auto& Hx : Hg) Hfull += Hx;
-        double E_ed = (v.adjoint() * Hfull * v).real()(0,0) / v.squaredNorm();
+        // <H> = <Hu> + sum over every bond of <t (g_up + g_dn)>: the groups partition
+        // the lattice's bonds, so this is the full lattice Hamiltonian
+        double E_num = (v.conjugate().array() * Hu_d.array().cast<Cxd>() * v.array())
+                           .sum().real();
+        for (auto& grp : gb) for (auto& hb : grp) E_num += hop_expect(hb, t, v);
+        double E_ed = E_num / v.squaredNorm();
         HVAResult lr = run_hva_lattice(lat, hop, L2c, W3c, yp, ang, 4096, 1e-14,
                                        pack_q2(nc, 0), &cfg);
         double err = std::abs(lr.energy - E_ed);
@@ -1088,6 +1229,7 @@ int main() {
         fails += !okl;
     }
 
+    lap("geometry gate for the width scan");
     // (s) GEOMETRY GATE for the width scan. Part E compares W=1/2/3 in one common
     // site-split representation, so the claim rests entirely on those MPOs really
     // being the chain and the ladder. Pin each against the independent builder that
@@ -1126,6 +1268,7 @@ int main() {
         }
     }
 
+    lap("input guards on the lattice circuit");
     // (t) GUARD GATE. run_hva_lattice reads ONE bulk site for the on-site phases and
     // applies them everywhere, and takes its local dimension from lattice_mpo while the
     // gate comes from hop_mpo. Both assumptions fail silently when broken -- a pinned
@@ -1173,6 +1316,7 @@ int main() {
         }
     }
 
+    lap("done");
     std::printf("%s\n", fails ? "HUBBARD TEST: FAIL" : "HUBBARD TEST: ALL OK");
     return fails ? 1 : 0;
 }
