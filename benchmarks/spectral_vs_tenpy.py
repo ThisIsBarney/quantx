@@ -5,8 +5,8 @@ C_{j,l0}(t) = <psi0| sz_j e^{-i(H-E0)t} sz_l0 |psi0> for a central source l0 of 
 open spin-1/2 Heisenberg chain (H = J sum sigma.sigma), then S(k,omega) is a cheap
 FFT. The expensive part is the real-time evolution + per-step measurement.
 
-QuantX: DMRG ground state + block-sparse (Sz) real-time TDVP2 + block two-MPS
-overlap. TeNPy: DMRG ground state + TEBD real-time evolution + MPSEnvironment
+QuantX: DMRG ground state + block-sparse (Sz) real-time TEBD (second order, with the
+Gram-matrix SVD; qx_spectral moved off TDVP2) + block two-MPS overlap. TeNPy: DMRG ground state + TEBD real-time evolution + MPSEnvironment
 measurement. We report the wall time of the full C_{j,l0}(t) computation and
 cross-check the correlations agree.
 
@@ -78,7 +78,7 @@ def main():
     dt, n_steps = 0.05, 150
     for n, chi in [(16, 64), (24, 96), (32, 128), (48, 128)]:
         row = {}
-        for name, fn in [("quantx-tdvp2", quantx_corr), ("tenpy-tebd", tenpy_corr)]:
+        for name, fn in [("quantx-tebd", quantx_corr), ("tenpy-tebd", tenpy_corr)]:
             try:
                 C, times, l0, wt, bond = fn(n, dt, n_steps, chi)
                 row[name] = (C, wt, bond)
@@ -88,10 +88,10 @@ def main():
             except Exception as e:
                 print(f"{n:>3} {n_steps:>5} {chi:>4} {name:<14}  FAILED: {e}")
                 row[name] = None
-        if row.get("quantx-tdvp2") and row.get("tenpy-tebd"):
-            qt, tt = row["quantx-tdvp2"][1], row["tenpy-tebd"][1]
+        if row.get("quantx-tebd") and row.get("tenpy-tebd"):
+            qt, tt = row["quantx-tebd"][1], row["tenpy-tebd"][1]
             # agreement on the correlations (max abs diff over j,t)
-            Cd = np.max(np.abs(row["quantx-tdvp2"][0] - row["tenpy-tebd"][0]))
+            Cd = np.max(np.abs(row["quantx-tebd"][0] - row["tenpy-tebd"][0]))
             speed = tt / qt if qt > 0 else float("nan")
             print(f"{'':>3} {'':>5} {'':>4} {'-> speedup':<14} {speed:>8.1f}x  (C agree |d|={Cd:.2e})")
         print()

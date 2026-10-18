@@ -1,4 +1,10 @@
-"""TDVP real-time benchmark: QuantX TDVP2 vs TeNPy TwoSiteTDVPEngine.
+"""Real-time benchmark: QuantX's TDVPSolver vs TeNPy's TwoSiteTDVPEngine.
+
+Superseded as a speed claim. The engine now runs this nearest-neighbour quench with block
+TEBD (the result's method is "tebd2-block"), so the QuantX side is no longer TDVP2, and
+TeNPy's fast method here is its TEBD, not its TDVP: see the correction at the top of
+docs/dmrg_tdvp_report.md and docs/time_evolution_status.md. Kept as an accuracy check
+against exact diagonalisation.
 
 Real-time quench of the open spin-1/2 Heisenberg chain from the Neel state,
 H = J sum_i sigma_i . sigma_{i+1} (Pauli convention, J=1). We evolve and record
@@ -88,8 +94,9 @@ def main():
         tp_m, tp_t, tp_b = tenpy_run(n, dt, n_steps, chi)
         line=f"N={n:<3} QuantX {qx_t:7.3f}s (bond {qx_b})   TeNPy {tp_t:7.3f}s (bond {tp_b})   speedup {tp_t/qx_t:5.1f}x"
         if n <= 12:
-            ex=exact_stag(n, dt, n_steps)
-            eq=max(abs(qx_m[k]-ex[k]) for k in range(len(ex)))
+            ex=exact_stag(n, dt, n_steps)                  # t = 0, dt, ..., T
+            off=len(ex)-len(qx_m)                         # QuantX's series leaves out t = 0
+            eq=max(abs(qx_m[k]-ex[k+off]) for k in range(len(qx_m)))
             et=max(abs(tp_m[k]-ex[k]) for k in range(len(ex)))
             line+=f"   err(QuantX)={eq:.1e} err(TeNPy)={et:.1e}"
         print(line)

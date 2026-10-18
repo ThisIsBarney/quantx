@@ -34,6 +34,7 @@ import re
 import subprocess
 import sys
 import time
+import _native                  # benchmarks/_native.py
 
 DT       = float(os.environ.get("BENCH_DT", "0.05"))
 STEPS    = int(os.environ.get("BENCH_STEPS", "50"))
@@ -47,10 +48,7 @@ if os.environ.get("BENCH_PLAN"):   # e.g. "32:256,512,1024;64:512"
             for n, cs in (p.split(":") for p in os.environ["BENCH_PLAN"].split(";"))}
 
 _here = os.path.dirname(__file__)
-QX_BENCH = os.environ.get("QX_TEBD_BENCH",
-                          os.path.join(_here, "..", "build-cuda-blas", "Release", "qx_tebd_bench.exe"))
-QX_DLL_DIR = os.environ.get("QX_DLL_DIR",
-                            r"C:\ProgramData\miniforge3\envs\qxblas\Library\bin")  # openblas.dll + deps
+QX_BENCH = None                 # found in main(): benchmarks/_native.py
 
 
 def _min_of(fn, reps):
@@ -80,8 +78,7 @@ def tenpy_quench(n, dt, n_steps, chi):
 
 
 def quantx_gpu(n, dt, n_steps, chi, fp32=False):
-    env = dict(os.environ)
-    env["PATH"] = QX_DLL_DIR + os.pathsep + env.get("PATH", "")   # openblas.dll + CUDA on PATH
+    env = _native.env()             # QX_DLL_DIR first on PATH, if set
     env["QX_GPU_MIN_BLK"] = "128"
     env["QX_GPU_THETA_MINWORK"] = "2097152"
     env["QX_GPU_FP32"] = "1" if fp32 else "0"
@@ -96,8 +93,8 @@ def quantx_gpu(n, dt, n_steps, chi, fp32=False):
 
 
 def main():
-    if not os.path.exists(QX_BENCH):
-        sys.exit(f"qx_tebd_bench not found at {QX_BENCH} (set QX_TEBD_BENCH or build build-cuda-blas)")
+    global QX_BENCH
+    QX_BENCH = _native.program("qx_tebd_bench", "QX_TEBD_BENCH")
     import tenpy
     print(f"dt={DT} steps={STEPS} cutoff={CUTOFF} reps={REPS}(min-of-N) cooldown={COOLDOWN}s | "
           f"tenpy {tenpy.__version__} | CPU threads=1 | GPU boost (min-of-N picks best trial)\n")
