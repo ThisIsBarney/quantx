@@ -1,6 +1,6 @@
 # QuantX roadmap
 
-*Last updated 2026-10-16.* The work is organised in phases, each closed by a gate whose
+*Last updated 2026-10-18.* The work is organised in phases, each closed by a gate whose
 condition can be checked. Dates are targets. The status of each item is kept current
 here as work merges.
 
@@ -54,7 +54,7 @@ verified capabilities in users' hands.
 | M7 | A smaller product surface | The README describes the engine (#200); the pure-Python modules move to `quantx_engine.contrib`, marked experimental (planned for 0.2) | 🔄 |
 | M8 | Referee feasibility | A one-page assessment of a classical baseline for SU(2) lattice gauge-theory dynamics (60 sites, conserved charge): the bond dimension and error needed, against the published tensor-network baseline. The one-pager is in, [docs/referee_su2_hadron.md](docs/referee_su2_hadron.md) (#217): the instance is already matched classically (an MPS at χ = 800, under an hour on a laptop, converged by its submitter's comparison), and it is the tracker's only one with a conserved U(1) charge. Left: the measured bond dimension and error | 🔄 |
 | M9 | Credibility material | Reproduction scripts for the TeNPy comparisons; notebooks for Hubbard and finite-temperature spectra, each reproducing its exact reference. The scripts run anywhere, each with a quick check ([benchmarks/REPRODUCING.md](benchmarks/REPRODUCING.md), #220); the notebooks check the engine against exact diagonalisation and the Lieb–Wu solution ([notebooks/engine/](notebooks/engine/), #221) | ✅ |
-| **G1** | **Gate: installable and usable** | After `pip install`, 20 lines of Python give a Hubbard ground state, a finite-temperature spectral function and an HVA circuit, each matching its exact reference | ⬜ |
+| **G1** | **Gate: installable and usable** | After `pip install`, 20 lines of Python give a Hubbard ground state, a finite-temperature spectral function and an HVA circuit, each matching its exact reference. [examples/quickstart.py](examples/quickstart.py) does it, and CI runs it on every wheel it builds (#223). Left: a release that carries M6 (`thermal` came after 0.1.0), and M7 and M8 | 🔄 |
 
 ## Phase 2 (2027-01 to 2027-06): from one-shot solvers to a composable library
 
