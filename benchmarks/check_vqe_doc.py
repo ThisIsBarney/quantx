@@ -851,6 +851,23 @@ else:
     if _svg != _pc.render(_T, _B, _C, "hubbard"):
         fails.append("results page: docs/conductivity_hubbard_sigma.svg is not what "
                      "plot_conductivity.py draws from docs/cond_hubbard_correlator.csv")
+    # It is the RAW current spectrum, not sigma: Re sigma = (1 - e^{-beta w})/(2 L w) S_J,
+    # a frequency-dependent factor (Codex, P1 -- the page, the figure's own axis and two
+    # docs all called the raw transform "proportional to sigma"). The page must say so,
+    # the method it points to for sigma must exist, and nothing may say "proportional".
+    expect_res("sigma: raw, not the conductivity",
+               "That is the raw transform, not the optical conductivity: "
+               "Re σ(ω, T) = (1 − e^(−βω))/(2Lω)")
+    if "def conductivity(" not in open(os.path.join(HERE, "..", "python", "quantx_engine",
+                                                    "thermal.py"), encoding="utf-8").read():
+        fails.append("results page: points to conductivity() for sigma, which "
+                     "quantx_engine/thermal.py no longer defines")
+    _ft = open(os.path.join(DOCS, "finite_temperature.md"), encoding="utf-8").read()
+    for _name, _txt in (("results.rst", res), ("universal_mpo.md", doc),
+                        ("finite_temperature.md", _ft), ("the Hubbard figure", _svg)):
+        if re.search(r"proportional to σ|∝ ?σ\(ω|&#8733; &#963;", _txt):
+            fails.append(f"{_name}: calls the raw current spectrum proportional to sigma; "
+                         f"the Kubo factor depends on omega, so it is not")
     # the run's size, U and chi, from the generator's defaults
     _gen = open(os.path.join(HERE, "hubbard_finite_t_conductivity.py"), encoding="utf-8").read()
     _mL = re.search(r"^L = int\(sys\.argv\[1\]\) if len\(sys\.argv\) > 1 else (\d+)$", _gen, re.M)

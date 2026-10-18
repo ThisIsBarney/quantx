@@ -98,10 +98,13 @@ k=π** (the Haldane gap Δ≈0.41 J), where the critical spin-1/2 chain instead 
 gapless two-spinon *continuum*. Demo at N=16, T=0.5; the dashed line is the
 single-magnon dispersion.
 
-![Spin-1 optical conductivity](conductivity_spin1_sigma.svg)
+![Spin-1 current spectral function](conductivity_spin1_sigma.svg)
 
-The current-current correlator `⟨J(t)J(0)⟩_β` (F2) feeds the optical conductivity
-`σ(ω,T)` the same way (FFT of the emitted `C(t)`). Both correlators are ED-validated
+The current-current correlator `⟨J(t)J(0)⟩_β` (F2) feeds the current spectral function
+`S_J(ω,T)` the same way (FFT of the emitted `C(t)`). That is not the optical
+conductivity: `Re σ(ω,T) = (1 − e^{−βω})/(2Lω) · S_J(ω,T)`, a frequency-dependent Kubo
+factor these figures do not apply (`.conductivity()` in `quantx_engine.thermal` does).
+Both correlators are ED-validated
 (8e-4 / 2e-3); the figures (`qx_thermal_skw_emit`/`qx_thermal_transport_bench` with
 `d=3`, `benchmarks/plot_skw.py`/`plot_conductivity.py`) are demos of the *fast-path*
 finite-T spectroscopy now available for spin-1.
@@ -300,11 +303,12 @@ The demo figures run at the **particle-hole symmetric point** `μ = U/2`, which 
 `⟨n⟩ = 1` at *every* temperature — the honest half-filled Mott ensemble. (The first
 attempt at μ=0 produced a physically *correct but different* object: the grand-canonical
 filling drifts below 1 on cooling and the low-ω response is a doped-carrier Drude peak —
-caught because the σ(ω) spectral weight sat below the Mott gap, contradicting the
+caught because the current spectral weight sat below the Mott gap, contradicting the
 intended caption.) At μ=U/2 the physics is textbook: `S_spin(k,ω,T)` stays gapless at
 k=π (spinons at the superexchange scale, `C(0)=0.8045` at T=0.5 vs 0.806 at T=0 —
-half filling pinned to 3 digits), while the current spectral function (∝ σ(ω,T), not
-Kubo-reweighted) puts most of its weight **above the Mott gap**: at T = 1 and 0.5 it
+half filling pinned to 3 digits), while the current spectral function (the raw
+transform, not σ(ω,T): no Kubo factor) puts most of its weight **above the Mott
+gap**: at T = 1 and 0.5 it
 peaks at ω ≈ 3.4 and 3.2, the upper Hubbard band, and the share of its weight below the
 gap (Δ_c = 1.287 at U = 4, Lieb–Wu; of all the weight the time step resolves) drops
 24% → 14% → **7%** as T cools 2 → 1 → 0.5 —

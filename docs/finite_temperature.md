@@ -135,9 +135,9 @@ finite-T spectroscopy.
 ![S(k,omega) cold](skw_b2.0.svg)
 ![S(k,omega) warm](skw_b0.5.svg)
 
-**Current spectral function `∝ σ(ω,T)`** (FFT of `⟨J(t)J(0)⟩_β`; the raw spectral
-function, not Kubo-reweighted). The response peaks near the exchange scale
-`ω ≈ J`; the total weight (f-sum `∝ ⟨J²⟩_T`) shrinks on cooling.
+**Current spectral function `S_J(ω,T)`** (FFT of `⟨J(t)J(0)⟩_β`; the raw spectral
+function, not `σ(ω,T)`, which multiplies it by the Kubo factor above). The response
+peaks near the exchange scale `ω ≈ J`; the total weight (`∝ ⟨J²⟩_T`) shrinks on cooling.
 
 ![current spectral function](conductivity_sigma_wT.svg)
 

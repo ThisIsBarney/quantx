@@ -191,14 +191,17 @@ S(k, ω, T) for the Hubbard chain at β = 2, from a 16-site purified chain:
 
 Data: ``docs/skw_hubbard_b2.0.csv``.
 
-**Charge transport at finite temperature.** The same purification, applied to the charge
-current: ⟨J(t)J(0)⟩_β of the half-filled Hubbard chain (16 sites, U = 4, χ = 1024),
-Fourier-transformed into the current spectral function. That is proportional to σ(ω, T),
-but it is the raw transform, not the Kubo-reweighted conductivity. As the chain cools
-through T = 2, 1 and 0.5, the share of its weight below the Mott gap (1.287 at U = 4, from
-Lieb–Wu) falls 24 % → 14 % → 7 %: thermal carriers inside the gap freezing out. At T = 1
-and 0.5 the spectrum peaks at ω ≈ 3.4 and 3.2, in the upper Hubbard band; at T = 2 its
-largest peak is the thermal one at ω ≈ 0.25.
+**The current spectrum at finite temperature.** The same purification, applied to the
+charge current: ⟨J(t)J(0)⟩_β of the half-filled Hubbard chain (16 sites, U = 4, χ = 1024),
+Fourier-transformed into the current spectral function S_J(ω, T). That is the raw
+transform, not the optical conductivity: Re σ(ω, T) = (1 − e^(−βω))/(2Lω) · S_J(ω, T),
+and because that Kubo factor depends on ω it moves weight between frequencies. The
+figure does not apply it (``conductivity()`` on the same correlation object does), so
+nothing below is a statement about transport. As the chain cools through T = 2, 1 and
+0.5, the share of the spectrum's weight below the Mott gap (1.287 at U = 4, from Lieb–Wu)
+falls 24 % → 14 % → 7 %, as the thermally excited carriers behind the in-gap current
+fluctuations freeze out. At T = 1 and 0.5 the spectrum peaks at ω ≈ 3.4 and 3.2, in the
+upper Hubbard band; at T = 2 its largest peak is the thermal one at ω ≈ 0.25.
 
 .. image:: ../conductivity_hubbard_sigma.svg
    :alt: Current spectral function of the half-filled Hubbard chain at three temperatures

@@ -1,18 +1,20 @@
-"""Current spectral function (proportional to the optical conductivity sigma(omega,T))
-from the finite-T current-current correlator C(t;T) = <J(t)J(0)>_beta emitted by
+"""Current spectral function S_J(omega,T) = Re int e^{i omega t} C(t) dt of the finite-T
+current-current correlator C(t;T) = <J(t)J(0)>_beta emitted by
 qx_thermal_transport_bench (docs/transport_correlator.csv: columns t, ReC_b<beta>,
-ImC_b<beta>, ...). This is the RAW spectral function Re int e^{i omega t} C(t) dt,
-not the Kubo-reweighted conductivity (which carries an extra (1-e^{-beta omega})/omega
-factor) -- so the f-sum (integral) tracks <J^2>_T and the trend with T is in the total
-weight, not a Drude peak.
+ImC_b<beta>, ...). This is the RAW spectral function, NOT the optical conductivity:
+Re sigma(omega) = (1 - e^{-beta omega}) / (2 L omega) * S_J(omega) (Kubo), and that
+factor depends on omega, so it moves weight between frequencies. This script does not
+apply it; quantx_engine.thermal's current_correlation(...).conductivity() does, gated
+against ED in test_thermal_ed.py. The integral of S_J tracks <J^2>_T, so the trend with
+T is in the total weight, not a Drude peak.
 
-sigma(omega) ∝ Re integral_{-inf}^{inf} e^{i omega t} C(t) dt. With C(-t) = C(t)^*
+S_J(omega) = Re integral_{-inf}^{inf} e^{i omega t} C(t) dt. With C(-t) = C(t)^*
 (the symmetric correlator), the integral is real and reduces to a cosine/sine
 transform of the t>=0 data, windowed with a Gaussian to tame the finite-time
 truncation ringing. Pure stdlib (no numpy) so it runs anywhere, matching the
 other QuantX plotters.
 
-load(), sigma(), summaries() and render() have no side effects, so
+load(), spectrum(), summaries() and render() have no side effects, so
 benchmarks/check_vqe_doc.py recomputes the numbers the docs quote with this code
 rather than with a copy of it.
 
@@ -59,8 +61,8 @@ def load(csvp):
     return T, betas, C
 
 
-# --- sigma(omega) = 2 * sum_t w(t) Re[e^{i omega t} C(t)] dt (t=0 half-weight) -
-def sigma(T, series, grid=None):
+# --- S_J(omega) = 2 * sum_t w(t) Re[e^{i omega t} C(t)] dt (t=0 half-weight) -
+def spectrum(T, series, grid=None):
     dt, tmax = T[1] - T[0], T[-1]
     def window(t): return math.exp(-0.5 * (t / (ETA * tmax)) ** 2)
     out = []
@@ -78,11 +80,11 @@ def summaries(T, betas, C, model):
     full = [math.pi / (T[1] - T[0]) * m / 2000 for m in range(2001)]
     out = {}
     for b in sorted(betas):
-        S = sigma(T, C[b])
+        S = spectrum(T, C[b])
         peak = omegas[max(range(len(omegas)), key=lambda m: S[m])]
         below = None
         if model == "hubbard":
-            pos = [max(v, 0.0) for v in sigma(T, C[b], full)]
+            pos = [max(v, 0.0) for v in spectrum(T, C[b], full)]
             below = sum(p for w, p in zip(full, pos) if w < MOTT_GAP_U4) / sum(pos)
         out[b] = (peak, below)
     return out
@@ -93,7 +95,7 @@ def render(T, betas, C, model):
     """The figure, as SVG text."""
     _CHAIN = ("Hubbard chain (U=4t, half filling) &#8212; charge current" if model == "hubbard"
               else "spin-1 Haldane chain" if model == "spin1" else "Heisenberg chain")
-    S = {b: sigma(T, C[b]) for b in betas}
+    S = {b: spectrum(T, C[b]) for b in betas}
     W, H = 780, 500
     L, R, TOP, BOT = 70, 170, 70, 70
     PX0, PX1, PY0, PY1 = L, W - R, TOP, H - BOT
@@ -121,9 +123,9 @@ def render(T, betas, C, model):
     s.append(f'<line x1="{PX0}" y1="{ypx(0):.1f}" x2="{PX1}" y2="{ypx(0):.1f}" stroke="#444" stroke-width="1.2"/>')
     s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-30}" text-anchor="middle" font-size="13" fill="#222">frequency  &#969;  (J=1)</text>')
     s.append(f'<text x="20" y="{(PY0+PY1)/2:.0f}" text-anchor="middle" font-size="13" fill="#222" '
-             f'transform="rotate(-90 20 {(PY0+PY1)/2:.0f})">&#963;(&#969;,T)  (arb.)</text>')
-    s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Finite-T current spectral function  &#8733; &#963;(&#969;,T)</text>')
-    s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="46" text-anchor="middle" font-size="12" fill="#555">{_CHAIN}, FFT of &#10216;J(t)J(0)&#10217;<tspan baseline-shift="sub" font-size="9">&#946;</tspan> (Gaussian window); raw, not Kubo-reweighted</text>')
+             f'transform="rotate(-90 20 {(PY0+PY1)/2:.0f})">S<tspan baseline-shift="sub" font-size="9">J</tspan>(&#969;,T)  (arb.)</text>')
+    s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Finite-T current spectral function  S<tspan baseline-shift="sub" font-size="10">J</tspan>(&#969;,T)</text>')
+    s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="46" text-anchor="middle" font-size="12" fill="#555">{_CHAIN}, FFT of &#10216;J(t)J(0)&#10217;<tspan baseline-shift="sub" font-size="9">&#946;</tspan> (Gaussian window); raw: not &#963;(&#969;), no Kubo factor</text>')
 
     colors = ["#d62728", "#1f77b4", "#2ca02c", "#9467bd", "#ff7f0e"]
     lx, ly = PX1 + 16, PY0 + 16
@@ -136,9 +138,9 @@ def render(T, betas, C, model):
         s.append(f'<line x1="{lx}" y1="{yy}" x2="{lx+22}" y2="{yy}" stroke="{col}" stroke-width="2.4"/>')
         s.append(f'<text x="{lx+28}" y="{yy+4}" font-size="11" fill="#333">T = {1.0/b:.2f}  (&#946;={b:.1f})</text>')
     s.append(f'<text x="{(PX0+PX1)/2:.0f}" y="{H-12}" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">'
-             + ('Optical weight sits ABOVE the Mott gap (&#969; &#8776; U scale); cooling sharpens the gap edge. Absolute scale arbitrary.'
+             + ('Spectral weight sits ABOVE the Mott gap (&#969; &#8776; U scale); cooling sharpens the gap edge. Absolute scale arbitrary.'
               if model == "hubbard" else
-              'Response peaks near the exchange scale &#969;&#8776;J; total weight (f-sum &#8733; &#10216;J&#178;&#10217;<tspan baseline-shift="sub" font-size="8">T</tspan>) decreases on cooling. Absolute scale arbitrary.') + '</text>')
+              'Response peaks near the exchange scale &#969;&#8776;J; total weight (&#8733; &#10216;J&#178;&#10217;<tspan baseline-shift="sub" font-size="8">T</tspan>) decreases on cooling. Absolute scale arbitrary.') + '</text>')
     s.append('</svg>')
     return "\n".join(s)
 
