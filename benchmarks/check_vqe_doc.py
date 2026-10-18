@@ -731,6 +731,10 @@ else:
     elif not _pg:
         fails.append("results page: the HVA-vs-state-vector precision sentence is gone or "
                      "reworded, so its bound can no longer be checked against the README")
+    elif not _rd:
+        # the README side can drift too, and a missing match must not read as agreement
+        fails.append("README: the HVA state-vector bound sentence is gone or reworded, so "
+                     "the Results page's bound can no longer be checked against it")
 
     # The stripe demonstration. Its data line says the CSV is what plot_stripes.py writes
     # from the run's log, so the two must agree row for row; the page called a run the
