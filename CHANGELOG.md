@@ -26,6 +26,11 @@ bug-fixes and packaging corrections only.
   falling by 4 at half the step, and the Fourier transforms against Lehmann sums to
   1e-8. J1-J2 and the Hubbard lattices have no purified form in the engine yet, and are
   refused. The C API entry point is `qx_thermal`.
+- **`examples/quickstart.py`** (gate G1): a Hubbard ground state, a finite-temperature
+  spectral function and an HVA circuit in twenty lines, each asserted against an exact
+  answer computed without the engine. CI runs it on every wheel it builds, in a clean
+  environment, and `test_quickstart.py` recomputes the three answers (two exact
+  diagonalisations and a state vector) and checks the example against them.
 
 ### Fixed
 

@@ -32,6 +32,9 @@ Windows AMD64, on any CPython 3.10 or later. On other platforms pip installs a
 pure-Python package without the engine, and `quantx_engine.backend_info()["native"]` is
 `False`. The wheels are CPU-only; the macOS ones also run without OpenMP.
 
+`quantx_engine.thermal` came after 0.1.0, the release on PyPI. Until the next release it
+needs a build from source (below).
+
 ## Quick start
 
 ```python
@@ -68,6 +71,10 @@ k, w, S = sf.spectrum()                     # S(k, omega, T), both signs of omeg
 Finite temperature works by purification, in the grand-canonical ensemble. The Hubbard
 chain needs a larger `max_bond` than the spin chains for the same times; see
 [docs/finite_temperature.md](docs/finite_temperature.md).
+
+[`examples/quickstart.py`](examples/quickstart.py) runs all three, a Hubbard ground
+state, a finite-temperature spectral function and an HVA circuit, and asserts each
+against an exact answer computed without the engine. CI runs it on every wheel.
 
 **Conventions.**
 - The spin models use physical spin operators S = σ/2 throughout.

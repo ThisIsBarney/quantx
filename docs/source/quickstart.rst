@@ -38,6 +38,31 @@ This cylinder already truncates at ``max_bond=256``: ``truncation_error`` is abo
 and the energy moves by 3e-3 at ``max_bond=1024``. Raise ``max_bond`` until it stops
 moving.
 
+Finite temperature
+------------------
+
+.. code-block:: python
+
+   from quantx_engine import thermal
+   from quantx_engine.models import XXZChain
+
+   sf = thermal.structure_factor(XXZChain(L=12), beta=1.0, t_max=4.0)   # ~10 s
+   k, omega, S = sf.spectrum()     # S(k, omega, T), both signs of omega
+
+The ensemble is grand canonical. :mod:`quantx_engine.thermal` also gives the statics and the
+optical conductivity.
+
+All three, checked
+------------------
+
+``examples/quickstart.py`` in the repository runs a Hubbard ground state, a
+finite-temperature spectral function and an HVA circuit, and asserts each against an exact
+answer computed without the engine. CI runs it on every wheel it builds.
+
+.. literalinclude:: ../../examples/quickstart.py
+   :language: python
+   :start-at: from quantx_engine import hva
+
 Conventions
 -----------
 

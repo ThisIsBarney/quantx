@@ -26,6 +26,9 @@ when called: :func:`~quantx_engine.dmrg.ground_state` raises
 :class:`~quantx_engine.hva.HVAError`, each asking for a platform wheel or
 ``QUANTX_LIB_PATH``. The experimental modules work either way.
 
+:mod:`quantx_engine.thermal` came after 0.1.0, the release on PyPI. Until the next
+release it needs a build from source (below).
+
 Optional extras
 ---------------
 
