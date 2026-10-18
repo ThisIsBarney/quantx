@@ -753,11 +753,18 @@ else()
 endif()
 
 add_test(NAME qx_hubbard_test COMMAND qx_hubbard_test)
-# Measured ~17 min on a 20-core box: the ED sections build dense 4^6 fermion
-# operators and run several 120-sweep DMRGs, and the HVA circuit case adds a
-# state-vector reference. ctest's 1500 s default leaves no headroom on a slower or
-# CPU-only machine. A per-test TIMEOUT wins over ctest --timeout, so the nightly long
-# suite on the slower hosted runners raises it here.
+# Measured 14 min on a 20-thread desktop (i5-13600KF), down from 42 min. The test
+# prints "[<section> took N s]" after every section, so a timeout points at a section
+# rather than at the whole run -- ctest buffers output, and a timed-out test otherwise
+# prints nothing at all.
+# What it costs now: almost all of it is the two rung-fused (d=16) ladder sections, the
+# explicit-JW ladder ED and the HVA circuit on the fused ladder, ~4-9 min each depending
+# on load. The HVA state-vector references for the chain, the swap network and the
+# width-W lattice used to be most of the 42 min -- dense 4096^3 eigendecompositions,
+# 1170 s for the lattice section alone -- and now run in closed form (see section q0).
+# ctest's 1500 s default leaves no headroom on a slower or CPU-only machine. A per-test
+# TIMEOUT wins over ctest --timeout, so the nightly long suite on the slower hosted
+# runners raises it here.
 set(QX_HUBBARD_TEST_TIMEOUT 5400 CACHE STRING "qx_hubbard_test timeout, in seconds")
 set_tests_properties(qx_hubbard_test PROPERTIES TIMEOUT ${QX_HUBBARD_TEST_TIMEOUT})
 add_test(NAME qx_thermal_blocks_test COMMAND qx_thermal_blocks_test)

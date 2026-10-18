@@ -57,7 +57,10 @@ jobs:
       - name: Execute notebooks with nbmake
         run: |
           mkdir -p reports
+          # notebooks/engine needs the native engine, which this job does not build:
+          # build-native.yml runs it against its own library.
           pytest notebooks/ \
+            --ignore=notebooks/engine \
             --nbmake \
             --nbmake-timeout=120 \
             -v \
