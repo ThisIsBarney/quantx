@@ -16,14 +16,15 @@ Against exact answers
 
 **The Hubbard chain against the Lieb–Wu integral equations.** The 1D Fermi-Hubbard model
 is exactly solvable, so its bulk energy per site is known *analytically* rather than from
-another numerical calculation. Extrapolating the engine's incremental bulk energy at
-N = 64:
+another numerical calculation. The engine's bulk energy per site is taken as the
+incremental difference (E₆₄ − E₄₈)/16 between its two longest open chains — a finite
+difference, not an extrapolation:
 
 .. list-table::
    :header-rows: 1
 
    * - U/t
-     - engine, bulk extrapolation
+     - engine, (E₆₄ − E₄₈)/16
      - Lieb–Wu exact
      - difference
    * - 2
@@ -43,8 +44,10 @@ N = 64:
    :alt: Hubbard chain energy per site against the Lieb-Wu exact solution
    :width: 100%
 
-Data: ``docs/hubbard_lieb_wu.csv``. The residual is finite-size extrapolation error, not
-truncation, and it shrinks with U because the chain is less correlated at strong coupling.
+Data: ``docs/hubbard_lieb_wu.csv``. The residual is mainly finite-size error that the
+difference does not cancel: the spin excitations are gapless at every U, so the energy of
+an open chain carries a 1/N term, and that term shrinks as U grows because the spin
+velocity does. Fitting it out of the three longest chains removes most of the residual.
 
 **Ground states against independent exact diagonalisation.** For the XXZ, J1-J2, spin-1
 Heisenberg and Fermi-Hubbard chains, and for Hubbard ladders and cylinders where the
@@ -184,16 +187,22 @@ S(k, ω, T) for the Hubbard chain at β = 2, from a 16-site purified chain:
 
 Data: ``docs/skw_hubbard_b2.0.csv``.
 
-**Stripe order in the doped Hubbard model.** On a 16×4 strip the engine shows the charge
-and spin stripe pattern that makes the doped Hubbard model hard — alternating hole-rich
-rows with the spin texture phase-shifted across them.
+**Stripe order in the doped Hubbard model.** On a 16×4 cylinder at U = 8 and 1/8 hole
+doping, the engine finds hole-rich rings around the cylinder about every 4 sites, and the
+antiferromagnetic order changes sign across each one — the π phase shift that is the
+signature of stripe order. This demonstrates the machinery (a doped charge sector, edge
+pinning, per-site profiles, 64 sites at χ = 1024); it does not settle the wavelength. At
+this doping the favoured stripes are reported to be *filled*, twice as far apart, with
+competing wavelengths a few kelvin apart in energy (Zheng et al., Science 358, 1155
+(2017)). The half-filled pattern here is one of those close competitors, and separating
+them takes a far larger χ.
 
 .. image:: ../hubbard_stripes.svg
-   :alt: Charge and spin stripes in the doped Hubbard model on a 16x4 strip
+   :alt: Charge and spin stripes in the doped Hubbard model on a 16x4 cylinder
    :width: 100%
 
-Data: ``docs/hubbard_stripes.csv``, and ``docs/hubbard_ttprime.csv`` for the same
-measurement with a diagonal hopping t′ switched on.
+Data: ``benchmarks/stripes_16x4_chi1024.log``, the run's own output, from which
+``benchmarks/plot_stripes.py`` writes ``docs/hubbard_stripes.csv`` and draws the figure.
 
 Performance
 -----------

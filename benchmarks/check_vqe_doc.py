@@ -11,7 +11,7 @@ present in the doc. Run it after regenerating any VQE data, before committing.
 
 Run: python benchmarks/check_vqe_doc.py   (exit 1 on any mismatch)
 """
-import csv, math, os, re, sys
+import csv, glob, math, os, re, subprocess, sys
 
 HERE = os.path.dirname(__file__)
 DOCS = os.path.join(HERE, "..", "docs")
@@ -619,6 +619,43 @@ else:
             expect_res(f"Lieb-Wu U={U_:g} exact", f"{ex:.8f}".replace("-", "\u2212"))
             expect_res(f"Lieb-Wu U={U_:g} difference",
                        f"{abs(eng - ex):.1e}".replace("e-0", "e-"))
+        # The engine column is a finite difference of the two longest chains, and the page
+        # must name which two: it called the N = 64 row an "extrapolation" until Codex read
+        # the showcase and found (E_N - E_prev)/(N - N_prev).
+        _sub = str.maketrans("0123456789", "₀₁₂₃₄"
+                                           "₅₆₇₈₉")
+        for U_ in sorted(LW):
+            n1, n2 = sorted(int(r_["N"]) for r_ in LW[U_])[-2:]
+            expect_res(f"Lieb-Wu U={U_:g} difference formula",
+                       f"(E{str(n2).translate(_sub)} − E{str(n1).translate(_sub)})"
+                       f"/{n2 - n1}")
+        # "mainly finite-size error ... a 1/N term ... shrinks as U grows ... fitting it out
+        # removes most of the residual": E_N = N e + f + a/N, solved exactly through the three
+        # longest chains, must leave less than half the residual at every U, and |a| must
+        # fall as U grows.
+        def _det3(M):
+            return (M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1])
+                    - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0])
+                    + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]))
+        _a = []
+        for U_ in sorted(LW):
+            R_ = {int(r_["N"]): r_ for r_ in LW[U_]}
+            n3 = sorted(R_)[-3:]
+            A_ = [[N_, 1.0, 1.0 / N_] for N_ in n3]
+            b_ = [float(R_[N_]["E_per_site"]) * N_ for N_ in n3]
+            e_, _, a_ = [_det3([[b_[i] if j == k else A_[i][j] for j in range(3)]
+                                for i in range(3)]) / _det3(A_) for k in range(3)]
+            ex_ = float(R_[n3[-1]]["e_liebwu"])
+            inc_ = float(R_[n3[-1]]["e_bulk_incremental"])
+            if not abs(e_ - ex_) < 0.5 * abs(inc_ - ex_):
+                fails.append(f"results page: at U={U_:g} the 1/N fit leaves {abs(e_ - ex_):.1e} "
+                             f"of the {abs(inc_ - ex_):.1e} residual, so 'mainly finite-size' "
+                             f"and 'removes most of the residual' no longer hold")
+            _a.append(abs(a_))
+        if any(lo_ >= hi_ for hi_, lo_ in zip(_a, _a[1:])):
+            fails.append(f"results page: the 1/N coefficient |a| = "
+                         f"{', '.join(f'{v:.3f}' for v in _a)} does not fall as U grows, so "
+                         f"'that term shrinks as U grows' no longer holds")
     # the J1-J2 truncation-sensitivity row the page tabulates
     jj_path = os.path.join(DOCS, "j1j2_dimerization.csv")
     if os.path.exists(jj_path):
@@ -695,22 +732,104 @@ else:
         fails.append("results page: the HVA-vs-state-vector precision sentence is gone or "
                      "reworded, so its bound can no longer be checked against the README")
 
-    # the stripe demonstration's stated size
+    # The stripe demonstration. Its data line says the CSV is what plot_stripes.py writes
+    # from the run's log, so the two must agree row for row; the page called a run the
+    # showcase makes periodic in y a "strip", so the geometry is read from the showcase's
+    # own MPO call; and the pattern the prose describes is re-derived from the profile.
     st_path = os.path.join(DOCS, "hubbard_stripes.csv")
-    if os.path.exists(st_path):
+    st_log = os.path.join(HERE, "stripes_16x4_chi1024.log")
+    if os.path.exists(st_path) and os.path.exists(st_log):
         S_ = list(csv.DictReader(open(st_path)))
+        _hd, _prof = None, []
+        for _ln in open(st_log):
+            _m = re.match(r"STRIPES Lx=(\d+) W=(\d+) chi=(\d+) U=(-?[\d.]+) holes=(\d+)", _ln)
+            _hd = _hd or (_m and _m.groups())
+            _m = re.match(r"PROF (\d+) (\d+) (\d+) (-?[\d.]+) (-?[\d.]+)$", _ln.strip())
+            if _m:
+                _prof.append(list(_m.groups()))
+        _csv = [[r_["i"], r_["x"], r_["y"], r_["n"], r_["two_sz"]] for r_ in S_]
+        _logrows = [p_[:3] + [f"{float(p_[3]):.8f}", f"{float(p_[4]):.8f}"] for p_ in _prof]
+        if not _hd or _csv != sorted(_logrows, key=lambda p_: int(p_[0])):
+            fails.append("results page: docs/hubbard_stripes.csv is not what plot_stripes.py "
+                         "writes from benchmarks/stripes_16x4_chi1024.log, as the page says")
         nx = max(int(r_["x"]) for r_ in S_) + 1
         ny = max(int(r_["y"]) for r_ in S_) + 1
-        expect_res("stripe lattice size", f"{nx}\u00d7{ny}")
+        hole, stag = [0.0] * nx, [0.0] * nx
+        for r_ in S_:
+            x_, y_ = int(r_["x"]), int(r_["y"])
+            hole[x_] += (1.0 - float(r_["n"])) / ny
+            stag[x_] += (-1) ** (x_ + y_) * float(r_["two_sz"]) / (2 * ny)
+        nholes = round(sum(hole) * ny)
+        _src = open(os.path.join(HERE, "..", "src", "hubbard_showcase.cpp"),
+                    encoding="utf-8").read()
+        _m = re.search(r"QX_STRIPES.*?build_hubbard_lattice_split_mpo\(([^;]*?)\);", _src, re.S)
+        _yp = [a_.strip() for a_ in _m.group(1).split(",")][5] if _m else None
+        if _yp not in ("true", "false") or not _hd:
+            fails.append("results page: cannot read the stripe run's geometry from "
+                         "src/hubbard_showcase.cpp and its log, so the stripe prose is unchecked")
+        else:
+            expect_res("stripe geometry, U and doping",
+                       f"{nx}\u00d7{ny} {'cylinder' if _yp == 'true' else 'strip'} at "
+                       f"U = {float(_hd[3]):g} and 1/{(nx * ny) // nholes} hole")
+            expect_res("stripe size and chi", f"{nx * ny} sites at \u03c7 = {_hd[2]}")
+        # hole-rich rings with the AF order flipping sign across each one
+        peaks = [x_ for x_ in range(1, nx - 1) if hole[x_] > max(hole[x_ - 1], hole[x_ + 1])]
+        flips = [x_ + 0.5 for x_ in range(nx - 1) if stag[x_] * stag[x_ + 1] < 0]
+        if (len(flips) < 2 or len(peaks) != len(flips)
+                or any(min(abs(f_ - p_) for p_ in peaks) > 1 for f_ in flips)):
+            fails.append(f"results page: the AF sign flips at x = {flips} no longer sit on the "
+                         f"hole-rich rings at x = {peaks}, as the stripe prose says")
+        else:
+            expect_res("stripe spacing",
+                       f"about every {(flips[-1] - flips[0]) / (len(flips) - 1):.0f} sites")
+            # holes per site along a ring: 1/2 is "half-filled", and filled stripes at the
+            # same doping sit 1/(1/2) = twice as far apart
+            if nholes / len(flips) / ny != 0.5:
+                fails.append(f"results page: {nholes} holes in {len(flips)} rings of {ny} is "
+                             f"not half-filled, so 'half-filled ... twice as far apart' is stale")
+            else:
+                expect_res("stripe filling", "The half-filled pattern here")
+                expect_res("filled-stripe spacing", "*filled*, twice as far apart")
+    else:
+        fails.append("results page: the stripe CSV or the log it is written from is missing")
     # and every figure the page embeds must be a file that exists, so a fresh checkout
     # cannot deploy a broken image -- the failure that reached review on this very page
     import re as _re
     for m in _re.findall(r"\.\./([A-Za-z0-9_.]+\.svg)", res):
         if not os.path.exists(os.path.join(DOCS, m)):
             fails.append(f"results page: embeds ../{m}, which is not in docs/")
-    for m in _re.findall(r"``docs/([A-Za-z0-9_.]+\.csv)``", res):
-        if not os.path.exists(os.path.join(DOCS, m)):
-            fails.append(f"results page: cites docs/{m}, which does not exist")
+    # ... and every data file it cites must be COMMITTED: an untracked file passes
+    # os.path.exists on the one machine that made it and fails on every fresh checkout.
+    try:
+        _tracked = set(subprocess.run(["git", "ls-files"], cwd=os.path.join(HERE, ".."),
+                                      capture_output=True, text=True,
+                                      check=True).stdout.splitlines())
+    except (OSError, subprocess.CalledProcessError):
+        _tracked = None                     # no git (an unpacked sdist): existence only
+
+    def _have(rel):
+        if _tracked is not None:
+            return rel in _tracked
+        return os.path.exists(os.path.join(HERE, "..", rel))
+
+    for m in _re.findall(r"``((?:docs|benchmarks)/[A-Za-z0-9_.+-]+\.(?:csv|log))``", res):
+        if not _have(m):
+            fails.append(f"results page: cites {m}, which is not committed")
+    # A figure is reproducible only if the script that draws it runs on a fresh checkout.
+    # Codex found the stripe renderer reading a log that was never committed -- the CSV the
+    # page named was the script's OUTPUT -- so every .csv/.log a figure's renderer names
+    # must be committed as well.
+    for svg in _re.findall(r"\.\./([A-Za-z0-9_.]+\.svg)", res):
+        for py in sorted(glob.glob(os.path.join(HERE, "plot_*.py"))):
+            body = open(py, encoding="utf-8").read()
+            if svg not in body:
+                continue
+            for lit in sorted(set(_re.findall(r"[\"']([A-Za-z0-9_.+-]+\.(?:csv|log))[\"']",
+                                              body))):
+                if not (_have("benchmarks/" + lit) or _have("docs/" + lit)):
+                    fails.append(f"results page: {svg} is drawn by benchmarks/"
+                                 f"{os.path.basename(py)}, which reads {lit}, and that file "
+                                 f"is not committed")
 
 if fails:
     # The doc uses -, x, sigma and superscripts, so the report itself contains non-ASCII.
