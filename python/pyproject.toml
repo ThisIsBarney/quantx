@@ -110,23 +110,16 @@ before-build = [
   "python {project}/scripts/build_native_for_wheel.py {package}/quantx_engine",
 ]
 
-# Smoke-test the installed wheel: the native engine must load from the wheel alone, and it
-# must report the same version pip installed (the engine once said 0.1.0-dev inside a
-# package that said 0.4.0, inside a distribution that said 1.0.0). Then the quick start
-# (gate G1): a Hubbard ground state, a finite-temperature spectral function and an HVA
-# circuit against their exact answers, on every platform wheel. cibuildwheel joins the
-# commands with &&.
-test-command = ["""python -c "
-import quantx_engine
-from quantx_engine import backend_info
-from quantx_engine.engine import Engine
-info = backend_info()
-print('native:', info['native'], '| version:', info['version'])
-print('pybind11:', Engine.pybind11_available())
-assert info['native'], 'Native engine not found in wheel'
-assert info['version'] == quantx_engine.__version__, (info['version'], quantx_engine.__version__)
-print('wheel smoke test PASSED')
-" """, "python {project}/examples/quickstart.py"]
+# Smoke-test the installed wheel (scripts/wheel_smoke_test.py): the native engine must load
+# from the wheel alone, at the version pip installed. Then the quick start (gate G1): a
+# Hubbard ground state, a finite-temperature spectral function and an HVA circuit against
+# their exact answers, on every platform wheel. Each command is one line: cmd.exe, which
+# runs them on Windows, cuts a command at its first line break. cibuildwheel joins the
+# list with &&.
+test-command = [
+  "python {project}/scripts/wheel_smoke_test.py",
+  "python {project}/examples/quickstart.py",
+]
 
 [tool.cibuildwheel.linux]
 manylinux-x86_64-image = "manylinux_2_28"
