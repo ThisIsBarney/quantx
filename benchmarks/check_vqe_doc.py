@@ -65,7 +65,9 @@ def expect_res(label, text):
         msg = "docs/source/results.rst is missing, but the docs site publishes it"
         if msg not in fails:
             fails.append(msg)
-    elif text not in res:
+    elif " ".join(text.split()) not in " ".join(res.split()):
+        # whitespace-insensitive: the page is reflowed prose, and a check that breaks when
+        # a sentence re-wraps would be loosened instead of kept
         fails.append(f"results page: {label}\n    expected in results.rst: {text}")
 
 def S(n, p):                                        # part B first, part A as fallback
@@ -589,6 +591,12 @@ else:
         if r_:
             expect_res(f"W={w_} correlation energy at p={pw_}",
                        format(float(r_["frac"]), ".1%").replace("%", " %"))
+    # ... and the depth range over which the page says that ordering holds. It said "from 2
+    # to 12" -- the barren-plateau scan's range -- of a width scan that stops at p = 8, and
+    # the ordering check above only visits depths the CSV has, so it could not notice.
+    _pe = [p_ for p_ in ps if p_ >= 2 and all(row(w, p_) for w in ws)]
+    if _pe:
+        expect_res("width-scan depth range", f"at every depth from {min(_pe)} to {max(_pe)}")
     # part F: the cylinder/chain gradient-variance band, both normalisations
     if F:
         pf_ = sorted({p for (_, p) in F})

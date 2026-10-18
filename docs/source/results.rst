@@ -67,7 +67,7 @@ scan in the documentation; they are not repeated here, so they cannot drift.
 same site-split representation, the same balanced cut and the same search protocol — only
 the connectivity graph changes. At depth 8 the correlation energy captured falls
 98.5 % → 95.7 % → 90.7 % as the lattice widens, and that ordering holds at every depth
-from 2 to 12. The wider lattices get **more** parameters per layer (4 against the chain's
+from 2 to 8. The wider lattices get **more** parameters per layer (4 against the chain's
 3), so a worse energy with more freedom is the stronger form of the result.
 
 .. image:: ../vqe_width.svg
