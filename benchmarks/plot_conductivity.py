@@ -49,15 +49,31 @@ ETA = 0.4                                   # Gaussian window width (frac of tma
 def window(t): return math.exp(-0.5 * (t / (ETA * tmax)) ** 2)
 WMAX, NW = 6.0, 240
 omegas = [WMAX * m / NW for m in range(NW + 1)]
-def sigma(series):
+def sigma(series, grid=None):
     out = []
-    for w in omegas:
+    for w in (omegas if grid is None else grid):
         s = 0.5 * series[0].real * window(0.0)   # t=0 counted once
         for k in range(1, len(T)):
             s += window(T[k]) * (cmath.exp(1j * w * T[k]) * series[k]).real
         out.append(2.0 * s * dt)
     return out
 S = {b: sigma(C[b]) for b in betas}
+
+# The numbers docs/universal_mpo.md quotes: the peak frequency and, for Hubbard, the share
+# of the (positive) weight below the U = 4 Mott gap, 1.287 (Lieb-Wu). The share is taken
+# over every frequency the time grid resolves, up to pi/dt, not just the plotted range:
+# the upper Hubbard band runs past omega = 6. The window suppresses late times, so these
+# summaries are not a check that C(t) itself converged.
+MOTT_GAP_U4 = 1.287
+full = [math.pi / dt * m / 2000 for m in range(2001)]
+for b in sorted(betas):
+    peak = omegas[max(range(len(omegas)), key=lambda m: S[b][m])]
+    line = f"beta={b:g}: peak omega {peak:.2f}"
+    if MODEL == "hubbard":
+        pos = [max(v, 0.0) for v in sigma(C[b], full)]
+        below = sum(p for w, p in zip(full, pos) if w < MOTT_GAP_U4) / sum(pos)
+        line += f", weight below the Mott gap {100 * below:.1f}% (of all omega <= pi/dt)"
+    print(line)
 
 # --- SVG ---------------------------------------------------------------------
 W, H = 780, 500
