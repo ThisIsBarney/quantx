@@ -212,14 +212,15 @@ def table(args):
 
 
 def trajectory(args):
+    # BLAS reads its thread count when its library loads, so before numpy is imported.
+    if not args.gpu:
+        for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+            os.environ[v] = str(args.threads)
     import numpy as np
     import quimb as qu
     import quimb.tensor as qtn
     from quimb.tensor.circuit import parse_openqasm2_file
 
-    if not args.gpu:
-        for v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
-            os.environ[v] = str(args.threads)
     z_op = qu.pauli("Z").real
     opts = {}
     if args.gpu:
@@ -263,17 +264,22 @@ def trajectory(args):
 
 
 def trajectory_table(args):
+    # One set of columns per run, named by bond dimension and device: a CPU and a GPU run at
+    # the same chi truncate differently, so neither may stand in for the other.
     runs = {}
     for f in sorted(args.out_dir.glob("su2_hadron_traj_chi*.json")):
         d = json.loads(f.read_text())
-        runs.setdefault(d["chi"], d)
-    chis = sorted(runs)
-    print("step," + ",".join(f"n_f_chi{c},norm2_meson_chi{c},norm2_vacuum_chi{c}" for c in chis)
+        key = f"chi{d['chi']}_{'gpu' if d['gpu'] else 'cpu'}"
+        if key in runs:
+            sys.exit(f"two {key} trajectories in {args.out_dir}; keep one")
+        runs[key] = d
+    keys = sorted(runs, key=lambda k: (runs[k]["chi"], k))
+    print("step," + ",".join(f"n_f_{k},norm2_meson_{k},norm2_vacuum_{k}" for k in keys)
           + ",TN,PP_CPU,PP_GPU,QPU")
-    for k in range(1, 21):
-        ours = ",".join(f"{runs[c]['n_f'][k - 1]:.5f},{runs[c]['meson'][k - 1]['norm2']:.6f},"
-                        f"{runs[c]['SCV'][k - 1]['norm2']:.6f}" for c in chis)
-        print(f"{k},{ours}," + ",".join(f"{x:.5f}" for x in PUBLISHED[k]))
+    for s in range(1, 21):
+        ours = ",".join(f"{runs[k]['n_f'][s - 1]:.5f},{runs[k]['meson'][s - 1]['norm2']:.6f},"
+                        f"{runs[k]['SCV'][s - 1]['norm2']:.6f}" for k in keys)
+        print(f"{s},{ours}," + ",".join(f"{x:.5f}" for x in PUBLISHED[s]))
 
 
 def main():

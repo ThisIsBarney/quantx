@@ -4,12 +4,15 @@ Reads docs/referee_su2_hadron_nf_t.csv (from `su2_hadron_quimb.py trajectory-tab
 docs/referee_su2_hadron_nf.csv (the bond-dimension scan, for the chi = 1600 point at step
 20), and writes docs/referee_su2_hadron_nf_t.svg. Two panels share the step axis: n_f(t) for
 the MPS and the four published methods, and each method minus the MPS at the steps where the
-MPS is exact (the truncations left a squared norm of 1 to 5e-5 in both circuits). The
-numbers the doc quotes come from summaries(). Pure stdlib, like the other plotters.
+MPS has converged: the largest-chi run and the one at half its chi (same device) agree to
+TOL, and the largest-chi run truncated the norm by less than 5e-5. That is convergence to a stated
+tolerance, not an error bound. The numbers the doc quotes come from summaries(). Pure stdlib,
+like the other plotters.
 
 Run: python benchmarks/plot_su2_hadron.py
 """
 import csv
+import math
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -25,18 +28,37 @@ SHORT = {"TN": "TN", "PP_CPU": "PP, CPU", "PP_GPU": "PP, GPU", "QPU": "QPU"}
 SLOTS = {"MPS": ("#2a78d6", "#3987e5"), "TN": ("#eb6834", "#d95926"),
          "PP_CPU": ("#1baf7a", "#199e70"), "PP_GPU": ("#eda100", "#c98500"),
          "QPU": ("#e87ba4", "#d55181")}
-EXACT_NORM2 = 1 - 5e-5
+CONVERGED_NORM2 = 1 - 5e-5
+TOL = 5e-4                    # |n_f(chi) - n_f(chi/2)| at a converged step
 
 
 def load(traj=os.path.join(DOCS, "referee_su2_hadron_nf_t.csv"),
          scan=os.path.join(DOCS, "referee_su2_hadron_nf.csv")):
     with open(traj, newline="") as f:
         rows = list(csv.DictReader(f))
-    chi = max(int(k[len("n_f_chi"):]) for k in rows[0] if k.startswith("n_f_chi"))
+    runs = {}                               # (chi, device) of every n_f_chi<chi>_<device> column
+    for k in rows[0]:
+        if k.startswith("n_f_chi"):
+            c, dev = k[len("n_f_chi"):].split("_")
+            runs[(int(c), dev)] = k[len("n_f_"):]
+    chi = max(c for c, _ in runs)
+    devs = sorted(dev for c, dev in runs if c == chi)
+    if len(devs) != 1:
+        raise ValueError(f"chi = {chi} has runs on {devs}: plot one of them")
+    dev = devs[0]
+    lab, half = runs[(chi, dev)], runs.get((chi // 2, dev))
+    if half is None:
+        raise ValueError(f"no chi = {chi // 2} {dev} run to check chi = {chi} against")
     data = {"steps": [int(r["step"]) for r in rows], "chi": chi,
-            "MPS": [float(r[f"n_f_chi{chi}"]) for r in rows],
-            "exact": [min(float(r[f"norm2_meson_chi{chi}"]), float(r[f"norm2_vacuum_chi{chi}"]))
-                      >= EXACT_NORM2 for r in rows]}
+            "MPS": [float(r[f"n_f_{lab}"]) for r in rows],
+            "half": [float(r[f"n_f_{half}"]) for r in rows],
+            "converged": [abs(float(r[f"n_f_{lab}"]) - float(r[f"n_f_{half}"])) <= TOL
+                          and min(float(r[f"norm2_meson_{lab}"]),
+                                  float(r[f"norm2_vacuum_{lab}"])) >= CONVERGED_NORM2
+                          for r in rows]}
+    # converged means every step up to here, not isolated steps further on
+    first_bad = next((i for i, c in enumerate(data["converged"]) if not c), len(rows))
+    data["converged"] = [i < first_bad for i in range(len(rows))]
     for m in METHODS:
         data[m] = [float(r[m]) for r in rows]
     with open(scan, newline="") as f:
@@ -48,15 +70,23 @@ def load(traj=os.path.join(DOCS, "referee_su2_hadron_nf_t.csv"),
 
 def summaries(d):
     """The numbers docs/referee_su2_hadron.md quotes."""
-    exact = [i for i, e in enumerate(d["exact"]) if e]
-    last = exact[-1]
-    out = {"exact_through": d["steps"][last]}
+    conv = [i for i, c in enumerate(d["converged"]) if c]
+    out = {"converged_through": d["steps"][conv[-1]],
+           "half_diff": max(abs(d["MPS"][i] - d["half"][i]) for i in conv)}
     for m in METHODS:
-        dev = [d[m][i] - d["MPS"][i] for i in exact]
+        dev = [d[m][i] - d["MPS"][i] for i in conv]
         k = max(range(len(dev)), key=lambda j: abs(dev[j]))
+        above = next((d["steps"][conv[j]] for j in range(len(dev))
+                      if all(x > 0 for x in dev[j:])), None)
         out[m] = {"step1": d[m][0] - d["MPS"][0], "max": dev[k],
-                  "max_step": d["steps"][exact[k]], "at_last_exact": dev[-1]}
+                  "max_step": d["steps"][conv[k]], "at_last": dev[-1], "above_from": above}
     return out
+
+
+def _up1(x):
+    """x rounded up to one significant figure, as text (3.3e-4 -> '4e-4')."""
+    e = math.floor(math.log10(x))
+    return f"{math.ceil(x / 10 ** e)}e{e}"
 
 
 def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
@@ -86,18 +116,18 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
          f'viewBox="0 0 {W} {H}" role="img" aria-labelledby="title desc">',
          "<title id=\"title\">n_f(t) of the SU(2) hadron circuits: an exact MPS against the "
          "published methods</title>",
-         "<desc id=\"desc\">Two panels over Trotter steps 1 to 20. The MPS is exact to step "
-         f"{summaries(d)['exact_through']}; every published method drifts above it. "
-         "docs/referee_su2_hadron_nf_t.csv holds every value.</desc>",
+         "<desc id=\"desc\">Two panels over Trotter steps 1 to 20. The MPS has converged "
+         f"through step {summaries(d)['converged_through']}; the classical methods drift above "
+         "it. docs/referee_su2_hadron_nf_t.csv holds every value.</desc>",
          "<style>" + "".join(css) + "</style>",
          f'<rect width="{W}" height="{H}" fill="var(--surface)"/>',
          '<text class="t" x="24" y="32">n_f(t) of the tracker\'s SU(2) hadron circuits, '
          'step by step</text>',
-         f'<text class="s" x="24" y="52">The MPS (χ = {d["chi"]}) is exact through step '
-         f'{summaries(d)["exact_through"]}: its truncations left the norm at 1 to 5e-5. '
-         'The classical methods drift above it;</text>',
-         '<text class="s" x="24" y="68">the QPU swings both ways. The CSV beside this '
-         'figure holds every value.</text>']
+         f'<text class="s" x="24" y="52">The MPS (χ = {d["chi"]}) has converged through step '
+         f'{summaries(d)["converged_through"]}: χ = {d["chi"] // 2} agrees to '
+         f'{_up1(summaries(d)["half_diff"])}, and the norm stays within 5e-5 of 1.</text>',
+         '<text class="s" x="24" y="68">The classical methods drift above it; the QPU swings '
+         'both ways. The CSV beside this figure holds every value.</text>']
     # legend
     for row, keys in enumerate((("MPS", "TN", "PP_CPU"), ("PP_GPU", "QPU"))):
         lx, ly = 24, 92 + 18 * row
@@ -107,10 +137,11 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
             o.append(f'<text class="l" x="{lx + 24}" y="{ly + 4}">{LABELS[k]}</text>')
             lx += 24 + 6.4 * len(LABELS[k]) + 26
     # panel A
-    last_exact = summaries(d)["exact_through"]
-    o.append(f'<rect x="{X(last_exact + 0.5):.1f}" y="{A_top}" '
-             f'width="{R - X(last_exact + 0.5):.1f}" height="{A_bot - A_top}" fill="var(--band)"/>')
-    o.append(f'<text class="m" x="{X(last_exact + 0.5) + 6:.1f}" y="{A_top + 14}">MPS truncates</text>')
+    last_conv = summaries(d)["converged_through"]
+    o.append(f'<rect x="{X(last_conv + 0.5):.1f}" y="{A_top}" '
+             f'width="{R - X(last_conv + 0.5):.1f}" height="{A_bot - A_top}" fill="var(--band)"/>')
+    o.append(f'<text class="m" x="{X(last_conv + 0.5) + 6:.1f}" y="{A_top + 14}">MPS not '
+             f'converged</text>')
     for v in (-1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0):
         cls = "a" if v == 0 else "g"
         o.append(f'<line class="{cls}" x1="{L}" y1="{YA(v):.1f}" x2="{R}" y2="{YA(v):.1f}"/>')
@@ -124,8 +155,8 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
     allidx = list(range(len(steps)))
     for k in METHODS:
         o.append(f'<path class="ln" stroke="var(--{k.lower()})" d="{path_of(d[k], YA, allidx)}"/>')
-    ex = [i for i in allidx if d["exact"][i]]
-    tail = [ex[-1]] + [i for i in allidx if not d["exact"][i] and steps[i] < 20]
+    ex = [i for i in allidx if d["converged"][i]]
+    tail = [ex[-1]] + [i for i in allidx if not d["converged"][i] and steps[i] < 20]
     o.append(f'<path class="ln" stroke="var(--mps)" d="{path_of(d["MPS"], YA, ex)}"/>')
     o.append(f'<path class="ln" stroke="var(--mps)" stroke-dasharray="4 4" '
              f'd="{path_of(d["MPS"], YA, tail)}"/>')
@@ -144,7 +175,7 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
                  f'stroke="var(--surface)" stroke-width="2"/>')
     # panel B: method minus MPS where the MPS is exact
     o.append(f'<text class="s" x="{L}" y="{B_top - 10}">Each method minus the MPS, where the '
-             f'MPS is exact (steps 1–{last_exact})</text>')
+             f'MPS has converged (steps 1–{last_conv})</text>')
     for v in (-0.2, -0.1, 0.0, 0.1, 0.2, 0.3):
         cls = "a" if abs(v) < 1e-12 else "g"
         o.append(f'<line class="{cls}" x1="{L}" y1="{YB(v):.1f}" x2="{R}" y2="{YB(v):.1f}"/>')
@@ -177,9 +208,11 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
 if __name__ == "__main__":
     d = load()
     s = summaries(d)
-    print(f"MPS exact through step {s['exact_through']}")
+    print(f"MPS converged through step {s['converged_through']}: chi/2 agrees to "
+          f"{s['half_diff']:.1e} ({_up1(s['half_diff'])})")
     for m in METHODS:
         v = s[m]
         print(f"{m:7s} step 1 {v['step1']:+.5f}   largest {v['max']:+.4f} at step {v['max_step']}"
-              f"   at step {s['exact_through']} {v['at_last_exact']:+.4f}")
+              f"   at step {s['converged_through']} {v['at_last']:+.4f}   above from step "
+              f"{v['above_from']}")
     print("wrote", render(d))

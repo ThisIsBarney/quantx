@@ -14,8 +14,8 @@ last step is n_f(20) = 0.12 ± 0.04: 0.630 at χ = 400, 0.154 at χ = 800 and 0.
 χ = 1600, where quimb's fidelity estimate reaches 0.995, the error bar being the last
 doubling's change. All three published classical values lie above it, by 0.13 to 0.29,
 and the QPU's −0.077 lies 0.19 below. That is no scatter around the answer: step by step,
-the scan is exact through step 14, and every classical method already drifts above it
-there, by up to 0.16. A QuantX run would add an exactly conserved
+the scan has converged through step 14, and every classical method already drifts above
+it there, by up to 0.16. A QuantX run would add an exactly conserved
 charge: it would refine a classical result, not provide a new one. And this is the
 tracker's only instance with a conserved U(1) charge, so the tracker gives the
 block-sparse engine little leverage today.
@@ -96,9 +96,9 @@ How the circuits are read:
   the fidelity estimates agree to 2e-4. χ = 400 takes 15 min there, against 85 min on
   two CPU threads.
 
-## Step by step: the classical methods drift from the exact values
+## Step by step: the classical methods drift from the converged values
 
-![n_f(t) of the SU(2) hadron circuits at every Trotter step: the MPS, exact through step 14, against the tensor network, both Pauli propagations and the QPU; below, each method minus the MPS](referee_su2_hadron_nf_t.svg)
+![n_f(t) of the SU(2) hadron circuits at every Trotter step: the MPS, converged through step 14, against the tensor network, both Pauli propagations and the QPU; below, each method minus the MPS](referee_su2_hadron_nf_t.svg)
 
 The circuits are 20 blocks of 1,602 gates, one per Trotter step. After each of the first
 19 blocks the SWAP gates have returned the qubits to their initial layout; the last block
@@ -107,13 +107,17 @@ lacks its final SWAP layer, which is the permutation above. So
 lists every method at every step
 ([referee_su2_hadron_nf_t.csv](referee_su2_hadron_nf_t.csv) holds both).
 
-- **Exact through step 14.** At χ = 800 the truncations leave the norm at 1 to 5e-5
-  in both circuits, and χ = 400 agrees with it to 4e-4.
+- **Converged through step 14.** χ = 400 and 800 agree to 4e-4 there, and at χ = 800
+  the truncations leave the norm within 5e-5 of 1 in both circuits. That is convergence to
+  a stated tolerance, not an error bound, but the tolerance is a hundred times smaller than
+  the drifts below.
 - **Step 1 checks the reading.** The MPS gives 1.8253, as both Pauli propagations do.
   The tensor network's 1.8242 evolves the Hamiltonian, not the circuit.
-- **Every classical method drifts above the exact values from step 2 on.** By step 10,
-  Pauli propagation on the CPU is 0.157 above, on the GPU 0.071, and the tensor network
-  0.051; at step 14 they are 0.11, 0.05 and 0.04 above, and at step 20 0.29, 0.13 and 0.16.
+- **The classical methods drift above the converged values:** both Pauli propagations from
+  step 2 on, and the tensor network from step 5 (before that it sits below, by up to
+  0.005). At step 10, Pauli propagation on the CPU is 0.157 above, on the GPU 0.071, and
+  the tensor network 0.051; at step 14 they are 0.11, 0.05 and 0.04 above, and at step 20
+  0.29, 0.13 and 0.16.
   Part of the tensor network's difference is the circuit's Trotter error, which it does
   not simulate; the Pauli propagations run the circuit itself.
 - **The QPU swings both ways,** by up to 0.32 (step 7).

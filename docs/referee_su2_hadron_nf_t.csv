@@ -1,4 +1,4 @@
-step,n_f_chi400,norm2_meson_chi400,norm2_vacuum_chi400,n_f_chi800,norm2_meson_chi800,norm2_vacuum_chi800,TN,PP_CPU,PP_GPU,QPU
+step,n_f_chi400_gpu,norm2_meson_chi400_gpu,norm2_vacuum_chi400_gpu,n_f_chi800_gpu,norm2_meson_chi800_gpu,norm2_vacuum_chi800_gpu,TN,PP_CPU,PP_GPU,QPU
 1,1.82534,1.000000,1.000000,1.82534,1.000000,1.000000,1.82422,1.82534,1.82534,1.77264
 2,1.34730,1.000000,1.000000,1.34730,1.000000,1.000000,1.34382,1.34881,1.34787,1.23472
 3,0.69035,1.000000,1.000000,0.69035,1.000000,1.000000,0.68530,0.69842,0.69390,0.70055
