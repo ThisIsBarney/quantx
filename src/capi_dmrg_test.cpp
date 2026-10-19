@@ -410,6 +410,64 @@ int main() {
     u1_error({{"n_qubits", 4}, {"gates", json::array()}}, {{"chi", 8}}, "unknown option",
              "u1_circuit: an unknown option is refused");
 
+    std::printf("\nqx_mps: states that stay in the engine\n");
+    {
+        auto mps = [](const json& req) { return json::parse(qx_mps(req.dump().c_str())); };
+        const long long live0 = mps({{"op", "live"}}).value("handles", -1LL);
+        json gs = mps({{"op", "ground_state"}, {"model", heis(4)}, {"max_bond", 16}});
+        const long long h = gs.value("handle", -1LL);
+        check(gs.value("ok", false) && std::abs(gs.value("energy", 0.0) - e4) < 1e-10,
+              "mps ground_state: the 4-site chain's -3 - 2 sqrt(3)", gs);
+        json info = mps({{"op", "info"}, {"handle", h}});
+        check(info.value("ok", false) && info.value("n_sites", 0) == 4 &&
+              info.value("local_dim", 0) == 2 && info.value("charge", -1) == 0 &&
+              std::abs(info.value("norm2", 0.0) - 1.0) < 1e-12 && info["bonds"].size() == 3,
+              "mps info: length, local space, charge, norm", info);
+        // sigma^z_1 |GS>: the singlet has <sigma^z_1> = 0 and <sigma^z_1 sigma^z_1> = 1.
+        json cp = mps({{"op", "copy"}, {"handle", h}});
+        const long long c = cp.value("handle", -1LL);
+        json ap = mps({{"op", "apply"}, {"handle", c}, {"site", 1}, {"diag", {1.0, -1.0}}});
+        json ov = mps({{"op", "overlap"}, {"bra", h}, {"ket", c}});
+        json zz = mps({{"op", "expect"}, {"bra", c}, {"ket", c}, {"diag", {1.0, 1.0}}});
+        check(ap.value("ok", false) && std::abs(ap.value("norm2", 0.0) - 1.0) < 1e-10 &&
+              ov.value("ok", false) && std::abs(ov.value("re", 9.0)) < 1e-10 &&
+              zz.value("ok", false) && std::abs(zz["re"][2].get<double>() - 1.0) < 1e-10,
+              "mps copy, apply, overlap, expect: sigma^z_1 on the singlet", ov);
+        // An eigenstate keeps its energy under real-time evolution.
+        json ev = mps({{"op", "evolve"}, {"handle", h}, {"model", heis(4)}, {"dt", 0.1},
+                       {"n_steps", 5}, {"max_bond", 16}});
+        json en = mps({{"op", "energy"}, {"handle", h}, {"model", heis(4)}});
+        check(ev.value("ok", false) && en.value("ok", false) &&
+              std::abs(en.value("energy", 0.0) - e4) < 1e-10,
+              "mps evolve, energy: the ground state keeps E0", en);
+        json f1 = mps({{"op", "free"}, {"handle", h}});
+        json f2 = mps({{"op", "free"}, {"handle", c}});
+        check(f1.value("ok", false) && f2.value("ok", false) &&
+              mps({{"op", "live"}}).value("handles", -1LL) == live0,
+              "mps free: every state given back", f2);
+        auto refused = [&](const json& req, const char* text, const char* what) {
+            json r = mps(req);
+            check(!r.value("ok", true) &&
+                  r.value("error", std::string()).find(text) != std::string::npos, what, r);
+        };
+        refused({{"op", "info"}, {"handle", h}}, "no live state", "mps: a freed handle is refused");
+        refused({{"op", "nope"}}, "unknown op", "mps: an unknown op is refused");
+        refused({{"op", "live"}, {"x", 1}}, "unknown key", "mps: an unknown key is refused");
+        refused({{"op", "ground_state"}, {"model", heis(2)}}, "n_sites must be >= 3",
+                "mps: a 2-site chain is refused");
+        refused({{"op", "ground_state"}, {"model", {{"type", "pauli_sum"}, {"n_qubits", 4}}}},
+                "no block-sparse form", "mps: a model without a block form is refused");
+        json p = mps({{"op", "product"}, {"model", heis(4)}, {"config", {0, 0, 0, 0}}});
+        const long long ph = p.value("handle", -1LL);
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 0}, {"diag", {0.0, 1.0}}},
+                "annihilates", "mps: an operator that annihilates the state is refused");
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 4}, {"diag", {1.0, 1.0}}},
+                "is not in", "mps: a site past the end is refused");
+        refused({{"op", "evolve"}, {"handle", ph}, {"model", heis(4)}, {"dt", 0.0}},
+                "dt must be > 0", "mps: dt = 0 is refused");
+        mps({{"op", "free"}, {"handle", ph}});
+    }
+
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");
     return failures ? 1 : 0;
 }

@@ -480,6 +480,41 @@ U1CircuitResult run_u1_circuit(int n, const std::vector<int>& bits,
                                const std::vector<int>& measure_after,
                                int chi_max, double cutoff);
 
+// ---- MPS handles (M11) ----------------------------------------------------------------
+// A block MPS kept by the engine between calls (opaque; defined in dmrg_blocks.cpp), so a
+// caller chains a ground state, one-site operators, time evolution and measurements
+// without serializing the state. Its centre is on site 0 between calls. Each function
+// locks the states it touches; a Hamiltonian must match the state's length and local
+// space. Charges are the engine's (2 Sz for spins, packed (N, 2 Sz) for Hubbard).
+struct MPSState;
+struct MPSInfo {
+    int n = 0, d = 0;
+    std::vector<int> bonds;                 // bonds 1..n-1, total dimension
+    double norm2 = 0;
+    int charge = 0;                         // the total charge, in the engine's units
+};
+struct MPSEvolveStats { int max_bond = 1; double wall_s = 0; };
+std::shared_ptr<MPSState> mps_ground_state(const std::vector<MPOSite>& H, int n, int max_bond,
+                                           double cutoff, int n_sweeps, double tol,
+                                           int total_charge,
+                                           const std::vector<int>* init_config,
+                                           DMRGResult* res);
+// A product state: config[i] indexes site i's local state.
+std::shared_ptr<MPSState> mps_product(const std::vector<MPOSite>& H, int n,
+                                      const std::vector<int>& config);
+std::shared_ptr<MPSState> mps_copy(MPSState& a);
+// diag(D) on one site, in place; returns the new squared norm. The state is not renormalized.
+double mps_apply_diag(MPSState& a, int site, const std::vector<std::complex<double>>& diag);
+// n_steps second-order TDVP2 steps of exp(-i H dt) (imag: exp(-H dt), renormalized).
+MPSEvolveStats mps_evolve(MPSState& a, const std::vector<MPOSite>& H, double dt,
+                          int n_steps, bool imag, int max_bond, double cutoff);
+std::complex<double> mps_overlap(MPSState& bra, MPSState& ket);           // <bra|ket>
+// <bra| D_j |ket> for every site j, D = diag(wts) on the local space.
+std::vector<std::complex<double>> mps_expect_diag(MPSState& bra, MPSState& ket,
+                                                  const std::vector<double>& wts);
+double mps_energy(MPSState& a, const std::vector<MPOSite>& H);           // <H>/<a|a>
+MPSInfo mps_info(MPSState& a);
+
 // Cost probe: apply ONE layer of x-hops (all W*(Lx-1) range-W bonds) of a width-W
 // cylinder to a chi-sized state through the swap network, and return the worst
 // discarded weight. Exists so the width scan can be sized from a measurement.

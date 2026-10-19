@@ -25,6 +25,20 @@ bug-fixes and packaging corrections only.
   half a second, and the end of every Trotter step maps to a fused position. Gated against
   an independent state vector to 1e-10 (`test_u1_circuit.py`, and the C++ contract
   test); the C API entry point is `qx_u1_circuit`.
+- **`quantx_engine.mps`** (M11): matrix-product states that stay in the engine between
+  calls, under a handle, so a ground state, one-site operators, time evolution and
+  measurements chain without the state passing through Python or JSON. It covers:
+  - `mps.ground_state` (DMRG in a symmetry sector) and `mps.product`;
+  - in place, on `MPS`: `copy`, `apply` (a one-site diagonal operator such as S^z, n or
+    the double occupancy, not renormalized) and `evolve` (two-site TDVP in real or
+    imaginary time, under any model of the same length and local space, so a quench too);
+  - the measurements `overlap`, `matrix_elements` (<a| O_j |b> at every site), `expect`
+    and `energy`.
+
+  The engine frees a state when its object is collected. Gated against an independent
+  exact diagonalisation (`test_mps.py`): ground states, static and dynamical correlation
+  functions, a quench's Loschmidt amplitude, imaginary time and Hubbard densities, to
+  1e-7 (1e-10 for energies a state is an eigenstate of). The C API entry point is `qx_mps`.
 
 ## [0.2.0] — 2026-10-18
 

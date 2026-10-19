@@ -19,7 +19,7 @@ import quantx_engine
 from quantx_engine import _MOVED_MODULES, _MOVED_NAMES
 
 ENGINE_API = {"__init__", "_deprecation", "engine", "dmrg", "models", "hva", "thermal", "tdvp",
-              "structure_factor", "u1_circuit"}
+              "structure_factor", "u1_circuit", "mps"}
 PKG = pathlib.Path(quantx_engine.__file__).parent
 
 
