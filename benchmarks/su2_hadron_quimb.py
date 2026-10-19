@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import pathlib
 import re
@@ -301,13 +302,21 @@ def check(args):
         ref = {int(r["step"]): r for r in csv.DictReader(f)}
     if args.column not in ref[1]:
         sys.exit(f"{args.against} has no column {args.column}")
+    if not d["n_f"]:
+        sys.exit(f"{args.run} has no steps")
     print(f"step  this run ({'GPU' if d['gpu'] else 'CPU'}, chi = {d['chi']})  "
           f"{args.column}   difference")
-    worst = 0.0
+    worst, non_finite = 0.0, []
     for k, v in enumerate(d["n_f"], 1):
         r = float(ref[k][args.column])
-        worst = max(worst, abs(v - r))
+        # max() would pass a NaN by: max(worst, nan) keeps worst
+        if not (math.isfinite(v) and math.isfinite(r)):
+            non_finite.append(k)
+        else:
+            worst = max(worst, abs(v - r))
         print(f"{k:4d}  {v:+.5f}  {r:+.5f}  {v - r:+.2e}")
+    if non_finite:
+        sys.exit(f"non-finite n_f at step(s) {non_finite}: nothing to compare")
     ok = worst <= args.tol
     print(f"largest difference {worst:.2e} over {len(d['n_f'])} steps: "
           f"{'within' if ok else 'PAST'} the tolerance {args.tol:g}")

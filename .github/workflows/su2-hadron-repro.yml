@@ -22,6 +22,8 @@ on:
     paths:
       - ".github/workflows/su2-hadron-repro.yml"
       - "benchmarks/su2_hadron_quimb.py"
+      # the committed scan `check` compares against: a change to it is reproduced too
+      - "docs/referee_su2_hadron_nf_t.csv"
 
 permissions:
   contents: read
@@ -44,10 +46,12 @@ jobs:
       - name: Install quimb (the version the scan used)
         run: pip install "quimb==1.11.2" numpy scipy
 
-      - name: Check the inputs are integers
+      - name: Check the inputs are positive integers, written plainly
+        # No leading zeros: the script reads 0400 as 400 and names its output chi400, so
+        # the check below would look for a file that does not exist.
         run: |
-          [[ "$CHI" =~ ^[0-9]+$ ]] || { echo "chi must be an integer"; exit 1; }
-          [[ "$STEPS" =~ ^[0-9]+$ ]] || { echo "steps must be an integer"; exit 1; }
+          [[ "$CHI" =~ ^[1-9][0-9]*$ ]] || { echo "chi must be a positive integer, e.g. 400"; exit 1; }
+          [[ "$STEPS" =~ ^[1-9][0-9]*$ ]] || { echo "steps must be a positive integer, e.g. 14"; exit 1; }
 
       - name: n_f(t) on this runner's CPU
         run: |
