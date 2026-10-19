@@ -1,0 +1,92 @@
+name: SU(2) hadron reproduction on QuantX (M16)
+
+# Reproduces docs/referee_su2_hadron.md's QuantX result on a GitHub runner's CPU: an
+# independent machine, and the engine's CPU path where the committed runs used its GPU one.
+# The job builds the native library, and benchmarks/su2_hadron_quantx.py downloads the
+# tracker's two circuits at a pinned commit, checks their SHA-256, fuses them into
+# charge-conserving gates and reads n_f(t) after every Trotter step. `check` compares each
+# step with the committed chi = 1600 trajectory (docs/referee_su2_hadron_quantx_nf_t.csv),
+# failing past the tolerance. Through step 14, chi = 400 agrees with chi = 1600 to 8e-6, so
+# the defaults hold the run to 1e-4 there. The engine's circuit path is in the triggers: a
+# change to it must still reproduce the physics.
+
+on:
+  workflow_dispatch:
+    inputs:
+      chi:
+        description: "Bond dimension"
+        default: "400"
+      steps:
+        description: "Trotter steps (1-20)"
+        default: "14"
+      tol:
+        description: "Largest difference allowed from the committed chi = 1600 trajectory"
+        default: "1e-4"
+  pull_request:
+    branches: ["master", "main"]
+    paths:
+      - ".github/workflows/su2-hadron-quantx-repro.yml"
+      - "benchmarks/su2_hadron_quantx.py"
+      - "benchmarks/su2_hadron_quimb.py"
+      - "docs/referee_su2_hadron_quantx_nf_t.csv"
+      - "python/quantx_engine/u1_circuit.py"
+      - "src/dmrg_blocks.cpp"
+      - "src/dmrg_capi.cpp"
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    name: n_f(t) on QuantX, on a GitHub runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CHI: ${{ inputs.chi || '400' }}
+      STEPS: ${{ inputs.steps || '14' }}
+      TOL: ${{ inputs.tol || '1e-4' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check the inputs
+        # No leading zeros: the script reads 0400 as 400 and names its output chi400, so
+        # the check below would look for a file that does not exist.
+        run: |
+          [[ "$CHI" =~ ^[1-9][0-9]*$ ]] || { echo "chi must be a positive integer, e.g. 400"; exit 1; }
+          [[ "$STEPS" =~ ^[1-9][0-9]*$ ]] || { echo "steps must be a positive integer, e.g. 14"; exit 1; }
+          [[ "$TOL" =~ ^[0-9.eE+-]+$ ]] || { echo "tol must be a number, e.g. 1e-4"; exit 1; }
+
+      - name: Build the native library
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake g++ ninja-build libgomp1
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DQX_ENABLE_OPENMP=ON \
+            -DQX_ENABLE_MPI=OFF -DQX_ENABLE_PYBIND=OFF -DQX_ENABLE_CUDA=OFF
+          cmake --build build --parallel "$(nproc)" --target qx_capi
+
+      - name: Install the package
+        run: python -m pip install -e python/
+
+      - name: n_f(t) on this runner's CPU
+        run: |
+          export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
+          python benchmarks/su2_hadron_quantx.py trajectory --chi "$CHI" --steps "$STEPS" \
+            --threads "$(nproc)" --qasm-dir qasm --out-dir runs
+
+      - name: Against the committed trajectory
+        run: |
+          suffix=""
+          [ "$STEPS" = "20" ] || suffix="_steps$STEPS"
+          python benchmarks/su2_hadron_quantx.py check \
+            --run "runs/su2_hadron_quantx_chi${CHI}${suffix}.json" --tol "$TOL"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: su2-hadron-quantx-trajectory
+          path: runs/
+          if-no-files-found: ignore

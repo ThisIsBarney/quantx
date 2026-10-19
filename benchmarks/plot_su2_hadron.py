@@ -1,16 +1,20 @@
 """n_f(t) of the tracker's SU(2) hadron circuits, step by step, against the published methods.
 
-Reads docs/referee_su2_hadron_nf_t.csv (from `su2_hadron_quimb.py trajectory-table`) and
-docs/referee_su2_hadron_nf.csv (the bond-dimension scan, for the chi = 1600 point at step
-20), and writes docs/referee_su2_hadron_nf_t.svg. Two panels share the step axis: n_f(t) for
-the MPS and the four published methods, and each method minus the MPS at the steps where the
-MPS has converged: the largest-chi run and the one at half its chi (same device) agree to
-TOL, and the largest-chi run truncated the norm by less than 5e-5. That is convergence to a stated
-tolerance, not an error bound. The numbers the doc quotes come from summaries(). Pure stdlib,
-like the other plotters.
+Two panels share the step axis: n_f(t) for the MPS and the four published methods, and each
+method minus the MPS at the steps where the MPS has converged: the largest-chi run and the
+one at half its chi (same device) agree to TOL, and the largest-chi run truncated the norm by
+less than 5e-5. That is convergence to a stated tolerance, not an error bound. The numbers
+the doc quotes come from summaries(). Pure stdlib, like the other plotters.
 
-Run: python benchmarks/plot_su2_hadron.py
+The MPS is QuantX's U(1) one (M16, docs/referee_su2_hadron_quantx_nf_t.csv, from
+`su2_hadron_quantx.py table`), which holds every step at chi = 1600; or, with --source
+quimb, M8's quimb scan (docs/referee_su2_hadron_nf_t.csv, from `su2_hadron_quimb.py
+trajectory-table`), whose chi = 1600 point at step 20 comes from the bond-dimension scan
+docs/referee_su2_hadron_nf.csv. Writes docs/referee_su2_hadron_nf_t.svg (or the _quimb one).
+
+Run: python benchmarks/plot_su2_hadron.py [--source quimb]
 """
+import argparse
 import csv
 import math
 import os
@@ -18,7 +22,13 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, "..", "docs")
 METHODS = ("TN", "PP_CPU", "PP_GPU", "QPU")
-LABELS = {"MPS": "MPS of the circuits (this scan)", "TN": "Tensor network (TDVP of H)",
+SOURCES = {   # trajectory CSV, step-20 scan CSV (None: the trajectory's own), label, figure
+    "quantx": ("referee_su2_hadron_quantx_nf_t.csv", None, "QuantX U(1) MPS of the circuits",
+               "referee_su2_hadron_nf_t.svg"),
+    "quimb": ("referee_su2_hadron_nf_t.csv", "referee_su2_hadron_nf.csv",
+              "quimb MPS of the circuits (M8)", "referee_su2_hadron_nf_t_quimb.svg"),
+}
+LABELS = {"MPS": SOURCES["quantx"][2], "TN": "Tensor network (TDVP of H)",
           "PP_CPU": "Pauli propagation, CPU", "PP_GPU": "Pauli propagation, GPU",
           "QPU": "QPU"}
 SHORT = {"TN": "TN", "PP_CPU": "PP, CPU", "PP_GPU": "PP, GPU", "QPU": "QPU"}
@@ -32,8 +42,7 @@ CONVERGED_NORM2 = 1 - 5e-5
 TOL = 5e-4                    # |n_f(chi) - n_f(chi/2)| at a converged step
 
 
-def load(traj=os.path.join(DOCS, "referee_su2_hadron_nf_t.csv"),
-         scan=os.path.join(DOCS, "referee_su2_hadron_nf.csv")):
+def load(traj=os.path.join(DOCS, SOURCES["quantx"][0]), scan=None):
     with open(traj, newline="") as f:
         rows = list(csv.DictReader(f))
     runs = {}                               # (chi, device) of every n_f_chi<chi>_<device> column
@@ -61,6 +70,9 @@ def load(traj=os.path.join(DOCS, "referee_su2_hadron_nf_t.csv"),
     data["converged"] = [i < first_bad for i in range(len(rows))]
     for m in METHODS:
         data[m] = [float(r[m]) for r in rows]
+    if scan is None:                        # the trajectory holds step 20 at its largest chi
+        data["final"] = (chi, data["MPS"][-1], abs(data["MPS"][-1] - data["half"][-1]))
+        return data
     with open(scan, newline="") as f:
         runs = {int(r["chi"]): float(r["n_f_20"]) for r in csv.DictReader(f) if r["device"] == "GPU"}
     best = max(runs)
@@ -77,7 +89,7 @@ def summaries(d):
         dev = [d[m][i] - d["MPS"][i] for i in conv]
         k = max(range(len(dev)), key=lambda j: abs(dev[j]))
         above = next((d["steps"][conv[j]] for j in range(len(dev))
-                      if all(x > 0 for x in dev[j:])), None)
+                      if all(x > TOL for x in dev[j:])), None)   # above by more than TOL
         out[m] = {"step1": d[m][0] - d["MPS"][0], "max": dev[k],
                   "max_step": d["steps"][conv[k]], "at_last": dev[-1], "above_from": above}
     return out
@@ -114,7 +126,7 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
            ".ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}"]
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
          f'viewBox="0 0 {W} {H}" role="img" aria-labelledby="title desc">',
-         "<title id=\"title\">n_f(t) of the SU(2) hadron circuits: an exact MPS against the "
+         "<title id=\"title\">n_f(t) of the SU(2) hadron circuits: a converged MPS against the "
          "published methods</title>",
          "<desc id=\"desc\">Two panels over Trotter steps 1 to 20. The MPS has converged "
          f"through step {summaries(d)['converged_through']}; the classical methods drift above "
@@ -168,12 +180,13 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
              f'stroke="var(--surface)" stroke-width="2"/>')
     o.append(f'<text class="l" x="{x20 + 12:.1f}" y="{YA(v_f + err) - 22:.1f}">step 20, '
              f'χ = {chi_f}:</text>')
+    nd = 2 if err >= 0.01 else 3            # the error bar's first digit sets the precision
     o.append(f'<text class="l" x="{x20 + 12:.1f}" y="{YA(v_f + err) - 8:.1f}">'
-             f'{v_f:.2f} ± {err:.2f}</text>')
+             f'{v_f:.{nd}f} ± {err:.{nd}f}</text>')
     for k in METHODS:                      # end dots at step 20
         o.append(f'<circle cx="{x20:.1f}" cy="{YA(d[k][-1]):.1f}" r="4" fill="var(--{k.lower()})" '
                  f'stroke="var(--surface)" stroke-width="2"/>')
-    # panel B: method minus MPS where the MPS is exact
+    # panel B: method minus MPS where the MPS has converged
     o.append(f'<text class="s" x="{L}" y="{B_top - 10}">Each method minus the MPS, where the '
              f'MPS has converged (steps 1–{last_conv})</text>')
     for v in (-0.2, -0.1, 0.0, 0.1, 0.2, 0.3):
@@ -206,7 +219,10 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
 
 
 if __name__ == "__main__":
-    d = load()
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--source", choices=sorted(SOURCES), default="quantx")
+    traj, scan, LABELS["MPS"], fig = SOURCES[ap.parse_args().source]
+    d = load(os.path.join(DOCS, traj), scan and os.path.join(DOCS, scan))
     s = summaries(d)
     print(f"MPS converged through step {s['converged_through']}: chi/2 agrees to "
           f"{s['half_diff']:.1e} ({_up1(s['half_diff'])})")
@@ -215,4 +231,4 @@ if __name__ == "__main__":
         print(f"{m:7s} step 1 {v['step1']:+.5f}   largest {v['max']:+.4f} at step {v['max_step']}"
               f"   at step {s['converged_through']} {v['at_last']:+.4f}   above from step "
               f"{v['above_from']}")
-    print("wrote", render(d))
+    print("wrote", render(d, os.path.join(DOCS, fig)))
