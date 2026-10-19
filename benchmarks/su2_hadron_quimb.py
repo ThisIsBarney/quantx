@@ -17,6 +17,11 @@ stays at its starting value 2 for every bond dimension.
     python benchmarks/su2_hadron_quimb.py table                       # every saved run
     python benchmarks/su2_hadron_quimb.py trajectory --chi 800 --gpu  # n_f after every step
     python benchmarks/su2_hadron_quimb.py trajectory-table            # with the tracker's
+    python benchmarks/su2_hadron_quimb.py check --run RUN.json        # against the scan
+
+`check` compares a fresh trajectory, from any machine, with the committed scan
+(docs/referee_su2_hadron_nf_t.csv) step by step, and fails past --tol: the reproduction CI
+job (.github/workflows/su2-hadron-repro.yml) runs it on a GitHub runner's CPU.
 
 The circuits are 20 blocks of 1,602 gates after their initial X gates, one per Trotter step.
 After each of the first 19 blocks the SWAP gates have returned the qubits to their initial
@@ -36,6 +41,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import pathlib
 import re
@@ -227,7 +233,9 @@ def trajectory(args):
         import cupy
         z_op = cupy.asarray(z_op)
         opts = {"to_backend": cupy.asarray, "gate_opts": {"method": "eig"}}
-    out = {"chi": args.chi, "cutoff": args.cutoff, "gpu": args.gpu}
+    if not 1 <= args.steps <= 20:
+        sys.exit("--steps must be 1 to 20")
+    out = {"chi": args.chi, "cutoff": args.cutoff, "gpu": args.gpu, "steps": args.steps}
     for name in CIRCUITS:
         path = qasm_path(args.qasm_dir, name)
         gates = parse_openqasm2_file(str(path))["gates"]
@@ -238,7 +246,7 @@ def trajectory(args):
         circ = qtn.CircuitMPS(2 * N_SITES, max_bond=args.chi, cutoff=args.cutoff, **opts)
         circ.apply_gates(gates[:n_x])
         perm, steps, t0 = list(range(2 * N_SITES)), [], time.time()
-        for k in range(1, 21):
+        for k in range(1, args.steps + 1):
             lo, hi = n_x + STEP_GATES * (k - 1), min(n_x + STEP_GATES * k, len(gates))
             circ.apply_gates(gates[lo:hi])
             for ln in lines[lo:hi]:
@@ -259,8 +267,10 @@ def trajectory(args):
     for k, v in enumerate(out["n_f"], 1):
         print(f"n_f({k:2d}) = {v:+.5f}")
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    name = f"su2_hadron_traj_chi{args.chi}{'_gpu' if args.gpu else ''}.json"
+    name = (f"su2_hadron_traj_chi{args.chi}{'_gpu' if args.gpu else ''}"
+            f"{'' if args.steps == 20 else f'_steps{args.steps}'}.json")
     (args.out_dir / name).write_text(json.dumps(out))
+    print("wrote", args.out_dir / name)
 
 
 def trajectory_table(args):
@@ -269,6 +279,8 @@ def trajectory_table(args):
     runs = {}
     for f in sorted(args.out_dir.glob("su2_hadron_traj_chi*.json")):
         d = json.loads(f.read_text())
+        if len(d["n_f"]) < 20:              # a partial run, as `check` takes
+            continue
         key = f"chi{d['chi']}_{'gpu' if d['gpu'] else 'cpu'}"
         if key in runs:
             sys.exit(f"two {key} trajectories in {args.out_dir}; keep one")
@@ -280,6 +292,36 @@ def trajectory_table(args):
         ours = ",".join(f"{runs[k]['n_f'][s - 1]:.5f},{runs[k]['meson'][s - 1]['norm2']:.6f},"
                         f"{runs[k]['SCV'][s - 1]['norm2']:.6f}" for k in keys)
         print(f"{s},{ours}," + ",".join(f"{x:.5f}" for x in PUBLISHED[s]))
+
+
+def check(args):
+    """A trajectory against the committed scan, step by step; exit 1 past --tol."""
+    import csv
+    d = json.loads(args.run.read_text())
+    with open(args.against, newline="") as f:
+        ref = {int(r["step"]): r for r in csv.DictReader(f)}
+    if args.column not in ref[1]:
+        sys.exit(f"{args.against} has no column {args.column}")
+    if not d["n_f"]:
+        sys.exit(f"{args.run} has no steps")
+    print(f"step  this run ({'GPU' if d['gpu'] else 'CPU'}, chi = {d['chi']})  "
+          f"{args.column}   difference")
+    worst, non_finite = 0.0, []
+    for k, v in enumerate(d["n_f"], 1):
+        r = float(ref[k][args.column])
+        # max() would pass a NaN by: max(worst, nan) keeps worst
+        if not (math.isfinite(v) and math.isfinite(r)):
+            non_finite.append(k)
+        else:
+            worst = max(worst, abs(v - r))
+        print(f"{k:4d}  {v:+.5f}  {r:+.5f}  {v - r:+.2e}")
+    if non_finite:
+        sys.exit(f"non-finite n_f at step(s) {non_finite}: nothing to compare")
+    ok = worst <= args.tol
+    print(f"largest difference {worst:.2e} over {len(d['n_f'])} steps: "
+          f"{'within' if ok else 'PAST'} the tolerance {args.tol:g}")
+    if not ok:
+        sys.exit(1)
 
 
 def main():
@@ -295,12 +337,20 @@ def main():
     tr.add_argument("--gpu", action="store_true")
     tr.add_argument("--threads", type=int, default=2)
     tr.add_argument("--cutoff", type=float, default=1e-10)
+    tr.add_argument("--steps", type=int, default=20, help="stop after this Trotter step")
+    ck = sub.add_parser("check")
+    ck.add_argument("--run", type=pathlib.Path, required=True)
+    ck.add_argument("--against", type=pathlib.Path,
+                    default=pathlib.Path(__file__).resolve().parent.parent / "docs"
+                    / "referee_su2_hadron_nf_t.csv")
+    ck.add_argument("--column", default="n_f_chi800_gpu")
+    ck.add_argument("--tol", type=float, default=1e-3)
     for q in (r, sub.add_parser("table"), tr, sub.add_parser("trajectory-table")):
         q.add_argument("--qasm-dir", type=pathlib.Path, default=pathlib.Path("su2_hadron_qasm"))
         q.add_argument("--out-dir", type=pathlib.Path, default=pathlib.Path("su2_hadron_runs"))
     args = p.parse_args()
     {"run": run, "table": table, "trajectory": trajectory,
-     "trajectory-table": trajectory_table}[args.cmd](args)
+     "trajectory-table": trajectory_table, "check": check}[args.cmd](args)
 
 
 if __name__ == "__main__":
