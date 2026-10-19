@@ -802,4 +802,64 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
     }
 }
 
+QX_API const char* qx_u1_circuit(const char* problem_json, const char* options_json) {
+    try {
+        nlj prob = nlj::parse(problem_json ? problem_json : "{}");
+        nlj opts = nlj::parse(options_json ? options_json : "{}");
+        for (auto it = prob.begin(); it != prob.end(); ++it)
+            if (it.key() != "n_qubits" && it.key() != "initial" && it.key() != "gates" &&
+                it.key() != "measure_after")
+                return dmrg_error("u1_circuit: unknown problem key '" + it.key() + "'");
+        for (auto it = opts.begin(); it != opts.end(); ++it)
+            if (it.key() != "max_bond" && it.key() != "cutoff")
+                return dmrg_error("u1_circuit: unknown option '" + it.key() + "'");
+        if (!prob.contains("n_qubits")) return dmrg_error("u1_circuit: 'n_qubits' is required");
+        const int n = prob["n_qubits"].get<int>();
+        if (n > 4000) return dmrg_error("u1_circuit: n_qubits exceeds max (4000)");
+        std::vector<int> bits(std::max(n, 0), 0);
+        if (prob.contains("initial")) bits = prob["initial"].get<std::vector<int>>();
+        if (!prob.contains("gates") || !prob["gates"].is_array())
+            return dmrg_error("u1_circuit: 'gates' must be a list of {q, u}");
+        std::vector<U1Gate> gates;
+        gates.reserve(prob["gates"].size());
+        for (const auto& g : prob["gates"]) {
+            U1Gate ug;
+            ug.q = g.at("q").get<int>();
+            for (const auto& z : g.at("u")) {
+                if (!z.is_array() || z.size() != 2)
+                    throw std::runtime_error("u1_circuit: each matrix entry is [re, im]");
+                ug.u.emplace_back(z[0].get<double>(), z[1].get<double>());
+            }
+            if (ug.u.size() == 4) ug.arity = 1;
+            else if (ug.u.size() == 16) ug.arity = 2;
+            else throw std::runtime_error("u1_circuit: a gate has 4 entries (one qubit) or 16 "
+                                          "(qubits q, q+1)");
+            gates.push_back(std::move(ug));
+        }
+        std::vector<int> when = {(int)gates.size()};
+        if (prob.contains("measure_after")) when = prob["measure_after"].get<std::vector<int>>();
+        const int chi = opts.value("max_bond", 256);
+        const double cutoff = opts.value("cutoff", 1e-10);
+
+        U1CircuitResult r = run_u1_circuit(n, bits, gates, when, chi, cutoff);
+        nlj out;
+        out["ok"] = true;
+        out["n_qubits"] = n;
+        out["ones"] = r.ones;
+        nlj ms = nlj::array();
+        for (const auto& m : r.measurements)
+            ms.push_back({{"after", m.after}, {"z", m.z}, {"norm2", m.norm2},
+                          {"max_bond", m.max_bond}});
+        out["measurements"] = ms;
+        out["max_bond"] = r.max_bond;
+        out["truncation_sum"] = r.trunc_sum;
+        out["truncation_max"] = r.trunc_max;
+        out["wall_time_s"] = r.wall_s;
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
 }  // extern "C"

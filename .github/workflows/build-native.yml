@@ -29,6 +29,8 @@ on:
       - "python/quantx_engine/thermal.py"
       - "python/quantx_engine/tests/test_thermal_ed.py"
       - "python/quantx_engine/tests/test_quickstart.py"
+      - "python/quantx_engine/u1_circuit.py"
+      - "python/quantx_engine/tests/test_u1_circuit.py"
       - "examples/quickstart.py"
       - "notebooks/engine/**"
   pull_request:
@@ -52,6 +54,8 @@ on:
       - "python/quantx_engine/thermal.py"
       - "python/quantx_engine/tests/test_thermal_ed.py"
       - "python/quantx_engine/tests/test_quickstart.py"
+      - "python/quantx_engine/u1_circuit.py"
+      - "python/quantx_engine/tests/test_u1_circuit.py"
       - "examples/quickstart.py"
       - "notebooks/engine/**"
   workflow_dispatch:
@@ -130,13 +134,15 @@ jobs:
           print('ctypes load test PASSED')
           "
 
-      - name: Symmetric models vs exact diagonalisation, HVA vs state vector, finite temperature vs full ED (M4/M5/M6 gates), noise rules vs the circuit backend
+      - name: Symmetric models vs exact diagonalisation, HVA and U(1) circuits vs state vector, finite temperature vs full ED (M4/M5/M6/M16 gates), noise rules vs the circuit backend
         # Solves every quantx_engine.models model on this build's engine against an
         # independent ED (1e-10), and runs HVA circuits (chain, ladder, strip, cylinder)
         # against an independent state vector (1e-10 from product starts; 1e-6 from U = 0
         # starts, which carry their DMRG preparation's residual), and the finite-temperature
         # statics and correlators against a full-space ED, to the second-order Trotter
-        # error of the steps (checked to fall by 4 at half the step). test_noise.py checks
+        # error of the steps (checked to fall by 4 at half the step). test_u1_circuit.py fuses
+        # transpiled-pattern OpenQASM circuits into charge-conserving gates and runs them
+        # against an independent state vector (1e-10). test_noise.py checks
         # CompositeNoise's collision rules against the circuit backend. The only job that runs
         # Python tests against the native library; QX_REQUIRE_NATIVE=1 makes a load
         # failure fail the gate instead of skipping it.
@@ -149,6 +155,7 @@ jobs:
                            python/quantx_engine/tests/test_hva_statevector.py \
                            python/quantx_engine/tests/test_thermal_ed.py \
                            python/quantx_engine/tests/test_quickstart.py \
+                           python/quantx_engine/tests/test_u1_circuit.py \
                            python/quantx_engine/tests/test_noise.py -v
 
       - name: Engine notebooks (M9) against this build's library

@@ -202,6 +202,30 @@ QX_API const char* qx_hva_layout(const char* problem_json);
 //     J = sum_{l,s} i t (c+_{l s} c_{l+1 s} - h.c.) for hubbard
 QX_API const char* qx_thermal(const char* problem_json, const char* options_json);
 
+// ── M16: qubit circuits that conserve the number of |1>s ─────────────────────
+// One-qubit phases and nearest-neighbour two-qubit gates on the block-sparse MPS. Every
+// bond carries the number of qubits in |1> to its left as an exact charge, so the total
+// is conserved at any truncation. Qubit |0> is Z = +1.
+//
+// problem_json:
+//   n_qubits      : int >= 2                                              (required)
+//   initial       : [0|1, ...], one bit per qubit (default all 0)
+//   gates         : [{q, u}, ...], in order. u is a row-major matrix of [re, im] entries:
+//                   4 entries, a phase on qubit q (it must be diagonal), or 16, a gate on
+//                   qubits (q, q+1) in the basis |00>, |01>, |10>, |11> with qubit q the
+//                   high bit. Each must be unitary and charge-conserving to 1e-10, or the
+//                   call fails naming it.
+//   measure_after : [int, ...] (default [len(gates)]): measure after this many gates, each
+//                   count once and in increasing order; the whole circuit runs either way
+// options_json:
+//   max_bond : int (default 256), cutoff: float (default 1e-10; the relative discarded
+//              norm, as everywhere in the engine)
+// Unknown keys are refused. Returns thread-local JSON: {ok, n_qubits, ones (the conserved
+//   number of |1>s, read off the MPS), measurements: [{after, z[] (<Z_i>, normalized),
+//   norm2 (the squared norm: the weight the truncations left), max_bond}], max_bond,
+//   truncation_sum, truncation_max, wall_time_s}.
+QX_API const char* qx_u1_circuit(const char* problem_json, const char* options_json);
+
 #ifdef __cplusplus
 }
 #endif
