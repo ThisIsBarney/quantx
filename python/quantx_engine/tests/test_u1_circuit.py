@@ -220,6 +220,128 @@ def test_unfusable_or_unreadable_circuits_are_refused(text, match):
         uc.from_qasm(text)
 
 
+# ── every gate against its qelib1.inc definition ─────────────────────────────────────────
+# Each gate as qelib1.inc defines it, from OpenQASM's two builtins: U(t, p, l), which is
+# Rz(p) Ry(t) Rz(l) up to a global phase, and CX. A step is (matrix, qubits), qubit 0 the
+# first operand; "cx" steps name control and target.
+
+def _ry(t):
+    return np.array([[math.cos(t / 2), -math.sin(t / 2)], [math.sin(t / 2), math.cos(t / 2)]])
+
+
+def U(t, p, lam):
+    return _rz(p) @ _ry(t) @ _rz(lam)
+
+
+pi = math.pi
+u3 = U
+
+
+def u1(lam):
+    return U(0, 0, lam)
+
+
+def u2(p, lam):
+    return U(pi / 2, p, lam)
+
+
+def h():
+    return u2(0, pi)
+
+
+def s():
+    return u1(pi / 2)
+
+
+def sdg():
+    return u1(-pi / 2)
+
+
+def t_():
+    return u1(pi / 4)
+
+
+CX = "cx"
+QELIB1 = {
+    "id": (0, lambda: [(U(0, 0, 0), [0])]),
+    "u0": (1, lambda g: [(U(0, 0, 0), [0])]),
+    "u1": (1, lambda lam: [(u1(lam), [0])]),
+    "p": (1, lambda lam: [(u1(lam), [0])]),
+    "u2": (2, lambda p, lam: [(u2(p, lam), [0])]),
+    "u3": (3, lambda t, p, lam: [(U(t, p, lam), [0])]),
+    "u": (3, lambda t, p, lam: [(U(t, p, lam), [0])]),
+    "x": (0, lambda: [(u3(pi, 0, pi), [0])]),
+    "y": (0, lambda: [(u3(pi, pi / 2, pi / 2), [0])]),
+    "z": (0, lambda: [(u1(pi), [0])]),
+    "h": (0, lambda: [(h(), [0])]),
+    "s": (0, lambda: [(s(), [0])]),
+    "sdg": (0, lambda: [(sdg(), [0])]),
+    "t": (0, lambda: [(t_(), [0])]),
+    "tdg": (0, lambda: [(u1(-pi / 4), [0])]),
+    "rx": (1, lambda th: [(u3(th, -pi / 2, pi / 2), [0])]),
+    "ry": (1, lambda th: [(u3(th, 0, 0), [0])]),
+    "rz": (1, lambda ph: [(u1(ph), [0])]),
+    "sx": (0, lambda: [(sdg(), [0]), (h(), [0]), (sdg(), [0])]),
+    "sxdg": (0, lambda: [(s(), [0]), (h(), [0]), (s(), [0])]),
+    "cx": (0, lambda: [(CX, [0, 1])]),
+    "cz": (0, lambda: [(h(), [1]), (CX, [0, 1]), (h(), [1])]),
+    "cy": (0, lambda: [(sdg(), [1]), (CX, [0, 1]), (s(), [1])]),
+    "swap": (0, lambda: [(CX, [0, 1]), (CX, [1, 0]), (CX, [0, 1])]),
+    "ch": (0, lambda: [(h(), [1]), (sdg(), [1]), (CX, [0, 1]), (h(), [1]), (t_(), [1]),
+                       (CX, [0, 1]), (t_(), [1]), (h(), [1]), (s(), [1]), (u3(pi, 0, pi), [1]),
+                       (s(), [0])]),
+    "crx": (1, lambda lam: [(u1(pi / 2), [1]), (CX, [0, 1]), (u3(-lam / 2, 0, 0), [1]),
+                            (CX, [0, 1]), (u3(lam / 2, -pi / 2, 0), [1])]),
+    "cry": (1, lambda lam: [(u3(lam / 2, 0, 0), [1]), (CX, [0, 1]), (u3(-lam / 2, 0, 0), [1]),
+                            (CX, [0, 1])]),
+    "crz": (1, lambda lam: [(u1(lam / 2), [1]), (CX, [0, 1]), (u1(-lam / 2), [1]),
+                            (CX, [0, 1])]),
+    "cu1": (1, lambda lam: [(u1(lam / 2), [0]), (CX, [0, 1]), (u1(-lam / 2), [1]),
+                            (CX, [0, 1]), (u1(lam / 2), [1])]),
+    "cp": (1, lambda lam: [(u1(lam / 2), [0]), (CX, [0, 1]), (u1(-lam / 2), [1]),
+                           (CX, [0, 1]), (u1(lam / 2), [1])]),
+    "cu3": (3, lambda th, ph, lam: [(u1((lam + ph) / 2), [0]), (u1((lam - ph) / 2), [1]),
+                                     (CX, [0, 1]), (u3(-th / 2, 0, -(ph + lam) / 2), [1]),
+                                     (CX, [0, 1]), (u3(th / 2, ph, 0), [1])]),
+    "cu": (4, lambda th, ph, lam, g: [(u1(g), [0]), (u1((lam + ph) / 2), [0]),
+                                      (u1((lam - ph) / 2), [1]), (CX, [0, 1]),
+                                      (u3(-th / 2, 0, -(ph + lam) / 2), [1]), (CX, [0, 1]),
+                                      (u3(th / 2, ph, 0), [1])]),
+    "csx": (0, lambda: [(h(), [1]), (u1(pi / 4), [0]), (CX, [0, 1]), (u1(-pi / 4), [1]),
+                        (CX, [0, 1]), (u1(pi / 4), [1]), (h(), [1])]),
+    "rxx": (1, lambda th: [(u3(pi / 2, th, 0), [0]), (h(), [1]), (CX, [0, 1]), (u1(-th), [1]),
+                           (CX, [0, 1]), (h(), [1]), (u2(-pi, pi - th), [0])]),
+    "rzz": (1, lambda th: [(CX, [0, 1]), (u1(th), [1]), (CX, [0, 1])]),
+}
+
+
+def _compose(n, steps):
+    out = np.eye(2 ** n, dtype=complex).reshape((2,) * (2 * n))
+    for m, qs in steps:
+        m = _CX if isinstance(m, str) else m
+        # act on the row (output) indices: axes 0..n-1 of the operator tensor
+        k = len(qs)
+        out = np.moveaxis(np.tensordot(m.reshape((2,) * (2 * k)), out,
+                                       axes=(list(range(k, 2 * k)), qs)), list(range(k)), qs)
+    return out.reshape(2 ** n, 2 ** n)
+
+
+@pytest.mark.parametrize("name", sorted(QELIB1))
+def test_every_gate_is_its_qelib1_definition(name):
+    n_par, steps = QELIB1[name]
+    pars = [0.37, -1.21, 2.05, 0.66][:n_par]
+    want = _compose(2 if name in uc._GATES and uc._GATES[name][1] == 2 else 1, steps(*pars))
+    got = np.asarray(uc._GATES[name][2](*pars), dtype=complex)
+    assert got.shape == want.shape
+    k = np.unravel_index(np.argmax(np.abs(want)), want.shape)
+    phase = got[k] / want[k]                                     # a global phase is free
+    assert abs(abs(phase) - 1) < 1e-12 and np.allclose(got, phase * want, atol=1e-12)
+
+
+def test_every_supported_gate_has_a_qelib1_definition():
+    assert set(uc._GATES) == set(QELIB1)
+
+
 def test_gate_parameters_are_arithmetic_on_pi():
     circ = uc.from_qasm("qreg q[1];\nrz(-pi/4) q[0];\nrz(2*pi/3 + 0.5) q[0];\nu1(1e-3) q[0];\n")
     phases = [np.angle(g.u[1, 1] / g.u[0, 0]) for g in circ.gates]
