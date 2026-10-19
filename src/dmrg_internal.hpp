@@ -449,6 +449,37 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           const std::shared_ptr<HVAInitState>& init = nullptr,
                           bool want_entropy = true);
 
+// ---- U(1) qubit circuits (M16) --------------------------------------------------------
+// One-qubit phases and nearest-neighbour two-qubit gates that conserve the number of
+// qubits in |1>, on the block-sparse MPS: every bond carries that number as an exact
+// charge, so the total is conserved at any truncation. A gate is a row-major matrix:
+// 2x2 on qubit q (it must be diagonal), or 4x4 on qubits (q, q+1) in the basis
+// |s_q s_{q+1}> = |00>, |01>, |10>, |11> (qubit q the high bit). run_u1_circuit checks
+// every gate unitary and charge-conserving to 1e-10, and refuses it otherwise.
+struct U1Gate {
+    int q = 0;
+    int arity = 2;                          // 1: phase on q; 2: gate on (q, q+1)
+    std::vector<std::complex<double>> u;    // 4 or 16 entries, row-major
+};
+struct U1Measurement {
+    int after = 0;                          // measured after this many gates
+    std::vector<double> z;                  // <Z_i>, normalized by the state's norm
+    double norm2 = 1;                       // squared norm: the weight the truncations left
+    int max_bond = 1;
+};
+struct U1CircuitResult {
+    std::vector<U1Measurement> measurements;
+    int max_bond = 1;                       // largest bond any gate produced
+    double trunc_sum = 0;                   // discarded weight, summed over the gates
+    double trunc_max = 0;                   // the largest single discard
+    int ones = 0;                           // the conserved number of |1>s, read off the MPS
+    double wall_s = 0;
+};
+U1CircuitResult run_u1_circuit(int n, const std::vector<int>& bits,
+                               const std::vector<U1Gate>& gates,
+                               const std::vector<int>& measure_after,
+                               int chi_max, double cutoff);
+
 // Cost probe: apply ONE layer of x-hops (all W*(Lx-1) range-W bonds) of a width-W
 // cylinder to a chi-sized state through the swap network, and return the worst
 // discarded weight. Exists so the width scan can be sized from a measurement.

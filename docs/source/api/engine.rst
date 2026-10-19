@@ -6,9 +6,9 @@ the platform wheels (or set ``QUANTX_LIB_PATH``); without it, each raises its mo
 error, naming what is missing.
 
 :func:`~quantx_engine.dmrg.ground_state` with :mod:`quantx_engine.models`,
-:mod:`quantx_engine.hva` and :mod:`quantx_engine.thermal` are gated: each capability is
-tested against a reference computed independently of the engine (see the
-:doc:`front page <../index>`).
+:mod:`quantx_engine.hva`, :mod:`quantx_engine.thermal` and :mod:`quantx_engine.u1_circuit`
+are gated: each capability is tested against a reference computed independently of the
+engine (see the :doc:`front page <../index>`).
 :mod:`quantx_engine.tdvp`, :mod:`quantx_engine.structure_factor` and the SU(2) path of
 :class:`~quantx_engine.dmrg.DMRGSolver` are validated in the C++ tests but have no
 Python gate yet.
@@ -33,6 +33,10 @@ Python gate yet.
      - Finite temperature by purification, for the XXZ, spin-1 and Hubbard chains: the
        statics, the dynamical structure factor S(k, ω, T) and the optical conductivity
        σ(ω, T).
+   * - :mod:`quantx_engine.u1_circuit`
+     - Qubit circuits that conserve the number of qubits in ``|1>``: OpenQASM fused into
+       one- and two-qubit gates that conserve it, run on the block-sparse MPS with that
+       number as an exact charge; <Z_i> at chosen points of the circuit.
    * - :mod:`quantx_engine.tdvp`
      - Real- and imaginary-time evolution and Loschmidt echoes of the XXZ chain.
    * - :mod:`quantx_engine.structure_factor`
@@ -47,5 +51,6 @@ Python gate yet.
    quantx_engine.dmrg
    quantx_engine.hva
    quantx_engine.thermal
+   quantx_engine.u1_circuit
    quantx_engine.tdvp
    quantx_engine.structure_factor

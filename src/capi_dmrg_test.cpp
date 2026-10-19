@@ -10,9 +10,13 @@
 // point does now for a 2-site chain, and that n=4 still takes the fast path.
 #include "qx/c_api.h"
 
+#include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdio>
+#include <random>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -289,6 +293,122 @@ int main() {
                   "thermal: dt = 0 is refused");
     thermal_error(xxz6, {{"quantity", "structure_factor"}, {"beta", 1.0}, {"t_max", -1.0}},
                   "t_max >= 0", "thermal: a negative t_max is refused");
+
+    std::printf("\nqx_u1_circuit: a charge-conserving circuit against the state vector\n");
+    {
+        // 60 random gates on 8 qubits: phases on one qubit, and two-qubit gates that are a
+        // phase on |00> and on |11> and a random unitary on {|01>, |10>}. Qubit 0 is the high
+        // bit of the state-vector index, and of each gate's basis |s_q s_{q+1}>.
+        using cd = std::complex<double>;
+        const int n = 8;
+        const double two_pi = 2.0 * std::acos(-1.0);
+        std::mt19937 rng(20261019);
+        std::uniform_real_distribution<double> ang(0.0, two_pi);
+        std::uniform_int_distribution<int> pair_at(0, n - 2), site_at(0, n - 1), kind(0, 3);
+        const std::vector<int> bits = {1, 0, 1, 1, 0, 0, 1, 0};
+        std::vector<std::pair<int, std::vector<cd>>> ops;
+        json gates = json::array();
+        for (int k = 0; k < 60; ++k) {
+            int q;
+            std::vector<cd> u;
+            if (kind(rng) == 0) {
+                q = site_at(rng);
+                u = {std::polar(1.0, ang(rng)), 0.0, 0.0, std::polar(1.0, ang(rng))};
+            } else {
+                q = pair_at(rng);
+                const double th = ang(rng), a = ang(rng), b = ang(rng), g = ang(rng);
+                u.assign(16, 0.0);
+                u[0] = std::polar(1.0, ang(rng));
+                u[5] = std::polar(std::cos(th), a + b);
+                u[6] = std::polar(std::sin(th), a + g);
+                u[9] = -std::polar(std::sin(th), a - g);
+                u[10] = std::polar(std::cos(th), a - b);
+                u[15] = std::polar(1.0, ang(rng));
+            }
+            json m = json::array();
+            for (const cd& z : u) m.push_back({z.real(), z.imag()});
+            gates.push_back({{"q", q}, {"u", m}});
+            ops.push_back({q, u});
+        }
+        auto dense_z = [&](int upto) {
+            std::vector<cd> psi(1 << n, 0.0);
+            int b0 = 0;
+            for (int i = 0; i < n; ++i) b0 |= bits[i] << (n - 1 - i);
+            psi[b0] = 1.0;
+            for (int k = 0; k < upto; ++k) {
+                const int q = ops[k].first;
+                const std::vector<cd>& u = ops[k].second;
+                const int d = u.size() == 4 ? 2 : 4;
+                const int hi = n - 1 - q, lo = d == 4 ? n - 2 - q : hi;   // bit positions
+                const int mask = (1 << hi) | (1 << lo);
+                std::vector<cd> out(psi.size(), 0.0);
+                for (int idx = 0; idx < (1 << n); ++idx) {
+                    const int p = d == 4 ? ((((idx >> hi) & 1) << 1) | ((idx >> lo) & 1))
+                                         : ((idx >> hi) & 1);
+                    for (int t = 0; t < d; ++t) {
+                        const int j = (idx & ~mask) |
+                                      (d == 4 ? (((t >> 1) << hi) | ((t & 1) << lo)) : (t << hi));
+                        out[j] += u[t * d + p] * psi[idx];
+                    }
+                }
+                psi.swap(out);
+            }
+            std::vector<double> z(n, 0.0);
+            for (int idx = 0; idx < (1 << n); ++idx)
+                for (int i = 0; i < n; ++i)
+                    z[i] += std::norm(psi[idx]) * (((idx >> (n - 1 - i)) & 1) ? -1.0 : 1.0);
+            return z;
+        };
+        const json prob = {{"n_qubits", n}, {"initial", bits}, {"gates", gates},
+                           {"measure_after", {60, 0, 25}}};
+        json r = call(qx_u1_circuit, prob, {{"max_bond", 64}});
+        bool ok = r.value("ok", false) && r["measurements"].size() == 3 &&
+                  r.value("ones", -1) == 4 && r["measurements"][0]["after"] == 0;
+        double worst = 0;
+        if (ok)
+            for (const auto& m : r["measurements"]) {
+                const auto z = dense_z(m["after"].get<int>());
+                for (int i = 0; i < n; ++i)
+                    worst = std::max(worst, std::abs(m["z"][i].get<double>() - z[i]));
+                worst = std::max(worst, std::abs(m["norm2"].get<double>() - 1.0));
+            }
+        check(ok && worst < 1e-10, "u1_circuit: <Z_i>, norm at 0, 25, 60 gates == state vector", r);
+
+        // Truncated hard, the state loses weight but not its charge: every state the MPS can
+        // hold has sum_i <Z_i> = n - 2 * ones exactly.
+        json t = call(qx_u1_circuit, prob, {{"max_bond", 2}});
+        double zsum = 0;
+        bool tok = t.value("ok", false) && t.value("ones", -1) == 4 &&
+                   t.value("max_bond", 99) <= 2 && t.value("truncation_sum", 0.0) > 1e-6 &&
+                   t["measurements"].back()["norm2"].get<double>() < 1.0;
+        if (tok)
+            for (int i = 0; i < n; ++i) zsum += t["measurements"].back()["z"][i].get<double>();
+        check(tok && std::abs(zsum) < 1e-12, "u1_circuit: at max_bond 2, sum <Z_i> = 0 exactly", t);
+    }
+    auto u1_error = [&](const json& prob, const json& opts, const char* text, const char* what) {
+        json r = call(qx_u1_circuit, prob, opts);
+        check(!r.value("ok", true) &&
+              r.value("error", std::string()).find(text) != std::string::npos, what, r);
+    };
+    auto u1_gate = [](int q, std::vector<double> diag_or_full) {
+        json m = json::array();
+        for (double x : diag_or_full) m.push_back({x, 0.0});
+        return json{{"q", q}, {"u", m}};
+    };
+    const std::vector<double> cx = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0};
+    const std::vector<double> id4 = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    u1_error({{"n_qubits", 4}, {"gates", {u1_gate(1, cx)}}}, json::object(),
+             "does not conserve", "u1_circuit: a CX (it changes the charge) is refused");
+    u1_error({{"n_qubits", 4}, {"gates", {u1_gate(0, {2, 0, 0, 1})}}}, json::object(),
+             "not unitary", "u1_circuit: a gate that is not unitary is refused");
+    u1_error({{"n_qubits", 4}, {"gates", {u1_gate(3, id4)}}}, json::object(),
+             "out of range", "u1_circuit: a two-qubit gate past the end is refused");
+    u1_error({{"n_qubits", 4}, {"initial", {0, 1}}, {"gates", json::array()}}, json::object(),
+             "one bit per qubit", "u1_circuit: a short initial bitstring is refused");
+    u1_error({{"n_qubits", 4}, {"gates", {u1_gate(0, id4)}}, {"measure_after", {2}}},
+             json::object(), "measure_after", "u1_circuit: measuring past the end is refused");
+    u1_error({{"n_qubits", 4}, {"gates", json::array()}}, {{"chi", 8}}, "unknown option",
+             "u1_circuit: an unknown option is refused");
 
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");
     return failures ? 1 : 0;

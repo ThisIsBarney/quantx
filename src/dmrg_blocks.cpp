@@ -5023,6 +5023,171 @@ HVAResult run_hva_circuit(const std::vector<MPOSite>& mpo, int n,
                                   want_entropy);
 }
 
+// ---- U(1) qubit circuits (M16) -------------------------------------------------------
+// A circuit of one-qubit phases and nearest-neighbour two-qubit gates, each conserving
+// the number of qubits in |1>, run on the block-sparse MPS. Qubit |0> is the spin-1/2
+// state of charge +1 and |1> the one of charge -1, so every bond carries the number of
+// |1>s to its left as an exact quantum number: the total charge is conserved at any
+// truncation, where a dense MPS loses it at the truncation's own scale.
+namespace {
+
+const std::vector<int> U1_QUBIT_CHARGES = {+1, -1};   // |0>, |1>
+
+// The computational-basis product state |bits>. A product state needs no environments
+// (a circuit never builds any), and every site of it is both left- and right-canonical,
+// so the orthogonality centre may be taken anywhere.
+BlockDMRG<Cx>::BMPS u1_product_state(int n, const std::vector<int>& bits) {
+    using BD = BlockDMRG<Cx>;
+    const std::vector<int>& qphys = U1_QUBIT_CHARGES;
+    BD::BMPS s;
+    s.n = n;
+    std::vector<int> qb(n + 1, 0);
+    for (int i = 0; i < n; ++i) qb[i + 1] = qb[i] + qphys[bits[i]];
+    s.bond.resize(n + 1);
+    for (int i = 0; i <= n; ++i) s.bond[i] = BondSpace::from_pairs({{qb[i], 1}});
+    s.A.resize(n);
+    for (int i = 0; i < n; ++i) {
+        auto cols = phys_groups(s.bond[i + 1], qb[i], +1, qphys);
+        BD::Mat blk = BD::Mat::Zero(1, phys_total(cols));
+        blk(0, cols[bits[i]].off) = Cx(1, 0);
+        s.A[i][qb[i]] = blk;
+    }
+    return s;
+}
+
+// <Z_i> at every site, on a copy, by the centre walk of measure_stag: the centre must be
+// at site 0. Each physical column group carries the charge Z of its state (+1 or -1),
+// weighted by its share of the centre's norm.
+std::vector<double> u1_z_profile(std::vector<std::map<int, BlockDMRG<Cx>::Mat>> A,
+                                 std::vector<BondSpace> bond, int n) {
+    using BD = BlockDMRG<Cx>;
+    const std::vector<int>& qphys = U1_QUBIT_CHARGES;
+    std::vector<double> z(n, 0.0);
+    for (int i = 0; i < n; ++i) {
+        z[i] = BD::center_sz(A[i], bond[i + 1], qphys);
+        if (i == n - 1) break;
+        auto mv = BD::singlesite_split_LR(A[i], bond[i], bond[i + 1], qphys);
+        A[i] = mv.A;
+        bond[i + 1] = mv.new_mid;
+        std::map<int, BD::Mat> next;
+        for (auto& [q_R, Cblk] : mv.C) {
+            auto it = A[i + 1].find(q_R);
+            if (it != A[i + 1].end()) next[q_R] = Cblk * it->second;
+        }
+        A[i + 1] = next;
+    }
+    return z;
+}
+
+int u1_max_bond(const BlockDMRG<Cx>::BMPS& s) {
+    int m = 1;
+    for (const auto& b : s.bond) {
+        int t = 0;
+        for (int d : b.dims) t += d;
+        m = std::max(m, t);
+    }
+    return m;
+}
+
+}  // namespace
+
+U1CircuitResult run_u1_circuit(int n, const std::vector<int>& bits,
+                               const std::vector<U1Gate>& gates,
+                               const std::vector<int>& measure_after,
+                               int chi_max, double cutoff) {
+    using BD = BlockDMRG<Cx>;
+    const auto t0 = std::chrono::steady_clock::now();
+    const std::vector<int>& qphys = U1_QUBIT_CHARGES;
+    if (n < 2) throw std::runtime_error("u1_circuit: need at least 2 qubits");
+    if ((int)bits.size() != n)
+        throw std::runtime_error("u1_circuit: the initial state must give one bit per qubit");
+    for (int b : bits)
+        if (b != 0 && b != 1) throw std::runtime_error("u1_circuit: initial bits must be 0 or 1");
+    if (chi_max < 1) throw std::runtime_error("u1_circuit: max_bond must be >= 1");
+    if (!(cutoff >= 0)) throw std::runtime_error("u1_circuit: cutoff must be >= 0");
+
+    // Every gate is checked here: the block update keeps only the charge-conserving
+    // entries, so a gate that mixes charge sectors would be applied silently in part.
+    std::vector<BD::Mat> mats(gates.size());
+    for (size_t k = 0; k < gates.size(); ++k) {
+        const U1Gate& g = gates[k];
+        const std::string at = "u1_circuit: gate " + std::to_string(k) + ": ";
+        if (g.arity != 1 && g.arity != 2) throw std::runtime_error(at + "arity must be 1 or 2");
+        const int dim = g.arity == 1 ? 2 : 4;
+        if ((int)g.u.size() != dim * dim)
+            throw std::runtime_error(at + "expected a " + std::to_string(dim) + "x" +
+                                     std::to_string(dim) + " matrix");
+        if (g.q < 0 || g.q + g.arity > n)
+            throw std::runtime_error(at + "qubit index out of range");
+        BD::Mat G(dim, dim);
+        for (int r = 0; r < dim; ++r)
+            for (int c = 0; c < dim; ++c) G(r, c) = g.u[r * dim + c];
+        const double unit = (G.adjoint() * G - BD::Mat::Identity(dim, dim)).cwiseAbs().maxCoeff();
+        if (!(unit <= 1e-10)) throw std::runtime_error(at + "not unitary (|U^dag U - 1| = " +
+                                                       std::to_string(unit) + ")");
+        // charge of a basis state: +1 per |0>, -1 per |1> (bit 1 of the 2x2, packed s1*2+s2)
+        auto charge = [&](int idx) {
+            if (g.arity == 1) return qphys[idx];
+            return qphys[idx >> 1] + qphys[idx & 1];
+        };
+        double leak = 0;
+        for (int r = 0; r < dim; ++r)
+            for (int c = 0; c < dim; ++c)
+                if (charge(r) != charge(c)) leak = std::max(leak, std::abs(G(r, c)));
+        if (!(leak <= 1e-10))
+            throw std::runtime_error(at + "does not conserve the number of |1>s (largest "
+                                     "charge-changing entry " + std::to_string(leak) + ")");
+        mats[k] = G;
+    }
+    std::vector<int> when = measure_after;
+    std::sort(when.begin(), when.end());
+    when.erase(std::unique(when.begin(), when.end()), when.end());
+    for (int w : when)
+        if (w < 0 || w > (int)gates.size())
+            throw std::runtime_error("u1_circuit: measure_after entries must lie in "
+                                     "[0, number of gates]");
+
+    BD::BMPS s = u1_product_state(n, bits);
+    U1CircuitResult out;
+    int centre = 0;                     // a product state: any site is a valid centre
+    size_t next = 0;
+    auto measure = [&](int after) {
+        BD::move_centre(s, centre, 0, qphys);
+        centre = 0;
+        double norm2 = 0;
+        for (auto& [q, b] : s.A[0]) norm2 += b.squaredNorm();
+        U1Measurement m;
+        m.after = after;
+        m.z = u1_z_profile(s.A, s.bond, n);
+        m.norm2 = norm2;
+        m.max_bond = u1_max_bond(s);
+        out.measurements.push_back(std::move(m));
+    };
+    while (next < when.size() && when[next] == 0) { measure(0); ++next; }
+    for (size_t k = 0; k < gates.size(); ++k) {
+        const U1Gate& g = gates[k];
+        if (g.arity == 1) {             // charge-conserving on one qubit = a diagonal phase
+            BD::apply_site_diag(s, g.q, {mats[k](0, 0), mats[k](1, 1)}, qphys);
+        } else {
+            BD::move_centre(s, centre, g.q, qphys);
+            const double err = BD::apply_gate_at(s, g.q, mats[k], chi_max, cutoff, qphys);
+            centre = g.q + 1;
+            out.trunc_sum += err;
+            out.trunc_max = std::max(out.trunc_max, err);
+            int t = 0;
+            for (int d : s.bond[g.q + 1].dims) t += d;
+            out.max_bond = std::max(out.max_bond, t);
+        }
+        while (next < when.size() && when[next] == (int)k + 1) { measure((int)k + 1); ++next; }
+    }
+    // The last bond's single charge is the conserved total: (#|0>) - (#|1>).
+    if (s.bond[n].n_sectors() != 1)
+        throw std::runtime_error("u1_circuit: the state left its charge sector");
+    out.ones = (n - s.bond[n].qns[0]) / 2;
+    out.wall_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return out;
+}
+
 // Entry point: GS once, then <GS|O|GS> per measurement MPO. The exported state has
 // its centre on site 0 with environments rebuilt per obs MPO (each obs derives its
 // own bond charges -- derive_mpo_sym scans the full chain, so correlator MPOs whose

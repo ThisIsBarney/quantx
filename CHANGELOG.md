@@ -11,6 +11,21 @@ bug-fixes and packaging corrections only.
 
 ## [Unreleased]
 
+### Added
+
+- **`quantx_engine.u1_circuit`** (M16): qubit circuits that conserve the number of |1>s,
+  run on the block-sparse engine with that number as an exact charge, so no truncation
+  moves the state out of its sector. `from_qasm` reads OpenQASM 2 (one register, the
+  qelib1 one- and two-qubit gates) and fuses the gates, greedily, into one- and two-qubit
+  gates that conserve the charge: a transpiled circuit breaks the symmetry gate by gate
+  but keeps it cluster by cluster. The X gates that prepare the initial state become its
+  bitstring. `run` gives <Z_i>, the squared norm and the largest bond at chosen points,
+  and `measure_points` turns positions in the source circuit into them. The Quantum
+  Advantage Tracker's 120-qubit SU(2) hadron circuits (32,072 gates) fuse into 8,290 in
+  half a second, and the end of every Trotter step maps to a fused position. Gated against
+  an independent state vector to 1e-10 (`test_u1_circuit.py`, and the C++ contract
+  test); the C API entry point is `qx_u1_circuit`.
+
 ## [0.2.0] — 2026-10-18
 
 The engine's finite-temperature methods reach Python, the experimental modules move to
