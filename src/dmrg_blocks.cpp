@@ -5294,14 +5294,19 @@ double mps_apply_diag(MPSState& a, int site, const std::vector<Cx>& diag) {
     // an isometry even when it is not unitary (a projector n_i, say), and the new norm is
     // that tensor's.
     BD::move_centre(a.s, 0, site, a.qphys);
+    auto before = a.s.A[site];
     BD::apply_site_diag(a.s, site, diag, a.qphys);
     double norm2 = 0;
     for (auto& [q, b] : a.s.A[site]) norm2 += b.squaredNorm();
     // The block SVD drops blocks below 1e-24 as zero, so a state this small has no bond
-    // left to split; refuse it rather than hand back an empty MPS.
-    if (!(norm2 > 1e-20))
+    // left to split; refuse it rather than hand back an empty MPS -- and leave the state
+    // as it was, for a caller that goes on using it after the refusal.
+    if (!(norm2 > 1e-20)) {
+        a.s.A[site] = std::move(before);
+        BD::move_centre(a.s, site, 0, a.qphys);
         throw std::runtime_error("mps_apply: the operator annihilates the state (squared "
-                                 "norm " + std::to_string(norm2) + ")");
+                                 "norm " + std::to_string(norm2) + "); the state is unchanged");
+    }
     BD::move_centre(a.s, site, 0, a.qphys);
     return norm2;
 }

@@ -234,8 +234,11 @@ def test_bad_requests_are_refused(engine):
         gs.apply([1, 2, 3], 0)
     with pytest.raises(mps.MPSError, match="site 6 is not in"):
         gs.apply("Sz", 6)
+    up = mps.product(chain, ["up"] * 6, engine=engine)
+    e_up = up.energy()
     with pytest.raises(mps.MPSError, match="annihilates"):
-        mps.product(chain, ["up"] * 6, engine=engine).apply([0, 1], 0)
+        up.apply([0, 1], 0)
+    assert abs(up.norm - 1) < 1e-12 and abs(up.energy() - e_up) < 1e-12   # left as it was
     with pytest.raises(mps.MPSError, match="8-site"):
         gs.evolve(XXZChain(L=8), dt=0.1)
     with pytest.raises(mps.MPSError, match="hubbard"):
