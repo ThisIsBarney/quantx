@@ -1,0 +1,69 @@
+name: SU(2) hadron reproduction (M8)
+
+# Reproduces docs/referee_su2_hadron.md's step-by-step result on a GitHub runner's CPU: an
+# independent machine and a different splitting (SVD rather than the GPU runs' eigensolver).
+# benchmarks/su2_hadron_quimb.py downloads the tracker's two circuits at a pinned commit,
+# checks their SHA-256, reads n_f(t) after every Trotter step, and `check` compares each step
+# with the committed scan (docs/referee_su2_hadron_nf_t.csv), failing past the tolerance.
+# Steps 1-14 are where the scan has converged (chi = 400 and 800 agree to 4e-4), so the
+# defaults reproduce exactly the steps the doc's comparison rests on.
+
+on:
+  workflow_dispatch:
+    inputs:
+      chi:
+        description: "Bond dimension"
+        default: "400"
+      steps:
+        description: "Trotter steps (1-20)"
+        default: "14"
+  pull_request:
+    branches: ["master", "main"]
+    paths:
+      - ".github/workflows/su2-hadron-repro.yml"
+      - "benchmarks/su2_hadron_quimb.py"
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    name: n_f(t) on a GitHub runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      CHI: ${{ inputs.chi || '400' }}
+      STEPS: ${{ inputs.steps || '14' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install quimb (the version the scan used)
+        run: pip install "quimb==1.11.2" numpy scipy
+
+      - name: Check the inputs are integers
+        run: |
+          [[ "$CHI" =~ ^[0-9]+$ ]] || { echo "chi must be an integer"; exit 1; }
+          [[ "$STEPS" =~ ^[0-9]+$ ]] || { echo "steps must be an integer"; exit 1; }
+
+      - name: n_f(t) on this runner's CPU
+        run: |
+          python benchmarks/su2_hadron_quimb.py trajectory --chi "$CHI" --steps "$STEPS" \
+            --threads "$(nproc)" --qasm-dir qasm --out-dir runs
+
+      - name: Against the committed scan
+        run: |
+          suffix=""
+          [ "$STEPS" = "20" ] || suffix="_steps$STEPS"
+          python benchmarks/su2_hadron_quimb.py check \
+            --run "runs/su2_hadron_traj_chi${CHI}${suffix}.json" --tol 1e-3
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: su2-hadron-trajectory
+          path: runs/
+          if-no-files-found: ignore
