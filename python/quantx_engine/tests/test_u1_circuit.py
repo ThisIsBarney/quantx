@@ -211,7 +211,9 @@ def test_a_position_inside_a_fused_gate_is_refused():
     ("qreg q[2];\nrz q[0];\n", "takes 1 parameter"),
     ("qreg q[2];\ncx q[0],q[0];\n", "same qubit twice"),
     ("qreg q[2];\nh q[2];\n", "past the register"),
-    ("h q[0];\n", "no qreg"),
+    ("qreg q[2];\nh r[0];\n", "other than the qreg"),
+    ("h q[0];\nqreg q[2];\n", "before the qreg"),
+    ("OPENQASM 2.0;\n", "no qreg"),
 ])
 def test_unfusable_or_unreadable_circuits_are_refused(text, match):
     with pytest.raises(uc.U1CircuitError, match=match):

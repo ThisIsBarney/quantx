@@ -188,17 +188,17 @@ def _param(text: str) -> float:
 
 
 def _parse_qasm(text: str):
-    n, gates = None, []
+    n, reg, gates = None, None, []
     for k, raw in enumerate(text.splitlines(), 1):
         line = raw.split("//", 1)[0].strip()
         for stmt in filter(None, (s.strip() for s in line.split(";"))):
             if stmt.startswith(("OPENQASM", "include", "creg", "barrier")):
                 continue
-            m = re.fullmatch(r"qreg\s+\w+\s*\[\s*(\d+)\s*\]", stmt)
+            m = re.fullmatch(r"qreg\s+(\w+)\s*\[\s*(\d+)\s*\]", stmt)
             if m:
                 if n is not None:
                     raise U1CircuitError("one quantum register only")
-                n = int(m.group(1))
+                reg, n = m.group(1), int(m.group(2))
                 continue
             word = re.match(r"\w*", stmt).group(0)
             if word in ("measure", "reset", "if", "gate", "opaque"):
@@ -214,9 +214,15 @@ def _parse_qasm(text: str):
             pars = [] if par is None or not par.strip() else [_param(p) for p in par.split(",")]
             if len(pars) != n_par:
                 raise U1CircuitError(f"line {k}: {name} takes {n_par} parameter(s)")
-            qs = [int(x) for x in re.findall(r"\w+\s*\[\s*(\d+)\s*\]", args)]
-            if len(qs) != arity or len(args.split(",")) != arity:
+            refs = re.findall(r"(\w+)\s*\[\s*(\d+)\s*\]", args)
+            if len(refs) != arity or len(args.split(",")) != arity:
                 raise U1CircuitError(f"line {k}: {name} acts on {arity} single qubit(s)")
+            if reg is None:
+                raise U1CircuitError(f"line {k}: a gate before the qreg")
+            if any(r != reg for r, _ in refs):
+                raise U1CircuitError(f"line {k}: {name} acts on a register other than the "
+                                     f"qreg {reg!r}")
+            qs = [int(i) for _, i in refs]
             if arity == 2 and qs[0] == qs[1]:
                 raise U1CircuitError(f"line {k}: {name} on the same qubit twice")
             gates.append((np.asarray(fn(*pars), dtype=complex), qs))
