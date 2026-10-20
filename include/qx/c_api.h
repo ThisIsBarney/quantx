@@ -234,14 +234,20 @@ QX_API const char* qx_u1_circuit(const char* problem_json, const char* options_j
 //                 truncation_error, n_sweeps_done, sweep_energies, sector, method, n_sites}
 //   product      {model, config: [local state per site]}       -> {handle}
 //   copy         {handle}                                     -> {handle}
-//   apply        {handle, site, diag: [real per local state]}  -> {norm2}   (in place; not
+//   apply        {handle, site, diag | matrix, string?}       -> {norm2}   (in place; not
 //                 renormalized; refused if it annihilates the state)
 //   evolve       {handle, model, dt, n_steps, imaginary?, max_bond?, cutoff?}
 //                 -> {max_bond, wall_time_s}   (TDVP2, in place; exp(-i H dt) per step, or
 //                 exp(-H dt) renormalized when imaginary)
 //   overlap      {bra, ket}                                   -> {re, im}  (<bra|ket>)
-//   expect       {bra, ket?, diag}                            -> {re: [..], im: [..]}
-//                 (<bra| D_j |ket> for every site j; ket defaults to bra)
+//   expect       {bra, ket?, diag | matrix, string?}          -> {re: [..], im: [..]}
+//                 (<bra| P_0 .. P_{j-1} O_j |ket> for every site j; ket defaults to bra)
+// A one-site operator O is its real diagonal ("diag", one entry per local state), or its
+// row-major d x d matrix ("matrix", entries <s'|O|s> with row s' the result, each a number
+// or an [re, im] pair), optionally with a "string": a diagonal of phases P applied on every
+// site left of O, such as the Jordan-Wigner parity (-1)^n of a fermion operator. A matrix
+// may change the charge, by one amount for all its entries: apply moves the state to that
+// sector, and expect is zero unless charge(bra) = charge(ket) + the shift.
 //   energy       {handle, model}                              -> {energy}  (<H>/<psi|psi>)
 //   info         {handle}  -> {n_sites, local_dim, bonds, norm2, charge}
 //   free         {handle}

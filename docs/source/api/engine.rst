@@ -39,9 +39,11 @@ Python gate yet.
        number as an exact charge; <Z_i> at chosen points of the circuit.
    * - :mod:`quantx_engine.mps`
      - Matrix-product states that stay in the engine between calls: a DMRG ground state
-       or a product state, one-site diagonal operators, TDVP in real or imaginary time
-       (under any model of the same local space), overlaps, matrix elements and
-       energies, chained without the state passing through Python.
+       or a product state, one-site operators (diagonal ones, and S^± and the fermion
+       c†, c, which move the state to another charge sector, a fermion operator with
+       its Jordan–Wigner string), TDVP in real or imaginary time (under any model of the
+       same local space), overlaps, matrix elements and energies, chained without the
+       state passing through Python.
    * - :mod:`quantx_engine.tdvp`
      - Real- and imaginary-time evolution and Loschmidt echoes of the XXZ chain.
    * - :mod:`quantx_engine.structure_factor`
