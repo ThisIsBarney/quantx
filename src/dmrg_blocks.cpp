@@ -3102,7 +3102,7 @@ static Mat build_fswap_gate(int d, const std::vector<int>& qphys) {
 // centre is already at site k; the centre is left at site k+1. Truncates to
 // (chi_max, cutoff) and reports the discarded weight.
 static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cutoff,
-                            const std::vector<int>& qphys) {
+                            const std::vector<int>& qphys, bool stable = false) {
     const std::map<int,RVec> no_sv;
     const int d = (int)qphys.size();
     auto th = form_theta(s.A[k], s.A[k+1], no_sv, s.bond[k], s.bond[k+1], s.bond[k+2],
@@ -3110,7 +3110,7 @@ static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cu
     bt_expand_theta(th, s.bond[k], s.bond[k+2], qphys);
     apply_gate_theta_general(th, s.bond[k], s.bond[k+2], G, d, qphys);
     auto svd = block_svd_truncate(th, s.bond[k], s.bond[k+2], chi_max, cutoff,
-                                  false, false, qphys);
+                                  false, stable, qphys);
     s.bond[k+1] = svd.new_mid_bs;
     s.A[k]   = bt_A_from_U(svd, s.bond[k], s.bond[k+1], qphys);
     s.A[k+1] = bt_center_LR(svd);
@@ -3133,14 +3133,15 @@ static int bond_total(const BondSpace& b) {
     for (int d : b.dims) t += d;
     return std::max(1, t);
 }
-static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys) {
+static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys,
+                        bool stable = false) {
     const std::map<int,RVec> no_sv;
     while (from < to) {                       // rightward
         auto th = form_theta(s.A[from], s.A[from+1], no_sv, s.bond[from],
                              s.bond[from+1], s.bond[from+2], true, qphys);
         bt_expand_theta(th, s.bond[from], s.bond[from+2], qphys);
         auto svd = block_svd_truncate(th, s.bond[from], s.bond[from+2],
-                                      bond_total(s.bond[from+1]), 0.0, false, false, qphys);
+                                      bond_total(s.bond[from+1]), 0.0, false, stable, qphys);
         s.bond[from+1] = svd.new_mid_bs;
         s.A[from]   = bt_A_from_U(svd, s.bond[from], s.bond[from+1], qphys);
         s.A[from+1] = bt_center_LR(svd);
@@ -3151,7 +3152,7 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
                              s.bond[from], s.bond[from+1], true, qphys);
         bt_expand_theta(th, s.bond[from-1], s.bond[from+1], qphys);
         auto svd = block_svd_truncate(th, s.bond[from-1], s.bond[from+1],
-                                      bond_total(s.bond[from]), 0.0, false, false, qphys);
+                                      bond_total(s.bond[from]), 0.0, false, stable, qphys);
         s.bond[from] = svd.new_mid_bs;
         s.A[from]   = svd.Vt;
         s.A[from-1] = bt_center_RL(svd, s.bond[from-1], s.bond[from], qphys);
@@ -3176,7 +3177,8 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
 // the Schmidt values.
 static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FSWAP,
                               int chi_max, double cutoff,
-                              const std::vector<int>& qphys, int& centre) {
+                              const std::vector<int>& qphys, int& centre,
+                              bool stable = false) {
     if (j <= i) throw std::runtime_error("apply_pair_gate: need j > i");
     // move_centre and apply_gate_at index s.A[k]/s.bond[k+1] with no bounds check of
     // their own, so an out-of-range mode pair is a heap overrun rather than an error.
@@ -3193,19 +3195,19 @@ static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FS
     double worst = 0;
     int c = centre;                           // current centre, as stated by the caller
     for (int k = j - 1; k > i; --k) {         // bring mode j down to site i+1
-        move_centre(s, c, k, qphys);
-        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
+        move_centre(s, c, k, qphys, stable);
+        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
         c = k + 1;
     }
-    move_centre(s, c, i, qphys);
-    worst = std::max(worst, apply_gate_at(s, i, G, chi_max, cutoff, qphys));
+    move_centre(s, c, i, qphys, stable);
+    worst = std::max(worst, apply_gate_at(s, i, G, chi_max, cutoff, qphys, stable));
     c = i + 1;
     for (int k = i + 1; k < j; ++k) {         // and walk it back up
-        move_centre(s, c, k, qphys);
-        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
+        move_centre(s, c, k, qphys, stable);
+        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
         c = k + 1;
     }
-    move_centre(s, c, i + 1, qphys);          // documented exit position
+    move_centre(s, c, i + 1, qphys, stable);  // documented exit position
     centre = i + 1;
     return worst;
 }
@@ -4922,7 +4924,12 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           int chi_max, double cutoff, int total_charge,
                           const std::vector<int>* init_config,
                           const std::shared_ptr<HVAInitState>& init,
-                          bool want_entropy, HVAGradient* gradient) {
+                          bool want_entropy, HVAGradient* gradient, bool direct_svd) {
+    // direct_svd: every split, gate or centre move, by a direct SVD instead of the Gram
+    // matrix's eigensolve. The Gram route is faster but leaves Schmidt values below
+    // sqrt(eps) of the largest imprecise, so a circuit whose bonds fill up carries a
+    // rounding noise of up to ~1e-10 in its energy; the direct one is smooth in the
+    // angles to ~1e-14, at up to twice the cost.
     using BD = BlockDMRG<Cx>;
     require_uniform_local_dim(lattice_mpo, "run_hva_lattice");
     require_uniform_local_dim(hop_mpo, "run_hva_lattice (hop_mpo)");
@@ -5017,7 +5024,7 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
             for (auto& e : groups[g])
                 worst_trunc = std::max(worst_trunc,
                     BD::apply_pair_gate(s, e.first, e.second, G, FS, chi_max, cutoff,
-                                        qphys, centre));
+                                        qphys, centre, direct_svd));
         }
         double thU = lay.back();
         if (thU != 0.0) {
@@ -5039,7 +5046,7 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
     // then never ran, so the centre is further right than the formula says) and gave a
     // silently 4x wrong energy on the W=1 lattice. n-1 extra lossless SVDs, once per
     // circuit evaluation, buys an invariant that cannot be got wrong.
-    BD::move_centre(s, s.n - 1, 0, qphys);
+    BD::move_centre(s, s.n - 1, 0, qphys, direct_svd);
     if (want_entropy) BD::entropy_walk(s, qphys, out.S_max, out.S_mid);
     BD::rebuild_mpo_envs(s, lattice_mpo);
     out.energy = BD::bt_energy(s, lattice_mpo);
@@ -5080,9 +5087,11 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                 const Mat G = BD::build_gate_from_mpo(hop_mpo, Cx(0, lay[k]), 0.0, 0.0);
                 for (auto& e : groups[k]) {
                     worst = std::max(worst, BD::apply_pair_gate(s, e.first, e.second, G, FS,
-                                                                chi_max, cutoff, qphys, c_psi));
+                                                                chi_max, cutoff, qphys, c_psi,
+                                                                direct_svd));
                     worst = std::max(worst, BD::apply_pair_gate(lam, e.first, e.second, G, FS,
-                                                                chi_max, cutoff, qphys, c_lam));
+                                                                chi_max, cutoff, qphys, c_lam,
+                                                                direct_svd));
                 }
             }
             gradient->grad[l] = std::move(g);

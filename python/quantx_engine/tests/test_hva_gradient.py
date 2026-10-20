@@ -2,22 +2,23 @@
 central differences.
 
 ``hva.circuit(..., gradient=True)`` returns dE/dtheta for every angle from one pass back
-through the circuit. It is checked two ways:
+through the circuit. The checks:
 
-- against the exact gradient of a state-vector simulation written independently of the
-  engine (the Fock-space simulator of test_hva_statevector, with the adjoint formula in
-  dense linear algebra), to 1e-8 from product starts. Measured on gradients of size 3
-  to 7: 1e-13 to 2e-12 on the ladder, the strip and the cylinder, 3.5e-9 on the chain,
-  whose bonds fill up (see below); the energies agree to 1e-11;
-- against central differences of the engine's own energies, to 1e-8: the five-point
-  stencil at h = 5e-4, whose truncation error is h^4/30 times the fifth derivative.
-
-The central differences run on the ladder and the cylinder, whose energies are smooth in
-the angles to 1e-14. A chain whose bonds fill up carries a rounding noise of about 3e-11
-in its energy: the circuit's SVDs go through the Gram matrix, which leaves Schmidt
-values below sqrt(eps) ~ 1e-8 imprecise, and as an angle moves they shift. Divided by
-h, that noise limits a five-point difference there to a few 1e-8 at any step size. The
-same rounding is what puts the chain's adjoint gradient 3.5e-9 off the state vector.
+- Against the exact gradient of a state-vector simulation written independently of the
+  engine: the Fock-space simulator of test_hva_statevector, with the adjoint formula in
+  dense linear algebra. With ``svd="direct"`` the circuit's own rounding is ~1e-14, so
+  this shows the method's precision. It is gated to 1e-10 from product starts (measured:
+  up to 1.2e-11 on gradients of size 3 to 7) and to 1e-6 from free starts, which carry
+  their DMRG preparation's residual (measured 1.4e-7 to 2.4e-7).
+- The default route, ``svd="gram"``, within its rounding. Its splits go through the Gram
+  matrix, which leaves Schmidt values below sqrt(eps) ~ 1e-8 imprecise, so a circuit
+  whose bonds fill up, like the chain here, carries a rounding noise of up to ~1e-10 in
+  its energy. Measured: the chain's energy 6e-12 off on Windows, 1.2e-10 on Linux; its
+  gradient 3.5e-9 off on Windows. It is gated to 1e-8 and 1e-6.
+- Against central differences of the engine's own energy, to 1e-8 (the done-when):
+  the five-point stencil at h = 5e-4, whose truncation error is h^4/30 times the fifth
+  derivative, with ``svd="direct"``. On the Gram route, the chain's rounding noise,
+  divided by h, would cap it at a few 1e-8 at any step size.
 """
 from __future__ import annotations
 
@@ -27,9 +28,10 @@ import pytest
 from quantx_engine.models import HubbardChain, HubbardLattice
 from quantx_engine.tests.test_hva_statevector import Fock, _angles, _native_or_skip
 
-TOL = 1e-10         # the energy against the state vector, from a product start
-GRAD_TOL = 1e-8     # the gradient against the state vector, from a product start
+TOL = 1e-10         # energy and gradient against the state vector: product start, direct
 FREE_TOL = 1e-6     # from a free start, which carries its DMRG preparation's residual
+GRAM_E_TOL = 1e-8   # the default (Gram) route's energy, within its rounding
+GRAM_TOL = 1e-6     # and its gradient
 FD_TOL = 1e-8       # against central differences: the M13 done-when
 H_FD = 5e-4
 
@@ -88,40 +90,52 @@ CASES = [
     (HubbardChain(L=5, U=2.0), (3, 2), "free", 2),                               # odd chain
     (HubbardLattice(Lx=3, W=2, U=4.0), (3, 3), "free", 2),                       # ladder
 ]
+IDS = ["chain", "ladder", "strip", "cylinder", "free-chain", "free-ladder"]
 
 
-@pytest.mark.parametrize("model, sector, init, layers", CASES,
-                         ids=["chain", "ladder", "strip", "cylinder", "free-chain",
-                              "free-ladder"])
-def test_gradient_matches_the_state_vector(engine, model, sector, init, layers):
+def _case(engine, model, sector, init, layers, svd):
     from quantx_engine import hva
     lay = hva.layout(model, engine=engine)
     angles = _angles(layers, lay.angles_per_layer, seed=7 * layers + sum(sector))
     zero = (len(angles) - 1, lay.angles_per_layer // 2)
     angles[zero[0]][zero[1]] = 0.0      # a zero angle skips its gates, not its derivative
     r = hva.circuit(model, angles, n_up=sector[0], n_dn=sector[1], init=init,
-                    max_bond=256, cutoff=1e-14, entropy=False, gradient=True,
+                    max_bond=256, cutoff=1e-14, entropy=False, gradient=True, svd=svd,
                     engine=engine)
     energy, grad = _exact_gradient(_lattice(model), lay.groups, angles, *sector, init,
                                    r.init_config)
-    tol, gtol = (TOL, GRAD_TOL) if init == "product" else (FREE_TOL, FREE_TOL)
+    return r, energy, grad, zero
+
+
+@pytest.mark.parametrize("model, sector, init, layers", CASES, ids=IDS)
+def test_gradient_matches_the_state_vector(engine, model, sector, init, layers):
+    r, energy, grad, zero = _case(engine, model, sector, init, layers, "direct")
+    tol = TOL if init == "product" else FREE_TOL
     assert abs(r.energy - energy) < tol
-    assert np.allclose(r.gradient, grad, atol=gtol, rtol=0), (r.gradient, grad)
+    assert np.allclose(r.gradient, grad, atol=tol, rtol=0), (r.gradient, grad)
     assert abs(grad[zero[0]][zero[1]]) > 1e-3       # the skipped group's derivative
     assert r.gradient_return_error < 1e-12
 
 
+@pytest.mark.parametrize("model, sector, init, layers", CASES[:4], ids=IDS[:4])
+def test_the_default_route_stays_within_its_rounding(engine, model, sector, init, layers):
+    r, energy, grad, _ = _case(engine, model, sector, init, layers, "gram")
+    assert abs(r.energy - energy) < GRAM_E_TOL
+    assert np.allclose(r.gradient, grad, atol=GRAM_TOL, rtol=0), (r.gradient, grad)
+
+
 @pytest.mark.parametrize("model, sector, layers",
-                         [(HubbardLattice(Lx=3, W=2, U=4.0), (3, 3), 2),
+                         [(HubbardLattice(Lx=6, W=1, U=4.0), (3, 3), 2),
+                          (HubbardLattice(Lx=3, W=2, U=4.0), (3, 3), 2),
                           (HubbardLattice(Lx=2, W=3, U=4.0, y_periodic=True), (3, 3), 2)],
-                         ids=["ladder", "cylinder"])
+                         ids=["chain", "ladder", "cylinder"])
 def test_gradient_matches_central_differences(engine, model, sector, layers):
     """The done-when: every component against the five-point central difference."""
     from quantx_engine import hva
     lay = hva.layout(model, engine=engine)
     angles = np.array(_angles(layers, lay.angles_per_layer, seed=3))
     kw = dict(n_up=sector[0], n_dn=sector[1], init="product", max_bond=256, cutoff=1e-14,
-              entropy=False, engine=engine)
+              entropy=False, svd="direct", engine=engine)
     r = hva.circuit(model, angles.tolist(), gradient=True, **kw)
 
     def energy(a):
@@ -138,6 +152,23 @@ def test_gradient_matches_central_differences(engine, model, sector, layers):
     assert np.abs(np.array(r.gradient) - fd).max() < FD_TOL, (r.gradient, fd)
 
 
+def test_the_direct_route_is_smooth(engine):
+    """On a chain whose bonds fill up, second differences of the energy at a step of 1e-6
+    are f'' h^2 ~ 1e-11 plus the rounding: about 5e-11 of it on the Gram route, 1e-14 on
+    the direct one (measured)."""
+    from quantx_engine import hva
+    model = HubbardLattice(Lx=6, W=1, U=4.0)
+    angles = np.array(_angles(2, hva.layout(model, engine=engine).angles_per_layer, seed=3))
+    es = []
+    for m in range(12):
+        a = angles.copy()
+        a[0, 1] += m * 1e-6
+        es.append(hva.circuit(model, a.tolist(), init="product", max_bond=256, cutoff=1e-14,
+                              entropy=False, svd="direct", engine=engine).energy)
+    d2 = np.diff(es, 2)
+    assert np.std(d2 - d2.mean()) < 1e-12
+
+
 def test_the_gradient_leaves_the_energy_alone(engine):
     from quantx_engine import hva
     model = HubbardLattice(Lx=3, W=2, U=4.0)
@@ -148,6 +179,8 @@ def test_the_gradient_leaves_the_energy_alone(engine):
     assert a.gradient is None and a.gradient_return_error is None
     assert a.gradient_truncation_error is None
     assert np.array(b.gradient).shape == np.array(angles).shape
+    with pytest.raises(hva.HVAError, match="svd must be"):
+        hva.circuit(model, angles, init="product", svd="qr", engine=engine)
 
 
 def test_an_optimizer_takes_the_gradient(engine):

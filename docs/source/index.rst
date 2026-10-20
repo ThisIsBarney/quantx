@@ -32,11 +32,13 @@ What is verified, and against what
      - :func:`~quantx_engine.hva.circuit`, :func:`~quantx_engine.hva.layout`
      - an independent state vector: energy and entropies to 1e-10 from a product start;
        to 1e-6 from the default U = 0 start (about 1e-8 measured)
-   * - The gradient of an HVA circuit's energy in every angle, by the adjoint method, at
-       a cost that does not grow with the number of angles
+   * - The gradient of an HVA circuit's energy in every angle, by the adjoint method: one
+       pass back through the circuit, with no circuit per angle
      - ``hva.circuit(..., gradient=True)``
-     - the exact gradient of the same independent state vector, and central differences
-       of the engine's own energy: to 1e-8 from a product start
+     - the exact gradient of the same independent state vector, to 1e-10 with
+       ``svd="direct"`` (1e-6 on the default, faster route, whose rounding puts it a
+       few 1e-9 off), and central differences of the engine's own energy, to 1e-8; from
+       a product start
    * - Finite-temperature statics, the dynamical structure factor S(k, ω, T) and the
        optical conductivity σ(ω, T) of the XXZ, spin-1 and Hubbard chains
      - :mod:`quantx_engine.thermal`

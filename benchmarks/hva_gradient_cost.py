@@ -2,12 +2,13 @@
 
 For circuits of 1 to 32 layers on one lattice, this times an energy evaluation, the energy
 with its adjoint gradient (``hva.circuit(..., gradient=True)``), and central differences,
-which take two circuits per angle. Central differences cost more with every angle. The
-adjoint gradient does not: its cost over the energy's is set by bond dimensions. The
-backward pass carries H|psi> as well as psi, and H|psi> needs up to w times psi's bond
-dimension (w the Hamiltonian's MPO bond dimension, 6 for the chain), up to max_bond.
-So the ratio is largest while psi's bonds are well below max_bond, and settles once the
-circuit fills them.
+which take two circuits per angle. Both cost more with depth, as the circuit does, but
+only central differences pay per angle: their cost over one energy evaluation grows
+with the angles. The adjoint gradient's is set by bond dimensions instead. The backward
+pass carries H|psi> as well as psi, and H|psi> needs up to w times psi's bond dimension
+(w the Hamiltonian's MPO bond dimension, 6 for the chain), up to max_bond. So the ratio
+is largest while psi's bonds are well below max_bond, and settles once the circuit
+fills them.
 
     python benchmarks/hva_gradient_cost.py              # a 16-site chain, chi = 128
     python benchmarks/hva_gradient_cost.py --quick      # a 6-site chain, a few seconds

@@ -59,6 +59,26 @@ bug-fixes and packaging corrections only.
   electron from the half-filled Hubbard chain and follows the hole: its charge moves out
   like a free particle, and its spin stays inside the cone of the spinon velocity from the
   Bethe ansatz.
+- **The gradient of an HVA circuit by the adjoint method** (M13): `hva.circuit(...,
+  gradient=True)` also returns dE/dθ for every angle, laid out as the angles. One pass
+  back through the circuit gives it: each step measures ⟨λ_k| G_k |ψ_k⟩ for its
+  generator, then undoes the step on both states. The generator is a bond group's
+  hopping, built as an MPO with its Jordan–Wigner strings, or the on-site term. It
+  needs no circuit per angle, where central differences need two. Its cost in energy
+  evaluations is set by bond dimensions, since H|ψ⟩ needs up to the Hamiltonian's MPO
+  bond dimension times ψ's. On a 16-site chain at max_bond 128 it is 32 at 2 layers and
+  6 at 32 layers, against 12 and 192 for central differences
+  (`benchmarks/hva_gradient_cost.py`). `gradient_truncation_error` and
+  `gradient_return_error` say what truncation cost it. Gated against the exact gradient
+  of an independent state vector (chain, ladder, strip, cylinder; to 1e-10 from product
+  starts with `svd="direct"`) and against central differences of the circuit's own
+  energy, to 1e-8 (`test_hva_gradient.py`). `qx_hva_circuit` takes `"gradient": true`.
+- **`svd="direct"` for HVA circuits**: every split by a direct SVD instead of the Gram
+  matrix's eigensolve. The default Gram route leaves Schmidt values below √ε of the
+  largest imprecise, so a circuit whose bonds fill up carries a rounding noise of up to
+  ~1e-10 in its energy (1.2e-10 measured on Linux, for a 6-site chain of three layers).
+  The direct route keeps the energy smooth in the angles to ~1e-14, at up to twice the
+  cost.
 
 ## [0.2.0] — 2026-10-18
 

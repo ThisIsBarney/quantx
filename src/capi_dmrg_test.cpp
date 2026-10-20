@@ -253,6 +253,13 @@ int main() {
               "difference of the energy to 1e-8, and leaves the energy as it was", g);
         hva_error(lad, {{"init", "product"}, {"gradient", "yes"}}, "true or false",
                   "hva: a gradient option that is not a bool is refused");
+        json dir = call(qx_hva_circuit, lad, {{"init", "product"}, {"cutoff", 1e-14},
+                                              {"entropy", false}, {"svd", "direct"}});
+        check(dir.value("ok", false) &&
+              std::abs(dir.value("energy", 0.0) - plain.value("energy", 1.0)) < 1e-10,
+              "hva svd direct: the energy of the Gram route, to its rounding", dir);
+        hva_error(lad, {{"init", "product"}, {"svd", "qr"}}, "'gram' (the default) or 'direct'",
+                  "hva: an unknown svd route is refused");
     }
 
     // ---- finite temperature (M6) --------------------------------------------------

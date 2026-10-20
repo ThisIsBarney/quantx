@@ -459,7 +459,10 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           const std::vector<int>* init_config = nullptr,
                           const std::shared_ptr<HVAInitState>& init = nullptr,
                           bool want_entropy = true,
-                          HVAGradient* gradient = nullptr);
+                          HVAGradient* gradient = nullptr,
+                          // a direct SVD at every split instead of the Gram matrix's
+                          // eigensolve: slower, and smooth in the angles to ~1e-14
+                          bool direct_svd = false);
 
 // ---- U(1) qubit circuits (M16) --------------------------------------------------------
 // One-qubit phases and nearest-neighbour two-qubit gates that conserve the number of

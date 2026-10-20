@@ -870,6 +870,9 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
         if (opts.contains("gradient") && !opts["gradient"].is_boolean())
             return dmrg_error("hva: 'gradient' must be true or false");
         const bool want_gradient = opts.value("gradient", false);
+        const std::string svd = opts.value("svd", std::string("gram"));
+        if (svd != "gram" && svd != "direct")
+            return dmrg_error("hva: 'svd' must be 'gram' (the default) or 'direct'");
         if (chi < 1) return dmrg_error("max_bond must be >= 1");
         if (init != "free" && init != "product")
             return dmrg_error("init must be 'free' (the U = 0 ground state) or 'product'");
@@ -909,7 +912,7 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
         HVAGradient grad;
         HVAResult r = run_hva_lattice(lat, hop, g.Lx, g.W, g.y_periodic, angles, chi,
                                       cutoff, total, &cfg, psi0, want_entropy,
-                                      want_gradient ? &grad : nullptr);
+                                      want_gradient ? &grad : nullptr, svd == "direct");
         out["ok"]               = true;
         out["energy"]           = r.energy;
         if (want_gradient) {

@@ -144,8 +144,14 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
 //   entropy  : bool   (default true; the entropies cost one extra lossless sweep)
 //   gradient : bool   (default false; M13) also return dE/dtheta for every angle, by the
 //              adjoint method: one pass back through the circuit, carrying the state
-//              and H|psi>. Its cost does not grow with the number of angles (see
+//              and H|psi>. Like the circuit, it costs more with depth, but it needs no
+//              circuit per angle, as central differences need two (see
 //              benchmarks/hva_gradient_cost.py)
+//   svd      : "gram" (default) | "direct": how every split is factorised. The Gram
+//              matrix's eigensolve is faster but leaves Schmidt values below sqrt(eps) of
+//              the largest imprecise: a circuit whose bonds fill up carries a rounding
+//              noise of up to ~1e-10 in its energy. The direct SVD keeps the energy smooth
+//              in the angles to ~1e-14, at up to twice the cost
 // Returns thread-local JSON: {ok, energy, entropy_max, entropy_mid (null for odd W*Lx),
 //   gradient (with the option: laid out as the angles), gradient_truncation_error (the
 //     largest single weight discarded computing it: H psi's compression to max_bond and

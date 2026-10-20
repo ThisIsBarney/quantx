@@ -31,8 +31,15 @@ singlet ground state. The free start is refused where the U = 0 ground state is
 degenerate, since DMRG would then return an arbitrary member of the degenerate space.
 ``init="product"`` starts from a product state in the sector.
 
-Precision: from a product start the circuit is exact up to ``max_bond`` (gated against
-a state vector to 1e-10). A free start is only as good as its DMRG preparation, which
+Precision: from a product start the circuit is exact up to ``max_bond`` and rounding
+(gated against a state vector to 1e-10). The rounding depends on how the splits are
+factorised. By default (``svd="gram"``) they go through the Gram matrix, the faster
+route, which leaves Schmidt values below sqrt(eps) ~ 1e-8 of the largest imprecise. A
+circuit whose bonds fill up then carries a rounding noise of up to ~1e-10 in its
+energy: 6e-12 on Windows and 1.2e-10 on Linux for one 6-site chain of three layers.
+``svd="direct"`` uses a direct SVD at every split, which keeps the energy smooth in the
+angles to ~1e-14, at up to twice the cost. A free start is only as good as its DMRG
+preparation, which
 stops when its energy stops changing, and a circuit inherits the start's error. On the
 small systems of the gate that meant 1e-8 to 7e-8 in the circuit energy; on a long chain
 with a small single-particle gap it can be far worse. ``init_energy_error`` (the start's
@@ -43,14 +50,14 @@ full precision, start from ``init="product"``.
 
 The gradient: ``gradient=True`` also returns dE/dtheta for every angle (``r.gradient``,
 laid out as the angles), by the adjoint method. One pass back through the circuit
-measures each step's generator between the state and H|psi>, both carried back. Its
-cost does not grow with the number of angles, where central differences cost two
-circuits per angle. It is set by bond dimensions instead: H|psi> needs up to w times
-the state's (w is the Hamiltonian's MPO bond dimension, 6 on a chain), so the gradient
-costs most while the state's bonds are well below max_bond. On a 16-site chain at
-max_bond 128 it costs 32 energy evaluations at 2 layers (6 angles), against 12 for
-central differences, and 6 at 32 layers (96 angles), against 192
-(benchmarks/hva_gradient_cost.py). An optimizer can take it directly::
+measures each step's generator between the state and H|psi>, both carried back. Like
+the circuit, it costs more with depth, but it needs no circuit per angle, where central
+differences need two. Its cost in energy evaluations is set by bond dimensions:
+H|psi> needs up to w times the state's (w is the Hamiltonian's MPO bond dimension, 6
+on a chain), so it is largest while the state's bonds are well below max_bond. On a
+16-site chain at max_bond 128 the gradient costs 32 energy evaluations at 2 layers
+(6 angles), against 12 for central differences, and 6 at 32 layers (96 angles),
+against 192 (benchmarks/hva_gradient_cost.py). An optimizer can take it directly::
 
     import numpy as np
     from scipy.optimize import minimize
@@ -62,10 +69,9 @@ central differences, and 6 at 32 layers (96 angles), against 192
     res = minimize(energy_and_gradient, np.full(3 * lay.angles_per_layer, 0.1),
                    jac=True, method="L-BFGS-B")
 
-Finite differences of the energy are a poor substitute. On states whose Schmidt values
-reach sqrt(eps) ~ 1e-8, the circuit's SVDs (through the Gram matrix) leave a rounding
-noise of about 1e-11 in the energy, and a difference step of 1e-8 turns that into an
-error of 1e-3 in the gradient.
+Finite differences of the energy are a poor substitute: with the default ``svd``, a
+difference step of 1e-8 turns the energy's rounding noise of ~1e-11 into an error of
+1e-3 in the gradient.
 
 What truncation costs the gradient: ``gradient_truncation_error`` is the largest weight
 discarded computing it (H|psi> is held at ``max_bond``, as the state is), and
@@ -209,6 +215,7 @@ def circuit(
     cutoff: float = 1e-12,
     entropy: bool = True,
     gradient: bool = False,
+    svd: str = "gram",
     engine=None,
 ) -> HVAResult:
     """Run an HVA circuit and measure the model's energy on its output.
@@ -234,8 +241,12 @@ def circuit(
     gradient : bool
         Also compute dE/dtheta for every angle, by the adjoint method: one pass back
         through the circuit, carrying the state and the Hamiltonian applied to it.
-        Its cost does not grow with the number of angles, where central differences
-        cost two circuits per angle (see the module notes).
+        It needs no circuit per angle, where central differences need two (see the
+        module notes for its cost).
+    svd : {"gram", "direct"}
+        How every split is factorised: through the Gram matrix (the default, faster),
+        or by a direct SVD, which keeps the energy smooth in the angles to ~1e-14
+        instead of ~1e-10, at up to twice the cost (see the module notes).
 
     Raises
     ------
@@ -249,6 +260,8 @@ def circuit(
     sector = lat.sector(n_up, n_dn)
     if init not in ("free", "product"):
         raise HVAError(f"init must be 'free' or 'product', got {init!r}")
+    if svd not in ("gram", "direct"):
+        raise HVAError(f"svd must be 'gram' or 'direct', got {svd!r}")
     try:
         if isinstance(max_bond, bool):
             raise TypeError
@@ -263,7 +276,7 @@ def circuit(
         raise HVAError("angles must be a sequence of layers, each a sequence of numbers") from exc
     prob = dict(lat.problem(), sector=sector, angles=layers)
     opts = {"max_bond": max_bond, "cutoff": cutoff, "init": init, "entropy": bool(entropy),
-            "gradient": bool(gradient)}
+            "gradient": bool(gradient), "svd": svd}
     out = _check(json.loads(_lib(engine).qx_hva_circuit(json.dumps(prob).encode(),
                                                         json.dumps(opts).encode())))
     return HVAResult(
