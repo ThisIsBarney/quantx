@@ -39,6 +39,9 @@ bug-fixes and packaging corrections only.
   exact diagonalisation (`test_mps.py`): ground states, static and dynamical correlation
   functions, a quench's Loschmidt amplitude, imaginary time and Hubbard densities, to
   1e-7 (1e-10 for energies a state is an eigenstate of). The C API entry point is `qx_mps`.
+  `notebooks/engine/12_mps_dynamics.ipynb` chains these calls for the XXZ chain's dynamical
+  spin correlation. It checks the result against an exact diagonalisation, then draws its
+  light cone and S(k, ω).
 
 ## [0.2.0] — 2026-10-18
 
