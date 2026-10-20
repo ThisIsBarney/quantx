@@ -465,7 +465,68 @@ int main() {
                 "is not in", "mps: a site past the end is refused");
         refused({{"op", "evolve"}, {"handle", ph}, {"model", heis(4)}, {"dt", 0.0}},
                 "dt must be > 0", "mps: dt = 0 is refused");
+
+        // Operators that change the charge. On the singlet, SU(2) ties the spin-flip
+        // correlation to the longitudinal one: <S+_j S-_1> = 2 <Sz_j Sz_1> = <s^z_j s^z_1>/2.
+        const json Sp = {0.0, 1.0, 0.0, 0.0}, Sm = {0.0, 0.0, 1.0, 0.0};   // |up><dn|, |dn><up|
+        json g2 = mps({{"op", "ground_state"}, {"model", heis(4)}, {"max_bond", 16}});
+        const long long hg = g2.value("handle", -1LL);
+        const long long hm = mps({{"op", "copy"}, {"handle", hg}}).value("handle", -1LL);
+        const long long hz = mps({{"op", "copy"}, {"handle", hg}}).value("handle", -1LL);
+        json am = mps({{"op", "apply"}, {"handle", hm}, {"site", 1}, {"matrix", Sm}});
+        mps({{"op", "apply"}, {"handle", hz}, {"site", 1}, {"diag", {1.0, -1.0}}});
+        json pm = mps({{"op", "expect"}, {"bra", hg}, {"ket", hm}, {"matrix", Sp}});
+        json zz2 = mps({{"op", "expect"}, {"bra", hg}, {"ket", hz}, {"diag", {1.0, -1.0}}});
+        json same = mps({{"op", "expect"}, {"bra", hg}, {"matrix", Sp}});
+        bool su2 = am.value("ok", false) && pm.value("ok", false) && zz2.value("ok", false) &&
+                   std::abs(am.value("norm2", 0.0) - 0.5) < 1e-10 &&
+                   mps({{"op", "info"}, {"handle", hm}}).value("charge", 0) == -2;
+        for (int j = 0; su2 && j < 4; ++j)
+            su2 = std::abs(pm["re"][j].get<double>() - 0.5 * zz2["re"][j].get<double>()) < 1e-10 &&
+                  std::abs(pm["im"][j].get<double>()) < 1e-10;
+        check(su2, "mps apply, expect: S-_1 moves the singlet to 2Sz = -2, and "
+                   "<S+_j S-_1> = <s^z_j s^z_1>/2 at every j", pm);
+        check(same.value("ok", false) && std::abs(same["re"][0].get<double>()) == 0.0,
+              "mps expect: <S+_j> between states of one charge is zero", same);
+        for (long long x : {hg, hm, hz}) mps({{"op", "free"}, {"handle", x}});
+
+        // A fermion operator carries the parity string: c+_{2 up} on |up, 0, 0, ud> passes one
+        // electron, so it gives -|up, 0, up, ud>, and moves (N, 2Sz) from (3, 1) to (4, 2).
+        const json hub4 = {{"type", "hubbard"}, {"n_sites", 4}, {"U", 4.0}};
+        const json cdag_up = {0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0};
+        const json parity = {1, -1, -1, 1};
+        const long long hf = mps({{"op", "product"}, {"model", hub4}, {"config", {1, 0, 0, 3}}})
+                                 .value("handle", -1LL);
+        const long long ht = mps({{"op", "product"}, {"model", hub4}, {"config", {1, 0, 1, 3}}})
+                                 .value("handle", -1LL);
+        json af = mps({{"op", "apply"}, {"handle", hf}, {"site", 2}, {"matrix", cdag_up},
+                       {"string", parity}});
+        json of = mps({{"op", "overlap"}, {"bra", ht}, {"ket", hf}});
+        json inf = mps({{"op", "info"}, {"handle", hf}});
+        check(af.value("ok", false) && of.value("ok", false) &&
+              std::abs(of.value("re", 0.0) + 1.0) < 1e-12 && std::abs(of.value("im", 1.0)) < 1e-12 &&
+              inf.value("charge", 0) == 4 * 4096 + 2,
+              "mps apply: c+_{2 up} with its string gives -|up, 0, up, ud> in (N, 2Sz) = (4, 2)", of);
+        refused({{"op", "apply"}, {"handle", hf}, {"site", 2}, {"matrix", cdag_up}},
+                "annihilates", "mps: c+ on an occupied orbital is refused");
+        mps({{"op", "free"}, {"handle", hf}});
+        mps({{"op", "free"}, {"handle", ht}});
+
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 0}, {"matrix", Sp}}, "annihilates",
+                "mps: S+ on an up spin is refused");
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 0}, {"matrix", {0, 1, 1, 0}}},
+                "one amount", "mps: an operator that mixes charge shifts is refused");
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 1}, {"matrix", Sm},
+                 {"string", {1.0, 0.5}}}, "phases", "mps: a string that is not phases is refused");
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 1}, {"matrix", Sm},
+                 {"diag", {1.0, 1.0}}}, "one of the two", "mps: diag and matrix together are refused");
+        refused({{"op", "expect"}, {"bra", ph}, {"diag", {1.0, 1.0}}, {"string", {1.0, 1.0}}},
+                "goes with a 'matrix'", "mps: a string with a diagonal is refused");
+        refused({{"op", "apply"}, {"handle", ph}, {"site", 1}, {"matrix", {0, 1, 0}}},
+                "a matrix on this local space has 4", "mps: a matrix of the wrong size is refused");
         mps({{"op", "free"}, {"handle", ph}});
+        check(mps({{"op", "live"}}).value("handles", -1LL) == live0,
+              "mps free: the charge-changing checks gave every state back", json());
     }
 
     std::printf("\n%s\n", failures ? "CAPI DMRG TEST: FAIL" : "CAPI DMRG TEST: ALL OK");

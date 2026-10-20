@@ -353,6 +353,56 @@ std::vector<double> mps_real_diag(const nlj& req) {
     return w;
 }
 
+// A list of complex numbers, each a number or an [re, im] pair.
+std::vector<std::complex<double>> mps_complex_entries(const nlj& req, const char* key) {
+    const std::string what = "mps " + req.value("op", std::string()) + ": '" + key + "'";
+    if (!req[key].is_array())
+        throw std::runtime_error(what + " must be a list of numbers or [re, im] pairs");
+    std::vector<std::complex<double>> v;
+    for (const auto& x : req[key]) {
+        if (x.is_number())
+            v.emplace_back(x.get<double>(), 0.0);
+        else if (x.is_array() && x.size() == 2 && x[0].is_number() && x[1].is_number())
+            v.emplace_back(x[0].get<double>(), x[1].get<double>());
+        else
+            throw std::runtime_error(what + " entries must be numbers or [re, im] pairs");
+    }
+    return v;
+}
+
+// A request's one-site operator: its real diagonal ("diag"), or its row-major matrix
+// ("matrix") with an optional diagonal "string" on the sites left of it.
+struct MPSOperator {
+    bool diag = true;
+    std::vector<double> w;
+    std::vector<std::complex<double>> m, string;
+    bool has_string = false;
+    const std::vector<std::complex<double>>* string_or_null() const {
+        return has_string ? &string : nullptr;
+    }
+};
+
+MPSOperator mps_operator(const nlj& req) {
+    const std::string what = "mps " + req.value("op", std::string());
+    if (req.contains("diag") == req.contains("matrix"))
+        throw std::runtime_error(what + ": give the operator as its 'diag' or its 'matrix', "
+                                 "one of the two");
+    MPSOperator o;
+    if (req.contains("diag")) {
+        if (req.contains("string"))
+            throw std::runtime_error(what + ": a 'string' goes with a 'matrix'");
+        o.w = mps_real_diag(req);
+        return o;
+    }
+    o.diag = false;
+    o.m = mps_complex_entries(req, "matrix");
+    if (req.contains("string")) {
+        o.has_string = true;
+        o.string = mps_complex_entries(req, "string");
+    }
+    return o;
+}
+
 nlj mps_complex_list(const std::vector<std::complex<double>>& v) {
     nlj re = nlj::array(), im = nlj::array();
     for (const auto& z : v) { re.push_back(z.real()); im.push_back(z.imag()); }
@@ -973,13 +1023,18 @@ QX_API const char* qx_mps(const char* request_json) {
             mps_keys(req, {"handle"});
             out["handle"] = mps_put(mps_copy(*mps_get(req, "handle")));
         } else if (op == "apply") {
-            mps_keys(req, {"handle", "site", "diag"});
+            mps_keys(req, {"handle", "site", "diag", "matrix", "string"});
             auto st = mps_get(req, "handle");
             if (!req.contains("site") || !req["site"].is_number_integer())
                 return dmrg_error("mps apply: 'site' must be an integer");
-            const auto w = mps_real_diag(req);
-            std::vector<std::complex<double>> diag(w.begin(), w.end());
-            out["norm2"] = mps_apply_diag(*st, req["site"].get<int>(), diag);
+            const int site = req["site"].get<int>();
+            const MPSOperator o = mps_operator(req);
+            if (o.diag) {
+                std::vector<std::complex<double>> diag(o.w.begin(), o.w.end());
+                out["norm2"] = mps_apply_diag(*st, site, diag);
+            } else {
+                out["norm2"] = mps_apply_local(*st, site, o.m, o.string_or_null());
+            }
         } else if (op == "evolve") {
             mps_keys(req, {"handle", "model", "dt", "n_steps", "imaginary", "max_bond", "cutoff"});
             auto st = mps_get(req, "handle");
@@ -995,10 +1050,13 @@ QX_API const char* qx_mps(const char* request_json) {
             out["re"] = z.real();
             out["im"] = z.imag();
         } else if (op == "expect") {
-            mps_keys(req, {"bra", "ket", "diag"});
+            mps_keys(req, {"bra", "ket", "diag", "matrix", "string"});
             auto bra = mps_get(req, "bra");
             auto ket = req.contains("ket") ? mps_get(req, "ket") : bra;
-            nlj v = mps_complex_list(mps_expect_diag(*bra, *ket, mps_real_diag(req)));
+            const MPSOperator o = mps_operator(req);
+            nlj v = mps_complex_list(o.diag ? mps_expect_diag(*bra, *ket, o.w)
+                                            : mps_expect_local(*bra, *ket, o.m,
+                                                               o.string_or_null()));
             out["re"] = v["re"];
             out["im"] = v["im"];
         } else if (op == "energy") {

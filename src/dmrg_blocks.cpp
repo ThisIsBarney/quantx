@@ -5237,6 +5237,60 @@ int mps_total_charge(const MPSState& a) {
     return last.qns[0];
 }
 
+// How far a one-site operator moves the charge. O is row-major d x d, O[s'][s] = <s'|O|s>,
+// and every entry that is not exactly zero must move it by the same amount: anything else
+// is no state of one sector, and the block update would silently keep part of it.
+int mps_op_shift(const std::vector<Cx>& op, const std::vector<int>& qphys, const char* what) {
+    const int d = (int)qphys.size();
+    if ((int)op.size() != d * d)
+        throw std::runtime_error(std::string(what) + ": the operator has " +
+                                 std::to_string(op.size()) + " entries; a matrix on this local "
+                                 "space has " + std::to_string(d * d));
+    int shift = 0, first = -1;
+    for (int r = 0; r < d; ++r)
+        for (int c = 0; c < d; ++c) {
+            const Cx o = op[r * d + c];
+            if (!std::isfinite(o.real()) || !std::isfinite(o.imag()))
+                throw std::runtime_error(std::string(what) + ": the operator's entries must be "
+                                         "finite");
+            if (o == Cx(0)) continue;
+            const int sh = qphys[r] - qphys[c];
+            if (first < 0) {
+                shift = sh;
+                first = r * d + c;
+            } else if (sh != shift) {
+                throw std::runtime_error(
+                    std::string(what) + ": the operator does not move the charge by one amount "
+                    "(entry (" + std::to_string(r) + ", " + std::to_string(c) + ") moves it by " +
+                    std::to_string(sh) + ", entry (" + std::to_string(first / d) + ", " +
+                    std::to_string(first % d) + ") by " + std::to_string(shift) +
+                    "); apply the parts that do one at a time");
+            }
+        }
+    if (first < 0) throw std::runtime_error(std::string(what) + ": the operator is zero");
+    return shift;
+}
+
+// A Jordan-Wigner string: one phase per local state, on every site left of the operator.
+// Phases keep each site an isometry, so the string is applied where the sites are.
+void mps_check_string(const std::vector<Cx>* string, int d, const char* what) {
+    if (!string) return;
+    if ((int)string->size() != d)
+        throw std::runtime_error(std::string(what) + ": the string has " +
+                                 std::to_string(string->size()) + " entries, the local space " +
+                                 std::to_string(d));
+    for (const Cx& p : *string)
+        if (!(std::abs(std::abs(p) - 1.0) <= 1e-12))
+            throw std::runtime_error(std::string(what) + ": the string's entries must be "
+                                     "phases, |p| = 1");
+}
+
+BondSpace mps_shifted(const BondSpace& b, int shift) {
+    BondSpace out = b;
+    for (int& q : out.qns) q += shift;
+    return out;
+}
+
 }  // namespace
 
 std::shared_ptr<MPSState> mps_ground_state(const std::vector<MPOSite>& H, int n, int max_bond,
@@ -5311,6 +5365,62 @@ double mps_apply_diag(MPSState& a, int site, const std::vector<Cx>& diag) {
     return norm2;
 }
 
+double mps_apply_local(MPSState& a, int site, const std::vector<Cx>& op,
+                       const std::vector<Cx>* string) {
+    using BD = BlockDMRG<Cx>;
+    std::lock_guard<std::mutex> lk(a.mu);
+    const int n = a.s.n, d = (int)a.qphys.size();
+    if (site < 0 || site >= n)
+        throw std::runtime_error("mps_apply: site " + std::to_string(site) + " is not in [0, " +
+                                 std::to_string(n) + ")");
+    const int shift = mps_op_shift(op, a.qphys, "mps_apply");
+    mps_check_string(string, d, "mps_apply");
+    // At the centre, as for a diagonal operator: O rewrites the centre tensor alone, and the
+    // new norm is that tensor's. Column group s' of the new tensor collects O[s'][s] times
+    // group s of the old one. A shift moves the charge of every bond right of the site by
+    // the same amount, so the tensors there keep their blocks under moved keys, and group
+    // s' lands on the bond sector that held group s, with the same width.
+    BD::move_centre(a.s, 0, site, a.qphys);
+    const BondSpace right = mps_shifted(a.s.bond[site + 1], shift);
+    std::map<int, BD::Mat> centre;
+    double norm2 = 0;
+    for (const auto& [q_L, blk] : a.s.A[site]) {
+        const auto from = phys_groups(a.s.bond[site + 1], q_L, +1, a.qphys);
+        const auto to = phys_groups(right, q_L, +1, a.qphys);
+        BD::Mat out = BD::Mat::Zero(blk.rows(), phys_total(to));
+        for (int r = 0; r < d; ++r)
+            for (int c = 0; c < d; ++c) {
+                const Cx o = op[r * d + c];
+                if (o == Cx(0) || from[c].width == 0) continue;
+                if (to[r].width != from[c].width)
+                    throw std::logic_error("mps_apply: a moved bond sector changed its width");
+                out.middleCols(to[r].off, to[r].width) +=
+                    o * blk.middleCols(from[c].off, from[c].width);
+            }
+        norm2 += out.squaredNorm();
+        centre.emplace(q_L, std::move(out));
+    }
+    // Checked before anything is replaced, so a refusal leaves the state as it was.
+    if (!(norm2 > 1e-20)) {
+        BD::move_centre(a.s, site, 0, a.qphys);
+        throw std::runtime_error("mps_apply: the operator annihilates the state (squared "
+                                 "norm " + std::to_string(norm2) + "); the state is unchanged");
+    }
+    a.s.A[site] = std::move(centre);
+    if (shift != 0) {
+        for (int k = site + 1; k < n; ++k) {
+            std::map<int, BD::Mat> moved;
+            for (auto& [q, blk] : a.s.A[k]) moved.emplace(q + shift, std::move(blk));
+            a.s.A[k] = std::move(moved);
+        }
+        for (int k = site + 1; k <= n; ++k) a.s.bond[k] = mps_shifted(a.s.bond[k], shift);
+    }
+    if (string)
+        for (int k = 0; k < site; ++k) BD::apply_site_diag(a.s, k, *string, a.qphys);
+    BD::move_centre(a.s, site, 0, a.qphys);
+    return norm2;
+}
+
 MPSEvolveStats mps_evolve(MPSState& a, const std::vector<MPOSite>& H, double dt,
                           int n_steps, bool imag, int max_bond, double cutoff) {
     using BD = BlockDMRG<Cx>;
@@ -5357,6 +5467,87 @@ std::vector<Cx> mps_expect_diag(MPSState& bra, MPSState& ket, const std::vector<
     auto OL = BD::overlap_left_envs(bra.s, ket.s, bra.qphys);
     auto OR = BD::overlap_right_envs(bra.s, ket.s, bra.qphys);
     return BD::measure_sz_all(bra.s, ket.s, OL, OR, bra.qphys, &wts);
+}
+
+std::vector<Cx> mps_expect_local(MPSState& bra, MPSState& ket, const std::vector<Cx>& op,
+                                 const std::vector<Cx>* string) {
+    using BD = BlockDMRG<Cx>;
+    using Mat = BD::Mat;
+    PairLock lk(bra, ket);
+    mps_check_pair(bra, ket, "mps_expect");
+    const std::vector<int>& qphys = bra.qphys;
+    const int n = bra.s.n, d = (int)qphys.size();
+    const int shift = mps_op_shift(op, qphys, "mps_expect");
+    mps_check_string(string, d, "mps_expect");
+    if (mps_total_charge(bra) != mps_total_charge(ket) + shift)
+        return std::vector<Cx>(n, Cx(0));                   // O|ket> is in another sector
+    // OL[i][q] = <bra[0..i-1]| P ... P |ket[0..i-1]>: left of the operator the two states
+    // carry the same charge on every bond, and the string weighs each local state.
+    std::vector<std::map<int, Mat>> OL(n);
+    OL[0][0] = Mat::Constant(1, 1, Cx(1));
+    for (int i = 0; i + 1 < n; ++i)
+        for (const auto& [q_L, E] : OL[i]) {
+            auto ib = bra.s.A[i].find(q_L);
+            auto ik = ket.s.A[i].find(q_L);
+            if (ib == bra.s.A[i].end() || ik == ket.s.A[i].end()) continue;
+            const auto bc = phys_groups(bra.s.bond[i + 1], q_L, +1, qphys);
+            const auto kc = phys_groups(ket.s.bond[i + 1], q_L, +1, qphys);
+            for (int s = 0; s < d; ++s) {
+                if (bc[s].width == 0 || kc[s].width == 0) continue;
+                Mat t = ib->second.middleCols(bc[s].off, bc[s].width).adjoint() *
+                        (E * ik->second.middleCols(kc[s].off, kc[s].width));
+                if (string) t *= (*string)[s];
+                Mat& dst = OL[i + 1][q_L + qphys[s]];
+                if (dst.size() == 0) dst = std::move(t); else dst += t;
+            }
+        }
+    // OR[i][q] = <bra[i..n-1]|ket[i..n-1]> between bra charge q + shift and ket charge q:
+    // right of the operator the bra's bonds carry the shift.
+    std::vector<std::map<int, Mat>> OR(n + 1);
+    OR[n][mps_total_charge(ket)] = Mat::Constant(1, 1, Cx(1));
+    for (int i = n - 1; i >= 1; --i)
+        for (const auto& [q_L, Ak] : ket.s.A[i]) {
+            auto ib = bra.s.A[i].find(q_L + shift);
+            if (ib == bra.s.A[i].end()) continue;
+            const auto bc = phys_groups(bra.s.bond[i + 1], q_L + shift, +1, qphys);
+            const auto kc = phys_groups(ket.s.bond[i + 1], q_L, +1, qphys);
+            for (int s = 0; s < d; ++s) {
+                if (bc[s].width == 0 || kc[s].width == 0) continue;
+                auto it = OR[i + 1].find(q_L + qphys[s]);
+                if (it == OR[i + 1].end()) continue;
+                Mat t = ib->second.middleCols(bc[s].off, bc[s].width).conjugate() *
+                        (it->second * Ak.middleCols(kc[s].off, kc[s].width).transpose());
+                Mat& dst = OR[i][q_L];
+                if (dst.size() == 0) dst = std::move(t); else dst += t;
+            }
+        }
+    // At site j, O[s'][s] pairs the ket's group s with the bra's group s', whose right bond
+    // sector is the ket's moved by the shift: the pairing OR[j+1] holds.
+    std::vector<Cx> out(n, Cx(0));
+    for (int j = 0; j < n; ++j) {
+        Cx val(0);
+        for (const auto& [q_L, E] : OL[j]) {
+            auto ib = bra.s.A[j].find(q_L);
+            auto ik = ket.s.A[j].find(q_L);
+            if (ib == bra.s.A[j].end() || ik == ket.s.A[j].end()) continue;
+            const auto bc = phys_groups(bra.s.bond[j + 1], q_L, +1, qphys);
+            const auto kc = phys_groups(ket.s.bond[j + 1], q_L, +1, qphys);
+            for (int c = 0; c < d; ++c) {
+                if (kc[c].width == 0) continue;
+                auto it = OR[j + 1].find(q_L + qphys[c]);
+                if (it == OR[j + 1].end()) continue;
+                const Mat t = E * ik->second.middleCols(kc[c].off, kc[c].width);
+                for (int r = 0; r < d; ++r) {
+                    const Cx o = op[r * d + c];
+                    if (o == Cx(0) || bc[r].width == 0) continue;
+                    const Mat left = ib->second.middleCols(bc[r].off, bc[r].width).adjoint() * t;
+                    val += o * (left.array() * it->second.array()).sum();
+                }
+            }
+        }
+        out[j] = val;
+    }
+    return out;
 }
 
 double mps_energy(MPSState& a, const std::vector<MPOSite>& H) {

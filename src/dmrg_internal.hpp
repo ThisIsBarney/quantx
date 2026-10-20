@@ -505,6 +505,12 @@ std::shared_ptr<MPSState> mps_product(const std::vector<MPOSite>& H, int n,
 std::shared_ptr<MPSState> mps_copy(MPSState& a);
 // diag(D) on one site, in place; returns the new squared norm. The state is not renormalized.
 double mps_apply_diag(MPSState& a, int site, const std::vector<std::complex<double>>& diag);
+// P_0 ... P_{site-1} O_site, in place, for O a row-major d x d matrix (O[s'][s] = <s'|O|s>)
+// and P an optional diagonal of phases (a Jordan-Wigner string; null for none). O may move
+// the charge, by one amount for all its entries; the state moves to that sector. Returns
+// the new squared norm.
+double mps_apply_local(MPSState& a, int site, const std::vector<std::complex<double>>& op,
+                       const std::vector<std::complex<double>>* string);
 // n_steps second-order TDVP2 steps of exp(-i H dt) (imag: exp(-H dt), renormalized).
 MPSEvolveStats mps_evolve(MPSState& a, const std::vector<MPOSite>& H, double dt,
                           int n_steps, bool imag, int max_bond, double cutoff);
@@ -512,6 +518,11 @@ std::complex<double> mps_overlap(MPSState& bra, MPSState& ket);           // <br
 // <bra| D_j |ket> for every site j, D = diag(wts) on the local space.
 std::vector<std::complex<double>> mps_expect_diag(MPSState& bra, MPSState& ket,
                                                   const std::vector<double>& wts);
+// <bra| P_0 ... P_{j-1} O_j |ket> for every site j, with O and P as in mps_apply_local;
+// zero unless charge(bra) = charge(ket) + O's shift.
+std::vector<std::complex<double>> mps_expect_local(MPSState& bra, MPSState& ket,
+                                                   const std::vector<std::complex<double>>& op,
+                                                   const std::vector<std::complex<double>>* string);
 double mps_energy(MPSState& a, const std::vector<MPOSite>& H);           // <H>/<a|a>
 MPSInfo mps_info(MPSState& a);
 

@@ -42,6 +42,23 @@ bug-fixes and packaging corrections only.
   `notebooks/engine/12_mps_dynamics.ipynb` chains these calls for the XXZ chain's dynamical
   spin correlation. It checks the result against an exact diagonalisation, then draws its
   light cone and S(k, ω).
+- **Operators that change the charge**, in `quantx_engine.mps` (M11):
+  - `Sp` and `Sm` (S^+ and S^-) on the spin chains;
+  - on the Hubbard chains and lattices, `Cdag_up`, `C_up`, `Cdag_dn` and `C_dn`, which
+    carry the Jordan–Wigner parity of the sites to their left, and `Sp` = c†_up c_dn and
+    `Sm`.
+
+  They are listed in `mps.CHARGED_OPERATORS`. Any other one-site operator can be given as
+  its matrix, with an optional string of phases. `apply` moves the state to the new
+  sector, which `MPS.sector` reports, and `matrix_elements` pairs states in two sectors the
+  operator connects. Green's functions chain as the S^z correlations do. Gated against
+  exact diagonalisation (`test_mps.py`) to 1e-7: the XXZ spin-flip correlation, and the
+  Hubbard particle and hole Green's functions for both spins, against an ED whose
+  Jordan–Wigner signs differ from the engine's. The C API's `apply` and `expect` take
+  `"matrix"` and `"string"`. `notebooks/engine/13_spin_charge_separation.ipynb` removes an
+  electron from the half-filled Hubbard chain and follows the hole: its charge moves out
+  like a free particle, and its spin stays inside the cone of the spinon velocity from the
+  Bethe ansatz.
 
 ## [0.2.0] — 2026-10-18
 

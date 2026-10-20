@@ -15,14 +15,28 @@ they compose::
     phi.evolve(chain, dt=0.05, steps=20)
     c = gs.matrix_elements("Sz", phi)               # <GS| e^{iHt} S^z_j e^{-iHt} S^z_16 |GS>
 
-The operators are the one-site diagonal ones of each local space (:data:`OPERATORS`), in
-the conventions of :mod:`quantx_engine.models` (S = sigma/2). Evolution is two-site TDVP;
-a state may be evolved under another model of the same length and local space than the
-one it was made with (a quench).
+Operators may change the charge. ``S^+`` and ``S^-`` move a spin state to the next S^z
+sector, and the Hubbard ``Cdag_up``, ``C_dn``, ... add or remove an electron, carrying the
+Jordan-Wigner string on every site to their left, so a Green's function is::
+
+    from quantx_engine.models import HubbardChain
+
+    chain = HubbardChain(L=16, U=4.0)
+    gs = mps.ground_state(chain, n_up=8, n_dn=8)
+    phi = gs.copy().apply("Cdag_up", 8)             # c+_{8 up} |GS>, now n_up = 9
+    phi.evolve(dt=0.05, steps=20)
+    g = gs.matrix_elements("C_up", phi)             # e^{-i E0 t} <GS| c_{j up}(t) c+_{8 up} |GS>
+
+The diagonal operators of each local space are in :data:`OPERATORS`, the ones that change
+the charge in :data:`CHARGED_OPERATORS`, in the conventions of :mod:`quantx_engine.models`
+(S = sigma/2). Any other one-site operator can be given as its matrix. Evolution is
+two-site TDVP; a state may be evolved under another model of the same length and local
+space than the one it was made with (a quench).
 """
 from __future__ import annotations
 
 import json
+import math
 import operator
 from ctypes import c_char_p
 from dataclasses import dataclass, field
@@ -31,7 +45,7 @@ from typing import Optional, Sequence, Union
 import numpy as np
 
 __all__ = ["MPSError", "MPS", "GroundState", "ground_state", "product", "OPERATORS",
-           "LOCAL_STATES"]
+           "CHARGED_OPERATORS", "LOCAL_STATES"]
 
 
 class MPSError(RuntimeError):
@@ -53,6 +67,34 @@ OPERATORS = {
 }
 
 
+def _unit(d: int, *entries) -> tuple:
+    """The d x d matrix with the given (row, column, value) entries, as nested tuples."""
+    m = [[0.0] * d for _ in range(d)]
+    for r, c, v in entries:
+        m[r][c] = v
+    return tuple(tuple(row) for row in m)
+
+
+_R2 = math.sqrt(2.0)
+_PARITY = (1, -1, -1, 1)        # (-1)^n on a Hubbard site
+# The one-site operators that change the charge: (the matrix <s'|O|s>, row s' the result;
+# the string on every site left of it, or None). The fermion operators follow the engine's
+# Hubbard convention: modes in site order and up before down on a site, |ud> =
+# c+_up c+_dn |0>, so c+_dn |up> = -|ud>. Their string is the parity of each site to the
+# left; S+ = c+_up c_dn needs none.
+CHARGED_OPERATORS = {
+    "spin-1/2": {"Sp": (_unit(2, (0, 1, 1)), None), "Sm": (_unit(2, (1, 0, 1)), None)},
+    "spin-1": {"Sp": (_unit(3, (0, 1, _R2), (1, 2, _R2)), None),
+               "Sm": (_unit(3, (1, 0, _R2), (2, 1, _R2)), None)},
+    "hubbard": {"Cdag_up": (_unit(4, (1, 0, 1), (3, 2, 1)), _PARITY),
+                "C_up": (_unit(4, (0, 1, 1), (2, 3, 1)), _PARITY),
+                "Cdag_dn": (_unit(4, (2, 0, 1), (3, 1, -1)), _PARITY),
+                "C_dn": (_unit(4, (0, 2, 1), (1, 3, -1)), _PARITY),
+                "Sp": (_unit(4, (1, 2, 1)), None), "Sm": (_unit(4, (2, 1, 1)), None)},
+}
+_Q2K = 4096     # the engine packs a Hubbard charge (N, 2 Sz) as N * 4096 + 2 Sz
+
+
 def _space(model) -> str:
     from quantx_engine.models import (HubbardChain, HubbardLattice, J1J2Chain, Spin1Chain,
                                       XXZChain)
@@ -65,19 +107,47 @@ def _space(model) -> str:
     raise MPSError(f"not a quantx_engine.models model: {model!r}")
 
 
-def _diag(space: str, op) -> list:
-    """The operator's diagonal on the local space: a name from OPERATORS, or the entries."""
+def _pairs(a) -> list:
+    return [[float(z.real), float(z.imag)] for z in np.asarray(a, dtype=complex).ravel()]
+
+
+def _operator(space: str, op, string=None) -> dict:
+    """The request fields of a one-site operator, and whether it is a real diagonal.
+
+    ``op`` is a name from OPERATORS or CHARGED_OPERATORS, a diagonal (one entry per local
+    state) or a matrix on the local space; ``string`` a diagonal of phases for the sites
+    left of a diagonal or a matrix (a named operator brings its own)."""
+    d = len(LOCAL_STATES[space])
     if isinstance(op, str):
-        try:
-            return [float(x) for x in OPERATORS[space][op]]
-        except KeyError:
-            raise MPSError(f"no operator {op!r} on a {space} site; expected one of "
-                           f"{sorted(OPERATORS[space])}, or its diagonal") from None
-    d = np.asarray(op, dtype=float)
-    if d.shape != (len(LOCAL_STATES[space]),):
-        raise MPSError(f"a {space} operator's diagonal has {len(LOCAL_STATES[space])} "
-                       f"entries, got shape {d.shape}")
-    return d.tolist()
+        if string is not None:
+            raise MPSError(f"{op!r} brings its own string; give a matrix to choose one")
+        if op in OPERATORS[space]:
+            return {"diag": [float(x) for x in OPERATORS[space][op]]}, True
+        if op in CHARGED_OPERATORS[space]:
+            m, s = CHARGED_OPERATORS[space][op]
+            fields = {"matrix": _pairs(m)}
+            if s is not None:
+                fields["string"] = _pairs(s)
+            return fields, False
+        raise MPSError(f"no operator {op!r} on a {space} site; expected one of "
+                       f"{sorted(OPERATORS[space]) + sorted(CHARGED_OPERATORS[space])}, its "
+                       f"diagonal or its matrix")
+    a = np.asarray(op)
+    if a.ndim == 1:
+        if a.shape != (d,):
+            raise MPSError(f"a {space} operator's diagonal has {d} entries, got shape {a.shape}")
+        if string is None and not np.iscomplexobj(a):
+            return {"diag": a.astype(float).tolist()}, True
+        a = np.diag(a)
+    if a.shape != (d, d):
+        raise MPSError(f"a {space} operator's matrix is {d} x {d}, got shape {a.shape}")
+    fields = {"matrix": _pairs(a)}
+    if string is not None:
+        s = np.asarray(string)
+        if s.shape != (d,):
+            raise MPSError(f"a {space} string has {d} entries, got shape {s.shape}")
+        fields["string"] = _pairs(s)
+    return fields, False
 
 
 def _int(v, name: str) -> int:
@@ -178,22 +248,40 @@ class MPS:
     def norm(self) -> float:
         return float(np.sqrt(self.info()["norm2"]))
 
+    @property
+    def sector(self) -> dict:
+        """The symmetry sector the state is in: ``{"sz": ...}`` for a spin chain,
+        ``{"n_up": ..., "n_dn": ...}`` for a Hubbard one."""
+        q = int(self.info()["charge"])
+        if self.space == "hubbard":
+            n = (q + _Q2K // 2) // _Q2K
+            sz2 = q - n * _Q2K
+            return {"n_up": (n + sz2) // 2, "n_dn": (n - sz2) // 2}
+        return {"sz": q / 2}
+
     def overlap(self, other: "MPS") -> complex:
         """``<self|other>``."""
         out = _call(self._lib, {"op": "overlap", "bra": self._h(), "ket": self._peer(other)})
         return complex(out["re"], out["im"])
 
-    def matrix_elements(self, op, ket: "MPS") -> np.ndarray:
-        """``<self| O_j |ket>`` for every site j, as they are: neither state is normalized."""
-        out = _call(self._lib, {"op": "expect", "bra": self._h(), "ket": self._peer(ket),
-                                "diag": _diag(self.space, op)})
+    def matrix_elements(self, op, ket: "MPS", *, string=None) -> np.ndarray:
+        """``<self| O_j |ket>`` for every site j, as they are: neither state is normalized.
+
+        O_j carries its string on the sites left of j. For an operator that changes the
+        charge, the values are zero unless ``self`` is in the sector O takes ``ket`` to."""
+        fields, _ = _operator(self.space, op, string)
+        out = _call(self._lib, dict(fields, op="expect", bra=self._h(), ket=self._peer(ket)))
         return np.asarray(out["re"]) + 1j * np.asarray(out["im"])
 
-    def expect(self, op) -> np.ndarray:
-        """``<O_j> = <self|O_j|self> / <self|self>`` for every site j."""
-        out = _call(self._lib, {"op": "expect", "bra": self._h(),
-                                "diag": _diag(self.space, op)})
-        return np.asarray(out["re"]) / self.info()["norm2"]
+    def expect(self, op, *, string=None) -> np.ndarray:
+        """``<O_j> = <self|O_j|self> / <self|self>`` for every site j.
+
+        Real for a real diagonal operator, complex otherwise; zero for one that changes
+        the charge."""
+        fields, real = _operator(self.space, op, string)
+        out = _call(self._lib, dict(fields, op="expect", bra=self._h()))
+        v = np.asarray(out["re"]) if real else np.asarray(out["re"]) + 1j * np.asarray(out["im"])
+        return v / self.info()["norm2"]
 
     def energy(self, model=None) -> float:
         """``<H> / <self|self>`` for a model (default: the one this state was made with)."""
@@ -207,10 +295,18 @@ class MPS:
         out = _call(self._lib, {"op": "copy", "handle": self._h()})
         return MPS(int(out["handle"]), self.model, self._lib, self.dmrg)
 
-    def apply(self, op, site: int) -> "MPS":
-        """``O_site |self>``, in place and not renormalized; O is diagonal on the local space."""
-        _call(self._lib, {"op": "apply", "handle": self._h(), "site": _int(site, "site"),
-                          "diag": _diag(self.space, op)})
+    def apply(self, op, site: int, *, string=None) -> "MPS":
+        """``O_site |self>``, in place and not renormalized.
+
+        O is a name from :data:`OPERATORS` or :data:`CHARGED_OPERATORS`, a diagonal, or a
+        matrix on the local space, ``<s'|O|s>`` with row s' the result. ``string`` is a
+        diagonal of phases applied on every site left of ``site`` too, as a fermion
+        operator's Jordan-Wigner string is; the named fermion operators bring their own.
+        An operator that changes the charge moves the state to its new sector
+        (:attr:`sector`). It must change it by one amount, so ``S^x`` is refused: its
+        correlations are sums of those of ``S^+`` and ``S^-``, each applied to a copy."""
+        fields, _ = _operator(self.space, op, string)
+        _call(self._lib, dict(fields, op="apply", handle=self._h(), site=_int(site, "site")))
         return self
 
     def evolve(self, model=None, *, dt: float, steps: int = 1, imaginary: bool = False,
