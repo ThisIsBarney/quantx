@@ -226,6 +226,33 @@ QX_API const char* qx_thermal(const char* problem_json, const char* options_json
 //   truncation_sum, truncation_max, wall_time_s}.
 QX_API const char* qx_u1_circuit(const char* problem_json, const char* options_json);
 
+// ── M11: matrix-product states that stay in the engine ──────────────────────────
+// A block-sparse MPS lives in the library between calls, under an integer handle, so a
+// caller chains a ground state, one-site operators, time evolution and measurements
+// without the state passing through JSON. One request per call, {"op": ..., ...}:
+//   ground_state {model, max_bond?, cutoff?, n_sweeps?, tol?}  -> {handle, energy,
+//                 truncation_error, n_sweeps_done, sweep_energies, sector, method, n_sites}
+//   product      {model, config: [local state per site]}       -> {handle}
+//   copy         {handle}                                     -> {handle}
+//   apply        {handle, site, diag: [real per local state]}  -> {norm2}   (in place; not
+//                 renormalized; refused if it annihilates the state)
+//   evolve       {handle, model, dt, n_steps, imaginary?, max_bond?, cutoff?}
+//                 -> {max_bond, wall_time_s}   (TDVP2, in place; exp(-i H dt) per step, or
+//                 exp(-H dt) renormalized when imaginary)
+//   overlap      {bra, ket}                                   -> {re, im}  (<bra|ket>)
+//   expect       {bra, ket?, diag}                            -> {re: [..], im: [..]}
+//                 (<bra| D_j |ket> for every site j; ket defaults to bra)
+//   energy       {handle, model}                              -> {energy}  (<H>/<psi|psi>)
+//   info         {handle}  -> {n_sites, local_dim, bonds, norm2, charge}
+//   free         {handle}
+//   live         {}        -> {handles}  (how many states are alive)
+// A model is the object qx_dmrg_sweep takes as its problem (type, n_sites, couplings,
+// sector), for a block-sparse type; evolve and energy may take another model of the same
+// length and local space than the state's (a quench). Local states are in the engine's
+// order: spin 1/2 (up, down), spin 1 (+1, 0, -1), Hubbard (empty, up, down, double).
+// Unknown keys and handles are refused. Returns thread-local JSON with "ok".
+QX_API const char* qx_mps(const char* request_json);
+
 #ifdef __cplusplus
 }
 #endif

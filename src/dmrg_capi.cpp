@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdlib>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -285,6 +288,75 @@ static double free_ground_energy(
         e0 += eps.head(k).sum();
     }
     return e0;
+}
+
+// ---- MPS handles (M11): the registry -----------------------------------------------------
+// States live here between calls, under integer handles. No pointer crosses the C API, so a
+// stale or made-up handle is refused, never dereferenced; and an operation holds its own
+// reference, so a concurrent free cannot pull a state out from under it.
+std::mutex g_mps_mu;
+std::map<long long, std::shared_ptr<MPSState>> g_mps;
+long long g_mps_next = 1;
+
+long long mps_put(std::shared_ptr<MPSState> s) {
+    std::lock_guard<std::mutex> lk(g_mps_mu);
+    const long long h = g_mps_next++;
+    g_mps[h] = std::move(s);
+    return h;
+}
+
+std::shared_ptr<MPSState> mps_get(const nlj& req, const char* key) {
+    if (!req.contains(key) || !req[key].is_number_integer())
+        throw std::runtime_error(std::string("mps: '") + key + "' must be a state handle");
+    const long long h = req[key].get<long long>();
+    std::lock_guard<std::mutex> lk(g_mps_mu);
+    auto it = g_mps.find(h);
+    if (it == g_mps.end())
+        throw std::runtime_error("mps: no live state has handle " + std::to_string(h));
+    return it->second;
+}
+
+void mps_keys(const nlj& req, std::initializer_list<const char*> allowed) {
+    for (auto it = req.begin(); it != req.end(); ++it) {
+        bool ok = it.key() == "op";
+        for (const char* a : allowed) ok = ok || it.key() == a;
+        if (!ok)
+            throw std::runtime_error("mps " + req.value("op", std::string()) + ": unknown key '" +
+                                     it.key() + "'");
+    }
+}
+
+// The block-sparse model of a request's "model" object, as qx_dmrg_sweep reads a problem.
+BlockModel mps_model(const nlj& req) {
+    if (!req.contains("model") || !req["model"].is_object())
+        throw std::runtime_error("mps " + req.value("op", std::string()) +
+                                 ": 'model' must be a model object, as qx_dmrg_sweep takes");
+    const nlj& m = req["model"];
+    const std::string type = m.value("type", std::string());
+    if (!is_block_model(type))
+        throw std::runtime_error("mps: model type '" + type + "' has no block-sparse form");
+    const int n = problem_n(m);
+    if (n < 3) throw std::runtime_error("mps: n_sites must be >= 3 (block-sparse solver)");
+    if (n > 400) throw std::runtime_error("mps: n_sites exceeds max (400)");
+    return resolve_block_model(m, type, n);
+}
+
+std::vector<double> mps_real_diag(const nlj& req) {
+    if (!req.contains("diag") || !req["diag"].is_array())
+        throw std::runtime_error("mps " + req.value("op", std::string()) +
+                                 ": 'diag' must be the operator's diagonal on the local space");
+    std::vector<double> w;
+    for (const auto& x : req["diag"]) {
+        if (!x.is_number()) throw std::runtime_error("mps: 'diag' entries must be real numbers");
+        w.push_back(x.get<double>());
+    }
+    return w;
+}
+
+nlj mps_complex_list(const std::vector<std::complex<double>>& v) {
+    nlj re = nlj::array(), im = nlj::array();
+    for (const auto& z : v) { re.push_back(z.real()); im.push_back(z.imag()); }
+    return {{"re", re}, {"im", im}};
 }
 
 }  // namespace
@@ -855,6 +927,105 @@ QX_API const char* qx_u1_circuit(const char* problem_json, const char* options_j
         out["truncation_sum"] = r.trunc_sum;
         out["truncation_max"] = r.trunc_max;
         out["wall_time_s"] = r.wall_s;
+        tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_mps(const char* request_json) {
+    try {
+        nlj req = nlj::parse(request_json ? request_json : "{}");
+        const std::string op = req.value("op", std::string());
+        nlj out;
+        out["ok"] = true;
+        if (op == "ground_state") {
+            mps_keys(req, {"model", "max_bond", "cutoff", "n_sweeps", "tol"});
+            BlockModel m = mps_model(req);
+            const int n = (int)m.mpo.size();
+            const int chi = req.value("max_bond", 64);
+            const double cutoff = req.value("cutoff", 1e-10);
+            const int n_sweeps = req.value("n_sweeps", 10);
+            const double tol = req.value("tol", 1e-10);
+            if (chi < 1) return dmrg_error("mps ground_state: max_bond must be >= 1");
+            if (n_sweeps < 1) return dmrg_error("mps ground_state: n_sweeps must be >= 1");
+            DMRGResult r;
+            auto st = mps_ground_state(m.mpo, n, chi, cutoff, n_sweeps, tol, m.total_charge,
+                                       &m.init_config, &r);
+            out["handle"] = mps_put(st);
+            out["energy"] = r.energy;
+            out["truncation_error"] = r.truncation_error;
+            out["n_sweeps_done"] = r.n_sweeps_done;
+            out["sweep_energies"] = r.sweep_energies;
+            out["wall_time_s"] = r.wall_time_s;
+            out["sector"] = m.sector;
+            out["method"] = m.method;
+            out["n_sites"] = n;
+        } else if (op == "product") {
+            mps_keys(req, {"model", "config"});
+            BlockModel m = mps_model(req);
+            if (!req.contains("config") || !req["config"].is_array())
+                return dmrg_error("mps product: 'config' must list one local state per site");
+            const auto config = req["config"].get<std::vector<int>>();
+            out["handle"] = mps_put(mps_product(m.mpo, (int)m.mpo.size(), config));
+        } else if (op == "copy") {
+            mps_keys(req, {"handle"});
+            out["handle"] = mps_put(mps_copy(*mps_get(req, "handle")));
+        } else if (op == "apply") {
+            mps_keys(req, {"handle", "site", "diag"});
+            auto st = mps_get(req, "handle");
+            if (!req.contains("site") || !req["site"].is_number_integer())
+                return dmrg_error("mps apply: 'site' must be an integer");
+            const auto w = mps_real_diag(req);
+            std::vector<std::complex<double>> diag(w.begin(), w.end());
+            out["norm2"] = mps_apply_diag(*st, req["site"].get<int>(), diag);
+        } else if (op == "evolve") {
+            mps_keys(req, {"handle", "model", "dt", "n_steps", "imaginary", "max_bond", "cutoff"});
+            auto st = mps_get(req, "handle");
+            BlockModel m = mps_model(req);
+            MPSEvolveStats e = mps_evolve(*st, m.mpo, req.value("dt", 0.0),
+                                          req.value("n_steps", 1), req.value("imaginary", false),
+                                          req.value("max_bond", 64), req.value("cutoff", 1e-10));
+            out["max_bond"] = e.max_bond;
+            out["wall_time_s"] = e.wall_s;
+        } else if (op == "overlap") {
+            mps_keys(req, {"bra", "ket"});
+            const auto z = mps_overlap(*mps_get(req, "bra"), *mps_get(req, "ket"));
+            out["re"] = z.real();
+            out["im"] = z.imag();
+        } else if (op == "expect") {
+            mps_keys(req, {"bra", "ket", "diag"});
+            auto bra = mps_get(req, "bra");
+            auto ket = req.contains("ket") ? mps_get(req, "ket") : bra;
+            nlj v = mps_complex_list(mps_expect_diag(*bra, *ket, mps_real_diag(req)));
+            out["re"] = v["re"];
+            out["im"] = v["im"];
+        } else if (op == "energy") {
+            mps_keys(req, {"handle", "model"});
+            auto st = mps_get(req, "handle");
+            out["energy"] = mps_energy(*st, mps_model(req).mpo);
+        } else if (op == "info") {
+            mps_keys(req, {"handle"});
+            MPSInfo i = mps_info(*mps_get(req, "handle"));
+            out["n_sites"] = i.n;
+            out["local_dim"] = i.d;
+            out["bonds"] = i.bonds;
+            out["norm2"] = i.norm2;
+            out["charge"] = i.charge;
+        } else if (op == "free") {
+            mps_keys(req, {"handle"});
+            mps_get(req, "handle");                         // refuses an unknown handle
+            std::lock_guard<std::mutex> lk(g_mps_mu);
+            g_mps.erase(req["handle"].get<long long>());
+        } else if (op == "live") {
+            mps_keys(req, {});
+            std::lock_guard<std::mutex> lk(g_mps_mu);
+            out["handles"] = (long long)g_mps.size();
+        } else {
+            return dmrg_error("mps: unknown op '" + op + "' (expected ground_state, product, "
+                              "copy, apply, evolve, overlap, expect, energy, info, free or live)");
+        }
         tl_dmrg_buf = out.dump();
         return tl_dmrg_buf.c_str();
     } catch (const std::exception& e) {

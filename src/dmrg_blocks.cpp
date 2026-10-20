@@ -5188,6 +5188,200 @@ U1CircuitResult run_u1_circuit(int n, const std::vector<int>& bits,
     return out;
 }
 
+// ---- MPS handles (M11) ---------------------------------------------------------------
+// A block MPS kept natively between calls, so a caller chains a ground state, local
+// operators, time evolution and measurements without the state ever leaving the engine.
+// Always complex: real-time evolution makes it so, and one scalar type keeps every
+// operation composable with every other. Between calls the orthogonality centre sits on
+// site 0 (the chain right of it right-canonical), which is what tdvp2_step_blocks and
+// bt_energy assume; the MPO environments are rebuilt by each operation that needs them,
+// for the Hamiltonian it is given, so a state may be evolved under any model of its
+// local space (a quench).
+struct MPSState {
+    BlockDMRG<Cx>::BMPS s;
+    std::vector<int> qphys;
+    std::mutex mu;                      // one operation at a time per state
+};
+
+namespace {
+
+// Both states' locks, once when they are the same state.
+struct PairLock {
+    std::unique_lock<std::mutex> a, b;
+    PairLock(MPSState& x, MPSState& y) {
+        if (&x == &y) { a = std::unique_lock<std::mutex>(x.mu); return; }
+        std::lock(x.mu, y.mu);
+        a = std::unique_lock<std::mutex>(x.mu, std::adopt_lock);
+        b = std::unique_lock<std::mutex>(y.mu, std::adopt_lock);
+    }
+};
+
+void mps_check_model(const MPSState& a, const std::vector<MPOSite>& H, const char* what) {
+    require_uniform_local_dim(H, what);
+    if ((int)H.size() != a.s.n || H[0].phys_charge != a.qphys)
+        throw std::runtime_error(std::string(what) + ": the model has " +
+                                 std::to_string(H.size()) + " sites or a local space other "
+                                 "than the state's");
+}
+
+void mps_check_pair(const MPSState& bra, const MPSState& ket, const char* what) {
+    if (bra.s.n != ket.s.n || bra.qphys != ket.qphys)
+        throw std::runtime_error(std::string(what) + ": the two states have different "
+                                 "lengths or local spaces");
+}
+
+int mps_total_charge(const MPSState& a) {
+    const BondSpace& last = a.s.bond[a.s.n];
+    if (last.n_sectors() != 1)
+        throw std::runtime_error("mps: the state is not in one charge sector");
+    return last.qns[0];
+}
+
+}  // namespace
+
+std::shared_ptr<MPSState> mps_ground_state(const std::vector<MPOSite>& H, int n, int max_bond,
+                                           double cutoff, int n_sweeps, double tol,
+                                           int total_charge,
+                                           const std::vector<int>* init_config,
+                                           DMRGResult* res) {
+    require_uniform_local_dim(H, "mps_ground_state");
+    auto st = std::make_shared<MPSState>();
+    DMRGResult r = BlockDMRG<Cx>::run(H, n, max_bond, cutoff, n_sweeps, tol, &st->s,
+                                      total_charge, init_config);
+    st->qphys = H[0].phys_charge;
+    if (res) *res = r;
+    return st;
+}
+
+std::shared_ptr<MPSState> mps_product(const std::vector<MPOSite>& H, int n,
+                                      const std::vector<int>& config) {
+    require_uniform_local_dim(H, "mps_product");
+    const std::vector<int>& qphys = H[0].phys_charge;
+    if ((int)config.size() != n)
+        throw std::runtime_error("mps_product: the configuration must give one local state "
+                                 "per site");
+    for (int i = 0; i < n; ++i)
+        if (config[i] < 0 || config[i] >= (int)qphys.size())
+            throw std::runtime_error("mps_product: local state " + std::to_string(config[i]) +
+                                     " at site " + std::to_string(i) + " is not in [0, d)");
+    // By index, not by charge: two local states may share a charge (|up> and |dn> under
+    // a single U(1)), and cps_init would silently pick the first.
+    auto st = std::make_shared<MPSState>();
+    st->s = BlockDMRG<Cx>::cps_init_states(H, n, config, qphys);
+    st->qphys = qphys;
+    return st;
+}
+
+std::shared_ptr<MPSState> mps_copy(MPSState& a) {
+    std::lock_guard<std::mutex> lk(a.mu);
+    auto b = std::make_shared<MPSState>();
+    b->s = a.s;
+    b->qphys = a.qphys;
+    return b;
+}
+
+double mps_apply_diag(MPSState& a, int site, const std::vector<Cx>& diag) {
+    using BD = BlockDMRG<Cx>;
+    std::lock_guard<std::mutex> lk(a.mu);
+    if (site < 0 || site >= a.s.n)
+        throw std::runtime_error("mps_apply: site " + std::to_string(site) + " is not in [0, " +
+                                 std::to_string(a.s.n) + ")");
+    if (diag.size() != a.qphys.size())
+        throw std::runtime_error("mps_apply: the operator has " + std::to_string(diag.size()) +
+                                 " diagonal entries, the local space " +
+                                 std::to_string(a.qphys.size()));
+    // At the centre the operator only rescales the centre tensor, so every other site stays
+    // an isometry even when it is not unitary (a projector n_i, say), and the new norm is
+    // that tensor's.
+    BD::move_centre(a.s, 0, site, a.qphys);
+    auto before = a.s.A[site];
+    BD::apply_site_diag(a.s, site, diag, a.qphys);
+    double norm2 = 0;
+    for (auto& [q, b] : a.s.A[site]) norm2 += b.squaredNorm();
+    // The block SVD drops blocks below 1e-24 as zero, so a state this small has no bond
+    // left to split; refuse it rather than hand back an empty MPS -- and leave the state
+    // as it was, for a caller that goes on using it after the refusal.
+    if (!(norm2 > 1e-20)) {
+        a.s.A[site] = std::move(before);
+        BD::move_centre(a.s, site, 0, a.qphys);
+        throw std::runtime_error("mps_apply: the operator annihilates the state (squared "
+                                 "norm " + std::to_string(norm2) + "); the state is unchanged");
+    }
+    BD::move_centre(a.s, site, 0, a.qphys);
+    return norm2;
+}
+
+MPSEvolveStats mps_evolve(MPSState& a, const std::vector<MPOSite>& H, double dt,
+                          int n_steps, bool imag, int max_bond, double cutoff) {
+    using BD = BlockDMRG<Cx>;
+    std::lock_guard<std::mutex> lk(a.mu);
+    mps_check_model(a, H, "mps_evolve");
+    if (!(dt > 0)) throw std::runtime_error("mps_evolve: dt must be > 0");
+    if (n_steps < 0) throw std::runtime_error("mps_evolve: n_steps must be >= 0");
+    if (max_bond < 1) throw std::runtime_error("mps_evolve: max_bond must be >= 1");
+    if (!(cutoff >= 0)) throw std::runtime_error("mps_evolve: cutoff must be >= 0");
+    const auto t0 = std::chrono::steady_clock::now();
+    BD::rebuild_mpo_envs(a.s, H);
+    for (int k = 0; k < n_steps; ++k) BD::tdvp2_step_blocks(a.s, H, dt, imag, max_bond, cutoff);
+    MPSEvolveStats out;
+    for (const auto& b : a.s.bond) {
+        int t = 0;
+        for (int d : b.dims) t += d;
+        out.max_bond = std::max(out.max_bond, t);
+    }
+    out.wall_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return out;
+}
+
+Cx mps_overlap(MPSState& bra, MPSState& ket) {
+    using BD = BlockDMRG<Cx>;
+    PairLock lk(bra, ket);
+    mps_check_pair(bra, ket, "mps_overlap");
+    if (mps_total_charge(bra) != mps_total_charge(ket)) return Cx(0);   // other sectors
+    auto OL = BD::overlap_left_envs(bra.s, ket.s, bra.qphys);
+    Cx v(0);
+    for (auto& [q, blk] : OL[bra.s.n]) v += blk.sum();
+    return v;
+}
+
+std::vector<Cx> mps_expect_diag(MPSState& bra, MPSState& ket, const std::vector<double>& wts) {
+    using BD = BlockDMRG<Cx>;
+    PairLock lk(bra, ket);
+    mps_check_pair(bra, ket, "mps_expect");
+    if (wts.size() != bra.qphys.size())
+        throw std::runtime_error("mps_expect: the operator has " + std::to_string(wts.size()) +
+                                 " diagonal entries, the local space " +
+                                 std::to_string(bra.qphys.size()));
+    if (mps_total_charge(bra) != mps_total_charge(ket))
+        return std::vector<Cx>(bra.s.n, Cx(0));
+    auto OL = BD::overlap_left_envs(bra.s, ket.s, bra.qphys);
+    auto OR = BD::overlap_right_envs(bra.s, ket.s, bra.qphys);
+    return BD::measure_sz_all(bra.s, ket.s, OL, OR, bra.qphys, &wts);
+}
+
+double mps_energy(MPSState& a, const std::vector<MPOSite>& H) {
+    using BD = BlockDMRG<Cx>;
+    std::lock_guard<std::mutex> lk(a.mu);
+    mps_check_model(a, H, "mps_energy");
+    BD::rebuild_mpo_envs(a.s, H);
+    return BD::bt_energy(a.s, H);
+}
+
+MPSInfo mps_info(MPSState& a) {
+    std::lock_guard<std::mutex> lk(a.mu);
+    MPSInfo out;
+    out.n = a.s.n;
+    out.d = (int)a.qphys.size();
+    for (int i = 1; i < a.s.n; ++i) {
+        int t = 0;
+        for (int d : a.s.bond[i].dims) t += d;
+        out.bonds.push_back(t);
+    }
+    for (auto& [q, b] : a.s.A[0]) out.norm2 += b.squaredNorm();   // the centre is site 0
+    out.charge = mps_total_charge(a);
+    return out;
+}
+
 // Entry point: GS once, then <GS|O|GS> per measurement MPO. The exported state has
 // its centre on site 0 with environments rebuilt per obs MPO (each obs derives its
 // own bond charges -- derive_mpo_sym scans the full chain, so correlator MPOs whose

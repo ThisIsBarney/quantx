@@ -7,6 +7,8 @@ The engine's Python API:
 * :mod:`quantx_engine.hva`: fermionic HVA circuits;
 * :mod:`quantx_engine.thermal`: finite temperature;
 * :mod:`quantx_engine.u1_circuit`: charge-conserving qubit circuits, read from OpenQASM;
+* :mod:`quantx_engine.mps`: matrix-product states that stay in the engine, chained through
+  ground states, one-site operators, TDVP and measurements;
 * :mod:`quantx_engine.tdvp` and :mod:`quantx_engine.structure_factor`: zero-temperature
   dynamics of the XXZ chain;
 * :class:`Engine`: the native library itself.
