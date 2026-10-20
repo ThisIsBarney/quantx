@@ -60,7 +60,7 @@ verified capabilities in users' hands.
 
 | | Item | Done when | Status |
 |---|---|---|---|
-| M11 | MPS and MPO as Python objects | One notebook chains DMRG, applying an operator, TDVP and correlation functions, never passing through JSON. In progress: `quantx_engine.mps` keeps states in the engine under handles (ground states, one-site diagonal operators, TDVP, matrix elements), gated against exact diagonalisation; next, the notebook, then operators that change the charge and MPOs | 🔄 |
+| M11 | MPS and MPO as Python objects | One notebook chains DMRG, applying an operator, TDVP and correlation functions, never passing through JSON. `quantx_engine.mps` (#232) keeps states in the engine under handles: ground states, one-site diagonal operators, TDVP, matrix elements, gated against exact diagonalisation. [notebooks/engine/12_mps_dynamics.ipynb](notebooks/engine/12_mps_dynamics.ipynb) chains them: C_j(t) of the XXZ chain against exact diagonalisation (4e-12), its light cone at 32 sites, and S(k, ω) peaking on the two-spinon continuum's lower edge. Left for later: operators that change the charge (S^±, c†) and MPOs as objects | ✅ |
 | M12 | cuTENSOR block-sparse backend | At χ = 256 no slower than TeNPy; at χ = 1024 the current lead is kept; the CPU path stays | ⬜ |
 | M13 | Adjoint gradients | The full gradient of an HVA circuit costs the same regardless of the number of parameters, and matches central differences to 1e-8 | ⬜ |
 | M14 | CUDA-Q backend | An NVQIR plugin (`--target quantx`), starting with particle-number-conserving circuits; CUDA-Q examples match a state vector | ⬜ |
