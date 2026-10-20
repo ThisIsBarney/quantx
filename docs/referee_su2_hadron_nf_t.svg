@@ -42,7 +42,7 @@
 <line x1="586.6" y1="305.6" x2="586.6" y2="305.2" stroke="var(--mps)" stroke-width="2"/>
 <circle cx="586.6" cy="305.4" r="4.5" fill="var(--mps)" stroke="var(--surface)" stroke-width="2"/>
 <text class="l" x="598.6" y="283.2">step 20, χ = 1600:</text>
-<text class="l" x="598.6" y="297.2">0.117 ± 0.002</text>
+<text class="l" x="598.6" y="297.2">0.1169 ± 0.0022</text>
 <circle cx="586.6" cy="292.6" r="4" fill="var(--tn)" stroke="var(--surface)" stroke-width="2"/>
 <circle cx="586.6" cy="282.3" r="4" fill="var(--pp_cpu)" stroke="var(--surface)" stroke-width="2"/>
 <circle cx="586.6" cy="295.2" r="4" fill="var(--pp_gpu)" stroke="var(--surface)" stroke-width="2"/>

@@ -95,6 +95,19 @@ def summaries(d):
     return out
 
 
+def value_and_bar(v, err):
+    """'v ± err', the error bar rounded up to two significant figures and v to the same place.
+
+    Up, not to the nearest: the bar is the change from the half-chi run, and a bar rounded
+    down would print an interval that no longer holds the value it was measured from
+    (0.002139 as 0.002 put the chi = 800 point outside 0.117 +- 0.002)."""
+    place = math.floor(math.log10(err)) - 1           # the second significant digit
+    q = 10.0 ** place
+    up = math.ceil(err / q - 1e-9) * q
+    nd = max(0, -place)
+    return f"{v:.{nd}f} ± {up:.{nd}f}"
+
+
 def _up1(x):
     """x rounded up to one significant figure, as text (3.3e-4 -> '4e-4')."""
     e = math.floor(math.log10(x))
@@ -180,9 +193,8 @@ def render(d, path=os.path.join(DOCS, "referee_su2_hadron_nf_t.svg")):
              f'stroke="var(--surface)" stroke-width="2"/>')
     o.append(f'<text class="l" x="{x20 + 12:.1f}" y="{YA(v_f + err) - 22:.1f}">step 20, '
              f'χ = {chi_f}:</text>')
-    nd = 2 if err >= 0.01 else 3            # the error bar's first digit sets the precision
     o.append(f'<text class="l" x="{x20 + 12:.1f}" y="{YA(v_f + err) - 8:.1f}">'
-             f'{v_f:.{nd}f} ± {err:.{nd}f}</text>')
+             f'{value_and_bar(v_f, err)}</text>')
     for k in METHODS:                      # end dots at step 20
         o.append(f'<circle cx="{x20:.1f}" cy="{YA(d[k][-1]):.1f}" r="4" fill="var(--{k.lower()})" '
                  f'stroke="var(--surface)" stroke-width="2"/>')

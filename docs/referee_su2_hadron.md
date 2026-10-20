@@ -13,8 +13,8 @@ entry reported the conserved charge only. We measured what it left open, the phy
 observable: the vacuum-subtracted fermion number after the last step, n_f(20).
 - quimb's scan gives n_f(20) = 0.12 ± 0.04 at χ = 1600.
 - QuantX's U(1) MPS of the same circuits keeps the charge exact. It gives
-  n_f(20) = 0.117 ± 0.002 at χ = 1600, in 2.0 hours on one GPU.
-- In both, the error bar is the change from the previous doubling of χ.
+  n_f(20) = 0.1169 ± 0.0022 at χ = 1600, in 2.0 hours on one GPU.
+- In both, the error bar is the change from the previous doubling of χ, rounded up.
 
 All three published classical values lie above it, by 0.13 to 0.29, and the QPU's −0.077
 lies 0.19 below. That is no scatter around the answer. Step by step, the QuantX MPS has
@@ -113,12 +113,13 @@ then carries that number as an exact charge.
 |---|---|---|---|---|
 | 200 | −0.91 | 0.044 / 0.026 | 60 | 3 min, CPU (2 threads) |
 | 400 | 0.312 | 0.674 / 0.622 | 60 | 13 min, GPU |
-| 800 | 0.119 | 0.966 / 0.959 | 60 | 38 min, GPU |
-| 1600 | 0.117 | 0.9993 / 0.9992 | 60 | 2.0 h, GPU |
+| 800 | 0.1190 | 0.966 / 0.959 | 60 | 38 min, GPU |
+| 1600 | 0.1169 | 0.9993 / 0.9992 | 60 | 2.0 h, GPU |
 
-- **n_f(20) = 0.117 ± 0.002.** The error bar is the change from χ = 800, as in quimb's scan,
-  where it was 0.04; quimb's χ = 1600 value, 0.116, lies inside it. QuantX's χ = 800 run is
-  already within 0.003 of it, where quimb needed χ = 1600.
+- **n_f(20) = 0.1169 ± 0.0022.** The error bar is the change from χ = 800, 0.00214, rounded
+  up so that the interval still holds the χ = 800 value; in quimb's scan it was 0.04.
+  quimb's χ = 1600 value, 0.1161, lies inside it. QuantX's χ = 800 run is already within
+  0.003 of it, where quimb needed χ = 1600.
 - **Q = 60 exactly,** at every χ and every step: no truncation can leave the charge
   sector. quimb's runs above lose 2e-4 of it at χ = 1600 and 9e-2 at χ = 200. Most of
   that leaks through the published circuit's intermediate states: given the fused gates,
@@ -199,7 +200,7 @@ exploit either.
 
 ## Recommendation
 
-1. **Offer the tracker n_f(20) = 0.117 ± 0.002, with both scans and the step-by-step
+1. **Offer the tracker n_f(20) = 0.1169 ± 0.0022, with both scans and the step-by-step
    comparison.** It is the first value of the physical observable with an error bar, from
    two independent MPS codes that agree inside it. Every published classical value lies
    outside that bar. The value the tracker records, Q, cannot separate the methods: a

@@ -19,7 +19,7 @@ unless a later report says otherwise.
 | [gpu_acceleration_report.md](gpu_acceleration_report.md) | The cuSOLVER GPU path (phases A to C) |
 | [finite_temperature.md](finite_temperature.md) | Finite-temperature spectroscopy by purification |
 | [universal_mpo.md](universal_mpo.md) | Any charge-conserving model on the block-sparse engine |
-| [referee_su2_hadron.md](referee_su2_hadron.md) | Whether the engine can referee the Quantum Advantage Tracker's SU(2) hadron instance (M8), and the bond dimension its observable needs: n_f(20) = 0.117 ± 0.002 at χ = 1600 on QuantX's U(1) MPS, with the charge exact (M16) |
+| [referee_su2_hadron.md](referee_su2_hadron.md) | Whether the engine can referee the Quantum Advantage Tracker's SU(2) hadron instance (M8), and the bond dimension its observable needs: n_f(20) = 0.1169 ± 0.0022 at χ = 1600 on QuantX's U(1) MPS, with the charge exact (M16) |
 | [showcase_google2023.md](showcase_google2023.md) | Reproducing a surface-code result (experimental modules) |
 
 The `.csv` and `.svg` files beside them are the data and figures these reports cite.
