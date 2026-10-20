@@ -867,6 +867,9 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
         const double cutoff = opts.value("cutoff", 1e-12);
         const std::string init = opts.value("init", std::string("free"));
         const bool want_entropy = opts.value("entropy", true);
+        if (opts.contains("gradient") && !opts["gradient"].is_boolean())
+            return dmrg_error("hva: 'gradient' must be true or false");
+        const bool want_gradient = opts.value("gradient", false);
         if (chi < 1) return dmrg_error("max_bond must be >= 1");
         if (init != "free" && init != "product")
             return dmrg_error("init must be 'free' (the U = 0 ground state) or 'product'");
@@ -903,10 +906,17 @@ QX_API const char* qx_hva_circuit(const char* problem_json, const char* options_
         } else {
             out["init_config"] = cfg;   // local states: 0 empty, 1 up, 2 down, 3 double
         }
+        HVAGradient grad;
         HVAResult r = run_hva_lattice(lat, hop, g.Lx, g.W, g.y_periodic, angles, chi,
-                                      cutoff, total, &cfg, psi0, want_entropy);
+                                      cutoff, total, &cfg, psi0, want_entropy,
+                                      want_gradient ? &grad : nullptr);
         out["ok"]               = true;
         out["energy"]           = r.energy;
+        if (want_gradient) {
+            out["gradient"]                  = grad.grad;   // dE/dtheta, laid out as the angles
+            out["gradient_truncation_error"] = grad.trunc_err;
+            out["gradient_return_error"]     = grad.return_error;
+        }
         // Entropies of the final state (natural log), from a lossless centre walk: the
         // largest over all cuts, and the balanced cut's (none when W*Lx is odd).
         out["entropy_max"]      = want_entropy ? nlj(r.S_max) : nlj(nullptr);

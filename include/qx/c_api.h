@@ -142,7 +142,15 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
 //   init     : "free" (default: the U = 0 ground state, prepared by DMRG; refused where it
 //              is degenerate) | "product" (a product state in the sector)
 //   entropy  : bool   (default true; the entropies cost one extra lossless sweep)
+//   gradient : bool   (default false; M13) also return dE/dtheta for every angle, by the
+//              adjoint method: one pass back through the circuit, carrying the state
+//              and H|psi>. Its cost does not grow with the number of angles (see
+//              benchmarks/hva_gradient_cost.py)
 // Returns thread-local JSON: {ok, energy, entropy_max, entropy_mid (null for odd W*Lx),
+//   gradient (with the option: laid out as the angles), gradient_truncation_error (the
+//     largest single weight discarded computing it: H psi's compression to max_bond and
+//     the backward pass's truncations), gradient_return_error (1 - |<psi_0|psi>| for the
+//     state the backward pass brings back to the start: 0 without truncation),
 //   truncation_error (the circuit's LARGEST single discarded weight), max_bond,
 //   layer_bonds[], wall_time_s, sector, init,
 //   init "free": init_energy, init_energy_exact (the U = 0 ground-state energy from the

@@ -215,6 +215,45 @@ int main() {
     hva_error({{"Lx", 3}, {"W", 2}, {"y_periodic", true}, {"angles", json::array()}},
               json::object(), "y_periodic needs W >= 3",
               "hva: y_periodic below W=3 is refused");
+    {
+        // M13: the adjoint gradient against central differences of the same circuit's
+        // energy, every component, on a ladder (its x-hops take the swap network). The
+        // physics is gated against a state vector in test_hva_gradient.py.
+        json lad = {{"Lx", 2}, {"W", 2}, {"U", 4.0}, {"sector", {{"n_up", 2}, {"n_dn", 2}}}};
+        const int apl = json::parse(qx_hva_layout(lad.dump().c_str())).value("angles_per_layer", 0);
+        const double vals[] = {0.3, -0.2, 0.5, 0.4, -0.1, 0.6, 0.2, -0.3};
+        lad["angles"] = json::array();
+        for (int l = 0; l < 2; ++l) {
+            json lay = json::array();
+            for (int k = 0; k < apl; ++k) lay.push_back(vals[(l * apl + k) % 8]);
+            lad["angles"].push_back(lay);
+        }
+        const json opts = {{"init", "product"}, {"cutoff", 1e-14}, {"entropy", false}};
+        json g = call(qx_hva_circuit, lad, {{"init", "product"}, {"cutoff", 1e-14},
+                                            {"entropy", false}, {"gradient", true}});
+        json plain = call(qx_hva_circuit, lad, opts);
+        bool ok = apl > 1 && g.value("ok", false) && plain.value("ok", false) &&
+                  g.value("energy", 0.0) == plain.value("energy", 1.0) &&
+                  g["gradient"].size() == 2 && g.value("gradient_return_error", 1.0) < 1e-12;
+        double worst = 0;
+        const double h = 5e-4;
+        for (int l = 0; ok && l < 2; ++l)
+            for (int k = 0; ok && k < apl; ++k) {
+                double e[4];
+                const int m[4] = {-2, -1, 1, 2};
+                for (int q = 0; q < 4; ++q) {
+                    json p = lad;
+                    p["angles"][l][k] = lad["angles"][l][k].get<double>() + m[q] * h;
+                    e[q] = call(qx_hva_circuit, p, opts).value("energy", 0.0);
+                }
+                const double fd = (e[0] - 8 * e[1] + 8 * e[2] - e[3]) / (12 * h);
+                worst = std::max(worst, std::abs(g["gradient"][l][k].get<double>() - fd));
+            }
+        check(ok && worst < 1e-8, "hva gradient: the adjoint gradient is the central "
+              "difference of the energy to 1e-8, and leaves the energy as it was", g);
+        hva_error(lad, {{"init", "product"}, {"gradient", "yes"}}, "true or false",
+                  "hva: a gradient option that is not a bool is refused");
+    }
 
     // ---- finite temperature (M6) --------------------------------------------------
     // The physics is gated against ED in python/quantx_engine/tests/test_thermal_ed.py;

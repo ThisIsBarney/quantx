@@ -440,6 +440,17 @@ hva_lattice_group_bonds(int Lx, int W, bool y_periodic);
 // ansatz is strictly weaker than the Hamiltonian being measured -- still a valid
 // variational upper bound, but not the ansatz the caller named, and nothing here says
 // so. Every in-tree caller passes tp = 0.
+// The adjoint gradient of a circuit's energy (M13): dE/dtheta for every angle, laid out
+// as the angles are, from one pass back through the circuit.
+struct HVAGradient {
+    std::vector<std::vector<double>> grad;
+    // The largest single weight discarded computing it: H psi's compression to the
+    // circuit's max_bond, and the backward pass's truncations on both states.
+    double trunc_err = 0;
+    // 1 - |<psi_0|psi>| for the state the backward pass brings back to the start: zero
+    // without truncation, and otherwise what the round trip's truncations cost.
+    double return_error = 0;
+};
 HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           const std::vector<MPOSite>& hop_mpo, int Lx, int W,
                           bool y_periodic,
@@ -447,7 +458,8 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           int chi_max, double cutoff, int total_charge = 0,
                           const std::vector<int>* init_config = nullptr,
                           const std::shared_ptr<HVAInitState>& init = nullptr,
-                          bool want_entropy = true);
+                          bool want_entropy = true,
+                          HVAGradient* gradient = nullptr);
 
 // ---- U(1) qubit circuits (M16) --------------------------------------------------------
 // One-qubit phases and nearest-neighbour two-qubit gates that conserve the number of
