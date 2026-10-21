@@ -1,0 +1,12 @@
+﻿quantx\_engine.contrib.statevector
+==================================
+
+.. automodule:: quantx_engine.contrib.statevector
+
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      StatevectorSimulator
+   

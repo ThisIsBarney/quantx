@@ -1,0 +1,1426 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.many_body - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.contrib.many_body</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Many-body physics enhancements for the QuantX engine (M102).</span>
+
+<span class="sd">Three additions:</span>
+
+<span class="sd">**Out-of-time-order correlators (OTOCs)**</span>
+<span class="sd">    Measure quantum information scrambling via the squared commutator::</span>
+
+<span class="sd">        C(t) = -⟨[W(t), V]²⟩  =  1 - Re F(t)</span>
+<span class="sd">        F(t) = ⟨W†(t) V† W(t) V⟩</span>
+
+<span class="sd">    where W(t) = exp(iHt) W exp(-iHt) is the Heisenberg-picture operator.</span>
+<span class="sd">    Fast scrambling (chaotic systems like SYK) drives C(t) → 1 on the</span>
+<span class="sd">    scrambling time scale t* ~ β ln N.</span>
+
+<span class="sd">**Sachdev-Ye-Kitaev (SYK) model**</span>
+<span class="sd">    Random all-to-all q-body Majorana fermion Hamiltonian::</span>
+
+<span class="sd">        H_SYK = (i^{q/2} / q!) Σ_{1≤i₁&lt;…&lt;i_q≤N} J_{i₁…i_q} χ_{i₁}…χ_{i_q}</span>
+
+<span class="sd">    The Majorana operators χ_i satisfy {χ_i, χ_j} = 2δ_{ij} and are mapped</span>
+<span class="sd">    to qubits via a Jordan-Wigner-like transformation.  The q=4 model is the</span>
+<span class="sd">    minimal holographic (AdS/CFT dual) case.</span>
+
+<span class="sd">**2D DMRG via snake-path mapping**</span>
+<span class="sd">    Maps a 2D Lx×Ly lattice to a 1D MPS via a snake (boustrophedon) path,</span>
+<span class="sd">    then runs the existing DMRG sweep engine.  Long-range 2D couplings become</span>
+<span class="sd">    medium-range 1D interactions that DMRG can still handle efficiently with</span>
+<span class="sd">    modest bond dimensions.</span>
+
+<span class="sd">Quick start::</span>
+
+<span class="sd">    from quantx_engine.contrib.many_body import compute_otoc, SYKModel, dmrg_2d</span>
+
+<span class="sd">    # OTOC for a 4-qubit Ising chain</span>
+<span class="sd">    from quantx_engine.contrib.trotter import ising_trotter</span>
+<span class="sd">    sim = ising_trotter(n=4, J=1.0, h=0.5)</span>
+<span class="sd">    result = compute_otoc(sim.hamiltonian, op_w="X", op_v="Z",</span>
+<span class="sd">                          site_w=0, site_v=3, t=1.0, n_qubits=4)</span>
+<span class="sd">    print(result.otoc_value)   # C(t) ∈ [0, 1]</span>
+
+<span class="sd">    # SYK model</span>
+<span class="sd">    model = SYKModel(N=8, q=4, seed=42)</span>
+<span class="sd">    print(model.ground_state_energy)</span>
+
+<span class="sd">    # 2D DMRG</span>
+<span class="sd">    result = dmrg_2d(Lx=2, Ly=2, J=1.0, bond_dim=8, sweeps=4)</span>
+<span class="sd">    print(result.energy)</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Kitaev, A. Y. (1997). Fault-tolerant quantum computation by anyons.</span>
+<span class="sd">       *Ann. Phys.* 303, 2–30.</span>
+<span class="sd">       https://doi.org/10.1016/S0003-4916(02)00018-0</span>
+
+<span class="sd">.. [2] Sachdev, S. &amp; Ye, J. (1993). Gapless spin-fluid ground state in a</span>
+<span class="sd">       random quantum Heisenberg magnet. *Phys. Rev. Lett.* 70, 3339.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevLett.70.3339</span>
+
+<span class="sd">.. [3] Larkin, A. I. &amp; Ovchinnikov, Yu. N. (1969). Quasiclassical method in</span>
+<span class="sd">       the theory of superconductivity. *Sov. Phys. JETP* 28, 1200.</span>
+<span class="sd">       (OTOC / scrambling motivation)</span>
+
+<span class="sd">Physical validation</span>
+<span class="sd">-------------------</span>
+<span class="sd">SYK model ground state energy is negative for any random couplings J_ijkl</span>
+<span class="sd">(the random model has E_0 &lt; 0 with probability 1) [Sachdev1993].</span>
+<span class="sd">OTOC C(t) = -&lt;[W(t),V]^2&gt; grows from 0 and saturates at late times for</span>
+<span class="sd">chaotic systems (information scrambling).</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">itertools</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.linalg</span><span class="w"> </span><span class="kn">import</span> <span class="n">expm</span> <span class="k">as</span> <span class="n">_scipy_expm</span>
+    <span class="n">_HAVE_SCIPY</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">_HAVE_SCIPY</span> <span class="o">=</span> <span class="kc">False</span>
+
+
+<span class="c1"># ── Error ──────────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="ManyBodyError">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.ManyBodyError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ManyBodyError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised for invalid many-body simulation parameters."""</span></div>
+
+
+
+<span class="c1"># ── Pauli helpers (local, minimal) ────────────────────────────────────────────</span>
+
+<span class="n">_I2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<span class="n">_X</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<span class="n">_Y</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<span class="n">_Z</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+<span class="n">_PAULI</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"I"</span><span class="p">:</span> <span class="n">_I2</span><span class="p">,</span> <span class="s2">"X"</span><span class="p">:</span> <span class="n">_X</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">:</span> <span class="n">_Y</span><span class="p">,</span> <span class="s2">"Z"</span><span class="p">:</span> <span class="n">_Z</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_single_site_op</span><span class="p">(</span><span class="n">op</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">site</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the 2^n × 2^n matrix for `op` acting on `site`, I elsewhere."""</span>
+    <span class="k">if</span> <span class="n">op</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_PAULI</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unknown single-site operator </span><span class="si">{</span><span class="n">op</span><span class="si">!r}</span><span class="s2">; use I/X/Y/Z"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">site</span> <span class="o">&lt;</span> <span class="n">n_qubits</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"site=</span><span class="si">{</span><span class="n">site</span><span class="si">}</span><span class="s2"> out of range [0, </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+    <span class="n">mat</span> <span class="o">=</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"I"</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+        <span class="n">mat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">mat</span><span class="p">,</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">op</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">site</span> <span class="k">else</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"I"</span><span class="p">])</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">mat</span><span class="p">,</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">op</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">site</span> <span class="k">else</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"I"</span><span class="p">])</span>
+    <span class="c1"># Rebuild cleanly</span>
+    <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="n">_PAULI</span><span class="p">[</span><span class="n">op</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">site</span> <span class="k">else</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"I"</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_exact_time_evolve</span><span class="p">(</span><span class="n">H</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return exp(-iHt) for a Hermitian matrix H.</span>
+
+<span class="sd">    Uses ``numpy.linalg.eigh`` (exact spectral decomposition, no scipy</span>
+<span class="sd">    required):  exp(-iHt) = V · diag(exp(-i λ t)) · V†.</span>
+<span class="sd">    """</span>
+    <span class="n">eigvals</span><span class="p">,</span> <span class="n">eigvecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigh</span><span class="p">(</span><span class="n">H</span><span class="p">)</span>
+    <span class="n">phases</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">eigvals</span> <span class="o">*</span> <span class="n">t</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">eigvecs</span> <span class="o">*</span> <span class="n">phases</span><span class="p">)</span> <span class="o">@</span> <span class="n">eigvecs</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>
+
+
+<span class="c1"># ═══════════════════════════════════════════════════════════════════════════════</span>
+<span class="c1"># Part 1 — Out-of-time-order correlators (OTOCs)</span>
+<span class="c1"># ═══════════════════════════════════════════════════════════════════════════════</span>
+
+<div class="viewcode-block" id="OTOCResult">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.OTOCResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OTOCResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of an OTOC calculation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    otoc_value : float</span>
+<span class="sd">        Scrambling diagnostic C(t) = 1 − Re F(t) ∈ [0, 1].</span>
+<span class="sd">    fotoc : complex</span>
+<span class="sd">        Raw OTOC F(t) = ⟨W†(t) V† W(t) V⟩.</span>
+<span class="sd">    t : float</span>
+<span class="sd">        Time at which the OTOC was evaluated.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        System size.</span>
+<span class="sd">    metadata : dict</span>
+<span class="sd">        op_w, op_v, site_w, site_v, method used.</span>
+<span class="sd">    """</span>
+    <span class="n">otoc_value</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">fotoc</span><span class="p">:</span> <span class="nb">complex</span>
+    <span class="n">t</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="OTOCSweepResult">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.OTOCSweepResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">OTOCSweepResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""OTOC evaluated at multiple times.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    t_list : np.ndarray</span>
+<span class="sd">        Time points.</span>
+<span class="sd">    otoc_values : np.ndarray</span>
+<span class="sd">        C(t) at each time point.</span>
+<span class="sd">    fotoc_values : np.ndarray</span>
+<span class="sd">        Raw F(t) at each time point (complex).</span>
+<span class="sd">    scrambling_time : float or None</span>
+<span class="sd">        First t where C(t) &gt; 0.5 (rough scrambling time); None if never reached.</span>
+<span class="sd">    """</span>
+    <span class="n">t_list</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">otoc_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">fotoc_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">scrambling_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="compute_otoc">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.compute_otoc">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">compute_otoc</span><span class="p">(</span>
+    <span class="n">hamiltonian</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">op_w</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">op_v</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">site_w</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">site_v</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">t</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">initial_state</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+    <span class="n">use_trotter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OTOCResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute the OTOC F(t) = ⟨ψ|W†(t) V† W(t) V|ψ⟩.</span>
+
+<span class="sd">    The scrambling diagnostic is C(t) = 1 − Re F(t).</span>
+
+<span class="sd">    For a thermalising system C(t) grows from 0 to ~1 on the scrambling</span>
+<span class="sd">    time scale; for an integrable system it stays near 0.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hamiltonian : np.ndarray</span>
+<span class="sd">        ``(2^n × 2^n)`` Hermitian Hamiltonian matrix.</span>
+<span class="sd">    op_w, op_v : str</span>
+<span class="sd">        Single-site Pauli operators (``'X'``, ``'Y'``, ``'Z'``, or ``'I'``).</span>
+<span class="sd">    site_w, site_v : int</span>
+<span class="sd">        Qubit indices for W and V respectively.</span>
+<span class="sd">    t : float</span>
+<span class="sd">        Time of evolution.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        System size (used to build operator matrices).</span>
+<span class="sd">    initial_state : np.ndarray or None</span>
+<span class="sd">        State |ψ⟩ in which expectation value is taken.  Defaults to |0…0⟩.</span>
+<span class="sd">    n_steps : int</span>
+<span class="sd">        Trotter steps (only used when ``use_trotter=True``).</span>
+<span class="sd">    use_trotter : bool</span>
+<span class="sd">        If True, approximate exp(-iHt) via second-order Trotter; otherwise</span>
+<span class="sd">        use ``scipy.linalg.expm`` (exact, requires scipy).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    OTOCResult</span>
+<span class="sd">    """</span>
+    <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">hamiltonian</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">n_qubits</span>
+    <span class="k">if</span> <span class="n">H</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">dim</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Hamiltonian shape </span><span class="si">{</span><span class="n">H</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> inconsistent with n_qubits=</span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+    <span class="n">W</span> <span class="o">=</span> <span class="n">_single_site_op</span><span class="p">(</span><span class="n">op_w</span><span class="p">,</span> <span class="n">site_w</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">)</span>
+    <span class="n">V</span> <span class="o">=</span> <span class="n">_single_site_op</span><span class="p">(</span><span class="n">op_v</span><span class="p">,</span> <span class="n">site_v</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">initial_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="n">psi</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">initial_state</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">psi</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">dim</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"initial_state must have length </span><span class="si">{</span><span class="n">dim</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">nm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">psi</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">nm</span> <span class="o">&lt;</span> <span class="mf">1e-12</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"initial_state has zero norm"</span><span class="p">)</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">psi</span> <span class="o">/</span> <span class="n">nm</span>
+
+    <span class="c1"># Time-evolution unitary U(t) = exp(-iHt)</span>
+    <span class="k">if</span> <span class="n">use_trotter</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.contrib.trotter</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrotterSimulator</span><span class="p">,</span> <span class="n">TrotterTerm</span>
+        <span class="c1"># Decompose H into Pauli terms by tracing: c_k = Tr(P_k H) / 2^n</span>
+        <span class="n">terms</span> <span class="o">=</span> <span class="n">_hamiltonian_to_trotter_terms</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">)</span>
+        <span class="n">sim</span> <span class="o">=</span> <span class="n">TrotterSimulator</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">,</span> <span class="n">terms</span><span class="p">)</span>
+        <span class="n">dt</span> <span class="o">=</span> <span class="n">t</span> <span class="o">/</span> <span class="n">n_steps</span>
+        <span class="n">U_step</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">_step2</span><span class="p">(</span><span class="n">dt</span><span class="p">)</span>
+        <span class="n">U</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_steps</span><span class="p">):</span>
+            <span class="n">U</span> <span class="o">=</span> <span class="n">U_step</span> <span class="o">@</span> <span class="n">U</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="s2">"trotter_order2"</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">U</span> <span class="o">=</span> <span class="n">_exact_time_evolve</span><span class="p">(</span><span class="n">H</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="n">method</span> <span class="o">=</span> <span class="s2">"exact_expm"</span>
+
+    <span class="n">Udagger</span> <span class="o">=</span> <span class="n">U</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span>
+
+    <span class="c1"># W(t) = U† W U</span>
+    <span class="n">Wt</span> <span class="o">=</span> <span class="n">Udagger</span> <span class="o">@</span> <span class="n">W</span> <span class="o">@</span> <span class="n">U</span>
+
+    <span class="c1"># F(t) = ⟨ψ| W†(t) V† W(t) V |ψ⟩</span>
+    <span class="n">Vpsi</span>    <span class="o">=</span> <span class="n">V</span> <span class="o">@</span> <span class="n">psi</span>
+    <span class="n">WtVpsi</span>  <span class="o">=</span> <span class="n">Wt</span> <span class="o">@</span> <span class="n">Vpsi</span>
+    <span class="n">VtWtVpsi</span> <span class="o">=</span> <span class="n">V</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">WtVpsi</span>   <span class="c1"># V† W(t) V |ψ⟩  (V is Hermitian → V† = V)</span>
+    <span class="n">WdVtWtVpsi</span> <span class="o">=</span> <span class="n">Wt</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">VtWtVpsi</span>
+
+    <span class="n">fotoc</span> <span class="o">=</span> <span class="nb">complex</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">vdot</span><span class="p">(</span><span class="n">psi</span><span class="p">,</span> <span class="n">WdVtWtVpsi</span><span class="p">))</span>
+    <span class="n">otoc_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">fotoc</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">OTOCResult</span><span class="p">(</span>
+        <span class="n">otoc_value</span><span class="o">=</span><span class="n">otoc_val</span><span class="p">,</span>
+        <span class="n">fotoc</span><span class="o">=</span><span class="n">fotoc</span><span class="p">,</span>
+        <span class="n">t</span><span class="o">=</span><span class="n">t</span><span class="p">,</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">metadata</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">"op_w"</span><span class="p">:</span> <span class="n">op_w</span><span class="p">,</span> <span class="s2">"site_w"</span><span class="p">:</span> <span class="n">site_w</span><span class="p">,</span>
+            <span class="s2">"op_v"</span><span class="p">:</span> <span class="n">op_v</span><span class="p">,</span> <span class="s2">"site_v"</span><span class="p">:</span> <span class="n">site_v</span><span class="p">,</span>
+            <span class="s2">"method"</span><span class="p">:</span> <span class="n">method</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="otoc_sweep">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.otoc_sweep">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">otoc_sweep</span><span class="p">(</span>
+    <span class="n">hamiltonian</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">op_w</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">op_v</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">site_w</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">site_v</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">t_list</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">initial_state</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OTOCSweepResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute OTOC at multiple times.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    t_list : sequence of float</span>
+<span class="sd">        Time points (must be non-negative, monotonically non-decreasing).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    OTOCSweepResult</span>
+<span class="sd">    """</span>
+    <span class="n">t_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">t_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">t_arr</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">t_arr</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"t_list must be a non-empty 1-D sequence"</span><span class="p">)</span>
+
+    <span class="n">otoc_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t_arr</span><span class="p">))</span>
+    <span class="n">fotoc_vals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">t_arr</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">t</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">t_arr</span><span class="p">):</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">compute_otoc</span><span class="p">(</span><span class="n">hamiltonian</span><span class="p">,</span> <span class="n">op_w</span><span class="p">,</span> <span class="n">op_v</span><span class="p">,</span> <span class="n">site_w</span><span class="p">,</span> <span class="n">site_v</span><span class="p">,</span>
+                         <span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">),</span> <span class="n">n_qubits</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">)</span>
+        <span class="n">otoc_vals</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">otoc_value</span>
+        <span class="n">fotoc_vals</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">r</span><span class="o">.</span><span class="n">fotoc</span>
+
+    <span class="n">scrambling_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">t</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">t_arr</span><span class="p">,</span> <span class="n">otoc_vals</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">c</span> <span class="o">&gt;</span> <span class="mf">0.5</span><span class="p">:</span>
+            <span class="n">scrambling_time</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">t</span><span class="p">)</span>
+            <span class="k">break</span>
+
+    <span class="k">return</span> <span class="n">OTOCSweepResult</span><span class="p">(</span>
+        <span class="n">t_list</span><span class="o">=</span><span class="n">t_arr</span><span class="p">,</span>
+        <span class="n">otoc_values</span><span class="o">=</span><span class="n">otoc_vals</span><span class="p">,</span>
+        <span class="n">fotoc_values</span><span class="o">=</span><span class="n">fotoc_vals</span><span class="p">,</span>
+        <span class="n">scrambling_time</span><span class="o">=</span><span class="n">scrambling_time</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_hamiltonian_to_trotter_terms</span><span class="p">(</span><span class="n">H</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Decompose an n-qubit Hamiltonian into TrotterTerm list via Pauli tracing.</span>
+
+<span class="sd">    Uses Tr(P_k H) / 2^n to extract coefficients.  Internal helper for</span>
+<span class="sd">    Trotter-based OTOC computation.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.contrib.trotter</span><span class="w"> </span><span class="kn">import</span> <span class="n">TrotterTerm</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">n_qubits</span>
+    <span class="n">terms</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">pauli_labels</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">product</span><span class="p">(</span><span class="s2">"IXYZ"</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">):</span>
+        <span class="n">ps</span> <span class="o">=</span> <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">pauli_labels</span><span class="p">)</span>
+        <span class="c1"># Build Pauli matrix</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="n">_PAULI</span><span class="p">[</span><span class="n">c</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">ps</span><span class="p">]</span>
+        <span class="n">P</span> <span class="o">=</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+        <span class="n">coeff</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">P</span> <span class="o">@</span> <span class="n">H</span><span class="p">)</span><span class="o">.</span><span class="n">real</span><span class="p">)</span> <span class="o">/</span> <span class="n">dim</span>
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">coeff</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">1e-14</span><span class="p">:</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">TrotterTerm</span><span class="p">(</span><span class="n">coeff</span><span class="p">,</span> <span class="n">ps</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">terms</span><span class="p">:</span>
+        <span class="c1"># Zero Hamiltonian: add a dummy zero term</span>
+        <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">TrotterTerm</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="s2">"I"</span> <span class="o">*</span> <span class="n">n_qubits</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">terms</span>
+
+
+<span class="c1"># ═══════════════════════════════════════════════════════════════════════════════</span>
+<span class="c1"># Part 2 — Sachdev-Ye-Kitaev (SYK) model</span>
+<span class="c1"># ═══════════════════════════════════════════════════════════════════════════════</span>
+
+<div class="viewcode-block" id="SYKResult">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SYKResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SYKResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Spectral diagnostics of the SYK model.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    energies : np.ndarray</span>
+<span class="sd">        Full eigenspectrum (sorted ascending).</span>
+<span class="sd">    ground_state_energy : float</span>
+<span class="sd">        Lowest eigenvalue.</span>
+<span class="sd">    level_spacing_ratio : float</span>
+<span class="sd">        Mean consecutive level-spacing ratio ⟨r⟩.  GOE predicts ≈ 0.536,</span>
+<span class="sd">        Poisson (integrable) predicts ≈ 0.386.</span>
+<span class="sd">    spectral_form_factor : np.ndarray or None</span>
+<span class="sd">        |Tr(e^{-iHt})|² evaluated at ``t_list`` (if requested).</span>
+<span class="sd">    """</span>
+    <span class="n">energies</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">ground_state_energy</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">level_spacing_ratio</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">spectral_form_factor</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="SYKModel">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SYKModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SYKModel</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Sachdev-Ye-Kitaev random q-body Majorana fermion Hamiltonian.</span>
+
+<span class="sd">    The q=4 SYK model is the minimal model conjectured to have a holographic</span>
+<span class="sd">    (AdS₂) dual at low temperatures; it exhibits maximal quantum chaos.</span>
+
+<span class="sd">    The Hamiltonian is::</span>
+
+<span class="sd">        H = (i^{q/2} / q!) Σ_{i₁&lt;…&lt;i_q} J_{i₁…i_q} γ_{i₁}…γ_{i_q}</span>
+
+<span class="sd">    where γ_i are Majorana fermion operators satisfying {γ_i, γ_j} = 2δ_{ij},</span>
+<span class="sd">    mapped to qubits via the Jordan-Wigner transformation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    N : int</span>
+<span class="sd">        Number of Majorana modes (must be even).  The qubit system has N//2</span>
+<span class="sd">        qubits; the Hilbert space has dimension 2^{N//2}.</span>
+<span class="sd">    q : int</span>
+<span class="sd">        Body count (must be even, typically 4).</span>
+<span class="sd">    seed : int or None</span>
+<span class="sd">        Random seed for reproducibility.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="SYKModel.__init__">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SYKModel.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">N</span><span class="p">:</span> <span class="s2">"Optional[int]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">q</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="s2">"Optional[int]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">n_sites</span><span class="p">:</span> <span class="s2">"Optional[int]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># ``n_sites`` kwarg: number of Majorana modes (same as N)</span>
+        <span class="k">if</span> <span class="n">n_sites</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">N</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">N</span> <span class="o">=</span> <span class="n">n_sites</span>
+        <span class="k">if</span> <span class="n">N</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"N (or n_sites) must be provided"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">N</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">N</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"SYK requires N ≥ 2 even (number of Majorana modes)"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">q</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">q</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"q must be an even integer ≥ 2"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">q</span> <span class="o">&gt;</span> <span class="n">N</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"q=</span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2"> cannot exceed N=</span><span class="si">{</span><span class="n">N</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_N</span> <span class="o">=</span> <span class="n">N</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_q</span> <span class="o">=</span> <span class="n">q</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_qubits</span> <span class="o">=</span> <span class="n">N</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+
+        <span class="c1"># Build Majorana operators γ_i via Jordan-Wigner</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_majoranas</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_majoranas</span><span class="p">()</span>
+
+        <span class="c1"># Build random coupling tensor and Hamiltonian</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_J</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_H</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_hamiltonian</span><span class="p">()</span></div>
+
+
+    <span class="c1"># ── Properties ────────────────────────────────────────────────────────</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">N</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_N</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">q</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_q</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_qubits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_qubits</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_H</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dim</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">2</span> <span class="o">**</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_qubits</span>
+
+    <span class="c1"># ── Majorana + Hamiltonian construction ───────────────────────────────</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_majoranas</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Jordan-Wigner Majorana operators γ_{2k} = (c_k + c†_k),</span>
+<span class="sd">        γ_{2k+1} = i(c†_k - c_k) for k=0..n_qubits-1."""</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_qubits</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">n</span>
+        <span class="n">majoranas</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="c1"># Jordan-Wigner string: Z^⊗k ⊗ X ⊗ I^⊗(n-k-1) for c_k + c†_k</span>
+            <span class="c1"># and Z^⊗k ⊗ Y ⊗ I^⊗(n-k-1) for i(c†_k - c_k)</span>
+            <span class="n">jw_string_x</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"I"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+            <span class="n">jw_string_y</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"I"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+                <span class="n">jw_string_x</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"Z"</span>
+                <span class="n">jw_string_y</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"Z"</span>
+            <span class="n">jw_string_x</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"X"</span>
+            <span class="n">jw_string_y</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"Y"</span>
+
+            <span class="n">gamma_even</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pauli_kron</span><span class="p">(</span><span class="n">jw_string_x</span><span class="p">)</span>
+            <span class="n">gamma_odd</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_pauli_kron</span><span class="p">(</span><span class="n">jw_string_y</span><span class="p">)</span>
+            <span class="n">majoranas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">gamma_even</span><span class="p">)</span>  <span class="c1"># γ_{2k}</span>
+            <span class="n">majoranas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">gamma_odd</span><span class="p">)</span>   <span class="c1"># γ_{2k+1}</span>
+
+        <span class="k">return</span> <span class="n">majoranas</span>  <span class="c1"># length N</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_pauli_kron</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pauli_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">pauli_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+        <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">pauli_list</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+            <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">p</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">result</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Build coupling tensor J and the q-body Hamiltonian."""</span>
+        <span class="n">N</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_N</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_q</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">factorial</span><span class="p">(</span><span class="n">q</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="n">N</span> <span class="o">**</span> <span class="p">(</span><span class="n">q</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># normalisation: J² = (q-1)!/N^{q-1}</span>
+        <span class="n">sigma</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">var</span><span class="p">)</span>
+
+        <span class="c1"># Enumerate all q-subsets of [0, N)</span>
+        <span class="n">subsets</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">combinations</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">),</span> <span class="n">q</span><span class="p">))</span>
+        <span class="c1"># Draw Gaussian couplings (antisymmetric by symmetry of subset enumeration)</span>
+        <span class="n">J_vals</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">subsets</span><span class="p">))</span>
+
+        <span class="n">dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dim</span>
+        <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="n">dim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="n">prefactor</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">**</span> <span class="p">(</span><span class="n">q</span> <span class="o">//</span> <span class="mi">2</span><span class="p">))</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">factorial</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">J_val</span><span class="p">,</span> <span class="n">subset</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">J_vals</span><span class="p">,</span> <span class="n">subsets</span><span class="p">):</span>
+            <span class="c1"># Product γ_{i1} γ_{i2} … γ_{iq}</span>
+            <span class="n">P</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_majoranas</span><span class="p">[</span><span class="n">subset</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">subset</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+                <span class="n">P</span> <span class="o">=</span> <span class="n">P</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_majoranas</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+            <span class="n">H</span> <span class="o">+=</span> <span class="n">J_val</span> <span class="o">*</span> <span class="n">prefactor</span> <span class="o">*</span> <span class="n">P</span>
+
+        <span class="c1"># Symmetrise: H should be Hermitian</span>
+        <span class="n">H</span> <span class="o">=</span> <span class="p">(</span><span class="n">H</span> <span class="o">+</span> <span class="n">H</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="n">J_vals</span><span class="p">,</span> <span class="n">H</span>
+
+    <span class="c1"># ── Spectral analysis ─────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="SYKModel.diagonalise">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SYKModel.diagonalise">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">diagonalise</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">t_list</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SYKResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Diagonalise the Hamiltonian and compute spectral diagnostics.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        t_list : sequence of float or None</span>
+<span class="sd">            If provided, compute spectral form factor |Tr(e^{-iHt})|² at these times.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        SYKResult</span>
+<span class="sd">        """</span>
+        <span class="n">eigvals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_H</span><span class="p">)</span>  <span class="c1"># real, sorted</span>
+        <span class="n">eigvals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">eigvals</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+
+        <span class="c1"># Level spacing ratio ⟨r⟩ = ⟨min(δn,δn+1)/max(δn,δn+1)⟩</span>
+        <span class="n">spacings</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">eigvals</span><span class="p">)</span>
+        <span class="n">spacings</span> <span class="o">=</span> <span class="n">spacings</span><span class="p">[</span><span class="n">spacings</span> <span class="o">&gt;</span> <span class="mf">1e-15</span><span class="p">]</span>  <span class="c1"># remove near-degenerate pairs</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">spacings</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">ratios</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">spacings</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">spacings</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">spacings</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">spacings</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+            <span class="n">lsr</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">ratios</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">lsr</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"nan"</span><span class="p">)</span>
+
+        <span class="n">sff</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">t_list</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">t_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">t_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+            <span class="n">sff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+                <span class="nb">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">eigvals</span> <span class="o">*</span> <span class="n">t</span><span class="p">)))</span> <span class="o">**</span> <span class="mi">2</span>
+                <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">t_arr</span>
+            <span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">SYKResult</span><span class="p">(</span>
+            <span class="n">energies</span><span class="o">=</span><span class="n">eigvals</span><span class="p">,</span>
+            <span class="n">ground_state_energy</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">eigvals</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+            <span class="n">level_spacing_ratio</span><span class="o">=</span><span class="n">lsr</span><span class="p">,</span>
+            <span class="n">spectral_form_factor</span><span class="o">=</span><span class="n">sff</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ground_state_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Ground state energy (calls diagonalise internally)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">diagonalise</span><span class="p">()</span><span class="o">.</span><span class="n">ground_state_energy</span></div>
+
+
+
+<div class="viewcode-block" id="syk_hamiltonian">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.syk_hamiltonian">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">syk_hamiltonian</span><span class="p">(</span>
+    <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">q</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the SYK Hamiltonian matrix for N Majorana modes, q-body interactions.</span>
+
+<span class="sd">    Convenience wrapper around :class:`SYKModel`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    N : int</span>
+<span class="sd">        Number of Majorana modes (even, ≥ 2).</span>
+<span class="sd">    q : int</span>
+<span class="sd">        Interaction body count (even, default 4).</span>
+<span class="sd">    seed : int or None</span>
+<span class="sd">        Random seed.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">SYKModel</span><span class="p">(</span><span class="n">N</span><span class="o">=</span><span class="n">N</span><span class="p">,</span> <span class="n">q</span><span class="o">=</span><span class="n">q</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span><span class="o">.</span><span class="n">hamiltonian</span></div>
+
+
+
+<span class="c1"># ═══════════════════════════════════════════════════════════════════════════════</span>
+<span class="c1"># Part 3 — 2D DMRG via snake-path mapping</span>
+<span class="c1"># ═══════════════════════════════════════════════════════════════════════════════</span>
+
+<div class="viewcode-block" id="DMRG2DResult">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.DMRG2DResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DMRG2DResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of a 2D DMRG calculation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    energy : float</span>
+<span class="sd">        Variational ground-state energy.</span>
+<span class="sd">    bond_dims : list[int]</span>
+<span class="sd">        Bond dimensions at the end of the last sweep.</span>
+<span class="sd">    truncation_error : float</span>
+<span class="sd">        Accumulated truncation error from the final sweep.</span>
+<span class="sd">    Lx, Ly : int</span>
+<span class="sd">        Lattice dimensions.</span>
+<span class="sd">    n_sweeps : int</span>
+<span class="sd">        Number of sweeps performed.</span>
+<span class="sd">    """</span>
+    <span class="n">energy</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">bond_dims</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">truncation_error</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">Lx</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">Ly</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">n_sweeps</span><span class="p">:</span> <span class="nb">int</span></div>
+
+
+
+<div class="viewcode-block" id="SnakeMapper">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SnakeMapper">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SnakeMapper</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Maps 2D lattice sites (x, y) to a 1D snake-path index.</span>
+
+<span class="sd">    The snake (boustrophedon) ordering::</span>
+
+<span class="sd">        Row 0: 0 → 1 → 2 → … → Lx-1        (left to right)</span>
+<span class="sd">        Row 1: Lx + Lx-1 → … → Lx           (right to left)</span>
+<span class="sd">        Row 2: 2Lx → 2Lx+1 → …              (left to right)</span>
+<span class="sd">        …</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Lx, Ly : int</span>
+<span class="sd">        Lattice dimensions (x = columns, y = rows).</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="SnakeMapper.__init__">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SnakeMapper.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">Lx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">Ly</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">Lx</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">Ly</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"Lx and Ly must be ≥ 1"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Lx</span> <span class="o">=</span> <span class="n">Lx</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">Ly</span> <span class="o">=</span> <span class="n">Ly</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_total</span> <span class="o">=</span> <span class="n">Lx</span> <span class="o">*</span> <span class="n">Ly</span>
+        <span class="c1"># Build forward and inverse maps</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_to_1d</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_to_2d</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">Ly</span><span class="p">):</span>
+            <span class="n">xs</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="n">Lx</span><span class="p">)</span> <span class="k">if</span> <span class="n">y</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">range</span><span class="p">(</span><span class="n">Lx</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">xs</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_to_1d</span><span class="p">[(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)]</span> <span class="o">=</span> <span class="n">idx</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_to_2d</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+                <span class="n">idx</span> <span class="o">+=</span> <span class="mi">1</span></div>
+
+
+<div class="viewcode-block" id="SnakeMapper.to_1d">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SnakeMapper.to_1d">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_1d</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">y</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Convert 2D coordinates to snake-path 1D index."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">Lx</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">y</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">Ly</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">x</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">y</span><span class="si">}</span><span class="s2">) out of range Lx=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">Lx</span><span class="si">}</span><span class="s2">, Ly=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">Ly</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_1d</span><span class="p">[(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)]</span></div>
+
+
+<div class="viewcode-block" id="SnakeMapper.to_2d">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SnakeMapper.to_2d">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_2d</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Convert snake-path 1D index to 2D coordinates."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">idx</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"idx=</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2"> out of range [0, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_total</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_to_2d</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_sites</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_total</span>
+
+<div class="viewcode-block" id="SnakeMapper.nn_pairs_1d">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.SnakeMapper.nn_pairs_1d">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">nn_pairs_1d</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""All nearest-neighbour pairs on the 2D lattice as 1D snake indices.</span>
+
+<span class="sd">        Returns a list of (i, j) with i &lt; j covering both x- and y-direction</span>
+<span class="sd">        bonds.</span>
+<span class="sd">        """</span>
+        <span class="n">pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Lx</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">Ly</span><span class="p">):</span>
+                <span class="n">i</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_1d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+                <span class="c1"># right neighbour</span>
+                <span class="k">if</span> <span class="n">x</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">Lx</span><span class="p">:</span>
+                    <span class="n">j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_1d</span><span class="p">(</span><span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+                    <span class="n">pairs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="nb">min</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)))</span>
+                <span class="c1"># up neighbour</span>
+                <span class="k">if</span> <span class="n">y</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">Ly</span><span class="p">:</span>
+                    <span class="n">j</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_1d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                    <span class="n">pairs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="nb">min</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">pairs</span><span class="p">))</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="dmrg_2d">
+<a class="viewcode-back" href="../../../api/many_body.html#quantx_engine.contrib.many_body.dmrg_2d">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">dmrg_2d</span><span class="p">(</span>
+    <span class="n">Lx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">Ly</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">J</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">bond_dim</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
+    <span class="n">sweeps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"heisenberg"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DMRG2DResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Ground-state DMRG for the 2D Heisenberg (or Ising) model on an Lx×Ly lattice.</span>
+
+<span class="sd">    Uses a snake-path MPS mapping to convert the 2D problem to 1D, then runs</span>
+<span class="sd">    two-site DMRG sweeps.  The 1D chain has ``Lx*Ly`` sites with both</span>
+<span class="sd">    short-range (adjacent on snake path) and medium-range (cross-row) bonds.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    Lx, Ly : int</span>
+<span class="sd">        Lattice dimensions.  Total sites = Lx * Ly.</span>
+<span class="sd">    J : float</span>
+<span class="sd">        Exchange coupling (positive = antiferromagnetic).</span>
+<span class="sd">    bond_dim : int</span>
+<span class="sd">        Maximum MPS bond dimension (controls accuracy).</span>
+<span class="sd">    sweeps : int</span>
+<span class="sd">        Number of DMRG sweeps (left-to-right + right-to-left = one sweep).</span>
+<span class="sd">    model : {'heisenberg', 'ising'}</span>
+<span class="sd">        'heisenberg': H = J Σ (XX + YY + ZZ)</span>
+<span class="sd">        'ising': H = -J Σ ZZ</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    DMRG2DResult</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">Lx</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">Ly</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"Lx and Ly must be ≥ 1"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">bond_dim</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"bond_dim must be ≥ 1"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">sweeps</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="s2">"sweeps must be ≥ 1"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">model</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"heisenberg"</span><span class="p">,</span> <span class="s2">"ising"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">ManyBodyError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"model must be 'heisenberg' or 'ising', got </span><span class="si">{</span><span class="n">model</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="n">mapper</span> <span class="o">=</span> <span class="n">SnakeMapper</span><span class="p">(</span><span class="n">Lx</span><span class="p">,</span> <span class="n">Ly</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">mapper</span><span class="o">.</span><span class="n">n_sites</span>
+    <span class="n">pairs</span> <span class="o">=</span> <span class="n">mapper</span><span class="o">.</span><span class="n">nn_pairs_1d</span><span class="p">()</span>
+
+    <span class="c1"># For small systems (n ≤ 12), use exact diagonalisation</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="mi">12</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_dmrg_2d_exact</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">Lx</span><span class="p">,</span> <span class="n">Ly</span><span class="p">,</span> <span class="n">sweeps</span><span class="p">)</span>
+
+    <span class="c1"># For larger systems use the variational MPS approach</span>
+    <span class="k">return</span> <span class="n">_dmrg_2d_variational</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">,</span> <span class="n">sweeps</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">Lx</span><span class="p">,</span> <span class="n">Ly</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_build_2d_hamiltonian</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+                          <span class="n">J</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build the full 2^n × 2^n Hamiltonian for exact diagonalisation."""</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">**</span> <span class="n">n</span>
+    <span class="n">H</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">dim</span><span class="p">,</span> <span class="n">dim</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">)</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">model</span> <span class="o">==</span> <span class="s2">"heisenberg"</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"X"</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">,</span> <span class="s2">"Z"</span><span class="p">):</span>
+                <span class="n">Pi</span> <span class="o">=</span> <span class="n">_single_site_op</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+                <span class="n">Pj</span> <span class="o">=</span> <span class="n">_single_site_op</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+                <span class="n">H</span> <span class="o">+=</span> <span class="n">J</span> <span class="o">*</span> <span class="p">(</span><span class="n">Pi</span> <span class="o">@</span> <span class="n">Pj</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># ising</span>
+            <span class="n">Zi</span> <span class="o">=</span> <span class="n">_single_site_op</span><span class="p">(</span><span class="s2">"Z"</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+            <span class="n">Zj</span> <span class="o">=</span> <span class="n">_single_site_op</span><span class="p">(</span><span class="s2">"Z"</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+            <span class="n">H</span> <span class="o">+=</span> <span class="o">-</span><span class="n">J</span> <span class="o">*</span> <span class="p">(</span><span class="n">Zi</span> <span class="o">@</span> <span class="n">Zj</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">H</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dmrg_2d_exact</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">Lx</span><span class="p">,</span> <span class="n">Ly</span><span class="p">,</span> <span class="n">sweeps</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DMRG2DResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Exact diagonalisation fallback for small lattices (n ≤ 12 sites)."""</span>
+    <span class="n">H</span> <span class="o">=</span> <span class="n">_build_2d_hamiltonian</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="n">H</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">DMRG2DResult</span><span class="p">(</span>
+        <span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">,</span>
+        <span class="n">bond_dims</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">truncation_error</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">Lx</span><span class="o">=</span><span class="n">Lx</span><span class="p">,</span>
+        <span class="n">Ly</span><span class="o">=</span><span class="n">Ly</span><span class="p">,</span>
+        <span class="n">n_sweeps</span><span class="o">=</span><span class="n">sweeps</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dmrg_2d_variational</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">,</span> <span class="n">sweeps</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">Lx</span><span class="p">,</span> <span class="n">Ly</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DMRG2DResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Variational MPS-DMRG for larger systems."""</span>
+    <span class="c1"># Build MPO tensors for the Hamiltonian</span>
+    <span class="c1"># Use a simple two-site DMRG with random initial MPS</span>
+    <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+    <span class="c1"># Initialise random MPS with given bond_dim</span>
+    <span class="c1"># Tensor shapes: [phys, bond_left, bond_right]</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># physical dimension (spin-1/2)</span>
+    <span class="n">mps</span> <span class="o">=</span> <span class="n">_random_mps</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
+    <span class="n">mps</span> <span class="o">=</span> <span class="n">_normalise_mps</span><span class="p">(</span><span class="n">mps</span><span class="p">)</span>
+
+    <span class="n">energy</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">trunc_error</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+    <span class="c1"># Two-site DMRG sweeps</span>
+    <span class="k">for</span> <span class="n">sweep</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">sweeps</span><span class="p">):</span>
+        <span class="c1"># Left-to-right sweep</span>
+        <span class="k">for</span> <span class="n">site</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">theta</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">trunc</span> <span class="o">=</span> <span class="n">_two_site_update</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">)</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">e</span>
+            <span class="n">trunc_error</span> <span class="o">+=</span> <span class="n">trunc</span>
+            <span class="n">mps</span> <span class="o">=</span> <span class="n">_update_mps_left</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">)</span>
+        <span class="c1"># Right-to-left sweep</span>
+        <span class="k">for</span> <span class="n">site</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">):</span>
+            <span class="n">theta</span><span class="p">,</span> <span class="n">e</span><span class="p">,</span> <span class="n">trunc</span> <span class="o">=</span> <span class="n">_two_site_update</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">pairs</span><span class="p">,</span> <span class="n">J</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">)</span>
+            <span class="n">energy</span> <span class="o">=</span> <span class="n">e</span>
+            <span class="n">trunc_error</span> <span class="o">+=</span> <span class="n">trunc</span>
+            <span class="n">mps</span> <span class="o">=</span> <span class="n">_update_mps_right</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">)</span>
+
+    <span class="n">bond_dims</span> <span class="o">=</span> <span class="p">[</span><span class="n">mps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+
+    <span class="k">return</span> <span class="n">DMRG2DResult</span><span class="p">(</span>
+        <span class="n">energy</span><span class="o">=</span><span class="n">energy</span><span class="p">,</span>
+        <span class="n">bond_dims</span><span class="o">=</span><span class="n">bond_dims</span><span class="p">,</span>
+        <span class="n">truncation_error</span><span class="o">=</span><span class="n">trunc_error</span><span class="p">,</span>
+        <span class="n">Lx</span><span class="o">=</span><span class="n">Lx</span><span class="p">,</span>
+        <span class="n">Ly</span><span class="o">=</span><span class="n">Ly</span><span class="p">,</span>
+        <span class="n">n_sweeps</span><span class="o">=</span><span class="n">sweeps</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_random_mps</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">d</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Random orthonormalised MPS. Tensors: [d, chi_l, chi_r]."""</span>
+    <span class="n">tensors</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">chi_l</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="n">chi_r</span> <span class="o">=</span> <span class="n">bond_dim</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">1</span>
+        <span class="n">chi_r</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">chi_r</span><span class="p">,</span> <span class="n">d</span> <span class="o">**</span> <span class="nb">min</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">chi_r</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">chi_r</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="n">d</span><span class="p">,</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">chi_r</span><span class="p">))</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">rng</span><span class="o">.</span><span class="n">standard_normal</span><span class="p">((</span><span class="n">d</span><span class="p">,</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">chi_r</span><span class="p">))</span>
+        <span class="n">tensors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">A</span><span class="p">)</span>
+        <span class="n">chi_l</span> <span class="o">=</span> <span class="n">chi_r</span>
+    <span class="k">return</span> <span class="n">tensors</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalise_mps</span><span class="p">(</span><span class="n">mps</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Left-normalise MPS (QR sweep)."""</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">mps</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>  <span class="c1"># [d, chi_l, chi_r]</span>
+        <span class="n">d</span><span class="p">,</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">chi_r</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span>
+        <span class="n">mat</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">d</span> <span class="o">*</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">chi_r</span><span class="p">)</span>
+        <span class="n">Q</span><span class="p">,</span> <span class="n">R</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span><span class="n">mat</span><span class="p">)</span>
+        <span class="n">new_chi</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">mps</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">Q</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">new_chi</span><span class="p">)</span>
+        <span class="c1"># R: [new_chi, old_chi_r]; mps[i+1]: [d, old_chi_r, chi_r_next]</span>
+        <span class="c1"># Contract over the shared bond (j = old_chi_r) → [d, new_chi, chi_r_next]</span>
+        <span class="n">mps</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,kjl-&gt;kil"</span><span class="p">,</span> <span class="n">R</span><span class="p">,</span> <span class="n">mps</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="c1"># Normalise last tensor</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">mps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">norm</span> <span class="o">&gt;</span> <span class="mf">1e-12</span><span class="p">:</span>
+        <span class="n">mps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">norm</span>
+    <span class="k">return</span> <span class="n">mps</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_expect_op</span><span class="p">(</span><span class="n">mps</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">op</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Mean-field expectation ⟨op⟩ on site k (no environment tensors).</span>
+
+<span class="sd">    Uses the raw MPS tensor at site k, ignoring environment factors.  This is</span>
+<span class="sd">    exact when k is the boundary of a left-/right-canonical MPS and the rest</span>
+<span class="sd">    of the chain is orthogonally compressed, but is used here as a</span>
+<span class="sd">    mean-field approximation for non-adjacent bond contributions during the</span>
+<span class="sd">    two-site DMRG update.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mps : list of np.ndarray</span>
+<span class="sd">        MPS tensors, each with shape [d, chi_l, chi_r].</span>
+<span class="sd">    k : int</span>
+<span class="sd">        Site index.</span>
+<span class="sd">    op : np.ndarray</span>
+<span class="sd">        Physical-space operator, shape [d, d].</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    float</span>
+<span class="sd">        Real part of the (unnormalized) expectation value.</span>
+<span class="sd">    """</span>
+    <span class="n">T</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">k</span><span class="p">]</span>  <span class="c1"># [d, chi_l, chi_r]</span>
+    <span class="c1"># ⟨op⟩ = Σ_{s,p,l,r} T*[s,l,r] op[s,p] T[p,l,r] / ||T||²</span>
+    <span class="n">val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"slr,sp,plr-&gt;"</span><span class="p">,</span> <span class="n">T</span><span class="o">.</span><span class="n">conj</span><span class="p">(),</span> <span class="n">op</span><span class="p">,</span> <span class="n">T</span><span class="p">)))</span>
+    <span class="n">norm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"slr,slr-&gt;"</span><span class="p">,</span> <span class="n">T</span><span class="o">.</span><span class="n">conj</span><span class="p">(),</span> <span class="n">T</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">val</span> <span class="o">/</span> <span class="n">norm</span> <span class="k">if</span> <span class="n">norm</span> <span class="o">&gt;</span> <span class="mf">1e-14</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_two_site_update</span><span class="p">(</span>
+    <span class="n">mps</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="n">site</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">pairs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]],</span>
+    <span class="n">J</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">model</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">bond_dim</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Apply local Hamiltonian to two-site tensor and return updated theta, energy, error."""</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">site</span><span class="p">]</span>       <span class="c1"># [d, chi_l, chi_m]</span>
+    <span class="n">B</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">site</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>   <span class="c1"># [d, chi_m, chi_r]</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">chi_l</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">chi_r</span> <span class="o">=</span> <span class="n">B</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+    <span class="c1"># Two-site wavefunction: A[p_i, chi_l, chi_m] × B[p_j, chi_m, chi_r]</span>
+    <span class="c1"># einsum "ijk,lkm-&gt;iljm": i=p_i, j=chi_l, k=chi_m(shared), l=p_j, m=chi_r</span>
+    <span class="c1"># result shape [p_i, chi_l, p_j, chi_r], reshaped to [d*chi_l, d*chi_r]</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ijk,lkm-&gt;iljm"</span><span class="p">,</span> <span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">d</span> <span class="o">*</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">d</span> <span class="o">*</span> <span class="n">chi_r</span><span class="p">)</span>
+
+    <span class="c1"># Build local Hamiltonian, including non-adjacent snake-mapped bonds.</span>
+    <span class="c1"># For each NN bond (bi, bj):</span>
+    <span class="c1">#   • both endpoints in {site, site+1}  → direct 2-site interaction term</span>
+    <span class="c1">#   • one endpoint in window            → mean-field: replace partner with ⟨op⟩</span>
+    <span class="c1">#   • neither endpoint in window        → skip</span>
+    <span class="n">h_local</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">d</span> <span class="o">*</span> <span class="n">d</span><span class="p">,</span> <span class="n">d</span> <span class="o">*</span> <span class="n">d</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">I2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">win</span> <span class="o">=</span> <span class="p">{</span><span class="n">site</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="n">site</span> <span class="o">+</span> <span class="mi">1</span><span class="p">:</span> <span class="mi">1</span><span class="p">}</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">bi</span><span class="p">,</span> <span class="n">bj</span><span class="p">)</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">:</span>
+        <span class="n">i_loc</span> <span class="o">=</span> <span class="n">win</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">bi</span><span class="p">)</span>
+        <span class="n">j_loc</span> <span class="o">=</span> <span class="n">win</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">bj</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">i_loc</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">j_loc</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>  <span class="c1"># bond entirely outside the two-site window</span>
+
+        <span class="k">if</span> <span class="n">i_loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">j_loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Both endpoints in window → standard 2-site interaction</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="o">==</span> <span class="s2">"heisenberg"</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">op_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"X"</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">,</span> <span class="s2">"Z"</span><span class="p">):</span>
+                    <span class="n">P</span> <span class="o">=</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">op_name</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">i_loc</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">h_local</span> <span class="o">+=</span> <span class="n">J</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">h_local</span> <span class="o">+=</span> <span class="n">J</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">P</span><span class="p">,</span> <span class="n">P</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># ising</span>
+                <span class="n">Z</span> <span class="o">=</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"Z"</span><span class="p">]</span>
+                <span class="n">h_local</span> <span class="o">+=</span> <span class="o">-</span><span class="n">J</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">Z</span><span class="p">,</span> <span class="n">Z</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># One endpoint in window, one outside → mean-field single-site term</span>
+            <span class="n">loc_idx</span> <span class="o">=</span> <span class="n">i_loc</span> <span class="k">if</span> <span class="n">i_loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">j_loc</span>
+            <span class="n">ext_site</span> <span class="o">=</span> <span class="n">bj</span> <span class="k">if</span> <span class="n">i_loc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">bi</span>
+            <span class="k">if</span> <span class="n">model</span> <span class="o">==</span> <span class="s2">"heisenberg"</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">op_name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"X"</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">,</span> <span class="s2">"Z"</span><span class="p">):</span>
+                    <span class="n">exp_val</span> <span class="o">=</span> <span class="n">_expect_op</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">ext_site</span><span class="p">,</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">op_name</span><span class="p">])</span>
+                    <span class="n">P_loc</span> <span class="o">=</span> <span class="n">J</span> <span class="o">*</span> <span class="n">exp_val</span> <span class="o">*</span> <span class="n">_PAULI</span><span class="p">[</span><span class="n">op_name</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">loc_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="n">h_local</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">P_loc</span><span class="p">,</span> <span class="n">I2</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">h_local</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">I2</span><span class="p">,</span> <span class="n">P_loc</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>  <span class="c1"># ising</span>
+                <span class="n">exp_val</span> <span class="o">=</span> <span class="n">_expect_op</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">ext_site</span><span class="p">,</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"Z"</span><span class="p">])</span>
+                <span class="n">P_loc</span> <span class="o">=</span> <span class="o">-</span><span class="n">J</span> <span class="o">*</span> <span class="n">exp_val</span> <span class="o">*</span> <span class="n">_PAULI</span><span class="p">[</span><span class="s2">"Z"</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">loc_idx</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">h_local</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">P_loc</span><span class="p">,</span> <span class="n">I2</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">h_local</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">I2</span><span class="p">,</span> <span class="n">P_loc</span><span class="p">)</span>
+
+    <span class="c1"># Effective environment (identity for simplicity — single-site approximation)</span>
+    <span class="n">H_eff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">chi_l</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">h_local</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">chi_r</span><span class="p">)))</span>
+
+    <span class="c1"># Reshape theta for eigenvalue problem</span>
+    <span class="n">theta_vec</span> <span class="o">=</span> <span class="n">theta</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">dim_eff</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">theta_vec</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">H_eff</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">dim_eff</span><span class="p">:</span>
+        <span class="c1"># Shapes don't match — skip this site</span>
+        <span class="k">return</span> <span class="n">theta</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span>
+
+    <span class="c1"># Energy via Rayleigh quotient</span>
+    <span class="n">energy</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">theta_vec</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="n">H_eff</span> <span class="o">@</span> <span class="n">theta_vec</span><span class="p">))</span>
+
+    <span class="c1"># SVD truncation</span>
+    <span class="n">theta_mat</span> <span class="o">=</span> <span class="n">theta</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">d</span> <span class="o">*</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">d</span> <span class="o">*</span> <span class="n">chi_r</span><span class="p">)</span>
+    <span class="n">U</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Vh</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">theta_mat</span><span class="p">,</span> <span class="n">full_matrices</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">keep</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">bond_dim</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">S</span><span class="p">))</span>
+    <span class="n">trunc_error</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">S</span><span class="p">[</span><span class="n">keep</span><span class="p">:]</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
+    <span class="n">S</span> <span class="o">=</span> <span class="n">S</span><span class="p">[:</span><span class="n">keep</span><span class="p">]</span>
+    <span class="n">U</span> <span class="o">=</span> <span class="n">U</span><span class="p">[:,</span> <span class="p">:</span><span class="n">keep</span><span class="p">]</span>
+    <span class="n">Vh</span> <span class="o">=</span> <span class="n">Vh</span><span class="p">[:</span><span class="n">keep</span><span class="p">,</span> <span class="p">:]</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="n">U</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Vh</span><span class="p">),</span> <span class="n">energy</span><span class="p">,</span> <span class="n">trunc_error</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_update_mps_left</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">theta_svd</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Update MPS tensors after left-to-right sweep."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">theta_svd</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">mps</span>
+    <span class="n">U</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Vh</span> <span class="o">=</span> <span class="n">theta_svd</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">chi_l</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">site</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">chi_new</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+
+    <span class="n">mps</span><span class="p">[</span><span class="n">site</span><span class="p">]</span> <span class="o">=</span> <span class="n">U</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">chi_new</span><span class="p">)</span>
+    <span class="c1"># Absorb S Vh into right tensor</span>
+    <span class="n">SV</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">S</span><span class="p">)</span> <span class="o">@</span> <span class="n">Vh</span>  <span class="c1"># [chi_new, d*chi_r]</span>
+    <span class="n">chi_r</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">site</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">mps</span><span class="p">[</span><span class="n">site</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">SV</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">chi_new</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">chi_r</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mps</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_update_mps_right</span><span class="p">(</span><span class="n">mps</span><span class="p">,</span> <span class="n">site</span><span class="p">,</span> <span class="n">theta_svd</span><span class="p">,</span> <span class="n">bond_dim</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Update MPS tensors after right-to-left sweep."""</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">theta_svd</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">mps</span>
+    <span class="n">U</span><span class="p">,</span> <span class="n">S</span><span class="p">,</span> <span class="n">Vh</span> <span class="o">=</span> <span class="n">theta_svd</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">chi_l</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">site</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">chi_r</span> <span class="o">=</span> <span class="n">mps</span><span class="p">[</span><span class="n">site</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">chi_new</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>
+
+    <span class="c1"># Absorb U S into left tensor</span>
+    <span class="n">US</span> <span class="o">=</span> <span class="n">U</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">S</span><span class="p">)</span>  <span class="c1"># [d*chi_l, chi_new]</span>
+    <span class="n">mps</span><span class="p">[</span><span class="n">site</span><span class="p">]</span> <span class="o">=</span> <span class="n">US</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">chi_l</span><span class="p">,</span> <span class="n">chi_new</span><span class="p">)</span>
+    <span class="n">mps</span><span class="p">[</span><span class="n">site</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">Vh</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">chi_new</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">chi_r</span><span class="p">)</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">mps</span>
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

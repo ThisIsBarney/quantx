@@ -1,0 +1,1046 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="./">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="genindex.html"><link rel="search" title="Search" href="search.html"><link rel="prev" title="REST API" href="rest_api.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>Changelog - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="rest_api.html">REST API</a></li>
+<li class="toctree-l1 current current-page"><a class="current reference internal" href="#">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/blob/master/docs/source/changelog.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/edit/master/docs/source/changelog.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="changelog">
+<h1>Changelog<a class="headerlink" href="#changelog" title="Link to this heading">¶</a></h1>
+<p>The full changelog is maintained in the repository root at <code class="docutils literal notranslate"><span class="pre">CHANGELOG.md</span></code>.</p>
+<section id="id1">
+<h2>Changelog<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<p>All notable changes to <strong>quantx-engine</strong> are documented here.</p>
+<p>The format follows <a class="reference external" href="https://keepachangelog.com/en/1.0.0/">Keep a Changelog</a> and this project
+adheres to <a class="reference external" href="https://semver.org/spec/v2.0.0.html">Semantic Versioning</a>: <code class="docutils literal notranslate"><span class="pre">MAJOR.MINOR.PATCH</span></code>.
+While the version is 0.x, a MINOR increment may change the API; PATCH increments are
+bug-fixes and packaging corrections only.</p>
+<hr class="docutils" />
+<section id="unreleased">
+<h3><a class="reference external" href="https://github.com/ThisIsBarney/quantx/compare/v0.2.0...HEAD">Unreleased</a><a class="headerlink" href="#unreleased" title="Link to this heading">¶</a></h3>
+<section id="added">
+<h4>Added<a class="headerlink" href="#added" title="Link to this heading">¶</a></h4>
+<ul>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">quantx_engine.u1_circuit</span></code></strong> (M16): qubit circuits that conserve the number of |1&gt;s,
+run on the block-sparse engine with that number as an exact charge, so no truncation
+moves the state out of its sector. <code class="docutils literal notranslate"><span class="pre">from_qasm</span></code> reads OpenQASM 2 (one register, the
+qelib1 one- and two-qubit gates) and fuses the gates, greedily, into one- and two-qubit
+gates that conserve the charge: a transpiled circuit breaks the symmetry gate by gate
+but keeps it cluster by cluster. The X gates that prepare the initial state become its
+bitstring. <code class="docutils literal notranslate"><span class="pre">run</span></code> gives &lt;Z_i&gt;, the squared norm and the largest bond at chosen points,
+and <code class="docutils literal notranslate"><span class="pre">measure_points</span></code> turns positions in the source circuit into them. The Quantum
+Advantage Tracker’s 120-qubit SU(2) hadron circuits (32,072 gates) fuse into 8,290 in
+half a second, and the end of every Trotter step maps to a fused position. Gated against
+an independent state vector to 1e-10 (<code class="docutils literal notranslate"><span class="pre">test_u1_circuit.py</span></code>, and the C++ contract
+test); the C API entry point is <code class="docutils literal notranslate"><span class="pre">qx_u1_circuit</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">quantx_engine.mps</span></code></strong> (M11): matrix-product states that stay in the engine between
+calls, under a handle, so a ground state, one-site operators, time evolution and
+measurements chain without the state passing through Python or JSON. It covers:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">mps.ground_state</span></code> (DMRG in a symmetry sector) and <code class="docutils literal notranslate"><span class="pre">mps.product</span></code>;</p></li>
+<li><p>in place, on <code class="docutils literal notranslate"><span class="pre">MPS</span></code>: <code class="docutils literal notranslate"><span class="pre">copy</span></code>, <code class="docutils literal notranslate"><span class="pre">apply</span></code> (a one-site diagonal operator such as S^z, n or
+the double occupancy, not renormalized) and <code class="docutils literal notranslate"><span class="pre">evolve</span></code> (two-site TDVP in real or
+imaginary time, under any model of the same length and local space, so a quench too);</p></li>
+<li><p>the measurements <code class="docutils literal notranslate"><span class="pre">overlap</span></code>, <code class="docutils literal notranslate"><span class="pre">matrix_elements</span></code> (&lt;a| O_j |b&gt; at every site), <code class="docutils literal notranslate"><span class="pre">expect</span></code>
+and <code class="docutils literal notranslate"><span class="pre">energy</span></code>.</p></li>
+</ul>
+<p>The engine frees a state when its object is collected. Gated against an independent
+exact diagonalisation (<code class="docutils literal notranslate"><span class="pre">test_mps.py</span></code>): ground states, static and dynamical correlation
+functions, a quench’s Loschmidt amplitude, imaginary time and Hubbard densities, to
+1e-7 (1e-10 for energies a state is an eigenstate of). The C API entry point is <code class="docutils literal notranslate"><span class="pre">qx_mps</span></code>.
+<code class="docutils literal notranslate"><span class="pre">notebooks/engine/12_mps_dynamics.ipynb</span></code> chains these calls for the XXZ chain’s dynamical
+spin correlation. It checks the result against an exact diagonalisation, then draws its
+light cone and S(k, ω).</p>
+</li>
+<li><p><strong>Operators that change the charge</strong>, in <code class="docutils literal notranslate"><span class="pre">quantx_engine.mps</span></code> (M11):</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Sp</span></code> and <code class="docutils literal notranslate"><span class="pre">Sm</span></code> (S^+ and S^-) on the spin chains;</p></li>
+<li><p>on the Hubbard chains and lattices, <code class="docutils literal notranslate"><span class="pre">Cdag_up</span></code>, <code class="docutils literal notranslate"><span class="pre">C_up</span></code>, <code class="docutils literal notranslate"><span class="pre">Cdag_dn</span></code> and <code class="docutils literal notranslate"><span class="pre">C_dn</span></code>, which
+carry the Jordan–Wigner parity of the sites to their left, and <code class="docutils literal notranslate"><span class="pre">Sp</span></code> = c†_up c_dn and
+<code class="docutils literal notranslate"><span class="pre">Sm</span></code>.</p></li>
+</ul>
+<p>They are listed in <code class="docutils literal notranslate"><span class="pre">mps.CHARGED_OPERATORS</span></code>. Any other one-site operator can be given as
+its matrix, with an optional string of phases. <code class="docutils literal notranslate"><span class="pre">apply</span></code> moves the state to the new
+sector, which <code class="docutils literal notranslate"><span class="pre">MPS.sector</span></code> reports, and <code class="docutils literal notranslate"><span class="pre">matrix_elements</span></code> pairs states in two sectors the
+operator connects. Green’s functions chain as the S^z correlations do. Gated against
+exact diagonalisation (<code class="docutils literal notranslate"><span class="pre">test_mps.py</span></code>) to 1e-7: the XXZ spin-flip correlation, and the
+Hubbard particle and hole Green’s functions for both spins, against an ED whose
+Jordan–Wigner signs differ from the engine’s. The C API’s <code class="docutils literal notranslate"><span class="pre">apply</span></code> and <code class="docutils literal notranslate"><span class="pre">expect</span></code> take
+<code class="docutils literal notranslate"><span class="pre">&quot;matrix&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;string&quot;</span></code>. <code class="docutils literal notranslate"><span class="pre">notebooks/engine/13_spin_charge_separation.ipynb</span></code> removes an
+electron from the half-filled Hubbard chain and follows the hole: its charge moves out
+like a free particle, and its spin stays inside the cone of the spinon velocity from the
+Bethe ansatz.</p>
+</li>
+<li><p><strong>The gradient of an HVA circuit by the adjoint method</strong> (M13): <code class="docutils literal notranslate"><span class="pre">hva.circuit(...,</span> <span class="pre">gradient=True)</span></code> also returns dE/dθ for every angle, laid out as the angles. One pass
+back through the circuit gives it: each step measures ⟨λ_k| G_k |ψ_k⟩ for its
+generator, then undoes the step on both states. The generator is a bond group’s
+hopping, built as an MPO with its Jordan–Wigner strings, or the on-site term. It
+needs no circuit per angle, where central differences need two. Its cost in energy
+evaluations is set by bond dimensions, since H|ψ⟩ needs up to the Hamiltonian’s MPO
+bond dimension times ψ’s. On a 16-site chain at max_bond 128 it is 32 at 2 layers and
+6 at 32 layers, against 12 and 192 for central differences
+(<code class="docutils literal notranslate"><span class="pre">benchmarks/hva_gradient_cost.py</span></code>). <code class="docutils literal notranslate"><span class="pre">gradient_truncation_error</span></code> and
+<code class="docutils literal notranslate"><span class="pre">gradient_return_error</span></code> say what truncation cost it. Gated against the exact gradient
+of an independent state vector (chain, ladder, strip, cylinder; to 1e-10 from product
+starts with <code class="docutils literal notranslate"><span class="pre">svd=&quot;direct&quot;</span></code>) and against central differences of the circuit’s own
+energy, to 1e-8 (<code class="docutils literal notranslate"><span class="pre">test_hva_gradient.py</span></code>). <code class="docutils literal notranslate"><span class="pre">qx_hva_circuit</span></code> takes <code class="docutils literal notranslate"><span class="pre">&quot;gradient&quot;:</span> <span class="pre">true</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">svd=&quot;direct&quot;</span></code> for HVA circuits</strong>: every split by a direct SVD instead of the Gram
+matrix’s eigensolve. The default Gram route leaves Schmidt values below √ε of the
+largest imprecise, so a circuit whose bonds fill up carries a rounding noise of up to
+~1e-10 in its energy (1.2e-10 measured on Linux, for a 6-site chain of three layers).
+The direct route keeps the energy smooth in the angles to ~1e-14, at up to twice the
+cost.</p></li>
+</ul>
+</section>
+</section>
+<section id="id2">
+<h3><a class="reference external" href="https://github.com/ThisIsBarney/quantx/releases/tag/v0.2.0">0.2.0</a> — 2026-10-18<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h3>
+<p>The engine’s finite-temperature methods reach Python, the experimental modules move to
+<code class="docutils literal notranslate"><span class="pre">quantx_engine.contrib</span></code>, and a quick start checks three engine features against exact
+answers on every platform wheel. The move keeps the old import paths working until
+0.4.0, with a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code>.</p>
+<section id="id3">
+<h4>Added<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">quantx_engine.thermal</span></code></strong> (M6): finite temperature from Python, by ancilla
+purification on the block-sparse engine, for the XXZ, spin-1 Heisenberg and Hubbard
+chains. <code class="docutils literal notranslate"><span class="pre">thermal.statics</span></code> gives the energy, the local values, the correlations and
+the susceptibility from β = 0 up; <code class="docutils literal notranslate"><span class="pre">thermal.structure_factor(...).spectrum()</span></code> the
+dynamical structure factor S(k, ω, T); and
+<code class="docutils literal notranslate"><span class="pre">thermal.current_correlation(...).conductivity()</span></code> the optical conductivity
+Re σ(ω, T), by the Kubo formula. The ensemble is grand canonical, and the conventions
+are those of <code class="docutils literal notranslate"><span class="pre">quantx_engine.models</span></code> (S = σ/2). It is gated against an exact
+diagonalisation of the whole Hilbert space (<code class="docutils literal notranslate"><span class="pre">test_thermal_ed.py</span></code>): every quantity to
+the second-order Trotter error of the steps, below 1e-3 at the default step 0.05 and
+falling by 4 at half the step, and the Fourier transforms against Lehmann sums to
+1e-8. J1-J2 and the Hubbard lattices have no purified form in the engine yet, and are
+refused. The C API entry point is <code class="docutils literal notranslate"><span class="pre">qx_thermal</span></code>.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">examples/quickstart.py</span></code></strong> (gate G1): a Hubbard ground state, a finite-temperature
+spectral function and an HVA circuit in twenty lines, each asserted against an exact
+answer computed without the engine. CI runs it on every wheel it builds, in a clean
+environment, and <code class="docutils literal notranslate"><span class="pre">test_quickstart.py</span></code> recomputes the three answers (two exact
+diagonalisations and a state vector) and checks the example against them.</p></li>
+</ul>
+</section>
+<section id="changed">
+<h4>Changed<a class="headerlink" href="#changed" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong>The experimental modules moved to <code class="docutils literal notranslate"><span class="pre">quantx_engine.contrib</span></code></strong> (M7). The 63 modules
+outside the engine API (all but <code class="docutils literal notranslate"><span class="pre">engine</span></code>, <code class="docutils literal notranslate"><span class="pre">dmrg</span></code>, <code class="docutils literal notranslate"><span class="pre">models</span></code>, <code class="docutils literal notranslate"><span class="pre">hva</span></code>, <code class="docutils literal notranslate"><span class="pre">thermal</span></code>, <code class="docutils literal notranslate"><span class="pre">tdvp</span></code> and
+<code class="docutils literal notranslate"><span class="pre">structure_factor</span></code>) import as <code class="docutils literal notranslate"><span class="pre">quantx_engine.contrib.&lt;module&gt;</span></code>, and
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">quantx_engine</span></code> loads the engine API alone. <code class="docutils literal notranslate"><span class="pre">__all__</span></code> lists <code class="docutils literal notranslate"><span class="pre">Engine</span></code>,
+<code class="docutils literal notranslate"><span class="pre">CircuitError</span></code>, <code class="docutils literal notranslate"><span class="pre">QuantXNativeUnavailable</span></code>, <code class="docutils literal notranslate"><span class="pre">backend_info</span></code> and <code class="docutils literal notranslate"><span class="pre">__version__</span></code>, so
+<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">quantx_engine</span> <span class="pre">import</span> <span class="pre">*</span></code> no longer brings the experimental names. The old paths
+work until 0.4.0, with a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code> at the caller’s line:
+<code class="docutils literal notranslate"><span class="pre">import</span> <span class="pre">quantx_engine.qec</span></code> gives <code class="docutils literal notranslate"><span class="pre">quantx_engine.contrib.qec</span></code> itself, and each of the 369
+names the package exported (<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">quantx_engine</span> <span class="pre">import</span> <span class="pre">SurfaceCode</span></code>) resolves to the
+object it named. To migrate, import from the contrib module:
+<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">quantx_engine.contrib.qec</span> <span class="pre">import</span> <span class="pre">SurfaceCode</span></code>. The PennyLane device’s entry point
+moved with it; <code class="docutils literal notranslate"><span class="pre">qml.device(&quot;quantx.statevector&quot;)</span></code> is unchanged.</p></li>
+</ul>
+</section>
+<section id="fixed">
+<h4>Fixed<a class="headerlink" href="#fixed" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong>The finite-temperature current correlator ⟨J(t) J⟩_β lost weight at every time
+step.</strong> It applied J to the evolving state and compressed the product back to the
+bond cap, with a first sweep that truncated against a part of the chain that was not
+orthonormal: 3e-2 on a 4-site Hubbard chain at the exact bond dimension, whatever the
+step. It is now contracted exactly, as an MPO sandwich, and compressing an applied
+MPO (as for J|ψ⟩, also in the zero-temperature conductivity) brings the state to
+canonical form before it truncates.</p></li>
+<li><p>The zero-temperature dynamics entry points (<code class="docutils literal notranslate"><span class="pre">qx_tdvp_evolve</span></code>, <code class="docutils literal notranslate"><span class="pre">qx_spectral</span></code>,
+<code class="docutils literal notranslate"><span class="pre">qx_loschmidt</span></code> and <code class="docutils literal notranslate"><span class="pre">qx_conductivity</span></code>) accept the type <code class="docutils literal notranslate"><span class="pre">&quot;xxz&quot;</span></code>, as their error messages
+always said; they took only <code class="docutils literal notranslate"><span class="pre">&quot;heisenberg&quot;</span></code>.</p></li>
+<li><p>The exact Lieb–Wu energies in <code class="docutils literal notranslate"><span class="pre">docs/hubbard_lieb_wu.csv</span></code>, against which the Hubbard
+chain’s DMRG is compared, were off in the 7th digit (1.8e-7, 3.6e-7 and 7.3e-7 at
+U = 2, 4 and 8): the trapezoid rule that made them left an endpoint error from the
+integrand’s slope at ω = 0. They are made with Simpson’s rule now, and
+<code class="docutils literal notranslate"><span class="pre">test_reference_data.py</span></code> recomputes them independently, with the strong-coupling
+series checking its normalisation. The DMRG energies at N = 64 sit 8.4e-5, 4.6e-5
+and 2.6e-5 from them.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="first-public-release">
+<h3><a class="reference external" href="https://github.com/ThisIsBarney/quantx/releases/tag/v0.1.0">0.1.0</a> — 2026-10-16  <em>(first public release)</em><a class="headerlink" href="#first-public-release" title="Link to this heading">¶</a></h3>
+<p>The first version published to PyPI. The native engine is now installable; what it can
+do from Python is gated against exact references.</p>
+<p>Version numbers restart here, so the API stability guarantee of the internal 1.0.0
+(below) does not carry over: as a 0.x release, any minor version may change the API.</p>
+<section id="id4">
+<h4>Added<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h4>
+<ul>
+<li><p><strong>Platform wheels that carry the native engine</strong> (#194). There is one
+<code class="docutils literal notranslate"><span class="pre">py3-none-&lt;platform&gt;</span></code> wheel per platform, which serves every CPython 3: Linux x86_64
+(manylinux_2_28), macOS arm64 and x86_64 (10.15+), and Windows AMD64. Any other
+platform installs the sdist, a pure-Python wheel that says so.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">quantx_engine.models</span></code> and <code class="docutils literal notranslate"><span class="pre">dmrg.ground_state</span></code></strong> (#196): ground states of the XXZ,
+J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains in a chosen symmetry sector on the
+block-sparse engine. They are gated against exact diagonalisation to 1e-10.</p></li>
+<li><p><strong><code class="docutils literal notranslate"><span class="pre">models.HubbardLattice</span></code> and <code class="docutils literal notranslate"><span class="pre">quantx_engine.hva</span></code></strong> (#197): Hubbard ground states on
+ladders, strips and cylinders, and fermionic HVA circuits on the same lattices
+(<code class="docutils literal notranslate"><span class="pre">hva.circuit</span></code>, <code class="docutils literal notranslate"><span class="pre">hva.layout</span></code>), returning energy, entanglement entropies and
+truncation. The circuits are gated against an independent state vector: to 1e-10
+from a product start, and to 1e-6 from the default U = 0 start, which carries its
+DMRG preparation’s residual (measured at about 1e-8). Lattice DMRG is gated against
+exact diagonalisation on the geometries where the fermion signs are physical.</p></li>
+<li><p><strong>The native engine these sit on</strong>, built since the internal 1.0.0 (the git history
+has the details):</p>
+<ul class="simple">
+<li><p>two-site DMRG on a block-sparse MPS that conserves U(1) or packed U(1)×U(1)
+charges, for any charge-conserving MPO, with a DMRG3S mixer;</p></li>
+<li><p>SU(2)-symmetric DMRG for Heisenberg chains of any spin;</p></li>
+<li><p>TDVP and TEBD;</p></li>
+<li><p>finite-temperature statics and dynamics by purification;</p></li>
+<li><p>Hubbard chains, ladders and cylinders, and fermionic HVA circuits;</p></li>
+<li><p>a matrix-free Lindblad solver;</p></li>
+<li><p>optional cuSOLVER acceleration in source builds.</p></li>
+</ul>
+<p>Only part of it is reachable from Python so far; the README lists which.</p>
+</li>
+</ul>
+</section>
+<section id="id5">
+<h4>Changed<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong>The README and the PyPI page lead with the engine:</strong> what it does from Python,
+and what each capability is checked against. Everything else in the package is
+marked experimental (M7). The package description now says the same thing.</p></li>
+</ul>
+</section>
+<section id="id6">
+<h4>Fixed<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h4>
+<ul>
+<li><p>Shots on the native circuit backend were sampled from one random pass, so any
+randomness in the circuit made them unanimous.</p>
+<ul class="simple">
+<li><p><strong>Measured circuits:</strong> a measured Bell pair read <code class="docutils literal notranslate"><span class="pre">00</span></code> on all 1000 shots, as did
+every QASM program that ends in <code class="docutils literal notranslate"><span class="pre">measure</span></code>. When every measurement is terminal and
+no noise acts, the shots are now sampled from the state before measurement: the
+exact distribution, still from one pass. An observable with X or Y on a measured
+qubit then reads 0.</p></li>
+<li><p><strong>Noise:</strong> <code class="docutils literal notranslate"><span class="pre">|1&gt;</span></code> under <code class="docutils literal notranslate"><span class="pre">DepolarizingNoise(0.5)</span></code> read all 0 or all 1, never the
+mixed state’s 3/4. With noise, or a measurement that later gates depend on, every
+shot now runs its own pass. This costs one full pass per shot, and
+<code class="docutils literal notranslate"><span class="pre">expectation_exact</span></code> becomes the average over the passes.</p></li>
+<li><p>With <code class="docutils literal notranslate"><span class="pre">shots</span> <span class="pre">=</span> <span class="pre">0</span></code>, a noisy circuit still returns one random pass.</p></li>
+<li><p>The classical register and the returned state come from one pass.</p></li>
+<li><p>A noise channel at strength zero counts as no noise.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max_shots</span></code> (1 000 000) is now enforced, not only advertised. A shot count must be
+a non-negative integer, and one past 2³² is refused: 2³² + 10 used to wrap to 10
+shots.</p></li>
+<li><p>Amplitude damping runs in place, which makes the noisy per-shot path about three
+times faster (a 16-qubit GHZ circuit at 1000 shots: 47 s, from about 150 s).</p></li>
+</ul>
+</li>
+<li><p>The native depolarizing channel applied a random Pauli with probability p, which is
+(1 − p)ρ + (p/3)(XρX + YρY + ZρZ). <code class="docutils literal notranslate"><span class="pre">DepolarizingNoise</span></code> documents, and the
+density-matrix simulator in <code class="docutils literal notranslate"><span class="pre">primitives</span></code> runs, (1 − p)ρ + p·I/2. The native backend
+now runs the documented channel too. Two readers of the parameter were also wrong:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">hardware.calibration_to_noise_model</span></code> passed a gate’s average infidelity r as p.
+It now inverts the channel for the gate’s arity: p = 2r for a one-qubit gate, and
+about 5r/6 for a two-qubit gate, where the channel acts on both qubits. The worst
+gate sets p.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">noise_char</span></code>’s process-tomography fit used the average-gate factor (d + 1)/d where
+the depolarizing parameter needs d²/(d² − 1). It read <code class="docutils literal notranslate"><span class="pre">DepolarizingNoise(0.1)</span></code>
+back as 0.1125.</p></li>
+</ul>
+<p>PEC’s <code class="docutils literal notranslate"><span class="pre">from_depolarizing</span></code> keeps its Pauli-error parameter and now says how it maps:
+<code class="docutils literal notranslate"><span class="pre">DepolarizingNoise(p)</span></code> is <code class="docutils literal notranslate"><span class="pre">noise_prob</span> <span class="pre">=</span> <span class="pre">3p/4</span></code>.</p>
+</li>
+<li><p>The native circuit backend returned ⟨Y⟩ with the wrong sign, exact and sampled
+alike: <code class="docutils literal notranslate"><span class="pre">S</span> <span class="pre">H|0⟩</span> <span class="pre">=</span> <span class="pre">|+i⟩</span></code> read −1. Every observable with an odd number of Y factors
+had its sign flipped, and so did any energy with such terms (a real Hamiltonian has
+none). The statevector, Lindblad and MPS code already used the right sign.</p></li>
+<li><p>The Python simulators read noise models on their own terms. The density-matrix
+simulator in <code class="docutils literal notranslate"><span class="pre">primitives</span></code> (behind <code class="docutils literal notranslate"><span class="pre">Estimator</span></code>, <code class="docutils literal notranslate"><span class="pre">Sampler</span></code> and <code class="docutils literal notranslate"><span class="pre">noise_vqe</span></code>):</p>
+<ul class="simple">
+<li><p>put noise only on the qubits a gate acts on;</p></li>
+<li><p>never applied <code class="docutils literal notranslate"><span class="pre">ReadoutNoise</span></code>’s bit flip;</p></li>
+<li><p>took T1 decay from <code class="docutils literal notranslate"><span class="pre">noise_metadata</span></code>, and only when <code class="docutils literal notranslate"><span class="pre">amplitude_damping_gamma</span></code> was
+unset.</p></li>
+</ul>
+<p>The dynamic-circuit simulator treated amplitude damping as a depolarizing
+probability and dropped every other channel. Now all three simulators apply the
+same channels, resolved by the new <code class="docutils literal notranslate"><span class="pre">noise.native_channels</span></code>: every qubit after every
+gate, as on the native backend, each rate clamped to [0, 1] as the backend clamps it.
+For dynamic circuits, <code class="docutils literal notranslate"><span class="pre">DynamicResult.metadata</span></code> reports <code class="docutils literal notranslate"><span class="pre">noise_channels</span></code> in place of
+the old <code class="docutils literal notranslate"><span class="pre">p_noise</span></code>. The density-matrix simulator now applies gates by contracting over
+their qubits, and one-qubit channels block by block, instead of multiplying
+2^n x 2^n matrices: a two-layer, 8-qubit circuit with depolarizing and T1 noise
+takes 0.2 s, from 1.2 s, although every qubit now gets the noise.</p>
+</li>
+<li><p>The block engine’s lossless centre moves padded every bond they crossed with
+zero-weight states, so reported bond dimensions were inflated (a circuit capped at
+<code class="docutils literal notranslate"><span class="pre">max_bond</span></code> 4 reported 10). Energies and entropies were unaffected (#197).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CompositeNoise</span></code> no longer drops a channel silently (#198). <code class="docutils literal notranslate"><span class="pre">to_dict()</span></code> merged its
+models with <code class="docutils literal notranslate"><span class="pre">dict.update</span></code>, so a second <code class="docutils literal notranslate"><span class="pre">noise</span></code>-kind model replaced the first:
+<code class="docutils literal notranslate"><span class="pre">CompositeNoise([DepolarizingNoise(...),</span> <span class="pre">ThermalRelaxationNoise(...),</span> <span class="pre">ReadoutNoise(...)])</span></code>
+ran depolarizing + bit-flip with no T1 channel. Two models that emit the same key
+(<code class="docutils literal notranslate"><span class="pre">noise</span></code>, <code class="docutils literal notranslate"><span class="pre">depolarizing_prob</span></code>, <code class="docutils literal notranslate"><span class="pre">amplitude_damping_gamma</span></code>, <code class="docutils literal notranslate"><span class="pre">noise_metadata</span></code>, …) now
+raise <code class="docutils literal notranslate"><span class="pre">NoiseModelError</span></code> when the composite is built, including through <code class="docutils literal notranslate"><span class="pre">+</span></code>. So does
+a custom model’s <code class="docutils literal notranslate"><span class="pre">noise</span></code> selector of kind <code class="docutils literal notranslate"><span class="pre">depolarizing</span></code> or <code class="docutils literal notranslate"><span class="pre">amplitude_damping</span></code> that
+carries a value, next to <code class="docutils literal notranslate"><span class="pre">DepolarizingNoise</span></code> or <code class="docutils literal notranslate"><span class="pre">AmplitudeDampingNoise</span></code>: the keys
+differ, but the backend writes the selector’s value into the same field.
+Depolarizing and amplitude damping still combine with one <code class="docutils literal notranslate"><span class="pre">noise</span></code>-kind model.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ReadoutNoise</span></code>’s docstring said its bit flip follows each measurement. The backend
+applies it to every qubit after every gate except measurements, so it is gate noise,
+not a readout error (#198).</p></li>
+<li><p>Eigen 3.4.0’s BDCSVD can read out of bounds on some rank-deficient blocks. It crashed
+the DMRG’s single-site splits, which since use JacobiSVD, and the HVA centre moves
+before #197. The wheels build without LAPACKE, so the two-site DMRG, the dense DMRG,
+TDVP and the SU(2) DMRG still ran it. The build now applies Eigen 3.4.1’s two BDCSVD
+fixes to Eigen 3.4.0: that case reports a numerical issue, and the total-deflation
+test uses |col0|. The engine redoes any SVD that BDCSVD reports as failed with
+JacobiSVD, and a new test (<code class="docutils literal notranslate"><span class="pre">qx_robust_svd_test</span></code>) drives that path. The build stays on
+3.4.0, the version the engine was validated with, and takes only these two fixes from
+3.4.1.</p></li>
+<li><p>The DMRG C API failed on every odd-length Heisenberg chain, with an error that blamed
+<code class="docutils literal notranslate"><span class="pre">max_bond</span></code> (#196).</p></li>
+<li><p>An unknown model type in <code class="docutils literal notranslate"><span class="pre">qx_dmrg_sweep</span></code> silently ran as an empty Hamiltonian and
+returned E = 0; it is now an error (#196).</p></li>
+<li><p>At n = 2 the five DMRG and dynamics entry points of the C API returned an internal
+error from inside the block engine, which needs n ≥ 3. <code class="docutils literal notranslate"><span class="pre">qx_dmrg_sweep</span></code> and
+<code class="docutils literal notranslate"><span class="pre">qx_tdvp_evolve</span></code> now answer 2-site chains with their dense and non-block solvers;
+the other three refuse with a message that says why (#195).</p></li>
+<li><p>Four tutorial notebooks called APIs that do not exist, and printed claims their own
+outputs contradicted (#195).</p></li>
+</ul>
+</section>
+<section id="known-issues">
+<h4>Known issues<a class="headerlink" href="#known-issues" title="Link to this heading">¶</a></h4>
+<ul class="simple">
+<li><p><strong>The VQE showcase’s measured bond dimensions are overstated.</strong> They were recorded
+before the #197 fix, so they are upper bounds. This covers <code class="docutils literal notranslate"><span class="pre">docs/universal_mpo.md</span></code>,
+the <code class="docutils literal notranslate"><span class="pre">chi_used</span></code> columns of <code class="docutils literal notranslate"><span class="pre">docs/vqe_hubbard.csv</span></code>, <code class="docutils literal notranslate"><span class="pre">vqe_entanglement.csv</span></code> and
+<code class="docutils literal notranslate"><span class="pre">vqe_ladder.csv</span></code>, and the <code class="docutils literal notranslate"><span class="pre">chi</span></code> column of <code class="docutils literal notranslate"><span class="pre">vqe_width.csv</span></code>. Configured χ (caps, the
+lossless budgets in <code class="docutils literal notranslate"><span class="pre">vqe_barren_size.csv</span></code>) are unaffected, and so are the energies,
+entropies and truncation errors.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="development-history-before-the-first-public-release">
+<h3>Development history before the first public release<a class="headerlink" href="#development-history-before-the-first-public-release" title="Link to this heading">¶</a></h3>
+<p>The versions below were internal milestones of the project. None was published to PyPI,
+and none has a release tag (an old <code class="docutils literal notranslate"><span class="pre">v0.2.0</span></code> tag, which published nothing, was deleted
+before the first release). They are kept as a record of what was built and when.
+Version numbering restarts at 0.1.0 with the first public release.</p>
+<section id="internal-2026-05-25-phase-2-complete">
+<h4>1.0.0 (internal) — 2026-05-25  <em>(Phase 2 complete)</em><a class="headerlink" href="#internal-2026-05-25-phase-2-complete" title="Link to this heading">¶</a></h4>
+<section id="id7">
+<h5>Added<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><strong>M167</strong> — Benchmark suite: <code class="docutils literal notranslate"><span class="pre">benchmarks/compare_backends.py</span></code> covering Lanczos,
+Lindblad, DMRG, TEBD, VQE, QEC; JSON result artefacts; <code class="docutils literal notranslate"><span class="pre">benchmarks-ci.yml</span></code> workflow.</p></li>
+<li><p><strong>M168</strong> — GPU wheels: <code class="docutils literal notranslate"><span class="pre">quantx-engine[gpu]</span></code> optional extra (CuPy-cuda12x runtime);
+<code class="docutils literal notranslate"><span class="pre">gpu-wheels.yml</span></code> CI with mock unit tests and optional self-hosted CUDA smoke test.</p></li>
+<li><p><strong>M169</strong> — IBM Quantum real hardware round-trip: <code class="docutils literal notranslate"><span class="pre">IBMHardwareBackend.submit</span></code>,
+<code class="docutils literal notranslate"><span class="pre">HardwareJob.fetch</span></code>; <code class="docutils literal notranslate"><span class="pre">examples/ibm_hardware_demo.py</span></code>; 17 mock tests;
+<code class="docutils literal notranslate"><span class="pre">hardware-tests.yml</span></code> CI with gated real-hardware job (requires <code class="docutils literal notranslate"><span class="pre">QISKIT_IBM_TOKEN</span></code>).</p></li>
+<li><p><strong>M170</strong> — <code class="docutils literal notranslate"><span class="pre">quantx_engine.ibm</span></code>: <code class="docutils literal notranslate"><span class="pre">circuit_to_qasm3</span></code>, QASM 3.0 serialisation
+compatible with Qiskit 1.x Primitives V2.</p></li>
+<li><p><strong>M171</strong> — Community infrastructure: GitHub issue templates (bug, feature, question),
+PR template, <code class="docutils literal notranslate"><span class="pre">SECURITY.md</span></code> (private vulnerability reporting), <code class="docutils literal notranslate"><span class="pre">CODE_OF_CONDUCT_CN.md</span></code>
+(Contributor Covenant 2.1), expanded <code class="docutils literal notranslate"><span class="pre">CONTRIBUTING.md</span></code>, <code class="docutils literal notranslate"><span class="pre">docs/add_your_hamiltonian.md</span></code>
+contributor guide.</p></li>
+<li><p><strong>M172</strong> — v1.0.0 release: version bump to 1.0.0, <code class="docutils literal notranslate"><span class="pre">release.yml</span></code> automated PyPI +
+GitHub Release workflow, API stability guarantee (see table below).</p></li>
+</ul>
+</section>
+<section id="api-stability-guarantee-v1-0">
+<h5>API stability guarantee (v1.0+)<a class="headerlink" href="#api-stability-guarantee-v1-0" title="Link to this heading">¶</a></h5>
+<p>The following symbols are <strong>stable</strong> and will not change without a deprecation cycle:</p>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Module</p></th>
+<th class="head"><p>Stable symbols</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">backend_info</span></code>, <code class="docutils literal notranslate"><span class="pre">Engine</span></code>, <code class="docutils literal notranslate"><span class="pre">LanczosSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">MPSSimulator</span></code>, <code class="docutils literal notranslate"><span class="pre">CachedDMRG</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.gpu</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GpuBackend</span></code>, <code class="docutils literal notranslate"><span class="pre">GpuStatevector</span></code>, <code class="docutils literal notranslate"><span class="pre">gpu_info</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.hardware</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">HardwareJob</span></code>, <code class="docutils literal notranslate"><span class="pre">HardwareJobResult</span></code>, <code class="docutils literal notranslate"><span class="pre">IBMHardwareBackend</span></code>, <code class="docutils literal notranslate"><span class="pre">HardwareError</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.ibm</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">circuit_to_qasm3</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.lindblad</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LindbladSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">JumpOperator</span></code>, <code class="docutils literal notranslate"><span class="pre">LindbladResult</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.tensor_network</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">MPO</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.pennylane_plugin</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">QuantXDevice</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Internal modules (prefixed <code class="docutils literal notranslate"><span class="pre">_</span></code>) and modules noted as experimental are exempt.</p>
+</section>
+</section>
+<hr class="docutils" />
+<section id="internal-2026-05-25-phase-2-track-m-sdk-usability">
+<h4>0.4.0 (internal) — 2026-05-25  <em>(Phase 2 Track M — SDK Usability)</em><a class="headerlink" href="#internal-2026-05-25-phase-2-track-m-sdk-usability" title="Link to this heading">¶</a></h4>
+<section id="id8">
+<h5>Added<a class="headerlink" href="#id8" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><strong>M162</strong> — Test coverage hardening: skip rate reduced to &lt; 1.4 % (49 / 3 699).
+Pure-Python Lindblad steady-state solver via Kronecker-product superoperator + SVD
+null-space; <code class="docutils literal notranslate"><span class="pre">JumpOperator(matrix)</span></code> matrix-form constructor; <code class="docutils literal notranslate"><span class="pre">GroverWalk</span></code> uniform
+initial superposition; <code class="docutils literal notranslate"><span class="pre">GKPState.norm()</span></code>, <code class="docutils literal notranslate"><span class="pre">CatQubit.energy_spectrum()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">TeleportationResult.fidelity</span></code>, <code class="docutils literal notranslate"><span class="pre">QLDPCCode.n</span></code> alias, <code class="docutils literal notranslate"><span class="pre">MBQC.fidelity()</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ZNEMitigator</span></code> alias, <code class="docutils literal notranslate"><span class="pre">RichardsonExtrapolation</span></code> class.</p></li>
+<li><p><strong>M163</strong> — GitHub Pages documentation site: Sphinx + Furo theme, <code class="docutils literal notranslate"><span class="pre">sphinx-apidoc</span></code>
+auto-generated API stubs, <code class="docutils literal notranslate"><span class="pre">docs.yml</span></code> CI workflow, <code class="docutils literal notranslate"><span class="pre">sphinx_copybutton</span></code> extension,
+Docs badge in README.</p></li>
+<li><p><strong>M164</strong> — Binder + Colab notebook compatibility: <code class="docutils literal notranslate"><span class="pre">notebooks/requirements.txt</span></code>,
+Colab/Binder launch badges in all 7 tutorial notebooks (01–07), pip-install guard
+cells, <code class="docutils literal notranslate"><span class="pre">scripts/add_notebook_badges.py</span></code> with dynamic branch detection,
+updated <code class="docutils literal notranslate"><span class="pre">notebooks-ci.yml</span></code>.</p></li>
+<li><p><strong>M165</strong> — Interactive examples gallery: two new tutorial notebooks —
+<code class="docutils literal notranslate"><span class="pre">08_quantum_walk_algorithms.ipynb</span></code> (DTQW, CTQW, Grover walk, walk spectrum)
+and <code class="docutils literal notranslate"><span class="pre">09_noise_mitigation.ipynb</span></code> (ZNE, Richardson extrapolation, PEC, RB).</p></li>
+<li><p><strong>M166</strong> — Versioned changelog + deprecation policy (this release):
+<code class="docutils literal notranslate"><span class="pre">CHANGELOG.md</span></code> updated, <code class="docutils literal notranslate"><span class="pre">quantx_engine._deprecation.warn()</span></code> helper,
+<code class="docutils literal notranslate"><span class="pre">&#64;deprecated</span></code> decorator, version bumped to <strong>0.4.0</strong>.</p></li>
+</ul>
+</section>
+<section id="id9">
+<h5>Fixed<a class="headerlink" href="#id9" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">GroverWalk.run()</span></code>: AttributeError <code class="docutils literal notranslate"><span class="pre">_walk._walk_op</span></code> → <code class="docutils literal notranslate"><span class="pre">_walk._W</span></code> (Codex P1).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">KrylovEvolver.run()</span></code>: off-by-one <code class="docutils literal notranslate"><span class="pre">n_steps+1</span></code> → <code class="docutils literal notranslate"><span class="pre">n_steps</span></code> snapshot count (Codex P2).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">sphinx-build</span> <span class="pre">|</span> <span class="pre">tail</span> <span class="pre">-20</span></code> masked Sphinx exit code; replaced with explicit <code class="docutils literal notranslate"><span class="pre">if</span> <span class="pre">!</span></code> guard.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">add_notebook_badges.py</span></code>: hardcoded <code class="docutils literal notranslate"><span class="pre">BRANCH</span> <span class="pre">=</span> <span class="pre">&quot;master&quot;</span></code> → dynamic <code class="docutils literal notranslate"><span class="pre">_default_branch()</span></code>.</p></li>
+</ul>
+</section>
+<section id="deprecated">
+<h5>Deprecated<a class="headerlink" href="#deprecated" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p>Nothing deprecated in this release.  The deprecation framework (<code class="docutils literal notranslate"><span class="pre">_deprecation.warn</span></code>)
+is in place for future cycles.</p></li>
+</ul>
+</section>
+</section>
+<hr class="docutils" />
+<section id="internal-2026-05-20">
+<h4>0.2.0 (internal) — 2026-05-20<a class="headerlink" href="#internal-2026-05-20" title="Link to this heading">¶</a></h4>
+<section id="id10">
+<h5>Added<a class="headerlink" href="#id10" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">quantx_engine.__version__</span></code> attribute (<code class="docutils literal notranslate"><span class="pre">&quot;0.2.0&quot;</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QuantXNativeUnavailable</span></code> exception — raised by <code class="docutils literal notranslate"><span class="pre">Engine.__init__</span></code> with a helpful message when
+the native C++ shared library cannot be loaded; all pure-Python modules remain functional</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CVaRQAOAResult</span></code> top-level export — <code class="docutils literal notranslate"><span class="pre">qaoa_optim.QAOAResult</span></code> renamed in the public namespace
+to avoid clash with the earlier <code class="docutils literal notranslate"><span class="pre">advanced_chemistry.QAOAResult</span></code> (M79)</p></li>
+<li><p><strong>M127</strong> packaging fixes: <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> optional-dependency groups <code class="docutils literal notranslate"><span class="pre">gpu</span></code>, <code class="docutils literal notranslate"><span class="pre">distributed</span></code>, <code class="docutils literal notranslate"><span class="pre">all</span></code></p></li>
+</ul>
+</section>
+<section id="id11">
+<h5>Fixed<a class="headerlink" href="#id11" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">test_advanced_chemistry_importable_from_package</span></code> now passes — <code class="docutils literal notranslate"><span class="pre">quantx_engine.QAOAResult</span></code>
+correctly refers to <code class="docutils literal notranslate"><span class="pre">advanced_chemistry.QAOAResult</span></code> (M79), not <code class="docutils literal notranslate"><span class="pre">qaoa_optim.QAOAResult</span></code> (M115)</p></li>
+<li><p>All 16 Codex review findings on PRs #111–#118 fixed (bosonic codes, magic-state distillation,
+bicycle LDPC, McLachlan dynamics, QSP/QSVT, OO-VQE, MBQC, dynamical decoupling)</p></li>
+</ul>
+</section>
+<section id="physics-modules-added-in-this-release-cycle-m119m126">
+<h5>Physics modules added in this release cycle (M119–M126)<a class="headerlink" href="#physics-modules-added-in-this-release-cycle-m119m126" title="Link to this heading">¶</a></h5>
+<div class="table-wrapper colwidths-auto docutils container">
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Milestone</p></th>
+<th class="head"><p>Module</p></th>
+<th class="head"><p>Key classes</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>M119</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">bosonic.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">CatQubit</span></code>, <code class="docutils literal notranslate"><span class="pre">GKPState</span></code>, <code class="docutils literal notranslate"><span class="pre">GKPDecoder</span></code>, <code class="docutils literal notranslate"><span class="pre">CatNoiseModel</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>M120</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ft_tgate.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FTTGate</span></code>, <code class="docutils literal notranslate"><span class="pre">FTCCXGate</span></code>, <code class="docutils literal notranslate"><span class="pre">MagicStateFactory</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>M121</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">qldpc.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ClassicalCode</span></code>, <code class="docutils literal notranslate"><span class="pre">HypergraphProductCode</span></code>, <code class="docutils literal notranslate"><span class="pre">LDPCDecoder</span></code>, <code class="docutils literal notranslate"><span class="pre">bicycle_code</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>M122</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">mclachlan.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">McLachlanSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">McLachlanResult</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>M123</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">qsp_qsvt.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">QSPAnglesFinder</span></code>, <code class="docutils literal notranslate"><span class="pre">QSVTCircuit</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>M124</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">oovqe.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">OOVQESolver</span></code>, <code class="docutils literal notranslate"><span class="pre">OOVQEResult</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>M125</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">mbqc.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GraphState</span></code>, <code class="docutils literal notranslate"><span class="pre">MBQCPattern</span></code>, <code class="docutils literal notranslate"><span class="pre">MeasurementResult</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>M126</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dyndecouple.py</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DynamicalDecoupling</span></code>, <code class="docutils literal notranslate"><span class="pre">QuantumMemory</span></code>, <code class="docutils literal notranslate"><span class="pre">DDSequence</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<hr class="docutils" />
+<section id="internal-2026-04-15">
+<h4>0.1.0 (internal) — 2026-04-15<a class="headerlink" href="#internal-2026-04-15" title="Link to this heading">¶</a></h4>
+<p>First internal milestone, covering M1–M118 (133 modules, 2000+ tests).</p>
+<section id="track-a-core-engine-m1m20">
+<h5>Track A — Core engine (M1–M20)<a class="headerlink" href="#track-a-core-engine-m1m20" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">Engine</span></code> — ctypes bridge to native C++ quantum simulation runtime</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CircuitError</span></code>, <code class="docutils literal notranslate"><span class="pre">ParseError</span></code>, OpenQASM 3.0 parser (<code class="docutils literal notranslate"><span class="pre">parse_qasm_to_circuit</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NoiseModel</span></code>, <code class="docutils literal notranslate"><span class="pre">DepolarizingNoise</span></code>, <code class="docutils literal notranslate"><span class="pre">AmplitudeDampingNoise</span></code>, <code class="docutils literal notranslate"><span class="pre">ThermalRelaxationNoise</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ReadoutNoise</span></code>, <code class="docutils literal notranslate"><span class="pre">CompositeNoise</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBMQuantumBackend</span></code>, <code class="docutils literal notranslate"><span class="pre">circuit_to_qasm3</span></code></p></li>
+</ul>
+</section>
+<section id="track-b-chemistry-vqe-m21m50">
+<h5>Track B — Chemistry &amp; VQE (M21–M50)<a class="headerlink" href="#track-b-chemistry-vqe-m21m50" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">PauliTerm</span></code>, <code class="docutils literal notranslate"><span class="pre">PauliHamiltonian</span></code>, <code class="docutils literal notranslate"><span class="pre">jordan_wigner</span></code>, <code class="docutils literal notranslate"><span class="pre">MolecularVQE</span></code> (<code class="docutils literal notranslate"><span class="pre">chemistry.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">UCCSDSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">ADAPTVQESolver</span></code>, <code class="docutils literal notranslate"><span class="pre">QAOASolver</span></code>, <code class="docutils literal notranslate"><span class="pre">QITESolver</span></code> (<code class="docutils literal notranslate"><span class="pre">advanced_chemistry.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FidelityQuantumKernel</span></code>, <code class="docutils literal notranslate"><span class="pre">QSVM</span></code> (<code class="docutils literal notranslate"><span class="pre">quantum_kernel.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QuantumNeuralNetwork</span></code>, <code class="docutils literal notranslate"><span class="pre">QuantumClassifier</span></code> (<code class="docutils literal notranslate"><span class="pre">qml.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SPSAOptimizer</span></code>, <code class="docutils literal notranslate"><span class="pre">NoiseAwareVQE</span></code> (<code class="docutils literal notranslate"><span class="pre">noise_vqe.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ExcitedStateVQE</span></code>, <code class="docutils literal notranslate"><span class="pre">detect_conical_intersections</span></code> (<code class="docutils literal notranslate"><span class="pre">excited_state.py</span></code>)</p></li>
+</ul>
+</section>
+<section id="track-c-qec-fault-tolerance-m51m70">
+<h5>Track C — QEC &amp; Fault tolerance (M51–M70)<a class="headerlink" href="#track-c-qec-fault-tolerance-m51m70" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">RepetitionCode</span></code>, <code class="docutils literal notranslate"><span class="pre">SurfaceCode</span></code>, <code class="docutils literal notranslate"><span class="pre">MWPMDecoder</span></code>, <code class="docutils literal notranslate"><span class="pre">LogicalErrorSimulator</span></code> (<code class="docutils literal notranslate"><span class="pre">qec.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LogicalQubit</span></code>, <code class="docutils literal notranslate"><span class="pre">MagicStateDistillery</span></code>, <code class="docutils literal notranslate"><span class="pre">FaultTolerantCircuit</span></code> (<code class="docutils literal notranslate"><span class="pre">fault_tolerant.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">GateSequence</span></code>, <code class="docutils literal notranslate"><span class="pre">SolovayKitaev</span></code>, <code class="docutils literal notranslate"><span class="pre">TCountOptimizer</span></code> (<code class="docutils literal notranslate"><span class="pre">clifford_t.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">StabilizerState</span></code>, <code class="docutils literal notranslate"><span class="pre">CliffordSimulator</span></code> (<code class="docutils literal notranslate"><span class="pre">clifford_sim.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FTQCPipeline</span></code>, <code class="docutils literal notranslate"><span class="pre">threshold_curve</span></code> (<code class="docutils literal notranslate"><span class="pre">ftqc_pipeline.py</span></code>)</p></li>
+</ul>
+</section>
+<section id="track-d-simulation-backends-m71m90">
+<h5>Track D — Simulation backends (M71–M90)<a class="headerlink" href="#track-d-simulation-backends-m71m90" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">MPS</span></code>, <code class="docutils literal notranslate"><span class="pre">MPO</span></code>, <code class="docutils literal notranslate"><span class="pre">TEBD</span></code>, <code class="docutils literal notranslate"><span class="pre">DMRG</span></code> (<code class="docutils literal notranslate"><span class="pre">tensor_network.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LanczosSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">ArnoldiSolver</span></code> (<code class="docutils literal notranslate"><span class="pre">lanczos.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">MPSSimulator</span></code>, <code class="docutils literal notranslate"><span class="pre">CachedDMRG</span></code> (<code class="docutils literal notranslate"><span class="pre">mps_simulator.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">GpuStatevector</span></code>, <code class="docutils literal notranslate"><span class="pre">GpuLanczos</span></code> (<code class="docutils literal notranslate"><span class="pre">gpu.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DistributedSVSimulator</span></code> via Ray (<code class="docutils literal notranslate"><span class="pre">ray_sim.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">LindbladSolver</span></code> (<code class="docutils literal notranslate"><span class="pre">lindblad.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">KrylovEvolver</span></code> (<code class="docutils literal notranslate"><span class="pre">spectral.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TDMRGSolver</span></code> (<code class="docutils literal notranslate"><span class="pre">tdmrg.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">TrotterSimulator</span></code> (<code class="docutils literal notranslate"><span class="pre">trotter.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SYKModel</span></code>, <code class="docutils literal notranslate"><span class="pre">compute_otoc</span></code> (<code class="docutils literal notranslate"><span class="pre">many_body.py</span></code>)</p></li>
+</ul>
+</section>
+<section id="track-eg-algorithms-protocols-m91m118">
+<h5>Track E–G — Algorithms &amp; Protocols (M91–M118)<a class="headerlink" href="#track-eg-algorithms-protocols-m91m118" title="Link to this heading">¶</a></h5>
+<ul class="simple">
+<li><p>Quantum walk algorithms: <code class="docutils literal notranslate"><span class="pre">DiscreteTimeWalk</span></code>, <code class="docutils literal notranslate"><span class="pre">ContinuousTimeQuantumWalk</span></code>, <code class="docutils literal notranslate"><span class="pre">GroverWalk</span></code></p></li>
+<li><p>Quantum network: <code class="docutils literal notranslate"><span class="pre">QuantumRepeater</span></code>, <code class="docutils literal notranslate"><span class="pre">EntanglementSwapper</span></code>, <code class="docutils literal notranslate"><span class="pre">BellPairGenerator</span></code></p></li>
+<li><p>Communication protocols: <code class="docutils literal notranslate"><span class="pre">BB84Protocol</span></code>, <code class="docutils literal notranslate"><span class="pre">E91Protocol</span></code>, <code class="docutils literal notranslate"><span class="pre">TeleportationProtocol</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">BlochFloquetSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">FloquetSystem</span></code> (<code class="docutils literal notranslate"><span class="pre">floquet.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">GRAPESolver</span></code>, <code class="docutils literal notranslate"><span class="pre">CRABSolver</span></code> (<code class="docutils literal notranslate"><span class="pre">optimal_control.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CrossEntropyBenchmarking</span></code> (<code class="docutils literal notranslate"><span class="pre">xeb.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">StateTomography</span></code>, <code class="docutils literal notranslate"><span class="pre">ProcessTomography</span></code> (<code class="docutils literal notranslate"><span class="pre">tomography.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CVaRQAOA</span></code>, <code class="docutils literal notranslate"><span class="pre">QAOALandscape</span></code> (<code class="docutils literal notranslate"><span class="pre">qaoa_optim.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QuantXSamplerV2</span></code>, <code class="docutils literal notranslate"><span class="pre">QuantXEstimatorV2</span></code> (<code class="docutils literal notranslate"><span class="pre">qiskit_compat.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CircuitWidget</span></code>, <code class="docutils literal notranslate"><span class="pre">BlochSphereWidget</span></code>, <code class="docutils literal notranslate"><span class="pre">JobMonitorWidget</span></code> (<code class="docutils literal notranslate"><span class="pre">jupyter_widgets.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RydbergSimulator</span></code> (<code class="docutils literal notranslate"><span class="pre">rydberg.py</span></code>)</p></li>
+<li><p>Pulse-level simulation: <code class="docutils literal notranslate"><span class="pre">PulseSimulator</span></code>, <code class="docutils literal notranslate"><span class="pre">DRAGWaveform</span></code> (<code class="docutils literal notranslate"><span class="pre">pulse.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NonEquilError</span></code>, <code class="docutils literal notranslate"><span class="pre">KeldyshSolver</span></code>, <code class="docutils literal notranslate"><span class="pre">KibbleZurekScaling</span></code> (<code class="docutils literal notranslate"><span class="pre">neqdyn.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">IBMHardwareBackend</span></code>, <code class="docutils literal notranslate"><span class="pre">IonQBackend</span></code>, <code class="docutils literal notranslate"><span class="pre">GoogleBackend</span></code> (<code class="docutils literal notranslate"><span class="pre">hardware.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QuantXDevice</span></code> PennyLane plugin (<code class="docutils literal notranslate"><span class="pre">pennylane_plugin.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">DynamicCircuit</span></code>, <code class="docutils literal notranslate"><span class="pre">DynamicSimulator</span></code> (<code class="docutils literal notranslate"><span class="pre">dynamic.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">HardwareTranspiler</span></code> (<code class="docutils literal notranslate"><span class="pre">transpiler.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ZNEResult</span></code>, <code class="docutils literal notranslate"><span class="pre">zne_mitigate</span></code>, <code class="docutils literal notranslate"><span class="pre">pec_mitigate</span></code> (<code class="docutils literal notranslate"><span class="pre">mitigation.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">FiniteSizeScaling</span></code>, <code class="docutils literal notranslate"><span class="pre">binder_cumulant</span></code> (<code class="docutils literal notranslate"><span class="pre">finite_size.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">SteadyStateSolver</span></code> (<code class="docutils literal notranslate"><span class="pre">quantum_channel.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">QuantumBoltzmannMachine</span></code>, <code class="docutils literal notranslate"><span class="pre">BoltzmannSampler</span></code> (<code class="docutils literal notranslate"><span class="pre">qbm.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">RBM</span></code> (<code class="docutils literal notranslate"><span class="pre">qbm.py</span></code>), <code class="docutils literal notranslate"><span class="pre">StandardRB</span></code>, <code class="docutils literal notranslate"><span class="pre">QuantumVolume</span></code> (<code class="docutils literal notranslate"><span class="pre">rb_qv.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ParameterSweep</span></code>, <code class="docutils literal notranslate"><span class="pre">grid_sweep</span></code> (<code class="docutils literal notranslate"><span class="pre">sweep.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CrosstalkModel</span></code>, <code class="docutils literal notranslate"><span class="pre">CouplingGraph</span></code> (<code class="docutils literal notranslate"><span class="pre">crosstalk.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NoiseCharacterizer</span></code> (<code class="docutils literal notranslate"><span class="pre">noise_char.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">CircuitTemplate</span></code>, <code class="docutils literal notranslate"><span class="pre">hardware_efficient_ansatz</span></code>, <code class="docutils literal notranslate"><span class="pre">uccsd_ansatz</span></code> (<code class="docutils literal notranslate"><span class="pre">templates.py</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">to_cirq</span></code>, <code class="docutils literal notranslate"><span class="pre">from_cirq</span></code>, <code class="docutils literal notranslate"><span class="pre">to_braket</span></code>, <code class="docutils literal notranslate"><span class="pre">from_braket</span></code> (<code class="docutils literal notranslate"><span class="pre">adapters.py</span></code>)</p></li>
+</ul>
+</section>
+</section>
+</section>
+</section>
+<hr class="docutils" />
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>If the above <code class="docutils literal notranslate"><span class="pre">include</span></code> directive fails (requires <code class="docutils literal notranslate"><span class="pre">myst-parser</span></code>), read
+<a class="reference external" href="https://github.com/ThisIsBarney/quantx/blob/master/CHANGELOG.md">CHANGELOG.md</a>
+directly on GitHub.</p>
+</div>
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          <a class="prev-page" href="rest_api.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">REST API</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">Changelog</a><ul>
+<li><a class="reference internal" href="#id1">Changelog</a><ul>
+<li><a class="reference internal" href="#unreleased">Unreleased</a><ul>
+<li><a class="reference internal" href="#added">Added</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#id2">0.2.0 — 2026-10-18</a><ul>
+<li><a class="reference internal" href="#id3">Added</a></li>
+<li><a class="reference internal" href="#changed">Changed</a></li>
+<li><a class="reference internal" href="#fixed">Fixed</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#first-public-release">0.1.0 — 2026-10-16  <em>(first public release)</em></a><ul>
+<li><a class="reference internal" href="#id4">Added</a></li>
+<li><a class="reference internal" href="#id5">Changed</a></li>
+<li><a class="reference internal" href="#id6">Fixed</a></li>
+<li><a class="reference internal" href="#known-issues">Known issues</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#development-history-before-the-first-public-release">Development history before the first public release</a><ul>
+<li><a class="reference internal" href="#internal-2026-05-25-phase-2-complete">1.0.0 (internal) — 2026-05-25  <em>(Phase 2 complete)</em></a><ul>
+<li><a class="reference internal" href="#id7">Added</a></li>
+<li><a class="reference internal" href="#api-stability-guarantee-v1-0">API stability guarantee (v1.0+)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#internal-2026-05-25-phase-2-track-m-sdk-usability">0.4.0 (internal) — 2026-05-25  <em>(Phase 2 Track M — SDK Usability)</em></a><ul>
+<li><a class="reference internal" href="#id8">Added</a></li>
+<li><a class="reference internal" href="#id9">Fixed</a></li>
+<li><a class="reference internal" href="#deprecated">Deprecated</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#internal-2026-05-20">0.2.0 (internal) — 2026-05-20</a><ul>
+<li><a class="reference internal" href="#id10">Added</a></li>
+<li><a class="reference internal" href="#id11">Fixed</a></li>
+<li><a class="reference internal" href="#physics-modules-added-in-this-release-cycle-m119m126">Physics modules added in this release cycle (M119–M126)</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#internal-2026-04-15">0.1.0 (internal) — 2026-04-15</a><ul>
+<li><a class="reference internal" href="#track-a-core-engine-m1m20">Track A — Core engine (M1–M20)</a></li>
+<li><a class="reference internal" href="#track-b-chemistry-vqe-m21m50">Track B — Chemistry &amp; VQE (M21–M50)</a></li>
+<li><a class="reference internal" href="#track-c-qec-fault-tolerance-m51m70">Track C — QEC &amp; Fault tolerance (M51–M70)</a></li>
+<li><a class="reference internal" href="#track-d-simulation-backends-m71m90">Track D — Simulation backends (M71–M90)</a></li>
+<li><a class="reference internal" href="#track-eg-algorithms-protocols-m91m118">Track E–G — Algorithms &amp; Protocols (M91–M118)</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="_static/documentation_options.js?v=95e61db4"></script>
+    <script src="_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

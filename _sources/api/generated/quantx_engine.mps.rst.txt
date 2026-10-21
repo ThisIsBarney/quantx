@@ -1,0 +1,26 @@
+﻿quantx\_engine.mps
+==================
+
+.. automodule:: quantx_engine.mps
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      ground_state
+      product
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      GroundState
+      MPS
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      MPSError
+   

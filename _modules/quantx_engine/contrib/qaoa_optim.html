@@ -1,0 +1,1323 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.qaoa_optim - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.contrib.qaoa_optim</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""M115: QAOA with CVaR objective — combinatorial optimisation.</span>
+
+<span class="sd">Provides a complete QAOA pipeline for combinatorial optimisation problems:</span>
+
+<span class="sd">* **CVaR-QAOA** (:class:`CVaRQAOA`) — replaces the standard ⟨H⟩ objective with</span>
+<span class="sd">  the Conditional Value-at-Risk CVaR_α, which focuses training on the best-α</span>
+<span class="sd">  fraction of measurement outcomes and significantly improves convergence.</span>
+
+<span class="sd">* **MaxCut** (:class:`MaxCutProblem`) — builds the Ising cost Hamiltonian for</span>
+<span class="sd">  graph max-cut and evaluates approximation ratios.</span>
+
+<span class="sd">* **TSP** (:class:`TSPProblem`) — encodes the Traveling Salesman Problem as a</span>
+<span class="sd">  QUBO/Ising Hamiltonian using the standard one-hot city-position encoding.</span>
+
+<span class="sd">* **Parameter landscape** (:class:`QAOALandscape`) — scans a (γ, β) grid at</span>
+<span class="sd">  depth p=1 and returns the full energy surface for visualisation and analysis.</span>
+
+<span class="sd">* **Warm-start initialisation** (:func:`warm_start_qaoa`) — returns informed</span>
+<span class="sd">  initial parameter guesses via several strategies.</span>
+
+<span class="sd">Classes</span>
+<span class="sd">-------</span>
+<span class="sd">CVaRQAOAError</span>
+<span class="sd">QAOAResult</span>
+<span class="sd">MaxCutProblem</span>
+<span class="sd">TSPProblem</span>
+<span class="sd">CVaRQAOA</span>
+<span class="sd">QAOALandscapeResult</span>
+<span class="sd">QAOALandscape</span>
+
+<span class="sd">Functions</span>
+<span class="sd">---------</span>
+<span class="sd">warm_start_qaoa</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Farhi, E., Goldstone, J. &amp; Gutmann, S. (2014). A quantum approximate</span>
+<span class="sd">       optimization algorithm. arXiv:1411.4028.</span>
+<span class="sd">       https://doi.org/10.48550/arXiv.1411.4028</span>
+
+<span class="sd">.. [2] Bravyi, S. et al. (2020). Obstacles to variational quantum optimization</span>
+<span class="sd">       from symmetry protection. *Phys. Rev. Lett.* 125, 260505.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevLett.125.260505</span>
+
+<span class="sd">.. [3] Wurtz, J. &amp; Love, P. (2021). MaxCut quantum approximate optimization</span>
+<span class="sd">       algorithm performance guarantees for p&gt;1. *Phys. Rev. A* 103, 042612.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevA.103.042612</span>
+
+<span class="sd">Physical validation</span>
+<span class="sd">-------------------</span>
+<span class="sd">QAOA p=1 on MaxCut for a 3-regular graph: approximation ratio &gt;= 0.6924</span>
+<span class="sd">[Farhi2014]. CVaR (alpha=0.25) improves the effective expected value by</span>
+<span class="sd">focusing on the best alpha-fraction of samples.</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.chemistry</span><span class="w"> </span><span class="kn">import</span> <span class="n">PauliHamiltonian</span><span class="p">,</span> <span class="n">PauliTerm</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"CVaRQAOAError"</span><span class="p">,</span>
+    <span class="s2">"QAOAResult"</span><span class="p">,</span>
+    <span class="s2">"MaxCutProblem"</span><span class="p">,</span>
+    <span class="s2">"TSPProblem"</span><span class="p">,</span>
+    <span class="s2">"CVaRQAOA"</span><span class="p">,</span>
+    <span class="s2">"QAOALandscapeResult"</span><span class="p">,</span>
+    <span class="s2">"QAOALandscape"</span><span class="p">,</span>
+    <span class="s2">"warm_start_qaoa"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="CVaRQAOAError">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOAError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CVaRQAOAError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised for invalid CVaR-QAOA requests."""</span></div>
+
+
+
+<span class="c1"># ── Helpers ───────────────────────────────────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_cost_phase</span><span class="p">(</span><span class="n">psi</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cost_diag</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply e^{-iγH_C}; H_C diagonal → phase rotation per basis state."""</span>
+    <span class="k">return</span> <span class="n">psi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">gamma</span> <span class="o">*</span> <span class="n">cost_diag</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_mixer</span><span class="p">(</span><span class="n">psi</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply ⊗_i e^{-iβX_i} (standard QAOA mixer) to state psi.</span>
+
+<span class="sd">    e^{-iβX} = [[cos β, -i sin β], [-i sin β, cos β]]</span>
+<span class="sd">    """</span>
+    <span class="n">cb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">beta</span><span class="p">)</span>
+    <span class="n">isb</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">beta</span><span class="p">)</span>
+    <span class="n">Rx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">cb</span><span class="p">,</span> <span class="n">isb</span><span class="p">],</span> <span class="p">[</span><span class="n">isb</span><span class="p">,</span> <span class="n">cb</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">n_qubits</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">psi</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n_qubits</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">Rx</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">q</span><span class="p">]])</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_qaoa_statevector</span><span class="p">(</span><span class="n">cost_diag</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                      <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Compute QAOA statevector for given (gamma, beta) parameters.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cost_diag : np.ndarray, shape (2**n,)</span>
+<span class="sd">        Cost values C(x) for each computational basis state |x⟩.</span>
+<span class="sd">    params : np.ndarray, shape (2*p,)</span>
+<span class="sd">        Concatenated [γ_1, …, γ_p, β_1, …, β_p].</span>
+<span class="sd">    n_qubits : int</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray, shape (2**n,) complex</span>
+<span class="sd">    """</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">params</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">gammas</span> <span class="o">=</span> <span class="n">params</span><span class="p">[:</span><span class="n">p</span><span class="p">]</span>
+    <span class="n">betas</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="n">p</span><span class="p">:]</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">n_qubits</span>
+
+    <span class="c1"># Initial state: uniform superposition |+⟩^⊗n</span>
+    <span class="n">psi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">dim</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">p</span><span class="p">):</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">_apply_cost_phase</span><span class="p">(</span><span class="n">psi</span><span class="p">,</span> <span class="n">cost_diag</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">gammas</span><span class="p">[</span><span class="n">layer</span><span class="p">]))</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">_apply_mixer</span><span class="p">(</span><span class="n">psi</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">betas</span><span class="p">[</span><span class="n">layer</span><span class="p">]),</span> <span class="n">n_qubits</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">psi</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cost_diagonal</span><span class="p">(</span><span class="n">cost_fn</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Evaluate cost_fn for all 2**n basis states."""</span>
+    <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">n_qubits</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">cost_fn</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dim</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_cvar</span><span class="p">(</span><span class="n">psi</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">cost_diag</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""CVaR_α objective: expected cost conditioned on lowest-α fraction.</span>
+
+<span class="sd">    For minimisation: lower CVaR is better.</span>
+<span class="sd">    """</span>
+    <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">psi</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">cost_diag</span><span class="p">)</span>
+    <span class="n">sorted_costs</span> <span class="o">=</span> <span class="n">cost_diag</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+    <span class="n">sorted_probs</span> <span class="o">=</span> <span class="n">probs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+
+    <span class="n">cum_prob</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">cvar_sum</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="k">for</span> <span class="n">cost</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">sorted_costs</span><span class="p">,</span> <span class="n">sorted_probs</span><span class="p">):</span>
+        <span class="n">remaining</span> <span class="o">=</span> <span class="n">alpha</span> <span class="o">-</span> <span class="n">cum_prob</span>
+        <span class="k">if</span> <span class="n">remaining</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">break</span>
+        <span class="n">contrib</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">prob</span><span class="p">,</span> <span class="n">remaining</span><span class="p">)</span>
+        <span class="n">cvar_sum</span> <span class="o">+=</span> <span class="n">cost</span> <span class="o">*</span> <span class="n">contrib</span>
+        <span class="n">cum_prob</span> <span class="o">+=</span> <span class="n">contrib</span>
+
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">cvar_sum</span> <span class="o">/</span> <span class="n">alpha</span><span class="p">)</span> <span class="k">if</span> <span class="n">alpha</span> <span class="o">&gt;</span> <span class="mf">1e-15</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">sorted_costs</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+
+<span class="c1"># ── Result dataclass ──────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="QAOAResult">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOAResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">QAOAResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of a :class:`CVaRQAOA` optimisation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    optimal_params : np.ndarray, shape (2*p,)</span>
+<span class="sd">        Optimised [γ_1, …, γ_p, β_1, …, β_p].</span>
+<span class="sd">    optimal_value : float</span>
+<span class="sd">        CVaR_α value at the optimal parameters.</span>
+<span class="sd">    expectation_value : float</span>
+<span class="sd">        ⟨H_C⟩ at the optimal parameters (standard expectation).</span>
+<span class="sd">    approximation_ratio : float | None</span>
+<span class="sd">        Ratio ⟨H_C⟩ / exact_optimum if known; else None.</span>
+<span class="sd">    n_layers : int</span>
+<span class="sd">        QAOA depth p.</span>
+<span class="sd">    alpha : float</span>
+<span class="sd">        CVaR level used.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">    """</span>
+    <span class="n">optimal_params</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">optimal_value</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">expectation_value</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">approximation_ratio</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+    <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">best_cost</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Best (maximum) objective value found.</span>
+
+<span class="sd">        For MaxCut problems where cost_diagonal = -cut_value, this returns</span>
+<span class="sd">        -optimal_value (a positive cut value).</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="o">-</span><span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">optimal_value</span><span class="p">)</span>
+
+<div class="viewcode-block" id="QAOAResult.to_dict">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOAResult.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"optimal_params"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimal_params</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">"optimal_value"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimal_value</span><span class="p">,</span>
+            <span class="s2">"expectation_value"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">expectation_value</span><span class="p">,</span>
+            <span class="s2">"approximation_ratio"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">approximation_ratio</span><span class="p">,</span>
+            <span class="s2">"n_layers"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">,</span>
+            <span class="s2">"alpha"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+            <span class="s2">"n_qubits"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<span class="c1"># ── MaxCutProblem ─────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="MaxCutProblem">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MaxCutProblem</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Graph Maximum Cut problem.</span>
+
+<span class="sd">    The cost function is C(x) = Σ_{(i,j)∈E} w_{ij} (1 − z_i z_j)/2</span>
+<span class="sd">    where z_i = 1 − 2x_i (z_i=+1 if qubit i is 0, z_i=−1 if qubit i is 1).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_nodes : int</span>
+<span class="sd">        Number of graph nodes (qubits).</span>
+<span class="sd">    edges : list[tuple[int, int]] | list[tuple[int, int, float]]</span>
+<span class="sd">        Edge list.  Each entry is (u, v) or (u, v, weight); default weight=1.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="MaxCutProblem.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_nodes</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">edges</span><span class="p">:</span> <span class="nb">list</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n_nodes</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_nodes must be ≥ 1, got </span><span class="si">{</span><span class="n">n_nodes</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_nodes</span> <span class="o">=</span> <span class="n">n_nodes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_edges</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">edges</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">u</span><span class="p">,</span> <span class="n">v</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+                <span class="n">w</span> <span class="o">=</span> <span class="mf">1.0</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">u</span> <span class="o">&lt;</span> <span class="n">n_nodes</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">n_nodes</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Edge (</span><span class="si">{</span><span class="n">u</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">) out of range for n_nodes=</span><span class="si">{</span><span class="n">n_nodes</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_edges</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span><span class="p">))</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">edges</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_edges</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxCutProblem.cut_value">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem.cut_value">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cut_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Evaluate cut value for bitstring x (integer representation)."""</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edges</span><span class="p">:</span>
+            <span class="n">bit_u</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="n">u</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span>
+            <span class="n">bit_v</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="n">v</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">bit_u</span> <span class="o">!=</span> <span class="n">bit_v</span><span class="p">:</span>
+                <span class="n">total</span> <span class="o">+=</span> <span class="n">w</span>
+        <span class="k">return</span> <span class="n">total</span></div>
+
+
+<div class="viewcode-block" id="MaxCutProblem.cost_diagonal">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem.cost_diagonal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cost_diagonal</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute C(x) = −cut_value(x) for all 2^n basis states.</span>
+
+<span class="sd">        Negative because QAOA minimises; maximising cut ↔ minimising −cut.</span>
+<span class="sd">        """</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_nodes</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">cut_value</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dim</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MaxCutProblem.cost_hamiltonian">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem.cost_hamiltonian">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cost_hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PauliHamiltonian</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build the Ising cost Hamiltonian H_C = −Σ w_{ij}(1−Z_iZ_j)/2."""</span>
+        <span class="n">terms</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">u</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">w</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_edges</span><span class="p">:</span>
+            <span class="c1"># −w/2 * (I − Z_u Z_v) = −w/2 + (w/2) Z_u Z_v</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="o">-</span><span class="n">w</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{}))</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="n">w</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{</span><span class="n">u</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">}))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">terms</span><span class="p">:</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="mi">0</span><span class="n">j</span><span class="p">,</span> <span class="n">ops</span><span class="o">=</span><span class="p">{}))</span>
+        <span class="k">return</span> <span class="n">PauliHamiltonian</span><span class="p">(</span><span class="n">terms</span><span class="o">=</span><span class="n">terms</span><span class="p">,</span> <span class="n">n_qubits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_nodes</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MaxCutProblem.exact_max_cut">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem.exact_max_cut">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exact_max_cut</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Brute-force exact max-cut value and the achieving bitstring.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        (max_cut_value, bitstring)</span>
+<span class="sd">        """</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_nodes</span>
+        <span class="n">best_val</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span>
+        <span class="n">best_x</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dim</span><span class="p">):</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">cut_value</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">v</span> <span class="o">&gt;</span> <span class="n">best_val</span><span class="p">:</span>
+                <span class="n">best_val</span> <span class="o">=</span> <span class="n">v</span>
+                <span class="n">best_x</span> <span class="o">=</span> <span class="n">x</span>
+        <span class="k">return</span> <span class="n">best_val</span><span class="p">,</span> <span class="n">best_x</span></div>
+
+
+<div class="viewcode-block" id="MaxCutProblem.approximation_ratio">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.MaxCutProblem.approximation_ratio">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">approximation_ratio</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Approximation ratio cut_value(x) / exact_max_cut."""</span>
+        <span class="n">exact</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_max_cut</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">exact</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mf">1.0</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cut_value</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">/</span> <span class="n">exact</span></div>
+</div>
+
+
+
+<span class="c1"># ── TSPProblem ────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="TSPProblem">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.TSPProblem">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TSPProblem</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Traveling Salesman Problem encoded as an Ising Hamiltonian.</span>
+
+<span class="sd">    Uses a one-hot encoding: qubit x_{i,p} = 1 iff city i is visited at</span>
+<span class="sd">    position p.  n² qubits total for n cities.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    distances : np.ndarray, shape (n, n)</span>
+<span class="sd">        Symmetric distance matrix (distances[i,j] = distance from city i to j).</span>
+<span class="sd">    penalty : float, default 10.0</span>
+<span class="sd">        Penalty coefficient for constraint violations.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="TSPProblem.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.TSPProblem.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">distances</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">penalty</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">distances</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="s2">"distances must be a square 2-D array"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="s2">"TSP requires at least 2 cities"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dist</span> <span class="o">=</span> <span class="n">dist</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">penalty</span> <span class="o">=</span> <span class="n">penalty</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span> <span class="o">**</span> <span class="mi">2</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_qubit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">city</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Qubit index for (city, position) pair."""</span>
+        <span class="k">return</span> <span class="n">city</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span> <span class="o">+</span> <span class="n">position</span>
+
+<div class="viewcode-block" id="TSPProblem.tour_length">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.TSPProblem.tour_length">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tour_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tour</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute total tour length for a city permutation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        tour : list[int]</span>
+<span class="sd">            Sequence of city indices, e.g. [0, 2, 1] for 3 cities.</span>
+<span class="sd">        """</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tour</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n</span> <span class="ow">or</span> <span class="nb">set</span><span class="p">(</span><span class="n">tour</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">set</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="s2">"tour must be a permutation of 0..n_cities-1"</span><span class="p">)</span>
+        <span class="n">total</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">total</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist</span><span class="p">[</span><span class="n">tour</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">tour</span><span class="p">[(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">n</span><span class="p">]]</span>
+        <span class="k">return</span> <span class="n">total</span></div>
+
+
+<div class="viewcode-block" id="TSPProblem.decode_bitstring">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.TSPProblem.decode_bitstring">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">decode_bitstring</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Decode a bitstring to a tour if the assignment is valid.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        list[int] | None</span>
+<span class="sd">            Tour order if the bitstring is a valid one-hot assignment;</span>
+<span class="sd">            ``None`` otherwise.</span>
+<span class="sd">        """</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span>
+        <span class="n">tour</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+        <span class="k">for</span> <span class="n">city</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">city</span><span class="p">,</span> <span class="n">pos</span><span class="p">))</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="n">tour</span><span class="p">[</span><span class="n">pos</span><span class="p">]</span> <span class="o">=</span> <span class="n">city</span>
+            <span class="k">if</span> <span class="n">count</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">None</span>
+        <span class="c1"># Check each position has exactly one city</span>
+        <span class="k">if</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">in</span> <span class="n">tour</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">tour</span><span class="p">))</span> <span class="o">!=</span> <span class="n">n</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">tour</span></div>
+
+
+<div class="viewcode-block" id="TSPProblem.cost_diagonal">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.TSPProblem.cost_diagonal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cost_diagonal</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""QUBO cost for all 2^(n²) basis states."""</span>
+        <span class="n">dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span>
+        <span class="n">costs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">dim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">dim</span><span class="p">):</span>
+            <span class="c1"># Distance term</span>
+            <span class="n">dist_cost</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">city_i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">city_j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">city_i</span> <span class="o">==</span> <span class="n">city_j</span><span class="p">:</span>
+                        <span class="k">continue</span>
+                    <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                        <span class="n">q_ip</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">city_i</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
+                        <span class="n">q_jnext</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">city_j</span><span class="p">,</span> <span class="p">(</span><span class="n">pos</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">n</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="n">q_ip</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span> <span class="ow">and</span> <span class="p">(</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="n">q_jnext</span><span class="p">)</span> <span class="o">&amp;</span> <span class="mi">1</span><span class="p">:</span>
+                            <span class="n">dist_cost</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist</span><span class="p">[</span><span class="n">city_i</span><span class="p">,</span> <span class="n">city_j</span><span class="p">]</span>
+
+            <span class="c1"># Constraint penalty: each city visited exactly once</span>
+            <span class="n">city_penalty</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">city</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="n">s</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">city</span><span class="p">,</span> <span class="n">pos</span><span class="p">))</span> <span class="o">&amp;</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">))</span>
+                <span class="n">city_penalty</span> <span class="o">+=</span> <span class="p">(</span><span class="n">s</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+
+            <span class="c1"># Each position has exactly one city</span>
+            <span class="n">pos_penalty</span> <span class="o">=</span> <span class="mf">0.0</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="n">s</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">((</span><span class="n">x</span> <span class="o">&gt;&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">city</span><span class="p">,</span> <span class="n">pos</span><span class="p">))</span> <span class="o">&amp;</span> <span class="mi">1</span> <span class="k">for</span> <span class="n">city</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">))</span>
+                <span class="n">pos_penalty</span> <span class="o">+=</span> <span class="p">(</span><span class="n">s</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+
+            <span class="n">costs</span><span class="p">[</span><span class="n">x</span><span class="p">]</span> <span class="o">=</span> <span class="n">dist_cost</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty</span> <span class="o">*</span> <span class="p">(</span><span class="n">city_penalty</span> <span class="o">+</span> <span class="n">pos_penalty</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">costs</span></div>
+
+
+<div class="viewcode-block" id="TSPProblem.cost_hamiltonian">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.TSPProblem.cost_hamiltonian">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cost_hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PauliHamiltonian</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build simplified QUBO Hamiltonian (diagonal Z terms only)."""</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_cities</span>
+        <span class="n">nq</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span>
+        <span class="n">terms</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># Distance terms: x_{i,p} * x_{j,p+1} * d_{ij}</span>
+        <span class="c1"># (1/4)(I - Z_{ip})(I - Z_{j,p+1}) * d_{ij}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="n">j</span><span class="p">:</span>
+                    <span class="k">continue</span>
+                <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                    <span class="n">q1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span>
+                    <span class="n">q2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">j</span><span class="p">,</span> <span class="p">(</span><span class="n">pos</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">n</span><span class="p">)</span>
+                    <span class="n">d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dist</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]</span>
+                    <span class="c1"># (I - Z_q1)(I - Z_q2)/4 → d/4 * (I - Z1 - Z2 + Z1Z2)</span>
+                    <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="n">d</span> <span class="o">/</span> <span class="mi">4</span><span class="p">),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{}))</span>
+                    <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="o">-</span><span class="n">d</span> <span class="o">/</span> <span class="mi">4</span><span class="p">),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{</span><span class="n">q1</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">}))</span>
+                    <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="o">-</span><span class="n">d</span> <span class="o">/</span> <span class="mi">4</span><span class="p">),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{</span><span class="n">q2</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">}))</span>
+                    <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="n">d</span> <span class="o">/</span> <span class="mi">4</span><span class="p">),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{</span><span class="n">q1</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">,</span> <span class="n">q2</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">}))</span>
+
+        <span class="c1"># Penalty terms: Σ_i (Σ_p x_{ip} - 1)²</span>
+        <span class="n">A</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">penalty</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">qs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
+            <span class="n">_add_one_hot_penalty</span><span class="p">(</span><span class="n">terms</span><span class="p">,</span> <span class="n">qs</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+            <span class="n">qs</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_qubit</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">pos</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)]</span>
+            <span class="n">_add_one_hot_penalty</span><span class="p">(</span><span class="n">terms</span><span class="p">,</span> <span class="n">qs</span><span class="p">,</span> <span class="n">A</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">terms</span><span class="p">:</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="mi">0</span><span class="n">j</span><span class="p">,</span> <span class="n">ops</span><span class="o">=</span><span class="p">{}))</span>
+        <span class="k">return</span> <span class="n">PauliHamiltonian</span><span class="p">(</span><span class="n">terms</span><span class="o">=</span><span class="n">terms</span><span class="p">,</span> <span class="n">n_qubits</span><span class="o">=</span><span class="n">nq</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_add_one_hot_penalty</span><span class="p">(</span>
+    <span class="n">terms</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">PauliTerm</span><span class="p">],</span> <span class="n">qubits</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">A</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Add penalty terms for (Σ_q x_q - 1)² using x_q = (I - Z_q)/2."""</span>
+    <span class="c1"># (Σ x_q - 1)² = Σ x_q² + 2 Σ_{p&lt;q} x_p x_q - 2 Σ x_q + 1</span>
+    <span class="c1"># x_q² = x_q, so: (n-2) Σ x_q + 2 Σ_{p&lt;q} x_p x_q + 1</span>
+    <span class="c1"># substitute x_q = (I - Z_q)/2</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">qubits</span><span class="p">)</span>
+    <span class="c1"># Constant: A(1 - n/2 + n(n-1)/4 * ...)</span>
+    <span class="c1"># Easier to just expand directly:</span>
+    <span class="c1"># A * (Σ_q (I-Z_q)/2 - 1)²</span>
+    <span class="c1"># = A * (n/2 - Σ Z_q/2 - 1)²</span>
+    <span class="c1"># = A * (  (n/2-1)² - (n/2-1)Σ Z_q + (1/4)(Σ Z_q)²  )</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">n</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="c1"># Constant term</span>
+    <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="n">A</span> <span class="o">*</span> <span class="p">(</span><span class="n">c</span> <span class="o">*</span> <span class="n">c</span> <span class="o">+</span> <span class="n">n</span> <span class="o">/</span> <span class="mi">4</span><span class="p">)),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{}))</span>
+    <span class="c1"># Linear Z terms</span>
+    <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">qubits</span><span class="p">:</span>
+        <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="n">A</span> <span class="o">*</span> <span class="p">(</span><span class="o">-</span><span class="n">c</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">n</span> <span class="o">/</span> <span class="mi">4</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">/</span> <span class="n">n</span><span class="p">)),</span> <span class="n">ops</span><span class="o">=</span><span class="p">{</span><span class="n">q</span><span class="p">:</span> <span class="s2">"Z"</span><span class="p">}))</span>
+    <span class="c1"># ZZ cross terms</span>
+    <span class="k">for</span> <span class="n">idx_p</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">idx_q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">idx_p</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+            <span class="n">terms</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">PauliTerm</span><span class="p">(</span><span class="n">coeff</span><span class="o">=</span><span class="nb">complex</span><span class="p">(</span><span class="n">A</span> <span class="o">*</span> <span class="mf">0.5</span><span class="p">),</span>
+                                   <span class="n">ops</span><span class="o">=</span><span class="p">{</span><span class="n">qubits</span><span class="p">[</span><span class="n">idx_p</span><span class="p">]:</span> <span class="s2">"Z"</span><span class="p">,</span> <span class="n">qubits</span><span class="p">[</span><span class="n">idx_q</span><span class="p">]:</span> <span class="s2">"Z"</span><span class="p">}))</span>
+
+
+<span class="c1"># ── CVaRQAOA ─────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CVaRQAOA">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOA">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CVaRQAOA</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""QAOA with Conditional Value-at-Risk (CVaR) objective.</span>
+
+<span class="sd">    Replaces the standard expectation-value objective ⟨H_C⟩ with</span>
+<span class="sd">    CVaR_α = E[C(x) | C(x) ≤ VaR_α], which focuses training on the</span>
+<span class="sd">    best-α fraction of measurement outcomes.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cost_diagonal : np.ndarray, shape (2**n,)</span>
+<span class="sd">        Pre-computed cost C(x) for every computational basis state.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">    n_layers : int, default 1</span>
+<span class="sd">        QAOA depth p.</span>
+<span class="sd">    alpha : float, default 0.25</span>
+<span class="sd">        CVaR confidence level ∈ (0, 1].  alpha=1 recovers standard QAOA.</span>
+<span class="sd">    exact_optimum : float | None</span>
+<span class="sd">        Known exact optimum for computing approximation ratio.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="CVaRQAOA.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOA.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cost_diagonal</span><span class="p">:</span> <span class="s2">"Optional[np.ndarray]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_qubits</span><span class="p">:</span> <span class="s2">"Optional[int]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">,</span>
+        <span class="n">exact_optimum</span><span class="p">:</span> <span class="s2">"Optional[float]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">problem</span><span class="p">:</span> <span class="s2">"Any"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">p</span><span class="p">:</span> <span class="s2">"Optional[int]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="s2">"Optional[int]"</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># ``problem`` kwarg: accept a MaxCutProblem (or duck-typed equivalent)</span>
+        <span class="k">if</span> <span class="n">problem</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">cost_diagonal</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">cost_diagonal</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">n_qubits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">n_qubits</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">n_nodes</span>
+        <span class="k">if</span> <span class="n">p</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">n_layers</span> <span class="o">=</span> <span class="n">p</span>  <span class="c1"># alias</span>
+
+        <span class="k">if</span> <span class="n">cost_diagonal</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="s2">"cost_diagonal (or problem) must be provided"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_qubits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="s2">"n_qubits (or problem) must be provided"</span><span class="p">)</span>
+
+        <span class="n">cost_diagonal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">cost_diagonal</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">n_qubits</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"cost_diagonal must have shape (</span><span class="si">{</span><span class="mi">1</span><span class="w"> </span><span class="o">&lt;&lt;</span><span class="w"> </span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">,) for "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits, got </span><span class="si">{</span><span class="n">cost_diagonal</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_layers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_layers must be ≥ 1, got </span><span class="si">{</span><span class="n">n_layers</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mf">0.0</span> <span class="o">&lt;</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"alpha must be in (0, 1], got </span><span class="si">{</span><span class="n">alpha</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span> <span class="o">=</span> <span class="n">cost_diagonal</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span> <span class="o">=</span> <span class="n">n_qubits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">=</span> <span class="n">n_layers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span> <span class="o">=</span> <span class="n">exact_optimum</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_seed</span> <span class="o">=</span> <span class="n">seed</span></div>
+
+
+<div class="viewcode-block" id="CVaRQAOA.objective">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOA.objective">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">objective</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute CVaR_α at given parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        params : np.ndarray, shape (2*p,)</span>
+<span class="sd">            [γ_1, …, γ_p, β_1, …, β_p]</span>
+<span class="sd">        """</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">_qaoa_statevector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_cvar</span><span class="p">(</span><span class="n">psi</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CVaRQAOA.expectation">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOA.expectation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">expectation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">params</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute ⟨H_C⟩ (standard expectation value) at given parameters."""</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">_qaoa_statevector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">)</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">psi</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">probs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="CVaRQAOA.optimize">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOA.optimize">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">optimize</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">initial_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"COBYLA"</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QAOAResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Optimise CVaR objective over QAOA parameters.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        initial_params : np.ndarray | None</span>
+<span class="sd">            Initial [γ, β] parameters.  If None, uses random initialisation.</span>
+<span class="sd">        method : str</span>
+<span class="sd">            Optimiser name passed to ``scipy.optimize.minimize``.</span>
+<span class="sd">        max_iter : int</span>
+<span class="sd">            Maximum number of objective evaluations.</span>
+<span class="sd">        seed : int | None</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        QAOAResult</span>
+<span class="sd">        """</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">minimize</span>  <span class="c1"># type: ignore</span>
+        <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+            <span class="c1"># Fallback: simple random restart grid search</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_optimize_grid</span><span class="p">(</span><span class="n">initial_params</span><span class="p">,</span> <span class="n">seed</span><span class="p">)</span>
+
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span>
+        <span class="k">if</span> <span class="n">initial_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">initial_params</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p</span><span class="p">)</span>
+        <span class="n">initial_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">initial_params</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+        <span class="n">res</span> <span class="o">=</span> <span class="n">minimize</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">objective</span><span class="p">,</span>
+            <span class="n">initial_params</span><span class="p">,</span>
+            <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
+            <span class="n">options</span><span class="o">=</span><span class="p">{</span><span class="s2">"maxiter"</span><span class="p">:</span> <span class="n">max_iter</span><span class="p">,</span> <span class="s2">"rhobeg"</span><span class="p">:</span> <span class="mf">0.3</span><span class="p">},</span>
+        <span class="p">)</span>
+        <span class="n">opt_params</span> <span class="o">=</span> <span class="n">res</span><span class="o">.</span><span class="n">x</span>
+        <span class="n">opt_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">res</span><span class="o">.</span><span class="n">fun</span><span class="p">)</span>
+        <span class="n">exp_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expectation</span><span class="p">(</span><span class="n">opt_params</span><span class="p">)</span>
+
+        <span class="n">approx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">approx</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">exp_val</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">QAOAResult</span><span class="p">(</span>
+            <span class="n">optimal_params</span><span class="o">=</span><span class="n">opt_params</span><span class="p">,</span>
+            <span class="n">optimal_value</span><span class="o">=</span><span class="n">opt_val</span><span class="p">,</span>
+            <span class="n">expectation_value</span><span class="o">=</span><span class="n">exp_val</span><span class="p">,</span>
+            <span class="n">approximation_ratio</span><span class="o">=</span><span class="n">approx</span><span class="p">,</span>
+            <span class="n">n_layers</span><span class="o">=</span><span class="n">p</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+            <span class="n">n_qubits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="CVaRQAOA.run">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.CVaRQAOA.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QAOAResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for :meth:`optimize`."""</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"seed"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_seed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimize</span><span class="p">(</span><span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_optimize_grid</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">initial_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QAOAResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fallback grid-search optimiser (no scipy required)."""</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span>
+        <span class="n">n_restarts</span> <span class="o">=</span> <span class="mi">20</span>
+        <span class="n">best_val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
+        <span class="n">best_params</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_restarts</span><span class="p">):</span>
+            <span class="n">params</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p</span><span class="p">)</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">objective</span><span class="p">(</span><span class="n">params</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">val</span> <span class="o">&lt;</span> <span class="n">best_val</span><span class="p">:</span>
+                <span class="n">best_val</span> <span class="o">=</span> <span class="n">val</span>
+                <span class="n">best_params</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">initial_params</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">objective</span><span class="p">(</span><span class="n">initial_params</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">val</span> <span class="o">&lt;</span> <span class="n">best_val</span><span class="p">:</span>
+                <span class="n">best_val</span> <span class="o">=</span> <span class="n">val</span>
+                <span class="n">best_params</span> <span class="o">=</span> <span class="n">initial_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+        <span class="c1"># Simple coordinate descent</span>
+        <span class="n">params</span> <span class="o">=</span> <span class="n">best_params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="mf">0.2</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+            <span class="n">improved</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">p</span><span class="p">):</span>
+                <span class="k">for</span> <span class="n">delta</span> <span class="ow">in</span> <span class="p">[</span><span class="n">step</span><span class="p">,</span> <span class="o">-</span><span class="n">step</span><span class="p">]:</span>
+                    <span class="n">p2</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                    <span class="n">p2</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="n">delta</span>
+                    <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">objective</span><span class="p">(</span><span class="n">p2</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">v</span> <span class="o">&lt;</span> <span class="n">best_val</span><span class="p">:</span>
+                        <span class="n">best_val</span> <span class="o">=</span> <span class="n">v</span>
+                        <span class="n">best_params</span> <span class="o">=</span> <span class="n">p2</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                        <span class="n">params</span> <span class="o">=</span> <span class="n">p2</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+                        <span class="n">improved</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">improved</span><span class="p">:</span>
+                <span class="n">step</span> <span class="o">*=</span> <span class="mf">0.7</span>
+            <span class="k">if</span> <span class="n">step</span> <span class="o">&lt;</span> <span class="mf">1e-4</span><span class="p">:</span>
+                <span class="k">break</span>
+
+        <span class="n">exp_val</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">expectation</span><span class="p">(</span><span class="n">best_params</span><span class="p">)</span>
+        <span class="n">approx</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">approx</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">exp_val</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">exact_optimum</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">QAOAResult</span><span class="p">(</span>
+            <span class="n">optimal_params</span><span class="o">=</span><span class="n">best_params</span><span class="p">,</span>
+            <span class="n">optimal_value</span><span class="o">=</span><span class="n">best_val</span><span class="p">,</span>
+            <span class="n">expectation_value</span><span class="o">=</span><span class="n">exp_val</span><span class="p">,</span>
+            <span class="n">approximation_ratio</span><span class="o">=</span><span class="n">approx</span><span class="p">,</span>
+            <span class="n">n_layers</span><span class="o">=</span><span class="n">p</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+            <span class="n">n_qubits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="c1"># ── QAOALandscape ─────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="QAOALandscapeResult">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOALandscapeResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">QAOALandscapeResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of :class:`QAOALandscape`.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gamma_values : np.ndarray, shape (n_gamma,)</span>
+<span class="sd">    beta_values : np.ndarray, shape (n_beta,)</span>
+<span class="sd">    energy_surface : np.ndarray, shape (n_gamma, n_beta)</span>
+<span class="sd">        ⟨H_C⟩ at each (γ, β) point.</span>
+<span class="sd">    cvar_surface : np.ndarray, shape (n_gamma, n_beta)</span>
+<span class="sd">        CVaR_α at each (γ, β) point.</span>
+<span class="sd">    optimal_gamma : float</span>
+<span class="sd">        γ value minimising energy_surface.</span>
+<span class="sd">    optimal_beta : float</span>
+<span class="sd">        β value minimising energy_surface.</span>
+<span class="sd">    alpha : float</span>
+<span class="sd">    """</span>
+    <span class="n">gamma_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">beta_values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">energy_surface</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">cvar_surface</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">optimal_gamma</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">optimal_beta</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span>
+
+<div class="viewcode-block" id="QAOALandscapeResult.to_dict">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOALandscapeResult.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"gamma_values"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma_values</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">"beta_values"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta_values</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">"energy_surface"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">energy_surface</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">"cvar_surface"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">cvar_surface</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="s2">"optimal_gamma"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimal_gamma</span><span class="p">,</span>
+            <span class="s2">"optimal_beta"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimal_beta</span><span class="p">,</span>
+            <span class="s2">"alpha"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="QAOALandscape">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOALandscape">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">QAOALandscape</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Parameter landscape scanner for depth-1 QAOA.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cost_diagonal : np.ndarray, shape (2**n,)</span>
+<span class="sd">        Cost values C(x) for every computational basis state.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">    alpha : float, default 0.25</span>
+<span class="sd">        CVaR level for the CVaR surface.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="QAOALandscape.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOALandscape.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">cost_diagonal</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.25</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span> <span class="o">=</span> <span class="n">n_qubits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span></div>
+
+
+<div class="viewcode-block" id="QAOALandscape.compute">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.QAOALandscape.compute">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">gamma_range</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">),</span>
+        <span class="n">beta_range</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="n">n_gamma</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+        <span class="n">n_beta</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">QAOALandscapeResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute energy landscape over a (γ, β) grid at depth p=1.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        gamma_range, beta_range : tuple[float, float]</span>
+<span class="sd">            Range for the parameter sweep.</span>
+<span class="sd">        n_gamma, n_beta : int</span>
+<span class="sd">            Grid resolution.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        QAOALandscapeResult</span>
+<span class="sd">        """</span>
+        <span class="n">gammas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">gamma_range</span><span class="p">,</span> <span class="n">n_gamma</span><span class="p">)</span>
+        <span class="n">betas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">*</span><span class="n">beta_range</span><span class="p">,</span> <span class="n">n_beta</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span>
+        <span class="n">energy_surface</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_gamma</span><span class="p">,</span> <span class="n">n_beta</span><span class="p">))</span>
+        <span class="n">cvar_surface</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n_gamma</span><span class="p">,</span> <span class="n">n_beta</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">ig</span><span class="p">,</span> <span class="n">gamma</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">gammas</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">ib</span><span class="p">,</span> <span class="n">beta</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">betas</span><span class="p">):</span>
+                <span class="n">params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">gamma</span><span class="p">,</span> <span class="n">beta</span><span class="p">])</span>
+                <span class="n">psi</span> <span class="o">=</span> <span class="n">_qaoa_statevector</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">psi</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+                <span class="n">energy_surface</span><span class="p">[</span><span class="n">ig</span><span class="p">,</span> <span class="n">ib</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">probs</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">))</span>
+                <span class="n">cvar_surface</span><span class="p">[</span><span class="n">ig</span><span class="p">,</span> <span class="n">ib</span><span class="p">]</span> <span class="o">=</span> <span class="n">_cvar</span><span class="p">(</span><span class="n">psi</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">cost_diagonal</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span>
+
+        <span class="c1"># Find minimum</span>
+        <span class="n">min_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unravel_index</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">energy_surface</span><span class="p">),</span> <span class="n">energy_surface</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">opt_gamma</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">gammas</span><span class="p">[</span><span class="n">min_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]])</span>
+        <span class="n">opt_beta</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">betas</span><span class="p">[</span><span class="n">min_idx</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+
+        <span class="k">return</span> <span class="n">QAOALandscapeResult</span><span class="p">(</span>
+            <span class="n">gamma_values</span><span class="o">=</span><span class="n">gammas</span><span class="p">,</span>
+            <span class="n">beta_values</span><span class="o">=</span><span class="n">betas</span><span class="p">,</span>
+            <span class="n">energy_surface</span><span class="o">=</span><span class="n">energy_surface</span><span class="p">,</span>
+            <span class="n">cvar_surface</span><span class="o">=</span><span class="n">cvar_surface</span><span class="p">,</span>
+            <span class="n">optimal_gamma</span><span class="o">=</span><span class="n">opt_gamma</span><span class="p">,</span>
+            <span class="n">optimal_beta</span><span class="o">=</span><span class="n">opt_beta</span><span class="p">,</span>
+            <span class="n">alpha</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<span class="c1"># ── warm_start_qaoa ───────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="warm_start_qaoa">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html#quantx_engine.contrib.qaoa_optim.warm_start_qaoa">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">warm_start_qaoa</span><span class="p">(</span>
+    <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">strategy</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"random"</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">prev_params</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return initial QAOA parameter guess using a given strategy.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_layers : int</span>
+<span class="sd">        QAOA depth p.</span>
+<span class="sd">    strategy : {"random", "fixed", "interpolated", "tqa"}</span>
+<span class="sd">        Initialisation strategy:</span>
+
+<span class="sd">        * ``"random"`` — uniform random in [0, π].</span>
+<span class="sd">        * ``"fixed"`` — γ_k = 0.1k/p, β_k = π/4 (1 − k/p).</span>
+<span class="sd">        * ``"interpolated"`` — linearly interpolate ``prev_params``</span>
+<span class="sd">          (depth p−1) to depth p.  Requires ``prev_params``.</span>
+<span class="sd">        * ``"tqa"`` — Trotterised Quantum Annealing schedule.</span>
+<span class="sd">    seed : int | None</span>
+<span class="sd">        Random seed (used only by ``"random"``).</span>
+<span class="sd">    prev_params : np.ndarray | None</span>
+<span class="sd">        Previous depth's parameters (needed for ``"interpolated"``).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.ndarray, shape (2*p,)</span>
+<span class="sd">        Concatenated [γ_1, …, γ_p, β_1, …, β_p].</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">n_layers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_layers must be ≥ 1, got </span><span class="si">{</span><span class="n">n_layers</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">strategy</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"random"</span><span class="p">,</span> <span class="s2">"fixed"</span><span class="p">,</span> <span class="s2">"interpolated"</span><span class="p">,</span> <span class="s2">"tqa"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"strategy must be 'random', 'fixed', 'interpolated', or 'tqa', "</span>
+            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">strategy</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+    <span class="n">p</span> <span class="o">=</span> <span class="n">n_layers</span>
+
+    <span class="k">if</span> <span class="n">strategy</span> <span class="o">==</span> <span class="s2">"random"</span><span class="p">:</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+
+    <span class="k">elif</span> <span class="n">strategy</span> <span class="o">==</span> <span class="s2">"fixed"</span><span class="p">:</span>
+        <span class="n">ts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="n">p</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+        <span class="n">gammas</span> <span class="o">=</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="n">ts</span>
+        <span class="n">betas</span> <span class="o">=</span> <span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">4</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">ts</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">gammas</span><span class="p">,</span> <span class="n">betas</span><span class="p">])</span>
+
+    <span class="k">elif</span> <span class="n">strategy</span> <span class="o">==</span> <span class="s2">"interpolated"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">prev_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">CVaRQAOAError</span><span class="p">(</span>
+                <span class="s2">"'interpolated' strategy requires prev_params from depth p-1"</span>
+            <span class="p">)</span>
+        <span class="n">prev</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">prev_params</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">prev_p</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">prev</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="c1"># Linearly interpolate from p_prev points to p points</span>
+        <span class="n">old_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">prev_p</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">new_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+        <span class="n">gammas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">new_times</span><span class="p">,</span> <span class="n">old_times</span><span class="p">,</span> <span class="n">prev</span><span class="p">[:</span><span class="n">prev_p</span><span class="p">])</span>
+        <span class="n">betas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">new_times</span><span class="p">,</span> <span class="n">old_times</span><span class="p">,</span> <span class="n">prev</span><span class="p">[</span><span class="n">prev_p</span><span class="p">:])</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">gammas</span><span class="p">,</span> <span class="n">betas</span><span class="p">])</span>
+
+    <span class="k">else</span><span class="p">:</span>  <span class="c1"># "tqa"</span>
+        <span class="n">ts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="n">p</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">p</span><span class="p">)</span>
+        <span class="n">gammas</span> <span class="o">=</span> <span class="n">ts</span> <span class="o">*</span> <span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">betas</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">ts</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">gammas</span><span class="p">,</span> <span class="n">betas</span><span class="p">])</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

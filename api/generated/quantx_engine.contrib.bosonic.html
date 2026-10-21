@@ -1,0 +1,955 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="quantx_engine.contrib.quantum_walk" href="quantx_engine.contrib.quantum_walk.html"><link rel="prev" title="quantx_engine.contrib.qldpc" href="quantx_engine.contrib.qldpc.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.bosonic - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" checked="" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="../core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/blob/master/docs/source/api/generated/quantx_engine.contrib.bosonic.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/edit/master/docs/source/api/generated/quantx_engine.contrib.bosonic.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-quantx_engine.contrib.bosonic">
+<span id="quantx-engine-contrib-bosonic"></span><h1>quantx_engine.contrib.bosonic<a class="headerlink" href="#module-quantx_engine.contrib.bosonic" title="Link to this heading">¶</a></h1>
+<p>M119: Bosonic codes — cat qubits and GKP (Gottesman-Kitaev-Preskill) codes.</p>
+<p>Provides hardware-biased-noise bosonic encodings that are at the centre of
+near-term fault-tolerant quantum computing roadmaps (AWS, Yale cat-qubit,
+INRIA/Alice&amp;Bob).</p>
+<section id="cat-qubits">
+<h2>Cat qubits<a class="headerlink" href="#cat-qubits" title="Link to this heading">¶</a></h2>
+<p>A <em>Kerr-cat qubit</em> encodes a logical qubit in the two coherent-state
+superpositions <a href="#id1"><span class="problematic" id="id2">|</span></a>C_α±⟩ ∝ <a href="#id3"><span class="problematic" id="id4">|</span></a>α⟩ ± <a href="#id5"><span class="problematic" id="id6">|</span></a>−α⟩ inside a driven Kerr oscillator:</p>
+<blockquote>
+<div><p>H = −K a†²a² + ε₂(a†² + a²)</p>
+</div></blockquote>
+<p>Bit-flip errors (X_L) are exponentially suppressed ~ exp(−2|α|²) while
+phase-flip errors (Z_L) scale polynomially, yielding a <em>biased</em> noise
+channel ideal for concatenation with a repetition code.</p>
+</section>
+<section id="gkp-codes">
+<h2>GKP codes<a class="headerlink" href="#gkp-codes" title="Link to this heading">¶</a></h2>
+<p>The Gottesman-Kitaev-Preskill code encodes a qubit in a harmonic oscillator
+whose Hilbert space is infinite-dimensional (or truncated at N_max photons).
+The logical code words are superpositions of squeezed states on a square
+phase-space lattice with spacing √π.  We implement the <em>finite-energy</em>
+(approximate) GKP state with Gaussian envelope parameter δ and the
+small-big-small (SBS) correction sequence for shift errors.</p>
+</section>
+<section id="classes">
+<h2>Classes<a class="headerlink" href="#classes" title="Link to this heading">¶</a></h2>
+<p>BosonicError
+CatNoiseModel
+CatQubit
+GKPState
+GKPDecoder</p>
+<p class="rubric">References</p>
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="id7" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></span>
+<p>Mirrahimi, M. et al. (2014). Dynamically protected cat-qubits: a new
+paradigm for universal quantum computation. <em>New J. Phys.</em> 16, 045014.
+<a class="reference external" href="https://doi.org/10.1088/1367-2630/16/4/045014">https://doi.org/10.1088/1367-2630/16/4/045014</a></p>
+</aside>
+<aside class="footnote brackets" id="id8" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>2<span class="fn-bracket">]</span></span>
+<p>Gottesman, D., Kitaev, A. &amp; Preskill, J. (2001). Encoding a qubit in
+an oscillator. <em>Phys. Rev. A</em> 64, 012310.
+<a class="reference external" href="https://doi.org/10.1103/PhysRevA.64.012310">https://doi.org/10.1103/PhysRevA.64.012310</a></p>
+</aside>
+<aside class="footnote brackets" id="id9" role="doc-footnote">
+<span class="label"><span class="fn-bracket">[</span>3<span class="fn-bracket">]</span></span>
+<p>Cochrane, P. T., Milburn, G. J. &amp; Munro, W. J. (1999). Macroscopically
+distinct quantum-superposition states as a bosonic code for amplitude
+damping. <em>Phys. Rev. A</em> 59, 2631.
+<a class="reference external" href="https://doi.org/10.1103/PhysRevA.59.2631">https://doi.org/10.1103/PhysRevA.59.2631</a></p>
+</aside>
+</aside>
+</section>
+<section id="physical-validation">
+<h2>Physical validation<a class="headerlink" href="#physical-validation" title="Link to this heading">¶</a></h2>
+<p>Cat qubit: Kerr-cat Hamiltonian H = -K a†²a² + epsilon_2(a†²+a²) has two
+degenerate ground states in Fock basis at large alpha. Verified via exact
+diagonalisation of the truncated Fock-space matrix.
+GKP state: finite-energy square-lattice code has displacement variance
+sigma^2 = Delta^2/(1 + Delta^2) [Gottesman2001].</p>
+<p class="rubric">Classes</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.CatNoiseModel" title="quantx_engine.contrib.bosonic.CatNoiseModel"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CatNoiseModel</span></code></a>([kappa_1, kappa_phi, alpha_sq])</p></td>
+<td><p>Noise model for a Kerr-cat qubit.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.CatQubit" title="quantx_engine.contrib.bosonic.CatQubit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CatQubit</span></code></a>([K, eps2, N_max, noise, alpha, ...])</p></td>
+<td><p>Kerr-cat qubit in a truncated Fock space.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.GKPDecoder" title="quantx_engine.contrib.bosonic.GKPDecoder"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GKPDecoder</span></code></a>(gkp[, n_rounds])</p></td>
+<td><p>Small-Big-Small (SBS) shift error correction for GKP codes.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.GKPState" title="quantx_engine.contrib.bosonic.GKPState"><code class="xref py py-obj docutils literal notranslate"><span class="pre">GKPState</span></code></a>([delta, N_max, truncation])</p></td>
+<td><p>Finite-energy GKP (Gottesman-Kitaev-Preskill) code state.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Exceptions</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.BosonicError" title="quantx_engine.contrib.bosonic.BosonicError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">BosonicError</span></code></a></p></td>
+<td><p>Raised for invalid bosonic-code requests.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<dl class="py exception">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.BosonicError">
+<span class="property"><span class="k"><span class="pre">exception</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.contrib.bosonic.</span></span><span class="sig-name descname"><span class="pre">BosonicError</span></span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#BosonicError"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.BosonicError" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ValueError</span></code></a></p>
+<p>Raised for invalid bosonic-code requests.</p>
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.contrib.bosonic.</span></span><span class="sig-name descname"><span class="pre">CatNoiseModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kappa_1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kappa_phi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_sq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatNoiseModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Noise model for a Kerr-cat qubit.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>kappa_1</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Single-photon loss rate (κ₁).  Sets the overall photon-loss timescale.</p></li>
+<li><p><strong>kappa_phi</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Pure dephasing rate (κ_φ) in the oscillator frame.</p></li>
+<li><p><strong>alpha_sq</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Cat-state amplitude squared <a href="#id10"><span class="problematic" id="id11">|</span></a>α|².  Controls the biased-noise ratio.</p></li>
+</ul>
+</dd>
+</dl>
+<div class="admonition-notes admonition">
+<p class="admonition-title">Notes</p>
+<p>The bit-flip rate scales as exp(−2|α|²·κ₁/κ₂) and the phase-flip rate
+scales as <a href="#id12"><span class="problematic" id="id13">|</span></a>α|²·(κ₁ + κ_φ) (linear in cat size).</p>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.kappa_1">
+<span class="sig-name descname"><span class="pre">kappa_1</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.01</span></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.kappa_1" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.kappa_phi">
+<span class="sig-name descname"><span class="pre">kappa_phi</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.001</span></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.kappa_phi" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.alpha_sq">
+<span class="sig-name descname"><span class="pre">alpha_sq</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4.0</span></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.alpha_sq" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.bit_flip_rate">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">bit_flip_rate</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.bit_flip_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Logical X error rate ~ exp(−2|α|²)·κ₁ (exponentially suppressed).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.phase_flip_rate">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">phase_flip_rate</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.phase_flip_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Logical Z error rate ~ <a href="#id14"><span class="problematic" id="id15">|</span></a>α|²·(κ₁ + κ_φ) (linear in cat size).</p>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.bias_ratio">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">bias_ratio</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.bias_ratio" title="Link to this definition">¶</a></dt>
+<dd><p>η = phase_flip_rate / bit_flip_rate (should be ≫ 1 for a useful cat).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatNoiseModel.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">kappa_1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.01</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kappa_phi</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_sq</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatNoiseModel.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.contrib.bosonic.</span></span><span class="sig-name descname"><span class="pre">CatQubit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">K</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kerr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Kerr-cat qubit in a truncated Fock space.</p>
+<p>The Kerr-cat Hamiltonian is</p>
+<blockquote>
+<div><p>H = −K a†²a² + ε₂(a†² + a²)</p>
+</div></blockquote>
+<p>which stabilises a two-component cat state with amplitude α = √(ε₂/K).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>K</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Kerr nonlinearity (anharmonicity).  Must be &gt; 0.</p></li>
+<li><p><strong>eps2</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Two-photon drive amplitude.  Must be &gt; 0.</p></li>
+<li><p><strong>N_max</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Fock-space truncation.  Should satisfy N_max ≫ 2|α|² + 10.</p></li>
+<li><p><strong>noise</strong> (<a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.CatNoiseModel" title="quantx_engine.contrib.bosonic.CatNoiseModel"><em>CatNoiseModel</em></a><em> | </em><em>None</em>) – Optional noise model.  If None, uses CatNoiseModel defaults with
+alpha_sq derived from eps2/K.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">K</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">eps2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">30</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kerr</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.encode_0">
+<span class="sig-name descname"><span class="pre">encode_0</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.encode_0"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.encode_0" title="Link to this definition">¶</a></dt>
+<dd><p>Logical <a href="#id16"><span class="problematic" id="id17">|</span></a>0_L⟩ = normalised even cat state <a href="#id18"><span class="problematic" id="id19">|</span></a>C_α+⟩.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.encode_1">
+<span class="sig-name descname"><span class="pre">encode_1</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.encode_1"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.encode_1" title="Link to this definition">¶</a></dt>
+<dd><p>Logical <a href="#id20"><span class="problematic" id="id21">|</span></a>1_L⟩ = normalised odd cat state <a href="#id22"><span class="problematic" id="id23">|</span></a>C_α−⟩.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.logical_z">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">logical_z</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.logical_z" title="Link to this definition">¶</a></dt>
+<dd><p>Z_L = exp(iπ n̂)  (photon-number parity).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Logical Z operator</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.logical_x">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">logical_x</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.logical_x" title="Link to this definition">¶</a></dt>
+<dd><p>swaps <a href="#id24"><span class="problematic" id="id25">|</span></a>C_α+⟩ ↔ <a href="#id26"><span class="problematic" id="id27">|</span></a>C_α−⟩ within the code subspace.</p>
+<p>Constructs the unitary X_L = <a href="#id44"><span class="problematic" id="id45">|1_L⟩⟨0_L|</span></a> + <a href="#id46"><span class="problematic" id="id47">|0_L⟩⟨1_L|</span></a> + (I − P_code),
+which acts as Pauli X on the {<a href="#id28"><span class="problematic" id="id29">|</span></a>0_L⟩, <a href="#id30"><span class="problematic" id="id31">|</span></a>1_L⟩} code subspace and as the
+identity on its orthogonal complement.  This is exact for any α.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Logical X operator</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py property">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.hamiltonian">
+<span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-name descname"><span class="pre">hamiltonian</span></span><span class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a></span><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.hamiltonian" title="Link to this definition">¶</a></dt>
+<dd><p>Full Kerr-cat Hamiltonian matrix (N_max × N_max).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.mean_photon_number">
+<span class="sig-name descname"><span class="pre">mean_photon_number</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.mean_photon_number"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.mean_photon_number" title="Link to this definition">¶</a></dt>
+<dd><p>⟨n̂⟩ for a Fock-space state vector.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.photon_number_distribution">
+<span class="sig-name descname"><span class="pre">photon_number_distribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.photon_number_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.photon_number_distribution" title="Link to this definition">¶</a></dt>
+<dd><p>P(n) = <a href="#id32"><span class="problematic" id="id33">|</span></a>⟨n|ψ⟩|² for n = 0, …, N_max−1.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.wigner_function">
+<span class="sig-name descname"><span class="pre">wigner_function</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xvec</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pvec</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.wigner_function"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.wigner_function" title="Link to this definition">¶</a></dt>
+<dd><p>Wigner function W(x, p) on a phase-space grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><ul class="simple">
+<li><p><strong>xvec</strong> (<em>np.ndarray, shape (Nx,)</em>)</p></li>
+<li><p><strong>pvec</strong> (<em>np.ndarray, shape (Np,)</em>)</p></li>
+<li><p><strong>W</strong> (<em>np.ndarray, shape (Nx, Np)</em>)</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><em>ndarray</em></a>, <a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><em>ndarray</em></a>, <a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><em>ndarray</em></a>]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.bit_flip_time">
+<span class="sig-name descname"><span class="pre">bit_flip_time</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.bit_flip_time"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.bit_flip_time" title="Link to this definition">¶</a></dt>
+<dd><p>Characteristic logical bit-flip time T_X ~ 1/Γ_X.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.phase_flip_rate">
+<span class="sig-name descname"><span class="pre">phase_flip_rate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.phase_flip_rate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.phase_flip_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Logical phase-flip rate Γ_Z (grows linearly with α²).</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.ground_state">
+<span class="sig-name descname"><span class="pre">ground_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.ground_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.ground_state" title="Link to this definition">¶</a></dt>
+<dd><p>Ground state of the Kerr-cat Hamiltonian (lowest eigenvalue).</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.CatQubit.energy_spectrum">
+<span class="sig-name descname"><span class="pre">energy_spectrum</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_levels</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#CatQubit.energy_spectrum"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.CatQubit.energy_spectrum" title="Link to this definition">¶</a></dt>
+<dd><p>Return the lowest n_levels eigenvalues of the Kerr-cat Hamiltonian.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_levels</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of energy levels to return (default 4).</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Sorted eigenvalues, shape (n_levels,).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.contrib.bosonic.</span></span><span class="sig-name descname"><span class="pre">GKPState</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">delta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Finite-energy GKP (Gottesman-Kitaev-Preskill) code state.</p>
+<p>The ideal GKP code encodes a qubit in a harmonic oscillator with
+stabilisers S_q = e^{i2√π q̂} and S_p = e^{-i2√π p̂}.  The finite-energy
+approximation uses a Gaussian envelope with width δ in Fock space.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>delta</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Envelope/squeezing parameter δ &gt; 0.  Smaller δ → better code words
+but more photons.  Physical squeezing in dB ≈ −20 log₁₀(δ/√(2π)).</p></li>
+<li><p><strong>N_max</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Fock-space truncation.</p></li>
+</ul>
+</dd>
+</dl>
+<div class="admonition-notes admonition">
+<p class="admonition-title">Notes</p>
+<p>The code words are constructed as a superposition of displaced squeezed
+vacuum states at lattice points n√π in phase space.</p>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">delta</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">N_max</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">truncation</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.code_word_0">
+<span class="sig-name descname"><span class="pre">code_word_0</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.code_word_0"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.code_word_0" title="Link to this definition">¶</a></dt>
+<dd><p><a href="#id34"><span class="problematic" id="id35">|</span></a>0_L⟩ = GKP logical zero code word.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.code_word_1">
+<span class="sig-name descname"><span class="pre">code_word_1</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.code_word_1"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.code_word_1" title="Link to this definition">¶</a></dt>
+<dd><p><a href="#id36"><span class="problematic" id="id37">|</span></a>1_L⟩ = GKP logical one code word.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.squeezing_db">
+<span class="sig-name descname"><span class="pre">squeezing_db</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.squeezing_db"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.squeezing_db" title="Link to this definition">¶</a></dt>
+<dd><p>Approximate squeezing in dB: s ≈ −20 log₁₀(δ/√(2π)).</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.mean_photon_number">
+<span class="sig-name descname"><span class="pre">mean_photon_number</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.mean_photon_number"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.mean_photon_number" title="Link to this definition">¶</a></dt>
+<dd><p>⟨n̂⟩ for a Fock-space state.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.overlap">
+<span class="sig-name descname"><span class="pre">overlap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_b</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.overlap"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.overlap" title="Link to this definition">¶</a></dt>
+<dd><p>Compute ⟨a|b⟩.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.logical_fidelity">
+<span class="sig-name descname"><span class="pre">logical_fidelity</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">noisy_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logical</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.logical_fidelity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.logical_fidelity" title="Link to this definition">¶</a></dt>
+<dd><p>Fidelity <a href="#id38"><span class="problematic" id="id39">|</span></a>⟨logical_L|noisy⟩|² after a shift error.</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPState.norm">
+<span class="sig-name descname"><span class="pre">norm</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPState.norm"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPState.norm" title="Link to this definition">¶</a></dt>
+<dd><p>Return the norm of the logical <a href="#id40"><span class="problematic" id="id41">|</span></a>0_L⟩ code word (should be 1.0).</p>
+<dl class="field-list simple">
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPDecoder">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.contrib.bosonic.</span></span><span class="sig-name descname"><span class="pre">GKPDecoder</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gkp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_rounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPDecoder"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPDecoder" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Small-Big-Small (SBS) shift error correction for GKP codes.</p>
+<p>The SBS sequence applies alternating small and big displacements to map
+shift errors back toward the lattice points:</p>
+<blockquote>
+<div><p>D_small(−ξ) · D_big(+ξ + correction) · D_small(−ξ)</p>
+</div></blockquote>
+<p>where the correction direction is estimated from a syndrome measurement
+of the shift-error magnitude.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>gkp</strong> (<a class="reference internal" href="../qec.html#quantx_engine.contrib.bosonic.GKPState" title="quantx_engine.contrib.bosonic.GKPState"><em>GKPState</em></a>) – The GKP state object (defines δ, N_max, lattice).</p></li>
+<li><p><strong>n_rounds</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of SBS correction rounds to apply.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPDecoder.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">gkp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_rounds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPDecoder.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPDecoder.__init__" title="Link to this definition">¶</a></dt>
+<dd><dl class="field-list simple">
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPDecoder.apply_shift">
+<span class="sig-name descname"><span class="pre">apply_shift</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rng</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPDecoder.apply_shift"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPDecoder.apply_shift" title="Link to this definition">¶</a></dt>
+<dd><p>Apply a random Gaussian shift error in q and p.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<em>np.ndarray</em>) – Input Fock-space state.</p></li>
+<li><p><strong>sigma</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Standard deviation of the Gaussian shift distribution.</p></li>
+<li><p><strong>rng</strong> (<em>np.random.Generator</em>) – Random number generator.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Shifted Fock-space state (normalised).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPDecoder.correct">
+<span class="sig-name descname"><span class="pre">correct</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPDecoder.correct"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPDecoder.correct" title="Link to this definition">¶</a></dt>
+<dd><p>Apply SBS correction to estimate and remove shift errors.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>state</strong> (<em>np.ndarray</em>) – Noisy Fock-space state.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Corrected state (normalised).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.contrib.bosonic.GKPDecoder.logical_error_rate">
+<span class="sig-name descname"><span class="pre">logical_error_rate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sigma</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_shots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">200</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/contrib/bosonic.html#GKPDecoder.logical_error_rate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.contrib.bosonic.GKPDecoder.logical_error_rate" title="Link to this definition">¶</a></dt>
+<dd><p>Estimate the logical error rate after SBS correction.</p>
+<p>Applies random shift errors of standard deviation σ to <a href="#id42"><span class="problematic" id="id43">|</span></a>0_L⟩,
+corrects with SBS, and measures fidelity with the original code word.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>sigma</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Shift noise standard deviation (in units of 1/√2).</p></li>
+<li><p><strong>n_shots</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Number of Monte Carlo samples.</p></li>
+<li><p><strong>seed</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><em>None</em>) – Random seed.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Estimated logical error rate (1 - mean fidelity).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)">float</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="quantx_engine.contrib.quantum_walk.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">quantx_engine.contrib.quantum_walk</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="quantx_engine.contrib.qldpc.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">quantx_engine.contrib.qldpc</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">quantx_engine.contrib.bosonic</a><ul>
+<li><a class="reference internal" href="#cat-qubits">Cat qubits</a></li>
+<li><a class="reference internal" href="#gkp-codes">GKP codes</a></li>
+<li><a class="reference internal" href="#classes">Classes</a></li>
+<li><a class="reference internal" href="#physical-validation">Physical validation</a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.BosonicError"><code class="docutils literal notranslate"><span class="pre">BosonicError</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.kappa_1"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.kappa_1</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.kappa_phi"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.kappa_phi</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.alpha_sq"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.alpha_sq</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.bit_flip_rate"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.bit_flip_rate</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.phase_flip_rate"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.phase_flip_rate</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.bias_ratio"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.bias_ratio</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatNoiseModel.__init__"><code class="docutils literal notranslate"><span class="pre">CatNoiseModel.__init__()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit"><code class="docutils literal notranslate"><span class="pre">CatQubit</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.__init__"><code class="docutils literal notranslate"><span class="pre">CatQubit.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.encode_0"><code class="docutils literal notranslate"><span class="pre">CatQubit.encode_0()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.encode_1"><code class="docutils literal notranslate"><span class="pre">CatQubit.encode_1()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.logical_z"><code class="docutils literal notranslate"><span class="pre">CatQubit.logical_z</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.logical_x"><code class="docutils literal notranslate"><span class="pre">CatQubit.logical_x</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.hamiltonian"><code class="docutils literal notranslate"><span class="pre">CatQubit.hamiltonian</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.mean_photon_number"><code class="docutils literal notranslate"><span class="pre">CatQubit.mean_photon_number()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.photon_number_distribution"><code class="docutils literal notranslate"><span class="pre">CatQubit.photon_number_distribution()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.wigner_function"><code class="docutils literal notranslate"><span class="pre">CatQubit.wigner_function()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.bit_flip_time"><code class="docutils literal notranslate"><span class="pre">CatQubit.bit_flip_time()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.phase_flip_rate"><code class="docutils literal notranslate"><span class="pre">CatQubit.phase_flip_rate()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.ground_state"><code class="docutils literal notranslate"><span class="pre">CatQubit.ground_state()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.CatQubit.energy_spectrum"><code class="docutils literal notranslate"><span class="pre">CatQubit.energy_spectrum()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState"><code class="docutils literal notranslate"><span class="pre">GKPState</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.__init__"><code class="docutils literal notranslate"><span class="pre">GKPState.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.code_word_0"><code class="docutils literal notranslate"><span class="pre">GKPState.code_word_0()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.code_word_1"><code class="docutils literal notranslate"><span class="pre">GKPState.code_word_1()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.squeezing_db"><code class="docutils literal notranslate"><span class="pre">GKPState.squeezing_db()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.mean_photon_number"><code class="docutils literal notranslate"><span class="pre">GKPState.mean_photon_number()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.overlap"><code class="docutils literal notranslate"><span class="pre">GKPState.overlap()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.logical_fidelity"><code class="docutils literal notranslate"><span class="pre">GKPState.logical_fidelity()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPState.norm"><code class="docutils literal notranslate"><span class="pre">GKPState.norm()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPDecoder"><code class="docutils literal notranslate"><span class="pre">GKPDecoder</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPDecoder.__init__"><code class="docutils literal notranslate"><span class="pre">GKPDecoder.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPDecoder.apply_shift"><code class="docutils literal notranslate"><span class="pre">GKPDecoder.apply_shift()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPDecoder.correct"><code class="docutils literal notranslate"><span class="pre">GKPDecoder.correct()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.contrib.bosonic.GKPDecoder.logical_error_rate"><code class="docutils literal notranslate"><span class="pre">GKPDecoder.logical_error_rate()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

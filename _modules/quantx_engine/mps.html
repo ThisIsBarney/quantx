@@ -1,0 +1,809 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.mps - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.mps</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Matrix-product states that stay in the engine (M11).</span>
+
+<span class="sd">A state the engine makes stays there, under a handle, until it is freed: a ground state,</span>
+<span class="sd">one-site operators, time evolution and measurements chain without the state passing</span>
+<span class="sd">through Python or JSON. The methods that change a state do it in place and return it, so</span>
+<span class="sd">they compose::</span>
+
+<span class="sd">    from quantx_engine import mps</span>
+<span class="sd">    from quantx_engine.models import XXZChain</span>
+
+<span class="sd">    chain = XXZChain(L=32)</span>
+<span class="sd">    gs = mps.ground_state(chain, max_bond=128)</span>
+<span class="sd">    phi = gs.copy().apply("Sz", 16)                 # S^z_16 |GS&gt;, not renormalized</span>
+<span class="sd">    gs.evolve(chain, dt=0.05, steps=20)             # e^{-iHt} |GS&gt; = e^{-i E0 t} |GS&gt;</span>
+<span class="sd">    phi.evolve(chain, dt=0.05, steps=20)</span>
+<span class="sd">    c = gs.matrix_elements("Sz", phi)               # &lt;GS| e^{iHt} S^z_j e^{-iHt} S^z_16 |GS&gt;</span>
+
+<span class="sd">Operators may change the charge. ``S^+`` and ``S^-`` move a spin state to the next S^z</span>
+<span class="sd">sector, and the Hubbard ``Cdag_up``, ``C_dn``, ... add or remove an electron, carrying the</span>
+<span class="sd">Jordan-Wigner string on every site to their left, so a Green's function is::</span>
+
+<span class="sd">    from quantx_engine.models import HubbardChain</span>
+
+<span class="sd">    chain = HubbardChain(L=16, U=4.0)</span>
+<span class="sd">    gs = mps.ground_state(chain, n_up=8, n_dn=8)</span>
+<span class="sd">    phi = gs.copy().apply("Cdag_up", 8)             # c+_{8 up} |GS&gt;, now n_up = 9</span>
+<span class="sd">    phi.evolve(dt=0.05, steps=20)</span>
+<span class="sd">    g = gs.matrix_elements("C_up", phi)             # e^{-i E0 t} &lt;GS| c_{j up}(t) c+_{8 up} |GS&gt;</span>
+
+<span class="sd">The diagonal operators of each local space are in :data:`OPERATORS`, the ones that change</span>
+<span class="sd">the charge in :data:`CHARGED_OPERATORS`, in the conventions of :mod:`quantx_engine.models`</span>
+<span class="sd">(S = sigma/2). Any other one-site operator can be given as its matrix. Evolution is</span>
+<span class="sd">two-site TDVP; a state may be evolved under another model of the same length and local</span>
+<span class="sd">space than the one it was made with (a quench).</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ctypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">c_char_p</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"MPSError"</span><span class="p">,</span> <span class="s2">"MPS"</span><span class="p">,</span> <span class="s2">"GroundState"</span><span class="p">,</span> <span class="s2">"ground_state"</span><span class="p">,</span> <span class="s2">"product"</span><span class="p">,</span> <span class="s2">"OPERATORS"</span><span class="p">,</span>
+           <span class="s2">"CHARGED_OPERATORS"</span><span class="p">,</span> <span class="s2">"LOCAL_STATES"</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="MPSError">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPSError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MPSError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A refused request, or a failure in the engine."""</span></div>
+
+
+
+<span class="c1"># The local states of each space, in the engine's order, and the diagonal one-site</span>
+<span class="c1"># operators on them (physical units: S = sigma/2).</span>
+<span class="n">LOCAL_STATES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"spin-1/2"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"up"</span><span class="p">,</span> <span class="s2">"dn"</span><span class="p">),</span>
+    <span class="s2">"spin-1"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"+1"</span><span class="p">,</span> <span class="s2">"0"</span><span class="p">,</span> <span class="s2">"-1"</span><span class="p">),</span>
+    <span class="s2">"hubbard"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"0"</span><span class="p">,</span> <span class="s2">"up"</span><span class="p">,</span> <span class="s2">"dn"</span><span class="p">,</span> <span class="s2">"ud"</span><span class="p">),</span>
+<span class="p">}</span>
+<span class="n">OPERATORS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"spin-1/2"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"Id"</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">"Sz"</span><span class="p">:</span> <span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">)},</span>
+    <span class="s2">"spin-1"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"Id"</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">"Sz"</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="s2">"Sz2"</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
+    <span class="s2">"hubbard"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"Id"</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">"N"</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="s2">"Nup"</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="s2">"Ndn"</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="s2">"Sz"</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="s2">"D"</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)},</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_unit</span><span class="p">(</span><span class="n">d</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="n">entries</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The d x d matrix with the given (row, column, value) entries, as nested tuples."""</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">*</span> <span class="n">d</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">d</span><span class="p">)]</span>
+    <span class="k">for</span> <span class="n">r</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">entries</span><span class="p">:</span>
+        <span class="n">m</span><span class="p">[</span><span class="n">r</span><span class="p">][</span><span class="n">c</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">m</span><span class="p">)</span>
+
+
+<span class="n">_R2</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">2.0</span><span class="p">)</span>
+<span class="n">_PARITY</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>        <span class="c1"># (-1)^n on a Hubbard site</span>
+<span class="c1"># The one-site operators that change the charge: (the matrix &lt;s'|O|s&gt;, row s' the result;</span>
+<span class="c1"># the string on every site left of it, or None). The fermion operators follow the engine's</span>
+<span class="c1"># Hubbard convention: modes in site order and up before down on a site, |ud&gt; =</span>
+<span class="c1"># c+_up c+_dn |0&gt;, so c+_dn |up&gt; = -|ud&gt;. Their string is the parity of each site to the</span>
+<span class="c1"># left; S+ = c+_up c_dn needs none.</span>
+<span class="n">CHARGED_OPERATORS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"spin-1/2"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"Sp"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">"Sm"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="kc">None</span><span class="p">)},</span>
+    <span class="s2">"spin-1"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"Sp"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_R2</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">_R2</span><span class="p">)),</span> <span class="kc">None</span><span class="p">),</span>
+               <span class="s2">"Sm"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">_R2</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">_R2</span><span class="p">)),</span> <span class="kc">None</span><span class="p">)},</span>
+    <span class="s2">"hubbard"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"Cdag_up"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">_PARITY</span><span class="p">),</span>
+                <span class="s2">"C_up"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="n">_PARITY</span><span class="p">),</span>
+                <span class="s2">"Cdag_dn"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)),</span> <span class="n">_PARITY</span><span class="p">),</span>
+                <span class="s2">"C_dn"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)),</span> <span class="n">_PARITY</span><span class="p">),</span>
+                <span class="s2">"Sp"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">"Sm"</span><span class="p">:</span> <span class="p">(</span><span class="n">_unit</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="kc">None</span><span class="p">)},</span>
+<span class="p">}</span>
+<span class="n">_Q2K</span> <span class="o">=</span> <span class="mi">4096</span>     <span class="c1"># the engine packs a Hubbard charge (N, 2 Sz) as N * 4096 + 2 Sz</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="n">HubbardChain</span><span class="p">,</span> <span class="n">HubbardLattice</span><span class="p">,</span> <span class="n">J1J2Chain</span><span class="p">,</span> <span class="n">Spin1Chain</span><span class="p">,</span>
+                                      <span class="n">XXZChain</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="p">(</span><span class="n">XXZChain</span><span class="p">,</span> <span class="n">J1J2Chain</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="s2">"spin-1/2"</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Spin1Chain</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s2">"spin-1"</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="p">(</span><span class="n">HubbardChain</span><span class="p">,</span> <span class="n">HubbardLattice</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="s2">"hubbard"</span>
+    <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not a quantx_engine.models model: </span><span class="si">{</span><span class="n">model</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pairs</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">[[</span><span class="nb">float</span><span class="p">(</span><span class="n">z</span><span class="o">.</span><span class="n">real</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">z</span><span class="o">.</span><span class="n">imag</span><span class="p">)]</span> <span class="k">for</span> <span class="n">z</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_operator</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">string</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The request fields of a one-site operator, and whether it is a real diagonal.</span>
+
+<span class="sd">    ``op`` is a name from OPERATORS or CHARGED_OPERATORS, a diagonal (one entry per local</span>
+<span class="sd">    state) or a matrix on the local space; ``string`` a diagonal of phases for the sites</span>
+<span class="sd">    left of a diagonal or a matrix (a named operator brings its own)."""</span>
+    <span class="n">d</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">LOCAL_STATES</span><span class="p">[</span><span class="n">space</span><span class="p">])</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">op</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">string</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">op</span><span class="si">!r}</span><span class="s2"> brings its own string; give a matrix to choose one"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">OPERATORS</span><span class="p">[</span><span class="n">space</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">"diag"</span><span class="p">:</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">OPERATORS</span><span class="p">[</span><span class="n">space</span><span class="p">][</span><span class="n">op</span><span class="p">]]},</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">CHARGED_OPERATORS</span><span class="p">[</span><span class="n">space</span><span class="p">]:</span>
+            <span class="n">m</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">CHARGED_OPERATORS</span><span class="p">[</span><span class="n">space</span><span class="p">][</span><span class="n">op</span><span class="p">]</span>
+            <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"matrix"</span><span class="p">:</span> <span class="n">_pairs</span><span class="p">(</span><span class="n">m</span><span class="p">)}</span>
+            <span class="k">if</span> <span class="n">s</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">fields</span><span class="p">[</span><span class="s2">"string"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_pairs</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">fields</span><span class="p">,</span> <span class="kc">False</span>
+        <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no operator </span><span class="si">{</span><span class="n">op</span><span class="si">!r}</span><span class="s2"> on a </span><span class="si">{</span><span class="n">space</span><span class="si">}</span><span class="s2"> site; expected one of "</span>
+                       <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">OPERATORS</span><span class="p">[</span><span class="n">space</span><span class="p">])</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nb">sorted</span><span class="p">(</span><span class="n">CHARGED_OPERATORS</span><span class="p">[</span><span class="n">space</span><span class="p">])</span><span class="si">}</span><span class="s2">, its "</span>
+                       <span class="sa">f</span><span class="s2">"diagonal or its matrix"</span><span class="p">)</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">a</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">a</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">d</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a </span><span class="si">{</span><span class="n">space</span><span class="si">}</span><span class="s2"> operator's diagonal has </span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2"> entries, got shape </span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">string</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">iscomplexobj</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">"diag"</span><span class="p">:</span> <span class="n">a</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()},</span> <span class="kc">True</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">a</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a </span><span class="si">{</span><span class="n">space</span><span class="si">}</span><span class="s2"> operator's matrix is </span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2"> x </span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2">, got shape </span><span class="si">{</span><span class="n">a</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"matrix"</span><span class="p">:</span> <span class="n">_pairs</span><span class="p">(</span><span class="n">a</span><span class="p">)}</span>
+    <span class="k">if</span> <span class="n">string</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">string</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">s</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">d</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a </span><span class="si">{</span><span class="n">space</span><span class="si">}</span><span class="s2"> string has </span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2"> entries, got shape </span><span class="si">{</span><span class="n">s</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">fields</span><span class="p">[</span><span class="s2">"string"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_pairs</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fields</span><span class="p">,</span> <span class="kc">False</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_int</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span>
+        <span class="k">return</span> <span class="n">operator</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be an int, got </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_lib</span><span class="p">(</span><span class="n">engine</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.dmrg</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_engine</span>
+    <span class="n">lib</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_resolve_engine</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="s2">"mps"</span><span class="p">,</span> <span class="n">MPSError</span><span class="p">),</span> <span class="s2">"_lib"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">lib</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="s2">"qx_mps"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="s2">"the loaded native library does not export qx_mps"</span><span class="p">)</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">qx_mps</span><span class="o">.</span><span class="n">argtypes</span> <span class="o">=</span> <span class="p">[</span><span class="n">c_char_p</span><span class="p">]</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">qx_mps</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">c_char_p</span>
+    <span class="k">return</span> <span class="n">lib</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_call</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">qx_mps</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">request</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">()))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ok"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error"</span><span class="p">,</span> <span class="s2">"unknown error from the native engine"</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<div class="viewcode-block" id="GroundState">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.GroundState">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">GroundState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""How :func:`ground_state`'s DMRG went."""</span>
+    <span class="n">energy</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">truncation_error</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">n_sweeps_done</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">sweep_energies</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">list</span><span class="p">)</span>
+    <span class="n">sector</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">)</span>
+    <span class="n">wall_time_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span></div>
+
+
+
+<div class="viewcode-block" id="MPS">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MPS</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A matrix-product state held by the native engine, until it is freed.</span>
+
+<span class="sd">    Make one with :func:`ground_state` or :func:`product`. The methods that change it do</span>
+<span class="sd">    so in place and return it; :meth:`copy` makes an independent state. The engine frees</span>
+<span class="sd">    the state when this object is collected, or at :meth:`free`.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="MPS.__init__">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">handle</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">lib</span><span class="p">,</span> <span class="n">dmrg</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">GroundState</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dmrg</span> <span class="o">=</span> <span class="n">handle</span><span class="p">,</span> <span class="n">lib</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">dmrg</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="o">=</span> <span class="n">_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span></div>
+
+
+    <span class="c1"># -- lifetime --------------------------------------------------------------------</span>
+<div class="viewcode-block" id="MPS.free">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.free">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">free</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Free the engine's state now; the object is unusable afterwards."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">h</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"free"</span><span class="p">,</span> <span class="s2">"handle"</span><span class="p">:</span> <span class="n">h</span><span class="p">})</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">free</span><span class="p">()</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>      <span class="c1"># interpreter shutdown, or a library already unloaded</span>
+            <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__enter__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__exit__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">exc</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">free</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_h</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="s2">"this state has been freed"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_peer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">"MPS"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">MPS</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"expected an MPS, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">other</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">other</span><span class="o">.</span><span class="n">_lib</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="s2">"the two states live in different engines"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">other</span><span class="o">.</span><span class="n">_h</span><span class="p">()</span>
+
+    <span class="c1"># -- reading ---------------------------------------------------------------------</span>
+<div class="viewcode-block" id="MPS.info">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.info">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">info</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""n_sites, local_dim, bonds (bonds 1..L-1), norm2 and charge (engine units)."""</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"info"</span><span class="p">,</span> <span class="s2">"handle"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">()})</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">out</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"n_sites"</span><span class="p">,</span> <span class="s2">"local_dim"</span><span class="p">,</span> <span class="s2">"bonds"</span><span class="p">,</span> <span class="s2">"norm2"</span><span class="p">,</span> <span class="s2">"charge"</span><span class="p">)}</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_sites</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s2">"n_sites"</span><span class="p">])</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bonds</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">b</span><span class="p">)</span> <span class="k">for</span> <span class="n">b</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s2">"bonds"</span><span class="p">]]</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">norm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s2">"norm2"</span><span class="p">]))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The symmetry sector the state is in: ``{"sz": ...}`` for a spin chain,</span>
+<span class="sd">        ``{"n_up": ..., "n_dn": ...}`` for a Hubbard one."""</span>
+        <span class="n">q</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s2">"charge"</span><span class="p">])</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="o">==</span> <span class="s2">"hubbard"</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="p">(</span><span class="n">q</span> <span class="o">+</span> <span class="n">_Q2K</span> <span class="o">//</span> <span class="mi">2</span><span class="p">)</span> <span class="o">//</span> <span class="n">_Q2K</span>
+            <span class="n">sz2</span> <span class="o">=</span> <span class="n">q</span> <span class="o">-</span> <span class="n">n</span> <span class="o">*</span> <span class="n">_Q2K</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">"n_up"</span><span class="p">:</span> <span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="n">sz2</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">"n_dn"</span><span class="p">:</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="n">sz2</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span><span class="p">}</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"sz"</span><span class="p">:</span> <span class="n">q</span> <span class="o">/</span> <span class="mi">2</span><span class="p">}</span>
+
+<div class="viewcode-block" id="MPS.overlap">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.overlap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">overlap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="s2">"MPS"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">complex</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``&lt;self|other&gt;``."""</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"overlap"</span><span class="p">,</span> <span class="s2">"bra"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">(),</span> <span class="s2">"ket"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_peer</span><span class="p">(</span><span class="n">other</span><span class="p">)})</span>
+        <span class="k">return</span> <span class="nb">complex</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"re"</span><span class="p">],</span> <span class="n">out</span><span class="p">[</span><span class="s2">"im"</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="MPS.matrix_elements">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.matrix_elements">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">matrix_elements</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">ket</span><span class="p">:</span> <span class="s2">"MPS"</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">string</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``&lt;self| O_j |ket&gt;`` for every site j, as they are: neither state is normalized.</span>
+
+<span class="sd">        O_j carries its string on the sites left of j. For an operator that changes the</span>
+<span class="sd">        charge, the values are zero unless ``self`` is in the sector O takes ``ket`` to."""</span>
+        <span class="n">fields</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_operator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">string</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">fields</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="s2">"expect"</span><span class="p">,</span> <span class="n">bra</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">(),</span> <span class="n">ket</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_peer</span><span class="p">(</span><span class="n">ket</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"re"</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"im"</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="MPS.expect">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.expect">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">expect</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">string</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``&lt;O_j&gt; = &lt;self|O_j|self&gt; / &lt;self|self&gt;`` for every site j.</span>
+
+<span class="sd">        Real for a real diagonal operator, complex otherwise; zero for one that changes</span>
+<span class="sd">        the charge."""</span>
+        <span class="n">fields</span><span class="p">,</span> <span class="n">real</span> <span class="o">=</span> <span class="n">_operator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">string</span><span class="p">)</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">fields</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="s2">"expect"</span><span class="p">,</span> <span class="n">bra</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">()))</span>
+        <span class="n">v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"re"</span><span class="p">])</span> <span class="k">if</span> <span class="n">real</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"re"</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"im"</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">v</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">info</span><span class="p">()[</span><span class="s2">"norm2"</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="MPS.energy">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.energy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``&lt;H&gt; / &lt;self|self&gt;`` for a model (default: the one this state was made with)."""</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_same_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"energy"</span><span class="p">,</span> <span class="s2">"handle"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">(),</span>
+                                       <span class="s2">"model"</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">problem</span><span class="p">()})[</span><span class="s2">"energy"</span><span class="p">])</span></div>
+
+
+    <span class="c1"># -- changing --------------------------------------------------------------------</span>
+<div class="viewcode-block" id="MPS.copy">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.copy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"MPS"</span><span class="p">:</span>
+        <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"copy"</span><span class="p">,</span> <span class="s2">"handle"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">()})</span>
+        <span class="k">return</span> <span class="n">MPS</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"handle"</span><span class="p">]),</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dmrg</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MPS.apply">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.apply">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">apply</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">site</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">string</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"MPS"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``O_site |self&gt;``, in place and not renormalized.</span>
+
+<span class="sd">        O is a name from :data:`OPERATORS` or :data:`CHARGED_OPERATORS`, a diagonal, or a</span>
+<span class="sd">        matrix on the local space, ``&lt;s'|O|s&gt;`` with row s' the result. ``string`` is a</span>
+<span class="sd">        diagonal of phases applied on every site left of ``site`` too, as a fermion</span>
+<span class="sd">        operator's Jordan-Wigner string is; the named fermion operators bring their own.</span>
+<span class="sd">        An operator that changes the charge moves the state to its new sector</span>
+<span class="sd">        (:attr:`sector`). It must change it by one amount, so ``S^x`` is refused: its</span>
+<span class="sd">        correlations are sums of those of ``S^+`` and ``S^-``, each applied to a copy."""</span>
+        <span class="n">fields</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">_operator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="n">op</span><span class="p">,</span> <span class="n">string</span><span class="p">)</span>
+        <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">fields</span><span class="p">,</span> <span class="n">op</span><span class="o">=</span><span class="s2">"apply"</span><span class="p">,</span> <span class="n">handle</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">(),</span> <span class="n">site</span><span class="o">=</span><span class="n">_int</span><span class="p">(</span><span class="n">site</span><span class="p">,</span> <span class="s2">"site"</span><span class="p">)))</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="MPS.evolve">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.MPS.evolve">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">evolve</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">steps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">imaginary</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+               <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-10</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"MPS"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""``steps`` two-site TDVP steps of exp(-i H dt), in place.</span>
+
+<span class="sd">        With ``imaginary``, of exp(-H dt), renormalized after each step. ``model`` is the</span>
+<span class="sd">        Hamiltonian (default: the one this state was made with); another of the same length</span>
+<span class="sd">        and local space is a quench.</span>
+<span class="sd">        """</span>
+        <span class="n">model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="k">if</span> <span class="n">model</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_same_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+        <span class="n">_call</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"evolve"</span><span class="p">,</span> <span class="s2">"handle"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_h</span><span class="p">(),</span> <span class="s2">"model"</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">problem</span><span class="p">(),</span>
+                          <span class="s2">"dt"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">dt</span><span class="p">),</span> <span class="s2">"n_steps"</span><span class="p">:</span> <span class="n">_int</span><span class="p">(</span><span class="n">steps</span><span class="p">,</span> <span class="s2">"steps"</span><span class="p">),</span>
+                          <span class="s2">"imaginary"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">imaginary</span><span class="p">),</span> <span class="s2">"max_bond"</span><span class="p">:</span> <span class="n">_int</span><span class="p">(</span><span class="n">max_bond</span><span class="p">,</span> <span class="s2">"max_bond"</span><span class="p">),</span>
+                          <span class="s2">"cutoff"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span><span class="p">)})</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_same_space</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="ow">or</span> <span class="n">model</span><span class="o">.</span><span class="n">L</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">L</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the model is a </span><span class="si">{</span><span class="n">model</span><span class="o">.</span><span class="n">L</span><span class="si">}</span><span class="s2">-site </span><span class="si">{</span><span class="n">_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="si">}</span><span class="s2"> chain, the state "</span>
+                           <span class="sa">f</span><span class="s2">"a </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">L</span><span class="si">}</span><span class="s2">-site </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="si">}</span><span class="s2"> one"</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">"MPS(freed)"</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bonds</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"MPS(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="si">}</span><span class="s2">, n_sites=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">b</span><span class="p">)</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">, max bond </span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">default</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+                <span class="sa">f</span><span class="s2">"handle </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_handle</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_sector</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">sz</span><span class="p">,</span> <span class="n">n_up</span><span class="p">,</span> <span class="n">n_dn</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">_Hubbard</span><span class="p">,</span> <span class="n">_SpinChain</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">_Hubbard</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">sz</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">'s sector is n_up / n_dn, not sz"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">sector</span><span class="p">(</span><span class="n">n_up</span><span class="p">,</span> <span class="n">n_dn</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">_SpinChain</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">n_up</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">n_dn</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">'s sector is sz, not n_up / n_dn"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">model</span><span class="o">.</span><span class="n">sector</span><span class="p">(</span><span class="n">sz</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not a quantx_engine.models model: </span><span class="si">{</span><span class="n">model</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="ground_state">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.ground_state">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">ground_state</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">sz</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">n_up</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">n_dn</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">256</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-10</span><span class="p">,</span>
+                 <span class="n">n_sweeps</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span> <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-10</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MPS</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The DMRG ground state of a model in one symmetry sector, as an :class:`MPS`.</span>
+
+<span class="sd">    The sector and the options are those of :func:`quantx_engine.dmrg.ground_state`; how</span>
+<span class="sd">    the DMRG went is on the result's ``dmrg``.</span>
+<span class="sd">    """</span>
+    <span class="n">sector</span> <span class="o">=</span> <span class="n">_sector</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">sz</span><span class="p">,</span> <span class="n">n_up</span><span class="p">,</span> <span class="n">n_dn</span><span class="p">)</span>
+    <span class="n">lib</span> <span class="o">=</span> <span class="n">_lib</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"ground_state"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">problem</span><span class="p">(),</span> <span class="n">sector</span><span class="o">=</span><span class="n">sector</span><span class="p">),</span>
+                      <span class="s2">"max_bond"</span><span class="p">:</span> <span class="n">_int</span><span class="p">(</span><span class="n">max_bond</span><span class="p">,</span> <span class="s2">"max_bond"</span><span class="p">),</span> <span class="s2">"cutoff"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span><span class="p">),</span>
+                      <span class="s2">"n_sweeps"</span><span class="p">:</span> <span class="n">_int</span><span class="p">(</span><span class="n">n_sweeps</span><span class="p">,</span> <span class="s2">"n_sweeps"</span><span class="p">),</span> <span class="s2">"tol"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">tol</span><span class="p">)})</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="n">GroundState</span><span class="p">(</span><span class="n">energy</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"energy"</span><span class="p">]),</span>
+                       <span class="n">truncation_error</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"truncation_error"</span><span class="p">]),</span>
+                       <span class="n">n_sweeps_done</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"n_sweeps_done"</span><span class="p">]),</span>
+                       <span class="n">sweep_energies</span><span class="o">=</span><span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">e</span><span class="p">)</span> <span class="k">for</span> <span class="n">e</span> <span class="ow">in</span> <span class="n">out</span><span class="p">[</span><span class="s2">"sweep_energies"</span><span class="p">]],</span>
+                       <span class="n">sector</span><span class="o">=</span><span class="n">model</span><span class="o">.</span><span class="n">describe_sector</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"sector"</span><span class="p">]),</span>
+                       <span class="n">wall_time_s</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"wall_time_s"</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="n">MPS</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"handle"</span><span class="p">]),</span> <span class="n">model</span><span class="p">,</span> <span class="n">lib</span><span class="p">,</span> <span class="n">info</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="product">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.mps.html#quantx_engine.mps.product">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">product</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">config</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span> <span class="o">*</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MPS</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The product state with local state ``config[i]`` on site i.</span>
+
+<span class="sd">    A local state is its index in the engine's order or its name in</span>
+<span class="sd">    :data:`LOCAL_STATES` (spin 1/2 "up", "dn"; spin 1 "+1", "0", "-1"; Hubbard "0",</span>
+<span class="sd">    "up", "dn", "ud").</span>
+<span class="sd">    """</span>
+    <span class="n">space</span> <span class="o">=</span> <span class="n">_space</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="n">names</span> <span class="o">=</span> <span class="n">LOCAL_STATES</span><span class="p">[</span><span class="n">space</span><span class="p">]</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">config</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">c</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">names</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="n">MPSError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"site </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">: no </span><span class="si">{</span><span class="n">space</span><span class="si">}</span><span class="s2"> local state </span><span class="si">{</span><span class="n">c</span><span class="si">!r}</span><span class="s2">; expected one of "</span>
+                               <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">names</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="n">idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">names</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">c</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">idx</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_int</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"config[</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">]"</span><span class="p">))</span>
+    <span class="n">lib</span> <span class="o">=</span> <span class="n">_lib</span><span class="p">(</span><span class="n">engine</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_call</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="p">{</span><span class="s2">"op"</span><span class="p">:</span> <span class="s2">"product"</span><span class="p">,</span> <span class="s2">"model"</span><span class="p">:</span> <span class="n">model</span><span class="o">.</span><span class="n">problem</span><span class="p">(),</span> <span class="s2">"config"</span><span class="p">:</span> <span class="n">idx</span><span class="p">})</span>
+    <span class="k">return</span> <span class="n">MPS</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"handle"</span><span class="p">]),</span> <span class="n">model</span><span class="p">,</span> <span class="n">lib</span><span class="p">)</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>
