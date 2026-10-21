@@ -54,10 +54,11 @@ measures each step's generator between the state and H|psi>, both carried back. 
 the circuit, it costs more with depth, but it needs no circuit per angle, where central
 differences need two. Its cost in energy evaluations is set by bond dimensions:
 H|psi> needs up to w times the state's (w is the Hamiltonian's MPO bond dimension, 6
-on a chain), so it is largest while the state's bonds are well below max_bond. On a
-16-site chain at max_bond 128 the gradient costs 32 energy evaluations at 2 layers
-(6 angles), against 12 for central differences, and 6 at 32 layers (96 angles),
-against 192 (benchmarks/hva_gradient_cost.py). An optimizer can take it directly::
+on a chain), up to max_bond, so it is largest while the state's bonds are well below
+max_bond. H|psi> itself is zipped up on the state, site by site. On a 16-site chain at
+max_bond 128 the gradient costs 11 energy evaluations at 2 layers (6 angles), against
+12 for central differences, and 4 at 32 layers (96 angles), against 192
+(benchmarks/hva_gradient_cost.py). An optimizer can take it directly::
 
     import numpy as np
     from scipy.optimize import minimize
@@ -76,7 +77,14 @@ difference step of 1e-8 turns the energy's rounding noise of ~1e-11 into an erro
 What truncation costs the gradient: ``gradient_truncation_error`` is the largest weight
 discarded computing it (H|psi> is held at ``max_bond``, as the state is), and
 ``gradient_return_error`` how far the backward pass missed the start. Both are zero
-without truncation.
+without truncation. H|psi> is not normalised: its weights count against
+|H psi|^2 = <psi|H^2|psi>, 86 to 335 on the 16-site chain of the cost above. So counted,
+``gradient_truncation_error`` is the scale of the gradient's own error: on that chain
+the gradient at max_bond 128 and 256 was 1.3 to 2.8 times it off, against max_bond 512,
+at 4 to 16 layers. From 16 layers on, max_bond 128 truncates that chain hard
+(``truncation_error`` 5e-4 to 6e-3, ``gradient_truncation_error`` 0.14 to 0.74; at 16
+layers the gradient is 0.28 off, on components up to 7.7), so the costs quoted there
+are those of an approximate gradient.
 """
 from __future__ import annotations
 
@@ -144,7 +152,9 @@ class HVAResult:
     gradient_truncation_error : float or None
         ``gradient=True`` only: the largest single weight discarded computing it, in
         H|psi>'s compression to ``max_bond`` and in the backward pass's truncations, the
-        gradient's counterpart of ``truncation_error``.
+        gradient's counterpart of ``truncation_error``. H|psi>'s weights count against
+        its own squared norm, <psi|H^2|psi>, and so counted the gradient's error came out
+        of the same size (see the module notes).
     gradient_return_error : float or None
         ``gradient=True`` only: 1 - |<psi_0|psi>| for the state the backward pass brings
         back to the start. It is zero without truncation; otherwise it is what the round
