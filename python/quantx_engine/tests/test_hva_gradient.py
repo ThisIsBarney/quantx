@@ -8,7 +8,7 @@ through the circuit. The checks:
   engine: the Fock-space simulator of test_hva_statevector, with the adjoint formula in
   dense linear algebra. With ``svd="direct"`` the circuit's own rounding is ~1e-14, so
   this shows the method's precision. It is gated to 1e-10 from product starts (measured:
-  up to 1.2e-11 on gradients of size 3 to 7) and to 1e-6 from free starts, which carry
+  up to 5.4e-13 on gradients of size 3 to 7) and to 1e-6 from free starts, which carry
   their DMRG preparation's residual (measured 1.4e-7 to 2.4e-7).
 - The default route, ``svd="gram"``, within its rounding. Its splits go through the Gram
   matrix, which leaves Schmidt values below sqrt(eps) ~ 1e-8 imprecise, so a circuit
@@ -19,6 +19,9 @@ through the circuit. The checks:
   the five-point stencil at h = 5e-4, whose truncation error is h^4/30 times the fifth
   derivative, with ``svd="direct"``. On the Gram route, the chain's rounding noise,
   divided by h, would cap it at a few 1e-8 at any step size.
+- With H|psi> truncated, against the gradient of the whole sector: it moves by less than
+  10 times gradient_truncation_error (measured: 0.9 to 2.8 times), so the diagnostic
+  says what the truncation cost.
 """
 from __future__ import annotations
 
@@ -218,3 +221,23 @@ def test_a_truncated_round_trip_says_so(engine):
     assert exact.gradient_return_error < 1e-12 and exact.gradient_truncation_error < 1e-12
     assert cut.truncation_error > 1e-6 and cut.gradient_return_error > 1e-6
     assert cut.gradient_truncation_error > 1e-6
+
+
+def test_the_gradient_moves_by_about_its_truncation_error(engine):
+    """With H|psi> truncated and the state not (to rounding), the gradient moves by about
+    gradient_truncation_error: 0.9 to 2.8 times it in every case measured, on an 8-site
+    chain at half its bond dimension and on the 16-site chain of the cost benchmark at 4
+    to 16 layers, against max_bond 512. H|psi> is zipped up on the state and truncated
+    only where its weights are Schmidt weights. A zip-up that truncated as it went,
+    against a right part that is not orthonormal, moved this gradient by 310 times the
+    weight it reported."""
+    from quantx_engine import hva
+    model = HubbardLattice(Lx=8, W=1, U=4.0)
+    angles = _angles(2, hva.layout(model, engine=engine).angles_per_layer, seed=1)
+    kw = dict(init="product", cutoff=1e-14, entropy=False, gradient=True, svd="direct",
+              engine=engine)
+    exact = hva.circuit(model, angles, max_bond=256, **kw)    # the whole sector
+    cut = hva.circuit(model, angles, max_bond=exact.max_bond // 2, **kw)
+    assert cut.truncation_error < 1e-12 < cut.gradient_truncation_error
+    err = np.abs(np.array(cut.gradient) - np.array(exact.gradient)).max()
+    assert err < 10 * cut.gradient_truncation_error, (err, cut.gradient_truncation_error)
