@@ -28,7 +28,7 @@ Python gate yet.
        SU(2) path for Heisenberg chains.
    * - :mod:`quantx_engine.hva`
      - Fermionic HVA circuits on the Hubbard lattices: energy, entanglement entropies,
-       truncation.
+       truncation, and the energy's gradient in every angle by the adjoint method.
    * - :mod:`quantx_engine.thermal`
      - Finite temperature by purification, for the XXZ, spin-1 and Hubbard chains: the
        statics, the dynamical structure factor S(k, ω, T) and the optical conductivity

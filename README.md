@@ -15,10 +15,11 @@ checked. Everything else in the package is marked experimental below.
 | Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a chosen symmetry sector | `dmrg.ground_state` with `models.XXZChain`, `J1J2Chain`, `Spin1Chain`, `HubbardChain` | exact diagonalisation, written independently of the engine, to 1e-10 |
 | Hubbard ground states on ladders, strips and cylinders | `dmrg.ground_state(models.HubbardLattice(...))` | exact diagonalisation on a ladder and a cylinder, where the fermion signs are physical, to 1e-10 |
 | Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy, entanglement entropy, truncation | `hva.circuit`, `hva.layout` | an independent state-vector simulation: energy and entropies to 1e-10 from a product start (`init="product"`); to 1e-6 from the default U = 0 start, measured at about 1e-8 (see below) |
+| The gradient of an HVA circuit's energy in every angle, by the adjoint method: one pass back through the circuit, with no circuit per angle | `hva.circuit(..., gradient=True)` | the exact gradient of the same independent state vector, to 1e-10 with `svd="direct"` (1e-6 on the default, faster route, whose rounding puts it a few 1e-9 off), and central differences of the engine's own energy, to 1e-8; from a product start |
 | Finite-temperature statics, the dynamical structure factor S(k, ω, T) and the optical conductivity σ(ω, T) of the XXZ, spin-1 and Hubbard chains | `thermal.statics`, `thermal.structure_factor(...).spectrum()`, `thermal.current_correlation(...).conductivity()` | exact diagonalisation of the whole Hilbert space, to the second-order Trotter error of the steps: below 1e-3 at the default step 0.05, and falling by 4 at half the step; the transforms against Lehmann sums to 1e-8 |
 
 These checks run in CI against a fresh Linux build of the engine (`test_models_ed.py`,
-`test_hva_statevector.py` and `test_thermal_ed.py` in `python/quantx_engine/tests/`). The macOS and Windows
+`test_hva_statevector.py`, `test_hva_gradient.py` and `test_thermal_ed.py` in `python/quantx_engine/tests/`). The macOS and Windows
 wheels are checked only for loading the engine.
 
 ## Install

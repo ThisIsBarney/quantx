@@ -24,6 +24,7 @@ on:
       - "python/quantx_engine/tests/test_models_ed.py"
       - "python/quantx_engine/hva.py"
       - "python/quantx_engine/tests/test_hva_statevector.py"
+      - "python/quantx_engine/tests/test_hva_gradient.py"
       - "python/quantx_engine/contrib/noise.py"
       - "python/quantx_engine/tests/test_noise.py"
       - "python/quantx_engine/thermal.py"
@@ -51,6 +52,7 @@ on:
       - "python/quantx_engine/tests/test_models_ed.py"
       - "python/quantx_engine/hva.py"
       - "python/quantx_engine/tests/test_hva_statevector.py"
+      - "python/quantx_engine/tests/test_hva_gradient.py"
       - "python/quantx_engine/contrib/noise.py"
       - "python/quantx_engine/tests/test_noise.py"
       - "python/quantx_engine/thermal.py"
@@ -138,7 +140,7 @@ jobs:
           print('ctypes load test PASSED')
           "
 
-      - name: Symmetric models and engine-held MPS vs exact diagonalisation, HVA and U(1) circuits vs state vector, finite temperature vs full ED (M4/M5/M6/M11/M16 gates), noise rules vs the circuit backend
+      - name: Symmetric models and engine-held MPS vs exact diagonalisation, HVA and U(1) circuits and HVA gradients vs state vector, finite temperature vs full ED (M4/M5/M6/M11/M13/M16 gates), noise rules vs the circuit backend
         # Solves every quantx_engine.models model on this build's engine against an
         # independent ED (1e-10), and runs HVA circuits (chain, ladder, strip, cylinder)
         # against an independent state vector (1e-10 from product starts; 1e-6 from U = 0
@@ -148,6 +150,8 @@ jobs:
         # transpiled-pattern OpenQASM circuits into charge-conserving gates and runs them
         # against an independent state vector (1e-10). test_mps.py chains states the engine
         # keeps (ground states, operators, TDVP, matrix elements) against an independent ED.
+        # test_hva_gradient.py checks the adjoint gradient of HVA circuits against the
+        # exact gradient of an independent state vector and against central differences.
         # test_noise.py checks
         # CompositeNoise's collision rules against the circuit backend. The only job that runs
         # Python tests against the native library; QX_REQUIRE_NATIVE=1 makes a load
@@ -159,6 +163,7 @@ jobs:
           export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
           python -m pytest python/quantx_engine/tests/test_models_ed.py \
                            python/quantx_engine/tests/test_hva_statevector.py \
+                           python/quantx_engine/tests/test_hva_gradient.py \
                            python/quantx_engine/tests/test_thermal_ed.py \
                            python/quantx_engine/tests/test_quickstart.py \
                            python/quantx_engine/tests/test_u1_circuit.py \

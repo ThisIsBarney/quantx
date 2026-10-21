@@ -31,8 +31,15 @@ singlet ground state. The free start is refused where the U = 0 ground state is
 degenerate, since DMRG would then return an arbitrary member of the degenerate space.
 ``init="product"`` starts from a product state in the sector.
 
-Precision: from a product start the circuit is exact up to ``max_bond`` (gated against
-a state vector to 1e-10). A free start is only as good as its DMRG preparation, which
+Precision: from a product start the circuit is exact up to ``max_bond`` and rounding
+(gated against a state vector to 1e-10). The rounding depends on how the splits are
+factorised. By default (``svd="gram"``) they go through the Gram matrix, the faster
+route, which leaves Schmidt values below sqrt(eps) ~ 1e-8 of the largest imprecise. A
+circuit whose bonds fill up then carries a rounding noise of up to ~1e-10 in its
+energy: 6e-12 on Windows and 1.2e-10 on Linux for one 6-site chain of three layers.
+``svd="direct"`` uses a direct SVD at every split, which keeps the energy smooth in the
+angles to ~1e-14, at up to twice the cost. A free start is only as good as its DMRG
+preparation, which
 stops when its energy stops changing, and a circuit inherits the start's error. On the
 small systems of the gate that meant 1e-8 to 7e-8 in the circuit energy; on a long chain
 with a small single-particle gap it can be far worse. ``init_energy_error`` (the start's
@@ -40,6 +47,36 @@ energy against the exact U = 0 energy) catches a bad start, but a small value do
 bound the circuit's error: the energy is stationary at the ground state, so the gate's
 starts were right to about 5e-14 in energy while their circuits were 1e-8 off. For the
 full precision, start from ``init="product"``.
+
+The gradient: ``gradient=True`` also returns dE/dtheta for every angle (``r.gradient``,
+laid out as the angles), by the adjoint method. One pass back through the circuit
+measures each step's generator between the state and H|psi>, both carried back. Like
+the circuit, it costs more with depth, but it needs no circuit per angle, where central
+differences need two. Its cost in energy evaluations is set by bond dimensions:
+H|psi> needs up to w times the state's (w is the Hamiltonian's MPO bond dimension, 6
+on a chain), so it is largest while the state's bonds are well below max_bond. On a
+16-site chain at max_bond 128 the gradient costs 32 energy evaluations at 2 layers
+(6 angles), against 12 for central differences, and 6 at 32 layers (96 angles),
+against 192 (benchmarks/hva_gradient_cost.py). An optimizer can take it directly::
+
+    import numpy as np
+    from scipy.optimize import minimize
+
+    def energy_and_gradient(x):
+        r = hva.circuit(cyl, x.reshape(3, -1).tolist(), n_up=6, n_dn=6, gradient=True)
+        return r.energy, np.ravel(r.gradient)
+
+    res = minimize(energy_and_gradient, np.full(3 * lay.angles_per_layer, 0.1),
+                   jac=True, method="L-BFGS-B")
+
+Finite differences of the energy are a poor substitute: with the default ``svd``, a
+difference step of 1e-8 turns the energy's rounding noise of ~1e-11 into an error of
+1e-3 in the gradient.
+
+What truncation costs the gradient: ``gradient_truncation_error`` is the largest weight
+discarded computing it (H|psi> is held at ``max_bond``, as the state is), and
+``gradient_return_error`` how far the backward pass missed the start. Both are zero
+without truncation.
 """
 from __future__ import annotations
 
@@ -102,6 +139,16 @@ class HVAResult:
     init_config : list[int] or None
         ``init="product"`` only: the starting local state per site (0 empty, 1 up,
         2 down, 3 double occupancy).
+    gradient : list[list[float]] or None
+        ``gradient=True`` only: dE/dtheta for every angle, laid out as the angles.
+    gradient_truncation_error : float or None
+        ``gradient=True`` only: the largest single weight discarded computing it, in
+        H|psi>'s compression to ``max_bond`` and in the backward pass's truncations, the
+        gradient's counterpart of ``truncation_error``.
+    gradient_return_error : float or None
+        ``gradient=True`` only: 1 - |<psi_0|psi>| for the state the backward pass brings
+        back to the start. It is zero without truncation; otherwise it is what the round
+        trip's truncations cost the gradient.
     """
     energy: float
     entropy_max: Optional[float]
@@ -117,6 +164,9 @@ class HVAResult:
     init_energy_error: Optional[float] = None
     init_truncation_error: Optional[float] = None
     init_config: Optional[list] = None
+    gradient: Optional[list] = None
+    gradient_truncation_error: Optional[float] = None
+    gradient_return_error: Optional[float] = None
 
 
 def _as_lattice(model):
@@ -164,6 +214,8 @@ def circuit(
     max_bond: int = 256,
     cutoff: float = 1e-12,
     entropy: bool = True,
+    gradient: bool = False,
+    svd: str = "gram",
     engine=None,
 ) -> HVAResult:
     """Run an HVA circuit and measure the model's energy on its output.
@@ -186,6 +238,15 @@ def circuit(
         Truncation cutoff of the circuit (the preparation uses its own 1e-12).
     entropy : bool
         Measure the final state's entanglement entropies (one extra lossless sweep).
+    gradient : bool
+        Also compute dE/dtheta for every angle, by the adjoint method: one pass back
+        through the circuit, carrying the state and the Hamiltonian applied to it.
+        It needs no circuit per angle, where central differences need two (see the
+        module notes for its cost).
+    svd : {"gram", "direct"}
+        How every split is factorised: through the Gram matrix (the default, faster),
+        or by a direct SVD, which keeps the energy smooth in the angles to ~1e-14
+        instead of ~1e-10, at up to twice the cost (see the module notes).
 
     Raises
     ------
@@ -199,6 +260,8 @@ def circuit(
     sector = lat.sector(n_up, n_dn)
     if init not in ("free", "product"):
         raise HVAError(f"init must be 'free' or 'product', got {init!r}")
+    if svd not in ("gram", "direct"):
+        raise HVAError(f"svd must be 'gram' or 'direct', got {svd!r}")
     try:
         if isinstance(max_bond, bool):
             raise TypeError
@@ -212,7 +275,8 @@ def circuit(
     except TypeError as exc:
         raise HVAError("angles must be a sequence of layers, each a sequence of numbers") from exc
     prob = dict(lat.problem(), sector=sector, angles=layers)
-    opts = {"max_bond": max_bond, "cutoff": cutoff, "init": init, "entropy": bool(entropy)}
+    opts = {"max_bond": max_bond, "cutoff": cutoff, "init": init, "entropy": bool(entropy),
+            "gradient": bool(gradient), "svd": svd}
     out = _check(json.loads(_lib(engine).qx_hva_circuit(json.dumps(prob).encode(),
                                                         json.dumps(opts).encode())))
     return HVAResult(
@@ -230,4 +294,7 @@ def circuit(
         init_energy_error=out.get("init_energy_error"),
         init_truncation_error=out.get("init_truncation_error"),
         init_config=out.get("init_config"),
+        gradient=out.get("gradient"),
+        gradient_truncation_error=out.get("gradient_truncation_error"),
+        gradient_return_error=out.get("gradient_return_error"),
     )

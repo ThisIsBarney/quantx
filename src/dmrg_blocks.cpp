@@ -12,6 +12,7 @@
 #include <limits>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <random>
 #include <set>
 #include <stdexcept>
@@ -3101,7 +3102,7 @@ static Mat build_fswap_gate(int d, const std::vector<int>& qphys) {
 // centre is already at site k; the centre is left at site k+1. Truncates to
 // (chi_max, cutoff) and reports the discarded weight.
 static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cutoff,
-                            const std::vector<int>& qphys) {
+                            const std::vector<int>& qphys, bool stable = false) {
     const std::map<int,RVec> no_sv;
     const int d = (int)qphys.size();
     auto th = form_theta(s.A[k], s.A[k+1], no_sv, s.bond[k], s.bond[k+1], s.bond[k+2],
@@ -3109,7 +3110,7 @@ static double apply_gate_at(BMPS& s, int k, const Mat& G, int chi_max, double cu
     bt_expand_theta(th, s.bond[k], s.bond[k+2], qphys);
     apply_gate_theta_general(th, s.bond[k], s.bond[k+2], G, d, qphys);
     auto svd = block_svd_truncate(th, s.bond[k], s.bond[k+2], chi_max, cutoff,
-                                  false, false, qphys);
+                                  false, stable, qphys);
     s.bond[k+1] = svd.new_mid_bs;
     s.A[k]   = bt_A_from_U(svd, s.bond[k], s.bond[k+1], qphys);
     s.A[k+1] = bt_center_LR(svd);
@@ -3132,14 +3133,15 @@ static int bond_total(const BondSpace& b) {
     for (int d : b.dims) t += d;
     return std::max(1, t);
 }
-static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys) {
+static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys,
+                        bool stable = false) {
     const std::map<int,RVec> no_sv;
     while (from < to) {                       // rightward
         auto th = form_theta(s.A[from], s.A[from+1], no_sv, s.bond[from],
                              s.bond[from+1], s.bond[from+2], true, qphys);
         bt_expand_theta(th, s.bond[from], s.bond[from+2], qphys);
         auto svd = block_svd_truncate(th, s.bond[from], s.bond[from+2],
-                                      bond_total(s.bond[from+1]), 0.0, false, false, qphys);
+                                      bond_total(s.bond[from+1]), 0.0, false, stable, qphys);
         s.bond[from+1] = svd.new_mid_bs;
         s.A[from]   = bt_A_from_U(svd, s.bond[from], s.bond[from+1], qphys);
         s.A[from+1] = bt_center_LR(svd);
@@ -3150,7 +3152,7 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
                              s.bond[from], s.bond[from+1], true, qphys);
         bt_expand_theta(th, s.bond[from-1], s.bond[from+1], qphys);
         auto svd = block_svd_truncate(th, s.bond[from-1], s.bond[from+1],
-                                      bond_total(s.bond[from]), 0.0, false, false, qphys);
+                                      bond_total(s.bond[from]), 0.0, false, stable, qphys);
         s.bond[from] = svd.new_mid_bs;
         s.A[from]   = svd.Vt;
         s.A[from-1] = bt_center_RL(svd, s.bond[from-1], s.bond[from], qphys);
@@ -3175,7 +3177,8 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
 // the Schmidt values.
 static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FSWAP,
                               int chi_max, double cutoff,
-                              const std::vector<int>& qphys, int& centre) {
+                              const std::vector<int>& qphys, int& centre,
+                              bool stable = false) {
     if (j <= i) throw std::runtime_error("apply_pair_gate: need j > i");
     // move_centre and apply_gate_at index s.A[k]/s.bond[k+1] with no bounds check of
     // their own, so an out-of-range mode pair is a heap overrun rather than an error.
@@ -3192,19 +3195,19 @@ static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FS
     double worst = 0;
     int c = centre;                           // current centre, as stated by the caller
     for (int k = j - 1; k > i; --k) {         // bring mode j down to site i+1
-        move_centre(s, c, k, qphys);
-        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
+        move_centre(s, c, k, qphys, stable);
+        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
         c = k + 1;
     }
-    move_centre(s, c, i, qphys);
-    worst = std::max(worst, apply_gate_at(s, i, G, chi_max, cutoff, qphys));
+    move_centre(s, c, i, qphys, stable);
+    worst = std::max(worst, apply_gate_at(s, i, G, chi_max, cutoff, qphys, stable));
     c = i + 1;
     for (int k = i + 1; k < j; ++k) {         // and walk it back up
-        move_centre(s, c, k, qphys);
-        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys));
+        move_centre(s, c, k, qphys, stable);
+        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
         c = k + 1;
     }
-    move_centre(s, c, i + 1, qphys);          // documented exit position
+    move_centre(s, c, i + 1, qphys, stable);  // documented exit position
     centre = i + 1;
     return worst;
 }
@@ -3432,7 +3435,8 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
 // that are not Schmidt values, and loses weight even from a state whose Schmidt rank
 // is within chi_max: 3e-2 of <J(t)J> on a 4-site Hubbard chain at the exact chi.
 static void compress_bmps(BMPS& p, int chi_max, double cutoff,
-                          const std::vector<int>& qphys = SPIN_HALF_CHARGES) {
+                          const std::vector<int>& qphys = SPIN_HALF_CHARGES,
+                          double* worst = nullptr) {    // largest single discarded weight
     const int n = p.n; const std::map<int,RVec> no_sv;
     const int no_cap = std::numeric_limits<int>::max();
     const double zero_cut = std::min(cutoff, 1e-14);
@@ -3442,6 +3446,7 @@ static void compress_bmps(BMPS& p, int chi_max, double cutoff,
         p.bond[i+1] = svd.new_mid_bs;
         p.A[i]   = bt_A_from_U(svd, p.bond[i], p.bond[i+1], qphys);
         p.A[i+1] = bt_center_LR(svd);
+        if (worst) *worst = std::max(*worst, svd.trunc_err);
     }
     for (int i = n - 2; i >= 0; --i) {
         auto theta = form_theta(p.A[i], p.A[i+1], no_sv, p.bond[i], p.bond[i+1], p.bond[i+2], true, qphys);
@@ -3449,6 +3454,7 @@ static void compress_bmps(BMPS& p, int chi_max, double cutoff,
         p.bond[i+1] = svd.new_mid_bs;
         p.A[i+1] = svd.Vt;
         p.A[i]   = bt_center_RL(svd, p.bond[i], p.bond[i+1], qphys);
+        if (worst) *worst = std::max(*worst, svd.trunc_err);
     }
 }
 
@@ -3457,7 +3463,7 @@ static void compress_bmps(BMPS& p, int chi_max, double cutoff,
 // per-bond charges); the product is built exactly (combined bonds up to W-wide
 // larger), then SVD-compressed to chi_max.
 static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
-                              int chi_max, double cutoff) {
+                              int chi_max, double cutoff, double* worst = nullptr) {
     const int n = s.n;
     const std::vector<int> wdelta = derive_mpo_sym(W).delta;
     const std::vector<int>& qphys = W[0].phys_charge;
@@ -3522,7 +3528,7 @@ static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
             p.A[i][q_cL] = blk;
         }
     }
-    compress_bmps(p, chi_max, cutoff, qphys);
+    compress_bmps(p, chi_max, cutoff, qphys, worst);
     return p;
 }
 
@@ -4817,6 +4823,100 @@ hva_lattice_group_bonds(int Lx, int W, bool y_periodic) {
     return lattice_bond_groups(Lx, W, y_periodic);
 }
 
+// The generator of one bond group as an MPO, G = sum over its bonds (i, j) of the hopping
+// term h_ij, for the adjoint gradient's <lambda| G |psi>. hop_mpo supplies the
+// nearest-neighbour term, h = sum_b W(start, b) (x) W(b, done) over its carry channels b,
+// as build_gate_from_mpo reads it. A longer bond carries the fermion parity on every site
+// between i and j: that is the operator the swap network applies, its swaps absorbing
+// exactly that string. Each channel of each open bond gets a slot of its own, slot r of
+// channel c at index 1 + c M + r, so every MPO bond index carries one charge along the
+// whole chain, as derive_mpo_sym requires; a bond keeps its slot from site i to site j.
+static std::vector<MPOSite> hva_group_mpo(int n, const std::vector<std::pair<int,int>>& bonds,
+                                          const std::vector<MPOSite>& hop_mpo) {
+    int bulk = -1, w = 0;
+    for (int i = 0; i < (int)hop_mpo.size(); ++i)
+        if (hop_mpo[i].chi_l == hop_mpo[i].chi_r && hop_mpo[i].chi_l >= w) {
+            w = hop_mpo[i].chi_l;
+            bulk = i;
+        }
+    if (bulk < 0) throw std::runtime_error("hva_group_mpo: no square bulk MPO site");
+    const MPOSite& H = hop_mpo[bulk];
+    const int d = H.d, hstart = H.chi_r - 1, hdone = 0;
+    const std::vector<int>& qphys = H.phys_charge;
+    std::vector<int> chans;                     // carry channels with a bond term
+    for (int b = 1; b < hstart; ++b)
+        if (H.W(hstart, b).cwiseAbs().maxCoeff() > 0 && H.W(b, hdone).cwiseAbs().maxCoeff() > 0)
+            chans.push_back(b);
+    Mat P = Mat::Zero(d, d);                    // the parity, as build_fswap_gate reads it
+    for (int s = 0; s < d; ++s) {
+        double N, twoSz;
+        obs2_of_charge(qphys[s], N, twoSz);
+        P(s, s) = (((int)std::llround(N)) & 1) ? -1.0 : 1.0;
+    }
+    std::vector<int> order(bonds.size()), slot(bonds.size(), -1), busy;   // busy[r]: last site
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(),
+              [&](int a, int b) { return bonds[a].first < bonds[b].first; });
+    for (int k : order) {
+        const int i = bonds[k].first, j = bonds[k].second;
+        if (!(0 <= i && i < j && j < n))
+            throw std::runtime_error("hva_group_mpo: a bond needs 0 <= i < j < n");
+        int r = 0;
+        while (r < (int)busy.size() && busy[r] >= i) ++r;
+        if (r == (int)busy.size()) busy.push_back(j); else busy[r] = j;
+        slot[k] = r;
+    }
+    const int M = (int)busy.size(), nc = (int)chans.size();
+    const int chi = 2 + nc * M, start = chi - 1, done = 0;
+    std::vector<MPOSite> mpo(n);
+    for (int k = 0; k < n; ++k) {
+        std::vector<Mat> Wk(chi * chi, Mat::Zero(d, d));
+        auto at = [&](int a, int b) -> Mat& { return Wk[a * chi + b]; };
+        at(done, done) = Mat::Identity(d, d);
+        at(start, start) = Mat::Identity(d, d);
+        for (size_t q = 0; q < bonds.size(); ++q) {
+            const int i = bonds[q].first, j = bonds[q].second;
+            for (int c = 0; c < nc; ++c) {
+                const int x = 1 + c * M + slot[q];
+                if (k == i) at(start, x) = H.W(hstart, chans[c]);
+                else if (k == j) at(x, done) = H.W(chans[c], hdone);
+                else if (k > i && k < j) at(x, x) = P;
+            }
+        }
+        MPOSite& site = mpo[k];                 // site 0 keeps row start, the last column done
+        site.chi_l = (k == 0) ? 1 : chi;
+        site.chi_r = (k == n - 1) ? 1 : chi;
+        site.d = d;
+        site.phys_charge = qphys;
+        site.ops.assign(site.chi_l * site.chi_r, Mat::Zero(d, d));
+        for (int a = 0; a < site.chi_l; ++a)
+            for (int b = 0; b < site.chi_r; ++b)
+                site.W(a, b) = at(k == 0 ? start : a, k == n - 1 ? done : b);
+    }
+    return mpo;
+}
+
+// The on-site generator sum_i hs_i as an MPO (bond dimension 2).
+static std::vector<MPOSite> hva_onsite_mpo(int n, const Mat& hs, const std::vector<int>& qphys) {
+    const int d = (int)hs.rows();
+    const Mat I = Mat::Identity(d, d), Z = Mat::Zero(d, d);
+    std::vector<MPOSite> mpo(n);
+    for (int k = 0; k < n; ++k) {
+        // bulk [[I, 0], [hs, I]] with done = 0 and start = 1
+        const Mat bulk[2][2] = {{I, Z}, {hs, I}};
+        MPOSite& site = mpo[k];
+        site.chi_l = (k == 0) ? 1 : 2;
+        site.chi_r = (k == n - 1) ? 1 : 2;
+        site.d = d;
+        site.phys_charge = qphys;
+        site.ops.assign(site.chi_l * site.chi_r, Z);
+        for (int a = 0; a < site.chi_l; ++a)
+            for (int b = 0; b < site.chi_r; ++b)
+                site.W(a, b) = bulk[k == 0 ? 1 : a][k == n - 1 ? 0 : b];
+    }
+    return mpo;
+}
+
 HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           const std::vector<MPOSite>& hop_mpo, int Lx, int W,
                           bool y_periodic,
@@ -4824,7 +4924,12 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
                           int chi_max, double cutoff, int total_charge,
                           const std::vector<int>* init_config,
                           const std::shared_ptr<HVAInitState>& init,
-                          bool want_entropy) {
+                          bool want_entropy, HVAGradient* gradient, bool direct_svd) {
+    // direct_svd: every split, gate or centre move, by a direct SVD instead of the Gram
+    // matrix's eigensolve. The Gram route is faster but leaves Schmidt values below
+    // sqrt(eps) of the largest imprecise, so a circuit whose bonds fill up carries a
+    // rounding noise of up to ~1e-10 in its energy; the direct one is smooth in the
+    // angles to ~1e-14, at up to twice the cost.
     using BD = BlockDMRG<Cx>;
     require_uniform_local_dim(lattice_mpo, "run_hva_lattice");
     require_uniform_local_dim(hop_mpo, "run_hva_lattice (hop_mpo)");
@@ -4904,6 +5009,8 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
     HVAResult out;
     double worst_trunc = 0;
     const Mat FS = BD::build_fswap_gate(d, qphys);
+    BD::BMPS s0;                        // the start, for the gradient's return check
+    if (gradient) s0 = s;
     auto max_bond = [&]() {
         int m = 0;
         for (auto& bd : s.bond) { int tt = 0; for (int dd : bd.dims) tt += dd; m = std::max(m, tt); }
@@ -4917,7 +5024,7 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
             for (auto& e : groups[g])
                 worst_trunc = std::max(worst_trunc,
                     BD::apply_pair_gate(s, e.first, e.second, G, FS, chi_max, cutoff,
-                                        qphys, centre));
+                                        qphys, centre, direct_svd));
         }
         double thU = lay.back();
         if (thU != 0.0) {
@@ -4939,10 +5046,68 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
     // then never ran, so the centre is further right than the formula says) and gave a
     // silently 4x wrong energy on the W=1 lattice. n-1 extra lossless SVDs, once per
     // circuit evaluation, buys an invariant that cannot be got wrong.
-    BD::move_centre(s, s.n - 1, 0, qphys);
+    BD::move_centre(s, s.n - 1, 0, qphys, direct_svd);
     if (want_entropy) BD::entropy_walk(s, qphys, out.S_max, out.S_mid);
     BD::rebuild_mpo_envs(s, lattice_mpo);
     out.energy = BD::bt_energy(s, lattice_mpo);
+    if (gradient) {
+        // The adjoint gradient. With U_k = exp(-i theta_k G_k) the circuit's k-th unitary,
+        //   dE/dtheta_k = 2 Im <lambda_k| G_k |psi_k> / <psi|psi>,
+        // psi_k = U_k ... U_1 psi_0 and lambda_k = U_{k+1}^dag ... U_K^dag H psi_K. One
+        // pass back through the circuit carries both states: each step measures one
+        // matrix element, then undoes U_k on both. That is one MPO product and three
+        // passes through the circuit, whatever the number of angles, where central
+        // differences take two circuits per angle; but lam needs up to the MPO's bond
+        // dimension times psi's, up to chi_max, and costs that much more per gate. The
+        // centres: s's is at 0 (above), lam's too (compress_bmps).
+        double worst = 0;
+        BD::BMPS lam = BD::apply_mpo_to_bmps(s, lattice_mpo, chi_max, cutoff, &worst);
+        std::vector<std::vector<MPOSite>> gen;
+        for (const auto& grp : groups) gen.push_back(hva_group_mpo(n, grp, hop_mpo));
+        const std::vector<MPOSite> gen_u = hva_onsite_mpo(n, hs, qphys);
+        double norm2 = 0;
+        for (const auto& [q, b] : s.A[0]) norm2 += b.squaredNorm();
+        int c_psi = 0, c_lam = 0;
+        gradient->grad.assign(angles.size(), {});
+        for (int l = (int)angles.size() - 1; l >= 0; --l) {
+            const auto& lay = angles[l];
+            std::vector<double> g(lay.size(), 0.0);
+            g.back() = 2 * std::imag(BD::mpo_sandwich(lam, gen_u, s)) / norm2;
+            if (lay.back() != 0.0) {
+                std::vector<Cx> ph(d);
+                for (int a = 0; a < d; ++a) ph[a] = std::exp(Cx(0, lay.back()) * hs(a, a));
+                for (int i = 0; i < n; ++i) {
+                    BD::apply_site_diag(s, i, ph, qphys);
+                    BD::apply_site_diag(lam, i, ph, qphys);
+                }
+            }
+            for (int k = (int)groups.size() - 1; k >= 0; --k) {
+                g[k] = 2 * std::imag(BD::mpo_sandwich(lam, gen[k], s)) / norm2;
+                if (lay[k] == 0.0) continue;
+                const Mat G = BD::build_gate_from_mpo(hop_mpo, Cx(0, lay[k]), 0.0, 0.0);
+                for (auto& e : groups[k]) {
+                    worst = std::max(worst, BD::apply_pair_gate(s, e.first, e.second, G, FS,
+                                                                chi_max, cutoff, qphys, c_psi,
+                                                                direct_svd));
+                    worst = std::max(worst, BD::apply_pair_gate(lam, e.first, e.second, G, FS,
+                                                                chi_max, cutoff, qphys, c_lam,
+                                                                direct_svd));
+                }
+            }
+            gradient->grad[l] = std::move(g);
+        }
+        gradient->trunc_err = worst;
+        // The backward pass has brought psi back to the start; how far it missed is what
+        // the round trip's truncations cost the gradient.
+        auto ov = [&](const BD::BMPS& a, const BD::BMPS& b) {
+            auto OL = BD::overlap_left_envs(a, b, qphys);
+            Cx v(0);
+            for (const auto& [q, blk] : OL[n]) v += blk.sum();
+            return v;
+        };
+        const double n0 = std::real(ov(s0, s0)), n1 = std::real(ov(s, s));
+        gradient->return_error = std::max(0.0, 1 - std::abs(ov(s0, s)) / std::sqrt(n0 * n1));
+    }
     out.wall_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
     return out;
 }
