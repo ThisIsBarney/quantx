@@ -587,10 +587,15 @@ TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
 // staggered magnetization every this many steps (<=0 = endpoints only).
 // J and delta parameterise the XXZ bond gate exp(tau*h), h = J(XX+YY)+J*delta*ZZ;
 // they must match the mpo passed in (whose energy is measured at the end).
+// even_odd (real time only): TeNPy's even/odd Trotter splitting on a B-form MPS, one
+// batch of SVDs per layer (M12), instead of the default left-right-left sweep. It is
+// faster where the Schmidt values stay large (moderate chi) and slower where they run
+// deep (large chi); the two splittings differ at O(dt^2). The same flag on the
+// spectral, Loschmidt and conductivity drivers below.
 TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag, int measure_stride = 1,
-                                 double J = 1.0, double delta = 1.0);
+                                 double J = 1.0, double delta = 1.0, bool even_odd = false);
 
 // Dynamical spin structure factor data: time-dependent correlations
 // C_{j,l0}(t) = <psi0| sigma^z_j e^{-i(H-E0)t} sigma^z_{l0} |psi0> from a central
@@ -611,7 +616,8 @@ SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double J = 1.0, double delta = 1.0,
                                    int total_charge = 0,
                                    const std::vector<int>* init_config = nullptr,
-                                   const std::vector<double>* op_wts = nullptr);
+                                   const std::vector<double>* op_wts = nullptr,
+                                   bool even_odd = false);
 
 // Loschmidt echo of a quench: ground state of mpo_i evolved under XXZ(Jf, deltaf).
 // L(t) = |<psi0|psi(t)>|^2 (return probability); rate(t) = -ln L(t) / n (its
@@ -624,7 +630,7 @@ struct LoschmidtResult {
 LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
                                      double dt, int n_steps, int chi_max,
                                      double cutoff, int n_sweeps,
-                                     double Jf, double deltaf);
+                                     double Jf, double deltaf, bool even_odd = false);
 
 // Spin conductivity: current-current correlator C(t) = <psi0|J e^{-i(H-E0)t}J|psi0>
 // (normalised by <psi0|psi0>), J the total spin current. sigma(omega) is its FFT.
@@ -636,7 +642,8 @@ struct ConductivityResult {
 ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, int n,
                                            double dt, int n_steps, int chi_max,
                                            double cutoff, int n_sweeps,
-                                           double J = 1.0, double delta = 1.0);
+                                           double J = 1.0, double delta = 1.0,
+                                           bool even_odd = false);
 
 // Finite-temperature statics via ancilla purification (thermofield double):
 // rho(beta) = e^{-beta H}/Z represented as the pure state |psi(beta)> =

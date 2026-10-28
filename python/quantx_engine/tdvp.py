@@ -94,6 +94,7 @@ class TDVPSolver:
         block: bool = True,
         engine: str = "tebd",
         measure_stride: int = 1,
+        scheme: str = "sweep",
     ) -> TDVPResult:
         """Evolve a Heisenberg chain by TDVP.
 
@@ -117,6 +118,12 @@ class TDVPSolver:
             TDVP1 (fixed bond) otherwise.
         initial : str
             Initial state: ``"neel"`` (``|up dn up dn...>``) or ``"up"`` (all up).
+        scheme : str
+            Real-time scheme of ``engine="tebd"``: ``"sweep"`` (default; left-right-left half-step
+            sweeps) or ``"even_odd"`` (TeNPy's even/odd splitting on a B-form MPS, one
+            batch of SVDs per layer). The even/odd scheme is faster where the Schmidt
+            values stay large -- moderate ``chi_max``, on GPU builds -- and slower where
+            they run deep; the two Trotter splittings differ at O(dt^2).
 
         Returns
         -------
@@ -132,7 +139,7 @@ class TDVPSolver:
         opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
                 "imag": bool(imag), "two_site": bool(two_site), "initial": initial,
                 "block": bool(block), "engine": engine,
-                "measure_stride": int(measure_stride)}
+                "measure_stride": int(measure_stride), "scheme": scheme}
         raw = self._lib.qx_tdvp_evolve(json.dumps(prob).encode(), json.dumps(opts).encode())
         out = json.loads(raw)
         if not out.get("ok", False):
@@ -202,15 +209,20 @@ class LoschmidtSolver:
                 self._lib = None
 
     def echo(self, n_qubits, delta_f, *, J=1.0, delta=1.0, dt=0.05, n_steps=200,
-             chi_max=128, cutoff=1e-10, n_sweeps=40):
-        """Loschmidt echo of the quench XXZ(delta) -> XXZ(delta_f)."""
+             chi_max=128, cutoff=1e-10, n_sweeps=40, scheme="sweep"):
+        """Loschmidt echo of the quench XXZ(delta) -> XXZ(delta_f).
+
+        ``scheme`` picks the real-time TEBD: ``"sweep"`` (default) or ``"even_odd"``
+        (see :meth:`TDVPSolver.evolve`).
+        """
         if self._lib is None:
             raise TDVPError("Loschmidt requires the native C++ library.")
         if n_qubits < 2:
             raise TDVPError("n_qubits must be >= 2")
         prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
         opts = {"delta_f": delta_f, "dt": dt, "n_steps": n_steps,
-                "chi_max": chi_max, "cutoff": cutoff, "n_sweeps": n_sweeps}
+                "chi_max": chi_max, "cutoff": cutoff, "n_sweeps": n_sweeps,
+                "scheme": scheme}
         raw = self._lib.qx_loschmidt(json.dumps(prob).encode(), json.dumps(opts).encode())
         out = json.loads(raw)
         if not out.get("ok", False):

@@ -45,10 +45,19 @@ What is verified, and against what
      - exact diagonalisation of the whole Hilbert space, to the second-order Trotter
        error of the steps: below 1e-3 at the default step 0.05, falling by 4 at half
        the step; the transforms against Lehmann sums to 1e-8
+   * - Zero-temperature dynamics of the XXZ chain: a Neel quench, the correlations
+       behind S(k, ω), the Loschmidt echo and the current-current correlator, by TEBD
+       with either Trotter scheme -- the default sweep, or TeNPy's even/odd splitting,
+       whose layers batch their SVDs
+     - ``tdvp.TDVPSolver``, ``tdvp.LoschmidtSolver``,
+       ``structure_factor.StructureFactorSolver`` and ``ConductivitySolver``, with
+       ``scheme="sweep"`` or ``scheme="even_odd"``
+     - exact diagonalisation, to the second-order Trotter error of the steps: below
+       1e-3 for the quench at step 0.02, below 8e-3 for the correlations at 0.05
 
 These checks run in CI on a Linux build of the engine (``test_models_ed.py``,
-``test_hva_statevector.py``, ``test_hva_gradient.py`` and ``test_thermal_ed.py`` in
-``python/quantx_engine/tests/``).
+``test_hva_statevector.py``, ``test_hva_gradient.py``, ``test_thermal_ed.py`` and
+``test_tebd_schemes.py`` in ``python/quantx_engine/tests/``).
 
 .. toctree::
    :maxdepth: 1

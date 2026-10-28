@@ -3,6 +3,7 @@
 #include "dmrg_internal.hpp"
 #include <Eigen/Dense>
 #include <cstdio>
+#include <stdexcept>
 #include <complex>
 #include <vector>
 
@@ -63,11 +64,22 @@ int main() {
     {
         // TEBD has O(dt^2) Trotter error (unlike Krylov-exact TDVP2), so tolerances
         // reflect the second-order Suzuki-Trotter accuracy, not machine precision.
-        auto rt = run_tebd2_blocks(mpo, n, dt, steps, /*chi_max*/16, 1e-12, /*imag*/false);
-        double me = 0;
-        for (size_t k=0;k<rt.times.size();++k) me=std::max(me, std::abs(rt.stag[k]-stag_exact(rt.times[k])));
-        check("TEBD2 staggered magnetization vs exact", me, 1e-3);
-        check("TEBD2 energy conserved (Trotter ~dt^2)", std::abs(rt.energy - (-(n-1.0))), 1e-3);
+        for (bool eo : {false, true}) {    // the sweep, then the even/odd scheme (M12)
+            auto rt = run_tebd2_blocks(mpo, n, dt, steps, /*chi_max*/16, 1e-12, /*imag*/false,
+                                       1, 1.0, 1.0, eo);
+            double me = 0;
+            for (size_t k=0;k<rt.times.size();++k) me=std::max(me, std::abs(rt.stag[k]-stag_exact(rt.times[k])));
+            check(eo ? "TEBD2 even/odd staggered magnetization vs exact"
+                     : "TEBD2 staggered magnetization vs exact", me, 1e-3);
+            check(eo ? "TEBD2 even/odd energy conserved (Trotter ~dt^2)"
+                     : "TEBD2 energy conserved (Trotter ~dt^2)", std::abs(rt.energy - (-(n-1.0))), 1e-3);
+        }
+        {   // imaginary time has no even/odd scheme (its update needs unitary gates)
+            bool threw = false;
+            try { run_tebd2_blocks(mpo, n, dt, 2, 16, 1e-12, /*imag*/true, 1, 1.0, 1.0, true); }
+            catch (const std::invalid_argument&) { threw = true; }
+            check("even/odd refuses imaginary time", threw ? 0.0 : 1.0, 0.5);
+        }
         auto gt = run_tebd2_blocks(mpo, n, 0.05, 400, 16, 1e-12, /*imag*/true);
         check("TEBD2 imag-time -> ground vs exact", std::abs(gt.energy - es.eigenvalues()(0)), 1e-4);
     }
@@ -87,18 +99,23 @@ int main() {
             return psi0.dot(Zs[j] * phit);
         };
         auto sp = run_spectral_blocks(mpo, n, /*dt*/0.05, /*n_steps*/20, /*chi*/32, 1e-12, 40);
-        double maxerr = 0;
+        auto sp_eo = run_spectral_blocks(mpo, n, 0.05, 20, 32, 1e-12, 40, 1.0, 1.0, 0, nullptr,
+                                         nullptr, /*even_odd*/true);
+        double maxerr = 0, maxerr_eo = 0;
         for (size_t ti = 0; ti < sp.times.size(); ++ti)
             for (int j = 0; j < n; ++j) {
                 Cx ce = C_exact(j, sp.times[ti]);
                 Cx cb(sp.C_re[ti][j], sp.C_im[ti][j]);
                 maxerr = std::max(maxerr, std::abs(ce - cb));
+                maxerr_eo = std::max(maxerr_eo,
+                                     std::abs(ce - Cx(sp_eo.C_re[ti][j], sp_eo.C_im[ti][j])));
             }
         // evolution is TEBD (O(dt^2) Trotter); dt=0.05 over 20 steps at chi=32 -> ~6e-3.
         // Tightened from 1.5e-2 after fixing the out_state export (the bond-1 Schmidt
         // values were silently dropped, adding a ~1e-2 STATIC bias this loose tolerance
         // was hiding -- caught by the Hubbard T=0 spectral vs ED with TeNPy as referee).
         check("C_{j,l0}(t) vs exact (all j,t, TEBD Trotter)", maxerr, 8e-3);
+        check("C_{j,l0}(t) vs exact, even/odd scheme", maxerr_eo, 8e-3);
         printf("  E0=%.6f exact=%.6f  l0=%d  max_bond=%d  %.3fs\n",
                sp.E0, E0, sp.l0, sp.max_bond, sp.wall_time_s);
     }
@@ -121,9 +138,12 @@ int main() {
         std::snprintf(nm, sizeof nm, "XXZ delta=%.1f imag->ground", delta);
         check(nm, std::abs(g.energy - esd.eigenvalues()(0)), 2e-3);
         // real-time Neel quench: energy is conserved (Neel energy = -delta*(n-1))
-        auto q = run_tebd2_blocks(mpo, n, 0.02, 25, 16, 1e-12, /*imag*/false, 1, 1.0, delta);
-        std::snprintf(nm, sizeof nm, "XXZ delta=%.1f real-time energy cons", delta);
-        check(nm, std::abs(q.energy - (-delta*(n-1.0))), 1e-3);
+        for (bool eo : {false, true}) {
+            auto q = run_tebd2_blocks(mpo, n, 0.02, 25, 16, 1e-12, /*imag*/false, 1, 1.0, delta, eo);
+            std::snprintf(nm, sizeof nm, "XXZ delta=%.1f real-time energy cons%s", delta,
+                          eo ? " (even/odd)" : "");
+            check(nm, std::abs(q.energy - (-delta*(n-1.0))), 1e-3);
+        }
         printf("  delta=%.1f  E_gs=%.6f exact=%.6f\n", delta, g.energy, esd.eigenvalues()(0));
     }
 
@@ -148,10 +168,14 @@ int main() {
         };
         auto mpo_i = build_xxz_mpo(n, 1.0, di);
         auto lo = run_loschmidt_blocks(mpo_i, n, 0.05, 30, 32, 1e-12, 40, 1.0, df);
-        double maxerr = 0;
-        for (size_t k=0;k<lo.times.size();++k)
+        auto lo_eo = run_loschmidt_blocks(mpo_i, n, 0.05, 30, 32, 1e-12, 40, 1.0, df, true);
+        double maxerr = 0, maxerr_eo = 0;
+        for (size_t k=0;k<lo.times.size();++k) {
             maxerr = std::max(maxerr, std::abs(lo.L[k] - L_exact(lo.times[k])));
+            maxerr_eo = std::max(maxerr_eo, std::abs(lo_eo.L[k] - L_exact(lo_eo.times[k])));
+        }
         check("Loschmidt L(t) vs exact (all t, TEBD Trotter)", maxerr, 5e-3);
+        check("Loschmidt L(t) vs exact, even/odd scheme", maxerr_eo, 5e-3);
         printf("  L(0)=%.4f (should be 1)  max_bond=%d  %.3fs\n", lo.L[0], lo.max_bond, lo.wall_time_s);
     }
 
@@ -179,10 +203,15 @@ int main() {
         // current state J|psi0> has broad energy support -> faster dynamics, so a
         // small dt is needed to keep the O(dt^2) Trotter error down (it scales dt^2).
         auto cd = run_conductivity_blocks(mpo, n, 0.0125, 120, 32, 1e-12, 40, Jc, dl);
-        double maxerr = 0;
-        for (size_t k=0;k<cd.times.size();++k)
+        auto cd_eo = run_conductivity_blocks(mpo, n, 0.0125, 120, 32, 1e-12, 40, Jc, dl, true);
+        double maxerr = 0, maxerr_eo = 0;
+        for (size_t k=0;k<cd.times.size();++k) {
             maxerr = std::max(maxerr, std::abs(C_exact(cd.times[k]) - Cx(cd.C_re[k], cd.C_im[k])));
+            maxerr_eo = std::max(maxerr_eo, std::abs(C_exact(cd_eo.times[k])
+                                                     - Cx(cd_eo.C_re[k], cd_eo.C_im[k])));
+        }
         check("conductivity C(t) vs exact (all t, TEBD Trotter)", maxerr, 5e-3);
+        check("conductivity C(t) vs exact, even/odd scheme", maxerr_eo, 5e-3);
         printf("  C(0)=%.4f (=<J^2>, exact=%.4f)  max_bond=%d  %.3fs\n",
                cd.C_re[0], C_exact(0.0).real(), cd.max_bond, cd.wall_time_s);
     }

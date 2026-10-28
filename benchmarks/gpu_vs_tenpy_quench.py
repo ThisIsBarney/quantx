@@ -8,6 +8,11 @@ is timed in-process. Both run the *same* physics:
   H = sum_i sigma_i . sigma_{i+1}   (Heisenberg, Pauli convention)
   |psi(0)> = Neel,  real-time evolve dt, n_steps, 2nd-order Trotter, truncate to chi.
 
+QuantX runs both of its real-time TEBD schemes: the default left-right-left sweep
+(QX-GPU, and QX-FP32 with single-precision GPU SVDs), and the even/odd scheme (QX-EO,
+M12), which is TeNPy's own Trotter splitting -- the like-for-like column. The sweep's
+splitting differs from it at O(dt^2).
+
 TeNPy's SpinSite uses S = sigma/2, so Jx=Jy=Jz=4 reproduces sigma.sigma. Single-thread
 CPU for TeNPy (its optimal config; here backed by Intel MKL). QuantX uses the GPU for
 the large per-Sz-sector SVD + theta build, and OpenBLAS (single-thread) for the small
@@ -77,13 +82,13 @@ def tenpy_quench(n, dt, n_steps, chi):
     return time.perf_counter() - t0, max(psi.chi)
 
 
-def quantx_gpu(n, dt, n_steps, chi, fp32=False):
+def quantx_gpu(n, dt, n_steps, chi, fp32=False, scheme="sweep"):
     env = _native.env()             # QX_DLL_DIR first on PATH, if set
     env["QX_GPU_MIN_BLK"] = "128"
     env["QX_GPU_THETA_MINWORK"] = "2097152"
     env["QX_GPU_FP32"] = "1" if fp32 else "0"
     env.pop("QX_TEBD_PROFILE", None)
-    out = subprocess.run([QX_BENCH, str(n), str(chi), str(n_steps), str(dt)],
+    out = subprocess.run([QX_BENCH, str(n), str(chi), str(n_steps), str(dt), "2", scheme],
                          capture_output=True, text=True, env=env).stdout
     m = re.search(r"wall=\s*([\d.]+)\s*s", out)
     b = re.search(r"max_bond=(\d+)", out)
@@ -100,15 +105,20 @@ def main():
           f"tenpy {tenpy.__version__} | CPU threads=1 | GPU boost (min-of-N picks best trial)\n")
     results = {"dt": DT, "steps": STEPS, "reps": REPS, "runs": []}
     for n in sorted(PLAN):
-        hdr = f"N={n}: {'chi':>5} {'TeNPy(s)':>10} {'QX-GPU(s)':>10} {'QX-FP32(s)':>11} {'GPU/TeNPy':>10} {'FP32/TeNPy':>11}"
+        hdr = (f"N={n}: {'chi':>5} {'TeNPy(s)':>10} {'QX-GPU(s)':>10} {'QX-FP32(s)':>11} "
+               f"{'QX-EO(s)':>9} {'GPU/TeNPy':>10} {'FP32/TeNPy':>11} {'EO/TeNPy':>9}")
         print(hdr); print("-" * len(hdr))
         for chi in PLAN[n]:
             tt, _ = _min_of(lambda: tenpy_quench(n, DT, STEPS, chi), REPS)
             qg, _ = _min_of(lambda: quantx_gpu(n, DT, STEPS, chi, False), REPS)
             qf, _ = _min_of(lambda: quantx_gpu(n, DT, STEPS, chi, True), REPS)
-            print(f"     {chi:>5} {tt:>10.2f} {qg:>10.2f} {qf:>11.2f} {tt/qg:>9.2f}x {tt/qf:>10.2f}x")
+            qe, _ = _min_of(lambda: quantx_gpu(n, DT, STEPS, chi, False, "even_odd"), REPS)
+            print(f"     {chi:>5} {tt:>10.2f} {qg:>10.2f} {qf:>11.2f} {qe:>9.2f} "
+                  f"{tt/qg:>9.2f}x {tt/qf:>10.2f}x {tt/qe:>8.2f}x")
             results["runs"].append({"N": n, "chi": chi, "tenpy": tt, "qx_gpu": qg,
-                                    "qx_fp32": qf, "gpu_vs_tenpy": tt/qg, "fp32_vs_tenpy": tt/qf})
+                                    "qx_fp32": qf, "qx_even_odd": qe,
+                                    "gpu_vs_tenpy": tt/qg, "fp32_vs_tenpy": tt/qf,
+                                    "even_odd_vs_tenpy": tt/qe})
             time.sleep(COOLDOWN)
         print()
     out = os.path.join(_here, "results_gpu_vs_tenpy.json")

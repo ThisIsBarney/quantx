@@ -22,7 +22,10 @@
 #include <cublas_v2.h>
 #include <cusolverDn.h>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <map>
 #include <mutex>
 #include <vector>
 
@@ -363,6 +366,178 @@ bool form_theta_block_z_multi(const std::complex<double>* const* As, const int* 
         row_off += dL;
     }
     if (cudaMemcpy(theta, dT, sizeof(cuDoubleComplex)*(size_t)nrow*ncol, cudaMemcpyDeviceToHost) != cudaSuccess) return false;
+    return true;
+}
+
+// ---- Batched Hermitian eigensolves for the B-form TEBD layer (M12) -----------
+namespace {
+
+// The padded size of a k x k matrix, i.e. its class. Each class is one
+// cusolverDnXsyevBatched, whose time is mostly latency growing with the size, so
+// the classes step by 1/4 to 1/2: padding costs at most that, fewer classes save
+// launches, and the classes run concurrently anyway.
+int eig_class(int k) {
+    if (k <= 64)  return ((k + 15) / 16) * 16;
+    if (k <= 256) return ((k + 31) / 32) * 32;
+    if (k <= 512) return ((k + 63) / 64) * 64;
+    return ((k + 127) / 128) * 128;
+}
+
+struct BatchSlot {           // one size class: its own stream, handle and buffers
+    cudaStream_t        st = nullptr;
+    cusolverDnHandle_t  h  = nullptr;
+    cusolverDnParams_t  p  = nullptr;
+    void* dA = nullptr;    size_t cA  = 0;
+    void* dW = nullptr;    size_t cW  = 0;
+    void* dInfo = nullptr; size_t cI  = 0;
+    void* dWork = nullptr; size_t cWk = 0;
+    std::vector<char> hWork;
+};
+struct BatchCtx {
+    std::mutex             mtx;
+    std::vector<BatchSlot> slots;           // grown to the most classes seen at once
+    void* hBuf = nullptr; size_t cH = 0;    // pinned staging, the matrices out and back
+};
+BatchCtx& bctx() { static BatchCtx b; return b; }
+
+bool ensure_slot(BatchSlot& s) {
+    if (s.h) return true;
+    if (!s.st && cudaStreamCreateWithFlags(&s.st, cudaStreamNonBlocking) != cudaSuccess)
+        return false;
+    if (!s.p && cusolverDnCreateParams(&s.p) != CUSOLVER_STATUS_SUCCESS) return false;
+    cusolverDnHandle_t h = nullptr;
+    if (cusolverDnCreate(&h) != CUSOLVER_STATUS_SUCCESS) return false;
+    if (cusolverDnSetStream(h, s.st) != CUSOLVER_STATUS_SUCCESS) { cusolverDnDestroy(h); return false; }
+    s.h = h;
+    return true;
+}
+bool ensure_pinned(void** p, size_t* cap, size_t bytes) {
+    if (*cap >= bytes) return true;
+    if (*p) cudaFreeHost(*p);
+    *p = nullptr; *cap = 0;
+    if (cudaMallocHost(p, bytes) != cudaSuccess) return false;
+    *cap = bytes;
+    return true;
+}
+
+// Pack matrix G (k x k) into the N x N slot A: G top left, -pad on the rest of the
+// diagonal, zeros elsewhere.
+template <class T>
+void pack_padded(const std::complex<double>* G, int k, int N, double pad, T* A) {
+    std::fill(A, A + (size_t)N * N, T(0));
+    for (int c = 0; c < k; ++c)
+        for (int r = 0; r < k; ++r) {
+            const std::complex<double> g = G[(size_t)c * k + r];
+            A[(size_t)c * N + r] = T((typename T::value_type)g.real(),
+                                     (typename T::value_type)g.imag());
+        }
+    for (int d = k; d < N; ++d) A[(size_t)d * N + d] = T((typename T::value_type)pad, 0);
+}
+// The k real eigenpairs back out of slot A / W: the last k (ascending; the padding's
+// eigenvalues are the lowest), rows 0..k-1 of their eigenvectors.
+template <class T, class R>
+void unpack_padded(const T* A, const R* W, int k, int N, std::complex<double>* G, double* w) {
+    for (int c = 0; c < k; ++c) {
+        w[c] = (double)W[N - k + c];
+        const T* src = A + (size_t)(N - k + c) * N;
+        for (int r = 0; r < k; ++r)
+            G[(size_t)c * k + r] = std::complex<double>((double)src[r].real(), (double)src[r].imag());
+    }
+}
+
+}  // namespace
+
+bool eigh_batched_z(int count, std::complex<double>* const* G, const int* n,
+                    double* const* w, bool fp32, int* ok) {
+    for (int i = 0; i < count; ++i) ok[i] = 0;
+    if (count <= 0 || !ctx().ok) return false;     // ctx() initialises the device
+    BatchCtx& b = bctx();
+    std::lock_guard<std::mutex> lock(b.mtx);
+
+    std::map<int, std::vector<int>> cls;           // class size N -> matrices
+    for (int i = 0; i < count; ++i) if (n[i] > 0) cls[eig_class(n[i])].push_back(i);
+    const size_t es = fp32 ? sizeof(std::complex<float>) : sizeof(std::complex<double>);
+    const size_t ws = fp32 ? sizeof(float) : sizeof(double);
+    // Staging layout, per class: the matrices, the eigenvalues, the info flags.
+    std::vector<size_t> offA, offW, offI;
+    size_t total = 0;
+    for (auto& [N, ids] : cls) {
+        offA.push_back(total); total += es * (size_t)N * N * ids.size();
+        offW.push_back(total); total += ws * (size_t)N * ids.size();
+        offI.push_back(total); total += sizeof(int) * ids.size();
+        total = (total + 255) & ~(size_t)255;
+    }
+    if (!ensure_pinned(&b.hBuf, &b.cH, total)) return false;
+    if (b.slots.size() < cls.size()) b.slots.resize(cls.size());
+    const cudaDataType tA = fp32 ? CUDA_C_32F : CUDA_C_64F;
+    const cudaDataType tW = fp32 ? CUDA_R_32F : CUDA_R_64F;
+    const auto vec = CUSOLVER_EIG_MODE_VECTOR;
+    const auto low = CUBLAS_FILL_MODE_LOWER;
+
+    // Pack and launch class by class: the host packs the next class while the device
+    // solves the last, and the classes' streams run concurrently.
+    bool fine = true;
+    int c = 0;
+    for (auto it = cls.begin(); it != cls.end() && fine; ++it, ++c) {
+        const int N = it->first;
+        const std::vector<int>& ids = it->second;
+        const int64_t nb = (int64_t)ids.size();
+        BatchSlot& s = b.slots[c];
+        char* hA = static_cast<char*>(b.hBuf) + offA[c];
+        for (size_t t = 0; t < ids.size(); ++t) {
+            const int i = ids[t], k = n[i];
+            double tr = 0;
+            for (int r = 0; r < k; ++r) tr += G[i][(size_t)r * k + r].real();
+            const double pad = -(tr > 0 ? tr : 1.0);   // below every eigenvalue of a PSD G
+            if (fp32) pack_padded(G[i], k, N, pad, reinterpret_cast<std::complex<float>*>(hA) + t * (size_t)N * N);
+            else      pack_padded(G[i], k, N, pad, reinterpret_cast<std::complex<double>*>(hA) + t * (size_t)N * N);
+        }
+        size_t wsD = 0, wsH = 0;
+        fine = ensure_slot(s)
+            && ensure(&s.dA, &s.cA, es * (size_t)N * N * nb)
+            && ensure(&s.dW, &s.cW, ws * (size_t)N * nb)
+            && ensure(&s.dInfo, &s.cI, sizeof(int) * nb)
+            && cusolverDnXsyevBatched_bufferSize(s.h, s.p, vec, low, N, tA, s.dA, N, tW, s.dW,
+                                                 tA, &wsD, &wsH, nb) == CUSOLVER_STATUS_SUCCESS
+            && ensure(&s.dWork, &s.cWk, wsD > 0 ? wsD : 1);
+        if (!fine) break;
+        if (s.hWork.size() < wsH) s.hWork.resize(wsH);
+        fine = cudaMemcpyAsync(s.dA, hA, es * (size_t)N * N * nb, cudaMemcpyHostToDevice,
+                               s.st) == cudaSuccess
+            && cusolverDnXsyevBatched(s.h, s.p, vec, low, N, tA, s.dA, N, tW, s.dW, tA,
+                                      s.dWork, wsD, s.hWork.empty() ? nullptr : s.hWork.data(),
+                                      wsH, static_cast<int*>(s.dInfo), nb) == CUSOLVER_STATUS_SUCCESS
+            && cudaMemcpyAsync(hA, s.dA, es * (size_t)N * N * nb, cudaMemcpyDeviceToHost,
+                               s.st) == cudaSuccess
+            && cudaMemcpyAsync(static_cast<char*>(b.hBuf) + offW[c], s.dW, ws * (size_t)N * nb,
+                               cudaMemcpyDeviceToHost, s.st) == cudaSuccess
+            && cudaMemcpyAsync(static_cast<char*>(b.hBuf) + offI[c], s.dInfo, sizeof(int) * nb,
+                               cudaMemcpyDeviceToHost, s.st) == cudaSuccess;
+    }
+    // Wait for every launched class (even after a failure: the staging buffer must
+    // not be reused while a copy into it is pending).
+    for (int u = 0; u < c && u < (int)b.slots.size(); ++u)
+        if (cudaStreamSynchronize(b.slots[u].st) != cudaSuccess) fine = false;
+    if (!fine) return false;
+
+    c = 0;
+    for (auto& [N, ids] : cls) {
+        const char* hA = static_cast<const char*>(b.hBuf) + offA[c];
+        const char* hW = static_cast<const char*>(b.hBuf) + offW[c];
+        const int*  hI = reinterpret_cast<const int*>(static_cast<const char*>(b.hBuf) + offI[c]);
+        for (size_t t = 0; t < ids.size(); ++t) {
+            const int i = ids[t], k = n[i];
+            if (hI[t] != 0) continue;              // not converged: the caller solves it
+            if (fp32)
+                unpack_padded(reinterpret_cast<const std::complex<float>*>(hA) + t * (size_t)N * N,
+                              reinterpret_cast<const float*>(hW) + t * (size_t)N, k, N, G[i], w[i]);
+            else
+                unpack_padded(reinterpret_cast<const std::complex<double>*>(hA) + t * (size_t)N * N,
+                              reinterpret_cast<const double*>(hW) + t * (size_t)N, k, N, G[i], w[i]);
+            ok[i] = 1;
+        }
+        ++c;
+    }
     return true;
 }
 
