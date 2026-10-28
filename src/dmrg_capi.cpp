@@ -537,17 +537,20 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         // n >= 3 (a bulk MPO site for the symmetry derivation); the non-block TDVP below
         // handles n = 2 fine, so fall back to it instead of failing.
         bool   block    = opts.value("block", true) && two_site && init == "neel" && n >= 3;
+        // Block evolution engine: "tebd" (Trotter gates, fast NN -- default) or "tdvp2"
+        // (Krylov, needed for general/long-range MPOs). The even/odd scheme is a TEBD
+        // scheme, so refuse it wherever the block TEBD will not run, rather than evolve
+        // by a different method than the one asked for.
+        const std::string engine = opts.value("engine", "tebd");
+        const bool even_odd = read_even_odd(opts);
+        if (even_odd && (!block || engine != "tebd"))
+            return dmrg_error("scheme 'even_odd' runs on the block TEBD only: engine 'tebd', "
+                              "block and two_site true, initial 'neel', n_qubits >= 3");
 
         auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
 
         if (block) {
-            // Block evolution engine: "tebd" (Trotter gates, fast NN -- default) or
-            // "tdvp2" (Krylov, needed for general/long-range MPOs).
-            std::string engine = opts.value("engine", "tebd");
             int stride = opts.value("measure_stride", 1);
-            const bool even_odd = read_even_odd(opts);
-            if (even_odd && engine == "tdvp2")
-                return dmrg_error("scheme 'even_odd' applies to engine 'tebd' only");
             auto r = (engine == "tdvp2")
                 ? qx_dmrg::run_tdvp2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag)
                 : qx_dmrg::run_tebd2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag, stride, J,

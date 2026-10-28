@@ -121,5 +121,10 @@ def test_refusals():
         s.evolve(6, n_steps=2, scheme="bogus")
     with pytest.raises(TDVPError, match="real-time only"):          # needs unitary gates
         s.evolve(6, n_steps=2, imag=True, scheme="even_odd")
-    with pytest.raises(TDVPError, match="engine 'tebd'"):
-        s.evolve(6, n_steps=2, engine="tdvp2", scheme="even_odd")
+    # Wherever the block TEBD does not run, the scheme is refused rather than ignored.
+    for kw in ({"engine": "tdvp2"}, {"block": False}, {"two_site": False},
+               {"initial": "up"}):
+        with pytest.raises(TDVPError, match="block TEBD only"):
+            s.evolve(6, n_steps=2, scheme="even_odd", **kw)
+    with pytest.raises(TDVPError, match="block TEBD only"):
+        s.evolve(2, n_steps=2, scheme="even_odd")
