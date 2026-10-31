@@ -36,6 +36,15 @@ static int read_n(const nlj& prob) {
     return prob.value("n_qubits", 8);
 }
 
+// The real-time TEBD scheme, option "scheme": "sweep" (the default) or "even_odd",
+// TeNPy's even/odd splitting with one batch of SVDs per layer (M12).
+static bool read_even_odd(const nlj& opts) {
+    const std::string scheme = opts.value("scheme", "sweep");
+    if (scheme == "sweep") return false;
+    if (scheme == "even_odd") return true;
+    throw std::invalid_argument("scheme must be 'sweep' or 'even_odd', got '" + scheme + "'");
+}
+
 // ---- Models the block-sparse engine runs -----------------------------------
 // Each resolves to its MPO, the U(1) sector to target, and a product state in that
 // sector to start from. Conventions are the MPO builders' own:
@@ -528,17 +537,24 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
         // n >= 3 (a bulk MPO site for the symmetry derivation); the non-block TDVP below
         // handles n = 2 fine, so fall back to it instead of failing.
         bool   block    = opts.value("block", true) && two_site && init == "neel" && n >= 3;
+        // Block evolution engine: "tebd" (Trotter gates, fast NN -- default) or "tdvp2"
+        // (Krylov, needed for general/long-range MPOs). The even/odd scheme is a TEBD
+        // scheme, so refuse it wherever the block TEBD will not run, rather than evolve
+        // by a different method than the one asked for.
+        const std::string engine = opts.value("engine", "tebd");
+        const bool even_odd = read_even_odd(opts);
+        if (even_odd && (!block || engine != "tebd"))
+            return dmrg_error("scheme 'even_odd' runs on the block TEBD only: engine 'tebd', "
+                              "block and two_site true, initial 'neel', n_qubits >= 3");
 
         auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
 
         if (block) {
-            // Block evolution engine: "tebd" (Trotter gates, fast NN -- default) or
-            // "tdvp2" (Krylov, needed for general/long-range MPOs).
-            std::string engine = opts.value("engine", "tebd");
             int stride = opts.value("measure_stride", 1);
             auto r = (engine == "tdvp2")
                 ? qx_dmrg::run_tdvp2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag)
-                : qx_dmrg::run_tebd2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag, stride, J, delta);
+                : qx_dmrg::run_tebd2_blocks(W, n, dt, n_steps, chi_max, 1e-12, imag, stride, J,
+                                            delta, even_odd);
             nlj out;
             out["ok"]            = true;
             out["energy"]        = r.energy;
@@ -547,6 +563,7 @@ QX_API const char* qx_tdvp_evolve(const char* problem_json,
             out["max_bond"]      = r.max_bond;
             out["wall_time_s"]   = r.wall_time_s;
             out["method"]        = (engine == "tdvp2") ? "tdvp2-block" : "tebd2-block";
+            if (engine != "tdvp2") out["scheme"] = even_odd ? "even_odd" : "sweep";
             tl_dmrg_buf = out.dump();
             return tl_dmrg_buf.c_str();
         }
@@ -609,10 +626,14 @@ QX_API const char* qx_spectral(const char* problem_json, const char* options_jso
         double cutoff  = opts.value("cutoff", 1e-10);
         int    n_sweeps = opts.value("n_sweeps", 40);
 
+        const bool even_odd = read_even_odd(opts);
+
         auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
-        auto r = qx_dmrg::run_spectral_blocks(W, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta);
+        auto r = qx_dmrg::run_spectral_blocks(W, n, dt, n_steps, chi_max, cutoff, n_sweeps, J, delta,
+                                              0, nullptr, nullptr, even_odd);
         nlj out;
         out["ok"]          = true;
+        out["scheme"]      = even_odd ? "even_odd" : "sweep";
         out["times"]       = r.times;
         out["l0"]          = r.l0;
         out["n"]           = r.n;
@@ -649,11 +670,14 @@ QX_API const char* qx_loschmidt(const char* problem_json, const char* options_js
         double cutoff  = opts.value("cutoff", 1e-10);
         int    n_sweeps = opts.value("n_sweeps", 40);
 
+        const bool even_odd = read_even_odd(opts);
+
         auto Wi = qx_dmrg::build_xxz_mpo(n, J, delta);     // initial Hamiltonian
         auto r  = qx_dmrg::run_loschmidt_blocks(Wi, n, dt, n_steps, chi_max, cutoff,
-                                                n_sweeps, J, delta_f);
+                                                n_sweeps, J, delta_f, even_odd);
         nlj out;
         out["ok"]          = true;
+        out["scheme"]      = even_odd ? "even_odd" : "sweep";
         out["times"]       = r.times;
         out["L"]           = r.L;
         out["rate"]        = r.rate;
@@ -690,11 +714,14 @@ QX_API const char* qx_conductivity(const char* problem_json, const char* options
         double cutoff  = opts.value("cutoff", 1e-10);
         int    n_sweeps = opts.value("n_sweeps", 40);
 
+        const bool even_odd = read_even_odd(opts);
+
         auto W = qx_dmrg::build_xxz_mpo(n, J, delta);
         auto r = qx_dmrg::run_conductivity_blocks(W, n, dt, n_steps, chi_max, cutoff,
-                                                  n_sweeps, J, delta);
+                                                  n_sweeps, J, delta, even_odd);
         nlj out;
         out["ok"]          = true;
+        out["scheme"]      = even_odd ? "even_odd" : "sweep";
         out["times"]       = r.times;
         out["C_re"]        = r.C_re;
         out["C_im"]        = r.C_im;

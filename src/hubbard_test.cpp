@@ -379,6 +379,24 @@ int main() {
                     smax2, tmax2, rt2.energy, E_init, E_tit2, ok2?"OK":"FAIL");
         fails += !ok2;
 
+        // The even/odd TEBD scheme (M12) through the same MPO gates -- the on-site U
+        // split over the two layers by the same boundary weights -- on both charge
+        // choices: the same ED time series, the same conserved energy.
+        {
+            double emax = 0, Ediff = 0;
+            for (const auto* m : {&mpo, &mpo2}) {
+                auto teo = run_tebd2_blocks(*m, n, dt, nst, 128, 1e-12, /*imag*/false, 1, 1.0, 1.0,
+                                            /*even_odd*/true);
+                for (size_t k = 0; k < teo.stag.size(); ++k)
+                    emax = std::max(emax, std::abs(teo.stag[k] - stag_ed(teo.times[k])));
+                Ediff = std::max(Ediff, std::abs(teo.energy - E_init));
+            }
+            bool ok_eo = emax < 5e-3 && Ediff < 2e-2;
+            std::printf("            even/odd TEBD (U(1), 2U1): max|s-s_ED|=%.1e  |E-E_init|=%.1e  %s\n",
+                        emax, Ediff, ok_eo ? "OK" : "FAIL");
+            fails += !ok_eo;
+        }
+
         // T=0 dynamical structure factors on the packed path: the spin and charge
         // correlators C^W_{j,l0}(t) = <gs| W_j e^{-i(H-E0)t} W_{l0} |gs> for diagonal
         // W (spin 2Sz = {0,+1,-1,0}; charge fluctuation n-1 = {-1,0,0,+1}) -- the raw
@@ -414,14 +432,18 @@ int main() {
             const std::vector<double> w_chg   = {-1.0, 0.0, 0.0, +1.0};   // n - 1
             std::vector<int> cfgS(n);
             for (int i2 = 0; i2 < n; ++i2) cfgS[i2] = (i2 % 2 == 0) ? 1 : 2;
-            double werr = 0;
+            double werr = 0, werr_eo = 0;
             for (auto* w : {&w_spin, &w_chg}) {
                 auto sp = run_spectral_blocks(mpo2, n, dt, nst, 128, 1e-12, 60, 1.0, 1.0,
                                               pack_q2(n, 0), &cfgS, w);
+                auto sp_eo = run_spectral_blocks(mpo2, n, dt, nst, 128, 1e-12, 60, 1.0, 1.0,
+                                                 pack_q2(n, 0), &cfgS, w, /*even_odd*/true);
                 for (size_t k = 0; k < sp.times.size(); ++k)
                     for (int j = 0; j < n; ++j) {
                         Cxd ced = C_ed(*w, j, sp.times[k]);
                         werr = std::max(werr, std::abs(ced - Cxd(sp.C_re[k][j], sp.C_im[k][j])));
+                        werr_eo = std::max(werr_eo,
+                                           std::abs(ced - Cxd(sp_eo.C_re[k][j], sp_eo.C_im[k][j])));
                     }
                 if (std::getenv("QX_SPEC_DIAG")) {   // where does it diverge: t=0 or later?
                     for (int k : {0, 1}) for (int j : {l0, l0+1}) {
@@ -452,9 +474,9 @@ int main() {
                                 sp.E0, Es(0), Es(1)-Es(0), Es(2)-Es(0));
                 }
             }
-            bool okw = werr < 2e-3;
-            std::printf("            S(k,w): max|C_spin/chg - C_ED| (t<=%.1f) = %.1e  %s\n",
-                        nst*dt, werr, okw ? "OK" : "FAIL");
+            bool okw = werr < 2e-3 && werr_eo < 2e-3;
+            std::printf("            S(k,w): max|C_spin/chg - C_ED| (t<=%.1f) = %.1e, even/odd %.1e  %s\n",
+                        nst*dt, werr, werr_eo, okw ? "OK" : "FAIL");
             fails += !okw;
         }
     }

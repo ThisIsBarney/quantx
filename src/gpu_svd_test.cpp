@@ -10,6 +10,7 @@
 #include <complex>
 #include <cstdio>
 #include <random>
+#include <vector>
 
 using Cx  = std::complex<double>;
 using Cm  = Eigen::MatrixXcd;
@@ -88,6 +89,74 @@ static void test_shape_fp32(int m, int n, std::mt19937_64& rng) {
     check("FP32 sv vs Eigen BDCSVD (rel)",          sv_err,  5e-3);
 }
 
+// eigh_batched_z (M12): one call over Gram matrices of mixed sizes -- several per
+// padded class, and lone ones -- given as lower triangles, as the B-form TEBD passes
+// them. Each must match Eigen's eigenvalues, reconstruct G = Q diag(w) Q^dag, and
+// have orthonormal eigenvectors.
+static void test_batched(bool fp32, std::mt19937_64& rng) {
+    std::normal_distribution<double> g(0.0, 1.0);
+    const std::vector<int> sizes = {5, 16, 17, 30, 48, 49, 64, 64, 70, 96, 97, 128, 140, 151, 200};
+    std::vector<Cm> G, Gin;
+    for (int k : sizes) {
+        Cm M(k, k + 7);
+        for (int i = 0; i < M.size(); ++i) M.data()[i] = Cx(g(rng), g(rng));
+        G.push_back(M * M.adjoint());
+        Gin.push_back(G.back().triangularView<Eigen::Lower>());
+    }
+    std::vector<Cx*> gp; std::vector<int> n; std::vector<Rv> w(sizes.size()); std::vector<double*> wp;
+    for (size_t i = 0; i < sizes.size(); ++i) {
+        gp.push_back(Gin[i].data()); n.push_back(sizes[i]);
+        w[i].resize(sizes[i]); wp.push_back(w[i].data());
+    }
+    std::vector<int> ok(sizes.size(), 0);
+    bool r = qx_gpu::eigh_batched_z((int)sizes.size(), gp.data(), n.data(), wp.data(), fp32, ok.data());
+    if (!r) { std::printf("  eigh_batched_z returned false\n"); ++failures; return; }
+    double dl = 0, rec = 0, orth = 0; int solved = 0;
+    for (size_t i = 0; i < sizes.size(); ++i) {
+        if (!ok[i]) continue;
+        ++solved;
+        Eigen::SelfAdjointEigenSolver<Cm> es(G[i]);
+        const double sc = es.eigenvalues().cwiseAbs().maxCoeff();
+        dl = std::max(dl, (w[i] - es.eigenvalues()).cwiseAbs().maxCoeff() / sc);
+        const Cm& Q = Gin[i];
+        rec  = std::max(rec, (Q * w[i].cast<Cx>().asDiagonal() * Q.adjoint() - G[i]).norm() / G[i].norm());
+        orth = std::max(orth, (Q.adjoint() * Q - Cm::Identity(sizes[i], sizes[i])).norm());
+    }
+    check(fp32 ? "batched FP32: matrices not solved" : "batched FP64: matrices not solved",
+          (double)(sizes.size() - solved), 0.5);
+    check("eigenvalues vs Eigen (rel)",         dl,   fp32 ? 1e-4 : 1e-11);
+    check("reconstruction ||QwQ^dag-G||/||G||", rec,  fp32 ? 1e-4 : 1e-11);
+    check("eigenvectors orthonormal",           orth, fp32 ? 1e-3 : 1e-10);
+}
+
+// The layer workload: many calls in a row whose class mix and sizes change from call to
+// call, so the device and pinned buffers grow and get reused. Every call is checked.
+static void test_batched_sequence(std::mt19937_64& rng) {
+    std::normal_distribution<double> g(0.0, 1.0);
+    std::uniform_int_distribution<int> cnt(1, 40), sz(48, 230);
+    double worst = 0; int unsolved = 0, calls = 120;
+    for (int call = 0; call < calls; ++call) {
+        const int c = cnt(rng);
+        std::vector<Cm> G(c), Q(c); std::vector<Rv> w(c);
+        std::vector<Cx*> gp(c); std::vector<int> n(c), ok(c); std::vector<double*> wp(c);
+        for (int i = 0; i < c; ++i) {
+            const int k = sz(rng);
+            Cm M(k, k + 3);
+            for (int e = 0; e < M.size(); ++e) M.data()[e] = Cx(g(rng), g(rng));
+            G[i] = M * M.adjoint(); Q[i] = G[i]; w[i].resize(k);
+            gp[i] = Q[i].data(); n[i] = k; wp[i] = w[i].data();
+        }
+        if (!qx_gpu::eigh_batched_z(c, gp.data(), n.data(), wp.data(), false, ok.data())) { ++unsolved; continue; }
+        for (int i = 0; i < c; ++i) {
+            if (!ok[i]) { ++unsolved; continue; }
+            worst = std::max(worst, (Q[i] * w[i].cast<Cx>().asDiagonal() * Q[i].adjoint() - G[i]).norm()
+                                    / G[i].norm());
+        }
+    }
+    check("120 calls of 1-40 matrices: not solved", (double)unsolved, 0.5);
+    check("120 calls: worst reconstruction",         worst,  1e-11);
+}
+
 int main() {
     if (!qx_gpu::gpu_available()) {
         std::printf("No usable CUDA device (gpu_available()=false); skipping.\n");
@@ -105,6 +174,10 @@ int main() {
     test_shape_fp32(80, 120, rng);
     test_shape_fp32(200, 200, rng);
     test_shape_fp32(96, 300, rng);
+    std::printf("\nBatched Hermitian eigensolves (eigh_batched_z), mixed sizes:\n");
+    test_batched(false, rng);
+    test_batched(true, rng);
+    test_batched_sequence(rng);
     std::printf("\n%s\n", failures == 0 ? "ALL PASSED" : "SOME FAILED");
     return failures == 0 ? 0 : 1;
 }

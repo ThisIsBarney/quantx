@@ -64,4 +64,17 @@ bool form_theta_block_z_multi(const std::complex<double>* const* As, const int* 
                               int nsec, const std::complex<double>* Ai1, int kmid,
                               int ncol, int nrow, std::complex<double>* theta);
 
+// Batched Hermitian eigensolves (M12): the Gram matrices of one B-form TEBD layer.
+// G[i] is n[i] x n[i], column-major, Hermitian positive semi-definite (only its lower
+// triangle is read), and is overwritten with its eigenvectors; w[i] receives its n[i]
+// eigenvalues, ascending. The matrices are grouped into padded size classes, one
+// cusolverDnXsyevBatched per class, each class on its own stream so the latency-bound
+// solves overlap. A matrix is padded with -trace on the extra diagonal, below all of
+// its eigenvalues, so the padding's eigenpairs sort first and never mix with its own.
+// fp32: solve in single precision (opt-in, like thin_svd_gram_gpu_c). ok[i] = 1 for
+// each matrix solved; 0 where the solver did not converge, or for all of them when
+// the call returns false (a device error), and the caller solves those on the CPU.
+bool eigh_batched_z(int count, std::complex<double>* const* G, const int* n,
+                    double* const* w, bool fp32, int* ok);
+
 }  // namespace qx_gpu

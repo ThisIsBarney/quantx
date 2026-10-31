@@ -99,6 +99,7 @@ class StructureFactorSolver:
         chi_max: int = 128,
         cutoff: float = 1e-10,
         n_sweeps: int = 40,
+        scheme: str = "sweep",
     ) -> DSFResult:
         """Compute the time-dependent correlations C_{j,l0}(t).
 
@@ -118,6 +119,12 @@ class StructureFactorSolver:
             SVD truncation cutoff.
         n_sweeps : int
             DMRG sweeps for the ground state.
+        scheme : str
+            Real-time TEBD scheme: ``"sweep"`` (default; left-right-left half-step
+            sweeps) or ``"even_odd"`` (TeNPy's even/odd splitting on a B-form MPS, one
+            batch of SVDs per layer). The even/odd scheme is faster where the Schmidt
+            values stay large -- moderate ``chi_max``, on GPU builds -- and slower where
+            they run deep; the two Trotter splittings differ at O(dt^2).
 
         Returns
         -------
@@ -129,7 +136,7 @@ class StructureFactorSolver:
             raise StructureFactorError("n_qubits must be >= 2")
         prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
         opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
-                "cutoff": cutoff, "n_sweeps": n_sweeps}
+                "cutoff": cutoff, "n_sweeps": n_sweeps, "scheme": scheme}
         raw = self._lib.qx_spectral(json.dumps(prob).encode(), json.dumps(opts).encode())
         out = json.loads(raw)
         if not out.get("ok", False):
@@ -243,15 +250,19 @@ class ConductivitySolver:
                 self._lib = None
 
     def correlator(self, n_qubits, *, J=1.0, delta=1.0, dt=0.0125, n_steps=400,
-                   chi_max=128, cutoff=1e-10, n_sweeps=40):
-        """Current-current correlator C(t) for the XXZ chain."""
+                   chi_max=128, cutoff=1e-10, n_sweeps=40, scheme="sweep"):
+        """Current-current correlator C(t) for the XXZ chain.
+
+        ``scheme`` picks the real-time TEBD: ``"sweep"`` (default) or ``"even_odd"``
+        (see :meth:`StructureFactorSolver.correlations`).
+        """
         if self._lib is None:
             raise StructureFactorError("Conductivity requires the native C++ library.")
         if n_qubits < 2:
             raise StructureFactorError("n_qubits must be >= 2")
         prob = {"n_qubits": n_qubits, "type": "heisenberg", "J": J, "delta": delta}
         opts = {"dt": dt, "n_steps": n_steps, "chi_max": chi_max,
-                "cutoff": cutoff, "n_sweeps": n_sweeps}
+                "cutoff": cutoff, "n_sweeps": n_sweeps, "scheme": scheme}
         raw = self._lib.qx_conductivity(json.dumps(prob).encode(), json.dumps(opts).encode())
         out = json.loads(raw)
         if not out.get("ok", False):
