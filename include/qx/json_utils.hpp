@@ -16,6 +16,8 @@ ContinuousExportConfig continuous_export_config_from_json(const std::string& jso
 ContinuousExportConfig sanitize_continuous_export_config(const ContinuousExportConfig& config);
 // Parse circuit JSON into gate-level circuit representation.
 QuantumCircuit circuit_from_json(const std::string& json);
+// Parse the steps of an adjoint backward pass, and the width they act on.
+std::vector<AdjointStep> adjoint_steps_from_json(const std::string& json, std::uint32_t& qubits);
 // Serialize simulation result to JSON string.
 std::string result_to_json(const SimulationResult& result);
 // Serialize circuit execution result to JSON string.

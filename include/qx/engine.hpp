@@ -26,6 +26,15 @@ BackendInfo explain_backend_choice(const QuantumProblem& problem, const RunOptio
 CircuitCapabilities circuit_backend_capabilities();
 // Execute quantum circuit and optionally sample shot statistics.
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions& options);
+// The adjoint method's backward pass (Jones and Gacon 2020). From the final state `ket` and one
+// `bras[r]` per row, walks the steps, and sets jacobian[r * columns + c] = Re <bra_r|dU|ket> at
+// each differentiated gate, with both vectors brought back to just after that gate. The caller
+// gives bras[r] = 2 O_r |ket>, so a row is d<O_r>/dtheta. Both arguments are taken by value:
+// the pass works on them.
+void adjoint_gradient(std::uint32_t qubits, const std::vector<AdjointStep>& steps,
+                      std::vector<std::complex<double>> ket,
+                      std::vector<std::vector<std::complex<double>>> bras,
+                      std::size_t columns, double* jacobian);
 // Run variational eigensolver (VQE) or QAOA optimization.
 VqeResult run_vqe(const VqeOptions& opts);
 // Run Quantum Phase Estimation to extract eigenphases of a unitary.

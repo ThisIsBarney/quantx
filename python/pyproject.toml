@@ -37,14 +37,14 @@ dependencies = [
 [project.optional-dependencies]
 # Development: testing only (scipy/networkx already in core deps)
 dev = ["pytest>=7.0"]
-pennylane = ["pennylane>=0.30.0"]
+pennylane = ["pennylane>=0.45; python_version>='3.11'"]
 gpu = ["cupy-cuda12x>=13.0"]
 distributed = ["ray[default]>=2.0"]
 
 # Full CI suite: adds PennyLane for plugin tests
 ci = [
     "pytest>=7.0",
-    "pennylane>=0.30.0",
+    "pennylane>=0.45; python_version>='3.11'",
 ]
 
 # Tutorial notebook execution in CI
@@ -56,7 +56,7 @@ notebooks = [
 
 # Meta-extra: everything optional (GPU, distributed, hardware)
 all = [
-    "pennylane>=0.30.0",
+    "pennylane>=0.45; python_version>='3.11'",
     "cupy-cuda12x>=13.0",
     "ray[default]>=2.0",
 ]
@@ -69,7 +69,7 @@ Changelog = "https://github.com/ThisIsBarney/quantx/blob/master/CHANGELOG.md"
 Issues = "https://github.com/ThisIsBarney/quantx/issues"
 
 [project.entry-points."pennylane.plugins"]
-"quantx.statevector" = "quantx_engine.contrib.pennylane_plugin:QuantXDevice"
+"quantx.statevector" = "quantx_engine.pennylane_device:StatevectorDevice"
 
 [tool.setuptools]
 packages = ["quantx_engine", "quantx_engine.contrib"]

@@ -400,6 +400,9 @@ struct QuantumCircuit {
   std::uint32_t qubits{1};
   std::vector<CircuitOp> operations{};
   std::vector<std::string> observables{};
+  // The state the circuit starts from, 2^qubits amplitudes with qubit q at bit q of the index.
+  // Empty means |0...0>. Not part of the JSON schema: qx_run_circuit_state takes it as a buffer.
+  std::vector<std::complex<double>> initial_state{};
   // 0 means no sampling: expectation_exact is <psi|O|psi> of the final state. Noise runs
   // as trajectories, so with noise that is one trajectory, a random sample of the noise
   // rather than its average; shots > 0 runs one trajectory per shot and averages them.
@@ -416,6 +419,18 @@ struct QuantumCircuit {
   std::uint32_t clbits{0};
   // Named parameter bindings resolved at circuit execution time by CircuitOp::param_names.
   std::map<std::string, double> parameter_map{};
+};
+
+// One gate of the adjoint method's backward pass, last gate of the circuit first.
+struct AdjointStep {
+  // U^dagger, as a circuit op.
+  CircuitOp inverse{};
+  // dU/dtheta, row-major on these qubits (targets[0] the high bit of its index). Empty when U
+  // has no parameter being differentiated. Not unitary, so it is not a circuit op.
+  std::vector<std::uint32_t> targets{};
+  std::vector<std::complex<double>> derivative{};
+  // The Jacobian column theta belongs to.
+  std::uint32_t column{0};
 };
 
 // Circuit execution output including exact and shot-based estimators.
