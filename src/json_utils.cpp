@@ -687,6 +687,36 @@ QuantumCircuit circuit_from_json(const std::string& json_text) {
   return c;
 }
 
+// Parse the steps of an adjoint backward pass, and the width they act on.
+std::vector<AdjointStep> adjoint_steps_from_json(const std::string& json_text,
+                                                 std::uint32_t& qubits) {
+  const json j = parse_json_or_throw(json_text);
+  qubits = get_or<std::uint32_t>(j, "qubits", 0);
+  std::vector<AdjointStep> steps;
+  const auto it = j.find("steps");
+  if (it == j.end() || !it->is_array()) {
+    throw std::runtime_error("an adjoint request needs a list of steps");
+  }
+  steps.reserve(it->size());
+  for (const auto& item : *it) {
+    AdjointStep step;
+    const auto inverse = item.find("inverse");
+    if (inverse == item.end() || !inverse->is_object()) {
+      throw std::runtime_error("each adjoint step needs its inverse gate");
+    }
+    step.inverse = parse_circuit_op(*inverse);
+    step.targets = get_or<std::vector<std::uint32_t>>(item, "targets", {});
+    const auto d = get_or<std::vector<double>>(item, "derivative", {});
+    step.derivative.resize(d.size() / 2);
+    for (std::size_t i = 0; i < step.derivative.size(); ++i) {
+      step.derivative[i] = {d[2 * i], d[2 * i + 1]};
+    }
+    step.column = get_or<std::uint32_t>(item, "column", 0);
+    steps.push_back(std::move(step));
+  }
+  return steps;
+}
+
 // Serialize Hamiltonian simulation result as compact JSON.
 std::string result_to_json(const SimulationResult& result) {
   json j;

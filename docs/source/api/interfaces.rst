@@ -6,21 +6,8 @@ Modules providing interoperability with external frameworks and tools.
 PennyLane Plugin
 -----------------
 
-Register QuantX as a PennyLane device (requires ``quantx-engine[pennylane]``):
-
-.. code-block:: python
-
-   import pennylane as qml
-
-   dev = qml.device("quantx.statevector", wires=4)
-
-   @qml.qnode(dev)
-   def circuit():
-       qml.Hadamard(0)
-       qml.CNOT(wires=[0, 1])
-       return qml.expval(qml.PauliZ(0))
-
-   print(circuit())
+The device is part of the engine now, as ``qml.device("quantx.statevector", wires=n)``:
+see :mod:`quantx_engine.pennylane_device`. This module keeps its former import path.
 
 .. automodule:: quantx_engine.contrib.pennylane_plugin
    :members:

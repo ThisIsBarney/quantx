@@ -72,6 +72,15 @@ same size but not the same. At the published sizes the two correlations differ b
 N = 16. The speed ratio is a fair one for equal step and order; a comparison at a given
 accuracy needs the step chosen for it.
 
+PennyLane's `lightning.qubit` is the other comparison, and it has no TeNPy in it:
+
+| Claim, and where | Script | QuantX side |
+|---|---|---|
+| Adjoint gradient of StronglyEntanglingLayers on two threads: 20, 73 and 862 ms at 12, 16 and 20 qubits, against 14, 65 and 981 ms for `lightning.qubit` and 90 and 685 ms for `default.qubit` ([CHANGELOG](../CHANGELOG.md), M15) | `pennylane_gradient.py` | Python API |
+
+It needs `pennylane>=0.45`, which brings `lightning.qubit`, and an install of this package,
+for the entry point of the device.
+
 ## Quick checks
 
 Each runs its script end to end at a small size, in seconds unless noted; the
@@ -90,6 +99,7 @@ BENCH_LX=4 BENCH_PLAN=128 python benchmarks/hubbard_ladder_vs_tenpy.py
 BENCH_LX=2 BENCH_PLAN=32 BENCH_SWEEPS=2 python benchmarks/hubbard_cylinder_vs_tenpy.py
 BENCH_PLAN=12:32 BENCH_STEPS=5 python benchmarks/gpu_vs_tenpy_quench.py   # N:chi
 BENCH_N=8 BENCH_PLAN=32 python benchmarks/hubbard_dmrg_vs_itensor.py     # minutes: Julia
+python benchmarks/pennylane_gradient.py --quick
 ```
 
 TeNPy stops a ground-state run whose truncation error passes its `max_trunc_err`

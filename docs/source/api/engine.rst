@@ -6,9 +6,10 @@ the platform wheels (or set ``QUANTX_LIB_PATH``); without it, each raises its mo
 error, naming what is missing.
 
 :func:`~quantx_engine.dmrg.ground_state` with :mod:`quantx_engine.models`,
-:mod:`quantx_engine.hva`, :mod:`quantx_engine.thermal`, :mod:`quantx_engine.u1_circuit` and
-:mod:`quantx_engine.mps` are gated: each capability is tested against a reference computed independently of the
-engine (see the :doc:`front page <../index>`).
+:mod:`quantx_engine.hva`, :mod:`quantx_engine.thermal`, :mod:`quantx_engine.u1_circuit`,
+:mod:`quantx_engine.mps` and :mod:`quantx_engine.pennylane_device` are gated: each capability
+is tested against a reference computed independently of the engine (see the
+:doc:`front page <../index>`).
 :mod:`quantx_engine.tdvp`, :mod:`quantx_engine.structure_factor` and the SU(2) path of
 :class:`~quantx_engine.dmrg.DMRGSolver` are validated in the C++ tests but have no
 Python gate yet.
@@ -44,6 +45,11 @@ Python gate yet.
        its Jordan–Wigner string), TDVP in real or imaginary time (under any model of the
        same local space), overlaps, matrix elements and energies, chained without the
        state passing through Python.
+   * - :mod:`quantx_engine.pennylane_device`
+     - ``qml.device("quantx.statevector", wires=n)``: PennyLane circuits on the engine's
+       state vector, up to 25 qubits, with adjoint gradients run in the engine. Needs
+       PennyLane 0.45 or later (``pip install "quantx-engine[pennylane]"``), and so Python
+       3.11.
    * - :mod:`quantx_engine.tdvp`
      - Real- and imaginary-time evolution and Loschmidt echoes of the XXZ chain.
    * - :mod:`quantx_engine.structure_factor`
@@ -58,6 +64,7 @@ Python gate yet.
    quantx_engine.dmrg
    quantx_engine.hva
    quantx_engine.thermal
+   quantx_engine.pennylane_device
    quantx_engine.u1_circuit
    quantx_engine.mps
    quantx_engine.tdvp

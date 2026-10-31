@@ -60,7 +60,8 @@ void emit_continuous_export_contract_event(RuntimeContext& runtime,
 // Return the fixed gate vocabulary accepted by the circuit executor.
 const std::vector<std::string>& supported_circuit_gates() {
   static const std::vector<std::string> gates = {
-      "X", "Y", "Z", "H", "S", "T", "RX", "RY", "RZ", "CNOT", "CX", "CZ", "SWAP", "MEASURE"};
+      "X", "Y", "Z", "H", "S", "T", "RX", "RY", "RZ", "CNOT", "CX", "CZ", "SWAP", "UNITARY",
+      "MEASURE"};
   return gates;
 }
 
@@ -116,6 +117,15 @@ void require_supported_noise_model(const QuantumCircuit& circuit) {
   throw unsupported_noise_error(circuit.noise_model);
 }
 
+// Below this many amplitudes a gate is too cheap to wake the thread team for.
+constexpr std::int64_t kParallelAmplitudes = 1LL << 14;
+
+// The k-th index with a 0 at bit q: k's bits at and above q move up one.
+inline std::int64_t insert_zero_bit(std::int64_t k, std::uint32_t q) {
+  const std::int64_t low = (1LL << q) - 1;
+  return ((k & ~low) << 1) | (k & low);
+}
+
 // Apply an arbitrary 2x2 single-qubit unitary to the full statevector.
 void apply_single_qubit(
     std::vector<Complex>& state,
@@ -124,26 +134,80 @@ void apply_single_qubit(
     Complex m01,
     Complex m10,
     Complex m11) {
-  const std::size_t n = state.size();
-  const std::size_t mask = static_cast<std::size_t>(1ULL << qubit);
-  for (std::size_t i = 0; i < n; ++i) {
-    if ((i & mask) == 0) {
-      const std::size_t j = i | mask;
-      const Complex a = state[i];
-      const Complex b = state[j];
-      state[i] = m00 * a + m01 * b;
-      state[j] = m10 * a + m11 * b;
+  const std::int64_t n = static_cast<std::int64_t>(state.size());
+  const std::int64_t mask = 1LL << qubit;
+#pragma omp parallel for if (n >= kParallelAmplitudes)
+  for (std::int64_t k = 0; k < n / 2; ++k) {
+    const std::int64_t i = insert_zero_bit(k, qubit);
+    const std::int64_t j = i | mask;
+    const Complex a = state[i];
+    const Complex b = state[j];
+    state[i] = m00 * a + m01 * b;
+    state[j] = m10 * a + m11 * b;
+  }
+}
+
+// Apply the 2^k x 2^k matrix m (row-major) to the qubits `targets`, with targets[0] the high bit
+// of the matrix's index: the convention of a gate written on the tensor product of its qubits.
+// Each group of 2^k amplitudes that differ only on those qubits is independent of the others.
+void apply_matrix(std::vector<Complex>& state, const std::vector<std::uint32_t>& targets,
+                  const std::vector<Complex>& m) {
+  const std::size_t k = targets.size();
+  if (k == 1) {
+    apply_single_qubit(state, targets[0], m[0], m[1], m[2], m[3]);
+    return;
+  }
+  const std::int64_t dim = 1LL << k;
+  std::vector<std::int64_t> offset(static_cast<std::size_t>(dim), 0);
+  for (std::int64_t a = 0; a < dim; ++a) {
+    for (std::size_t t = 0; t < k; ++t) {
+      if ((a >> (k - 1U - t)) & 1) {
+        offset[static_cast<std::size_t>(a)] |= 1LL << targets[t];
+      }
+    }
+  }
+  std::vector<std::uint32_t> ascending = targets;
+  std::sort(ascending.begin(), ascending.end());
+  const std::int64_t groups = static_cast<std::int64_t>(state.size()) >> k;
+#pragma omp parallel if (static_cast<std::int64_t>(state.size()) >= kParallelAmplitudes)
+  {
+    std::vector<Complex> in(static_cast<std::size_t>(dim));
+#pragma omp for
+    for (std::int64_t g = 0; g < groups; ++g) {
+      std::int64_t base = g;
+      for (const auto q : ascending) {
+        base = insert_zero_bit(base, q);
+      }
+      for (std::int64_t a = 0; a < dim; ++a) {
+        in[static_cast<std::size_t>(a)] = state[base + offset[static_cast<std::size_t>(a)]];
+      }
+      // By hand: this is the innermost loop of every general gate, and operator* on complex
+      // goes through the C99 infinity check at the default flags of GCC.
+      const Complex* row = m.data();
+      for (std::int64_t r = 0; r < dim; ++r, row += dim) {
+        double re = 0.0;
+        double im = 0.0;
+        for (std::int64_t c = 0; c < dim; ++c) {
+          const Complex& u = row[c];
+          const Complex& v = in[static_cast<std::size_t>(c)];
+          re += u.real() * v.real() - u.imag() * v.imag();
+          im += u.real() * v.imag() + u.imag() * v.real();
+        }
+        state[base + offset[static_cast<std::size_t>(r)]] = Complex{re, im};
+      }
     }
   }
 }
 
 // Apply controlled-NOT gate.
 void apply_cnot(std::vector<Complex>& state, std::uint32_t control, std::uint32_t target) {
-  const std::size_t n = state.size();
-  const std::size_t cm = static_cast<std::size_t>(1ULL << control);
-  const std::size_t tm = static_cast<std::size_t>(1ULL << target);
-  for (std::size_t i = 0; i < n; ++i) {
-    if ((i & cm) != 0 && (i & tm) == 0) {
+  const std::int64_t n = static_cast<std::int64_t>(state.size());
+  const std::int64_t cm = 1LL << control;
+  const std::int64_t tm = 1LL << target;
+#pragma omp parallel for if (n >= kParallelAmplitudes)
+  for (std::int64_t k = 0; k < n / 2; ++k) {
+    const std::int64_t i = insert_zero_bit(k, target);
+    if ((i & cm) != 0) {
       std::swap(state[i], state[i | tm]);
     }
   }
@@ -151,10 +215,11 @@ void apply_cnot(std::vector<Complex>& state, std::uint32_t control, std::uint32_
 
 // Apply controlled-Z gate.
 void apply_cz(std::vector<Complex>& state, std::uint32_t control, std::uint32_t target) {
-  const std::size_t n = state.size();
-  const std::size_t cm = static_cast<std::size_t>(1ULL << control);
-  const std::size_t tm = static_cast<std::size_t>(1ULL << target);
-  for (std::size_t i = 0; i < n; ++i) {
+  const std::int64_t n = static_cast<std::int64_t>(state.size());
+  const std::int64_t cm = 1LL << control;
+  const std::int64_t tm = 1LL << target;
+#pragma omp parallel for if (n >= kParallelAmplitudes)
+  for (std::int64_t i = 0; i < n; ++i) {
     if ((i & cm) != 0 && (i & tm) != 0) {
       state[i] = -state[i];
     }
@@ -164,15 +229,13 @@ void apply_cz(std::vector<Complex>& state, std::uint32_t control, std::uint32_t 
 // Apply SWAP gate.
 void apply_swap(std::vector<Complex>& state, std::uint32_t q0, std::uint32_t q1) {
   if (q0 == q1) return;
-  const std::size_t n = state.size();
-  const std::size_t m0 = static_cast<std::size_t>(1ULL << q0);
-  const std::size_t m1 = static_cast<std::size_t>(1ULL << q1);
-  for (std::size_t i = 0; i < n; ++i) {
-    const bool b0 = (i & m0) != 0;
-    const bool b1 = (i & m1) != 0;
-    if (!b0 && b1) {
-      const std::size_t j = (i | m0) & ~m1;
-      std::swap(state[i], state[j]);
+  const std::int64_t n = static_cast<std::int64_t>(state.size());
+  const std::int64_t m0 = 1LL << q0;
+  const std::int64_t m1 = 1LL << q1;
+#pragma omp parallel for if (n >= kParallelAmplitudes)
+  for (std::int64_t i = 0; i < n; ++i) {
+    if ((i & m0) == 0 && (i & m1) != 0) {
+      std::swap(state[i], state[(i | m0) & ~m1]);
     }
   }
 }
@@ -321,6 +384,50 @@ double resolve_gate_param(const CircuitOp& op, std::size_t i,
     return it->second;
   }
   return (i < op.params.size()) ? op.params[i] : 0.0;
+}
+
+// The matrix of a UNITARY op: its params are the row-major 2^k x 2^k entries as (re, im) pairs.
+// Checked here because the kernel would apply anything, and an entry dropped or a matrix that is
+// not unitary leaves a state of the wrong norm with no error.
+std::vector<Complex> unitary_matrix(const CircuitOp& op, std::uint32_t qubits) {
+  const std::size_t k = op.targets.size();
+  if (k == 0 || k > qubits) {
+    throw invalid_circuit_error("UNITARY requires between 1 and " + std::to_string(qubits) +
+                                " targets");
+  }
+  std::vector<std::uint32_t> seen = op.targets;
+  std::sort(seen.begin(), seen.end());
+  for (std::size_t i = 0; i < k; ++i) {
+    require_qubit(seen[i], qubits, "UNITARY");
+    if (i > 0 && seen[i] == seen[i - 1]) {
+      throw invalid_circuit_error("UNITARY repeats a target qubit");
+    }
+  }
+  const std::size_t dim = static_cast<std::size_t>(1ULL << k);
+  if (op.params.size() != 2 * dim * dim) {
+    throw invalid_circuit_error("UNITARY on " + std::to_string(k) + " qubits takes " +
+                                std::to_string(2 * dim * dim) + " params (re, im per entry), got " +
+                                std::to_string(op.params.size()));
+  }
+  std::vector<Complex> m(dim * dim);
+  for (std::size_t i = 0; i < m.size(); ++i) {
+    m[i] = Complex{op.params[2 * i], op.params[2 * i + 1]};
+  }
+  double worst = 0.0;
+  for (std::size_t r = 0; r < dim; ++r) {
+    for (std::size_t c = 0; c < dim; ++c) {
+      Complex dot{0.0, 0.0};
+      for (std::size_t a = 0; a < dim; ++a) {
+        dot += std::conj(m[a * dim + r]) * m[a * dim + c];
+      }
+      worst = std::max(worst, std::abs(dot - Complex{r == c ? 1.0 : 0.0, 0.0}));
+    }
+  }
+  if (!(worst <= 1e-8)) {
+    throw invalid_circuit_error("UNITARY is not unitary (largest entry of U^dag U - 1 is " +
+                                std::to_string(worst) + ")");
+  }
+  return m;
 }
 
 // Helper: look up a double value from noise_params with a default fallback.
@@ -532,21 +639,112 @@ ShotStats shot_stats_rotated_state(
 // mid-circuit MEASURE costs one full pass per shot.
 constexpr std::uint32_t kMaxCircuitShots = 1000000;
 
+// Apply one gate to a state, without noise. `g` is the op's name in upper case. False for a name
+// that is not a gate on the state alone: MEASURE, or one the engine does not know.
+bool apply_gate(std::vector<Complex>& state, const std::string& g, const CircuitOp& op,
+                std::uint32_t qubits, const std::map<std::string, double>& parameter_map) {
+  if (g == "X" || g == "Y" || g == "Z" || g == "H" || g == "S" || g == "T" || g == "RX" || g == "RY" ||
+      g == "RZ") {
+    if (op.targets.size() != 1) {
+      throw invalid_circuit_error("single-qubit gate " + g + " requires 1 target");
+    }
+    const std::uint32_t t = op.targets[0];
+    require_qubit(t, qubits, g);
+
+    if (g == "X") {
+      apply_single_qubit(state, t, {0.0, 0.0}, {1.0, 0.0}, {1.0, 0.0}, {0.0, 0.0});
+    } else if (g == "Y") {
+      apply_single_qubit(state, t, {0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.0, 0.0});
+    } else if (g == "Z") {
+      apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
+    } else if (g == "H") {
+      apply_h_gate(state, t);
+    } else if (g == "S") {
+      apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
+    } else if (g == "T") {
+      const double inv_sqrt2 = 0.7071067811865475244;
+      apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {inv_sqrt2, inv_sqrt2});
+    } else if (g == "RX") {
+      const double theta = resolve_gate_param(op, 0, parameter_map);
+      const double c = std::cos(theta * 0.5);
+      const double s = std::sin(theta * 0.5);
+      apply_single_qubit(state, t, {c, 0.0}, {0.0, -s}, {0.0, -s}, {c, 0.0});
+    } else if (g == "RY") {
+      const double theta = resolve_gate_param(op, 0, parameter_map);
+      const double c = std::cos(theta * 0.5);
+      const double s = std::sin(theta * 0.5);
+      apply_single_qubit(state, t, {c, 0.0}, {-s, 0.0}, {s, 0.0}, {c, 0.0});
+    } else if (g == "RZ") {
+      const double theta = resolve_gate_param(op, 0, parameter_map);
+      apply_single_qubit(state, t, std::exp(Complex{0.0, -theta * 0.5}), {0.0, 0.0}, {0.0, 0.0},
+                         std::exp(Complex{0.0, theta * 0.5}));
+    }
+    return true;
+  }
+
+  if (g == "CNOT" || g == "CX") {
+    if (op.controls.empty() || op.targets.size() != 1) {
+      throw invalid_circuit_error("CNOT requires 1 control and 1 target");
+    }
+    const std::uint32_t c = op.controls[0];
+    const std::uint32_t t = op.targets[0];
+    require_qubit(c, qubits, g);
+    require_qubit(t, qubits, g);
+    apply_cnot(state, c, t);
+    return true;
+  }
+
+  if (g == "CZ") {
+    if (op.controls.empty() || op.targets.size() != 1) {
+      throw invalid_circuit_error("CZ requires 1 control and 1 target");
+    }
+    const std::uint32_t c = op.controls[0];
+    const std::uint32_t t = op.targets[0];
+    require_qubit(c, qubits, g);
+    require_qubit(t, qubits, g);
+    apply_cz(state, c, t);
+    return true;
+  }
+
+  if (g == "SWAP") {
+    if (op.targets.size() != 2) {
+      throw invalid_circuit_error("SWAP requires 2 targets");
+    }
+    const std::uint32_t q0 = op.targets[0];
+    const std::uint32_t q1 = op.targets[1];
+    require_qubit(q0, qubits, g);
+    require_qubit(q1, qubits, g);
+    apply_swap(state, q0, q1);
+    return true;
+  }
+
+  if (g == "UNITARY") {
+    apply_matrix(state, op.targets, unitary_matrix(op, qubits));
+    return true;
+  }
+
+  return false;
+}
+
 // A MEASURE the pass did not perform: its classical bit and qubit.
 struct DeferredMeasure {
   std::uint32_t clbit{0};
   std::uint32_t qubit{0};
 };
 
-// One pass through the circuit from |0...0>, in place. The noise channels and any MEASURE draw
+// One pass through the circuit from its start state, in place. The noise channels and any MEASURE draw
 // from rng, so when either acts the pass is one random trajectory, not the circuit's mixed state.
 // With `deferred`, the MEASUREs are not performed but recorded there, with their classical bits
 // reserved: valid only when every MEASURE is terminal (see has_nonterminal_measure).
 void run_trajectory(const QuantumCircuit& circuit, std::mt19937_64& rng, std::vector<Complex>& state,
                     std::vector<std::uint32_t>& measurement_results,
                     std::vector<DeferredMeasure>* deferred = nullptr) {
-  std::fill(state.begin(), state.end(), Complex{0.0, 0.0});
-  state[0] = Complex{1.0, 0.0};
+  if (circuit.initial_state.empty()) {
+    std::fill(state.begin(), state.end(), Complex{0.0, 0.0});
+    state[0] = Complex{1.0, 0.0};
+  } else {
+    state = circuit.initial_state;
+  }
 
   // Classical register: pre-sized when clbits > 0, or grown dynamically by unaddressed MEASUREs.
   measurement_results.assign(circuit.clbits, 0U);
@@ -555,81 +753,7 @@ void run_trajectory(const QuantumCircuit& circuit, std::mt19937_64& rng, std::ve
     std::string g = op.name;
     std::transform(g.begin(), g.end(), g.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 
-    if (g == "X" || g == "Y" || g == "Z" || g == "H" || g == "S" || g == "T" || g == "RX" || g == "RY" ||
-        g == "RZ") {
-      if (op.targets.size() != 1) {
-        throw invalid_circuit_error("single-qubit gate " + g + " requires 1 target");
-      }
-      const std::uint32_t t = op.targets[0];
-      require_qubit(t, circuit.qubits, g);
-
-      if (g == "X") {
-        apply_single_qubit(state, t, {0.0, 0.0}, {1.0, 0.0}, {1.0, 0.0}, {0.0, 0.0});
-      } else if (g == "Y") {
-        apply_single_qubit(state, t, {0.0, 0.0}, {0.0, -1.0}, {0.0, 1.0}, {0.0, 0.0});
-      } else if (g == "Z") {
-        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {-1.0, 0.0});
-      } else if (g == "H") {
-        apply_h_gate(state, t);
-      } else if (g == "S") {
-        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {0.0, 1.0});
-      } else if (g == "T") {
-        const double inv_sqrt2 = 0.7071067811865475244;
-        apply_single_qubit(state, t, {1.0, 0.0}, {0.0, 0.0}, {0.0, 0.0}, {inv_sqrt2, inv_sqrt2});
-      } else if (g == "RX") {
-        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
-        const double c = std::cos(theta * 0.5);
-        const double s = std::sin(theta * 0.5);
-        apply_single_qubit(state, t, {c, 0.0}, {0.0, -s}, {0.0, -s}, {c, 0.0});
-      } else if (g == "RY") {
-        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
-        const double c = std::cos(theta * 0.5);
-        const double s = std::sin(theta * 0.5);
-        apply_single_qubit(state, t, {c, 0.0}, {-s, 0.0}, {s, 0.0}, {c, 0.0});
-      } else if (g == "RZ") {
-        const double theta = resolve_gate_param(op, 0, circuit.parameter_map);
-        apply_single_qubit(state, t, std::exp(Complex{0.0, -theta * 0.5}), {0.0, 0.0}, {0.0, 0.0},
-                           std::exp(Complex{0.0, theta * 0.5}));
-      }
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "CNOT" || g == "CX") {
-      if (op.controls.empty() || op.targets.size() != 1) {
-        throw invalid_circuit_error("CNOT requires 1 control and 1 target");
-      }
-      const std::uint32_t c = op.controls[0];
-      const std::uint32_t t = op.targets[0];
-      require_qubit(c, circuit.qubits, g);
-      require_qubit(t, circuit.qubits, g);
-      apply_cnot(state, c, t);
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "CZ") {
-      if (op.controls.empty() || op.targets.size() != 1) {
-        throw invalid_circuit_error("CZ requires 1 control and 1 target");
-      }
-      const std::uint32_t c = op.controls[0];
-      const std::uint32_t t = op.targets[0];
-      require_qubit(c, circuit.qubits, g);
-      require_qubit(t, circuit.qubits, g);
-      apply_cz(state, c, t);
-      apply_noise_after_gate(state, circuit, rng);
-      continue;
-    }
-
-    if (g == "SWAP") {
-      if (op.targets.size() != 2) {
-        throw invalid_circuit_error("SWAP requires 2 targets");
-      }
-      const std::uint32_t q0 = op.targets[0];
-      const std::uint32_t q1 = op.targets[1];
-      require_qubit(q0, circuit.qubits, g);
-      require_qubit(q1, circuit.qubits, g);
-      apply_swap(state, q0, q1);
+    if (apply_gate(state, g, op, circuit.qubits, circuit.parameter_map)) {
       apply_noise_after_gate(state, circuit, rng);
       continue;
     }
@@ -840,6 +964,65 @@ SimulationResult run(const QuantumProblem& problem, const RunOptions& options) {
   return result;
 }
 
+// Public API: the adjoint method's backward pass.
+void adjoint_gradient(std::uint32_t qubits, const std::vector<AdjointStep>& steps,
+                      std::vector<Complex> ket, std::vector<std::vector<Complex>> bras,
+                      std::size_t columns, double* jacobian) {
+  const std::map<std::string, double> no_parameters;
+  const std::size_t amplitudes = static_cast<std::size_t>(1ULL << qubits);
+  if (ket.size() != amplitudes) {
+    throw invalid_circuit_error("the state has " + std::to_string(ket.size()) +
+                                " amplitudes, the circuit " + std::to_string(amplitudes));
+  }
+  for (const auto& bra : bras) {
+    if (bra.size() != amplitudes) {
+      throw invalid_circuit_error("a bra has " + std::to_string(bra.size()) +
+                                  " amplitudes, the circuit " + std::to_string(amplitudes));
+    }
+  }
+  // Refused before anything runs: a step the walk cannot take would leave a partial Jacobian.
+  for (const auto& step : steps) {
+    if (!step.targets.empty()) {
+      if (step.column >= columns) {
+        throw invalid_circuit_error("a step's Jacobian column is out of range");
+      }
+      const std::size_t dim = static_cast<std::size_t>(1ULL << step.targets.size());
+      if (step.derivative.size() != dim * dim) {
+        throw invalid_circuit_error("a step's derivative is not a matrix on its targets");
+      }
+      for (const auto q : step.targets) {
+        require_qubit(q, qubits, "derivative");
+      }
+    }
+  }
+  std::fill(jacobian, jacobian + bras.size() * columns, 0.0);
+  const std::int64_t n = static_cast<std::int64_t>(amplitudes);
+  std::vector<Complex> mu;
+  for (const auto& step : steps) {
+    const std::string g = upper_gate_name(step.inverse.name);
+    if (!apply_gate(ket, g, step.inverse, qubits, no_parameters)) {
+      throw unsupported_gate_error(g);
+    }
+    if (!step.targets.empty()) {
+      mu = ket;
+      apply_matrix(mu, step.targets, step.derivative);
+      for (std::size_t r = 0; r < bras.size(); ++r) {
+        const Complex* bra = bras[r].data();
+        const Complex* m = mu.data();
+        double dot = 0.0;
+#pragma omp parallel for reduction(+ : dot) if (n >= kParallelAmplitudes)
+        for (std::int64_t i = 0; i < n; ++i) {
+          dot += bra[i].real() * m[i].real() + bra[i].imag() * m[i].imag();
+        }
+        jacobian[r * columns + step.column] += dot;
+      }
+    }
+    for (auto& bra : bras) {
+      apply_gate(bra, g, step.inverse, qubits, no_parameters);
+    }
+  }
+}
+
 // Public API: run gate-level circuit simulation.
 CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   log::init_logging();
@@ -865,6 +1048,11 @@ CircuitResult run_circuit(const QuantumCircuit& circuit, const RunOptions&) {
   const bool deferred_measures = !branching && circuit_has_measure(circuit);
 
   const std::size_t n = static_cast<std::size_t>(1ULL << circuit.qubits);
+  if (!circuit.initial_state.empty() && circuit.initial_state.size() != n) {
+    throw invalid_circuit_error("the initial state has " +
+                                std::to_string(circuit.initial_state.size()) +
+                                " amplitudes, the circuit " + std::to_string(n));
+  }
   std::vector<Complex> state(n, Complex{0.0, 0.0});
   std::vector<std::uint32_t> measurement_results;
   std::vector<DeferredMeasure> deferred;
