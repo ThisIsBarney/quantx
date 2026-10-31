@@ -72,14 +72,15 @@ same size but not the same. At the published sizes the two correlations differ b
 N = 16. The speed ratio is a fair one for equal step and order; a comparison at a given
 accuracy needs the step chosen for it.
 
-PennyLane's `lightning.qubit` is the other comparison, and it has no TeNPy in it:
+PennyLane's own devices are the other comparison, and they have no TeNPy in them:
 
 | Claim, and where | Script | QuantX side |
 |---|---|---|
 | Adjoint gradient of StronglyEntanglingLayers on two threads: 20, 73 and 862 ms at 12, 16 and 20 qubits, against 14, 65 and 981 ms for `lightning.qubit` and 90 and 685 ms for `default.qubit` ([CHANGELOG](../CHANGELOG.md), M15) | `pennylane_gradient.py` | Python API |
+| quantx.mps against `default.tensor`, with a bond cap that binds on both: on a 48-qubit XY chain, which conserves the number of excitations, 0.52, 2.0 and 8.2 s at caps 64, 128 and 256 against 3.7, 16.7 and 64.8 s; on a 40-qubit circuit that conserves nothing, 1.2, 4.4 and 19.9 s at caps 32, 64 and 128 against 1.2, 3.1 and 13.2 s (with `svd="gram"`, 0.67, 2.9 and 14.8 s) ([CHANGELOG](../CHANGELOG.md), M15) | `pennylane_mps.py` | Python API |
 
-It needs `pennylane>=0.45`, which brings `lightning.qubit`, and an install of this package,
-for the entry point of the device.
+They need `pennylane>=0.45`, which brings `lightning.qubit`, `quimb` for `default.tensor`, and
+an install of this package, for the entry points of the devices.
 
 ## Quick checks
 
@@ -100,6 +101,7 @@ BENCH_LX=2 BENCH_PLAN=32 BENCH_SWEEPS=2 python benchmarks/hubbard_cylinder_vs_te
 BENCH_PLAN=12:32 BENCH_STEPS=5 python benchmarks/gpu_vs_tenpy_quench.py   # N:chi
 BENCH_N=8 BENCH_PLAN=32 python benchmarks/hubbard_dmrg_vs_itensor.py     # minutes: Julia
 python benchmarks/pennylane_gradient.py --quick
+python benchmarks/pennylane_mps.py --quick
 ```
 
 TeNPy stops a ground-state run whose truncation error passes its `max_trunc_err`

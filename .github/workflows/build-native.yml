@@ -40,6 +40,7 @@ on:
       - "python/quantx_engine/pennylane_device.py"
       - "python/quantx_engine/contrib/pennylane_plugin.py"
       - "python/quantx_engine/tests/test_pennylane_statevector.py"
+      - "python/quantx_engine/tests/test_pennylane_mps.py"
       - "python/quantx_engine/tests/test_pennylane_demos.py"
       - "python/quantx_engine/tests/test_pennylane_plugin.py"
       - "examples/quickstart.py"
@@ -76,6 +77,7 @@ on:
       - "python/quantx_engine/pennylane_device.py"
       - "python/quantx_engine/contrib/pennylane_plugin.py"
       - "python/quantx_engine/tests/test_pennylane_statevector.py"
+      - "python/quantx_engine/tests/test_pennylane_mps.py"
       - "python/quantx_engine/tests/test_pennylane_demos.py"
       - "python/quantx_engine/tests/test_pennylane_plugin.py"
       - "examples/quickstart.py"
@@ -189,22 +191,26 @@ jobs:
                            python/quantx_engine/tests/test_tebd_schemes.py \
                            python/quantx_engine/tests/test_noise.py -v
 
-      - name: PennyLane device (M15) against this build's library
-        # quantx.statevector against default.qubit and an independent state vector, then
-        # PennyLane's demos, then the device test suite PennyLane ships for any device,
-        # analytically and at finite shots. That suite's statistical tests are marked flaky,
-        # and default.qubit needs the reruns as well (it fails the same two without them).
+      - name: PennyLane devices (M15) against this build's library
+        # quantx.statevector and quantx.mps against default.qubit and an independent state
+        # vector, then PennyLane's demos, then the device test suite PennyLane ships for any
+        # device, analytically and at finite shots. That suite's statistical tests are marked
+        # flaky, and default.qubit needs the reruns as well (it fails the same two without
+        # them).
         env:
           QX_REQUIRE_NATIVE: "1"
         run: |
           python -m pip install "pennylane>=0.45" flaky pytest-mock
           export QUANTX_LIB_PATH="$(find "$PWD/build" -name libquantx.so | head -n1)"
           python -m pytest python/quantx_engine/tests/test_pennylane_statevector.py \
+                           python/quantx_engine/tests/test_pennylane_mps.py \
                            python/quantx_engine/tests/test_pennylane_demos.py \
                            python/quantx_engine/tests/test_pennylane_plugin.py -v
           SUITE="$(python -c 'import os, pennylane; print(os.path.dirname(pennylane.__file__))')/devices/tests"
-          python -m pytest "$SUITE" --device=quantx.statevector -q
-          python -m pytest "$SUITE" --device=quantx.statevector --shots=10000 -q
+          for DEVICE in quantx.statevector quantx.mps; do
+            python -m pytest "$SUITE" --device=$DEVICE -q
+            python -m pytest "$SUITE" --device=$DEVICE --shots=10000 -q
+          done
 
       - name: Engine notebooks (M9) against this build's library
         # notebooks/engine needs the native engine, so it runs here rather than in
