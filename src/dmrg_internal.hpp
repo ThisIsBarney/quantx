@@ -542,6 +542,39 @@ std::vector<std::complex<double>> mps_expect_local(MPSState& bra, MPSState& ket,
 double mps_energy(MPSState& a, const std::vector<MPOSite>& H);           // <H>/<a|a>
 MPSInfo mps_info(MPSState& a);
 
+// ---- Qubit circuits on an MPS (M15) ---------------------------------------------------
+// The qubit states of the handles above. |0> is local state 0. With `conserve` every bond
+// carries the number of |1>s to its left as an exact charge (as in run_u1_circuit), and the
+// gates must conserve it; without, every local state has charge 0, so a bond is one block
+// and any gate runs: the same kernels with no symmetry to use.
+std::shared_ptr<MPSState> mps_qubits(int n, const std::vector<int>& bits, bool conserve);
+// q1 < 0: u is 2x2 on q0. Else 4x4 on (q0, q1), q0 the high bit, any two distinct qubits.
+struct QubitGate {
+    int q0 = 0, q1 = -1;
+    std::vector<std::complex<double>> u;    // row-major
+};
+struct MPSGateStats {
+    int max_bond = 1;                       // the largest bond of the state afterwards
+    double trunc_sum = 0;                   // discarded weight, summed over the gates and swaps
+    double trunc_max = 0;                   // the largest single discard
+    double wall_s = 0;
+};
+// The gates, in place. A pair that is not adjacent is brought together with SWAPs and sent
+// back, each one a truncating two-site update. `direct`: direct SVDs rather than the Gram
+// route. Every gate is checked, unitary to 1e-10 and conserving the charge, before any runs.
+MPSGateStats mps_gates(MPSState& a, const std::vector<QubitGate>& gates, int max_bond,
+                       double cutoff, bool direct);
+// <P>/<psi|psi> for each Pauli string, a list of (site, 'X'|'Y'|'Z') in increasing site order.
+// An empty one is the identity.
+std::vector<double> mps_pauli_expect(MPSState& a,
+                                     const std::vector<std::vector<std::pair<int, char>>>& terms);
+// `shots` independent bitstrings by perfect sampling, normalized by the norm truncation left:
+// out[shot * n + site] is 0 or 1. Reproducible for a seed, whatever the number of threads.
+void mps_sample(MPSState& a, unsigned long long shots, unsigned long long seed,
+                unsigned char* out);
+// The state's 2^n amplitudes, not renormalized, site 0 the high bit of an amplitude's index.
+void mps_amplitudes(MPSState& a, std::complex<double>* out, unsigned long long size);
+
 // Cost probe: apply ONE layer of x-hops (all W*(Lx-1) range-W bonds) of a width-W
 // cylinder to a chi-sized state through the swap network, and return the worst
 // discarded weight. Exists so the width scan can be sized from a measurement.

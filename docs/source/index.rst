@@ -61,10 +61,18 @@ What is verified, and against what
        every gate, measurement and gradient against ``default.qubit``; the kernels
        against an independent state vector to 1e-12, and the backward pass against
        central differences to 1e-8
+   * - PennyLane circuits on the engine's block-sparse MPS, at any width, with the number of
+       ``|1>``\ s as an exact charge when the gates conserve it
+     - ``qml.device("quantx.mps", wires=n, max_bond=chi)``, from
+       :mod:`quantx_engine.pennylane_device`
+     - PennyLane's own device test suite, analytic and at finite shots, and its demos; at
+       an exact bond, gates and measurements against ``default.qubit``, and the kernels
+       against an independent state vector to 1e-11, with and without the charge; at 100
+       qubits, answers known in closed form
 
 These checks run in CI on a Linux build of the engine (``test_models_ed.py``,
 ``test_hva_statevector.py``, ``test_hva_gradient.py``, ``test_thermal_ed.py``,
-``test_tebd_schemes.py``, ``test_pennylane_statevector.py`` and
+``test_tebd_schemes.py``, ``test_pennylane_statevector.py``, ``test_pennylane_mps.py`` and
 ``test_pennylane_demos.py`` in ``python/quantx_engine/tests/``).
 
 .. toctree::

@@ -70,6 +70,7 @@ Issues = "https://github.com/ThisIsBarney/quantx/issues"
 
 [project.entry-points."pennylane.plugins"]
 "quantx.statevector" = "quantx_engine.pennylane_device:StatevectorDevice"
+"quantx.mps" = "quantx_engine.pennylane_device:MPSDevice"
 
 [tool.setuptools]
 packages = ["quantx_engine", "quantx_engine.contrib"]

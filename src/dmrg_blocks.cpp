@@ -1304,10 +1304,21 @@ static void robust_thin_svd(const Mat& X, Mat& U, Mat& Vt, RVec& sv) {
     U = svd.matrixU(); Vt = svd.matrixV().adjoint(); sv = svd.singularValues();
 }
 
+// A thin QR in the form of a thin SVD's factors: X = U * diag(1) * Vt, with U isometric and
+// Vt upper triangular. For a split that moves the gauge and truncates nothing, where the
+// singular values have no use.
+static void thin_qr(const Mat& X, Mat& U, Mat& Vt, RVec& sv) {
+    const Eigen::Index k = std::min(X.rows(), X.cols());
+    Eigen::HouseholderQR<Mat> f(X);
+    U = f.householderQ() * Mat::Identity(X.rows(), k);
+    Vt = f.matrixQR().topRows(k).template triangularView<Eigen::Upper>();
+    sv = RVec::Ones(k);
+}
+
 static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
                                     const BondSpace& bs_L, const BondSpace& bs_mid,
                                     const std::vector<int>& qphys = SPIN_HALF_CHARGES,
-                                    int max_bond = -1, double cutoff = 0.0) {
+                                    int max_bond = -1, double cutoff = 0.0, bool qr = false) {
     SiteMove mv;
     std::map<int,Mat> Umap;     // q_R -> U (rows x keep)
     std::vector<std::pair<int,int>> new_sectors;
@@ -1341,7 +1352,8 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
         // Robust per-sector SVD: the mixer's subspace expansion widens these blocks
         // far past chi, where Eigen's BDCSVD crashes -- see robust_thin_svd.
         Mat Uq, Vtq; RVec svq;
-        robust_thin_svd(X, Uq, Vtq, svq);
+        if (qr) thin_qr(X, Uq, Vtq, svq);
+        else robust_thin_svd(X, Uq, Vtq, svq);
         svds.push_back({q_R, std::move(Uq), std::move(Vtq), std::move(svq)});
     }
     // Phase 2: keep counts. Default (max_bond <= 0): keep everything -- the historical
@@ -1409,13 +1421,20 @@ static SiteMove singlesite_split_LR(const std::map<int,Mat>& M,
 // mv.A) and centre matrices C[q_L] = U*S (stored in mv.C, to be absorbed into the
 // previous site). Per left-bond sector -- the physical+right index stays together.
 // mv.new_mid is the new LEFT bond space (bond[i]).
-static SiteMove singlesite_split_RL(const std::map<int,Mat>& M) {
+static SiteMove singlesite_split_RL(const std::map<int,Mat>& M, bool qr = false) {
     SiteMove mv;
     std::vector<std::pair<int,int>> new_sectors;
     for (auto& [q_L, Mblk] : M) {
         if (Mblk.size() == 0) continue;
         Mat U, Vt; RVec sv;                                  // robust_thin_svd: BDCSVD
-        robust_thin_svd(Mblk, U, Vt, sv);                    // crashes on large blocks
+        if (qr) {                                            // M = (QR of M^dag)^dag
+            Mat Q, R;
+            thin_qr(Mblk.adjoint(), Q, R, sv);
+            U = R.adjoint();
+            Vt = Q.adjoint();
+        } else {
+            robust_thin_svd(Mblk, U, Vt, sv);                // crashes on large blocks
+        }
         int keep = (int)sv.size();
         mv.A[q_L] = Vt.topRows(keep);                        // keep x cols (right-canonical)
         Mat Cp = U.leftCols(keep);                           // dL x keep
@@ -3293,6 +3312,25 @@ static void apply_site_diag(BMPS& s, int site, const std::vector<S>& diag,
     }
 }
 
+// Apply a row-major d x d matrix on the physical index of one site, in place. Every state a
+// nonzero entry connects must share a charge, so that their column groups line up: a qubit
+// gate on a state of no charges, or a diagonal one on any state. A unitary keeps the site an
+// isometry, so it needs no SVD and the orthogonality centre stays where it is.
+static void apply_site_matrix(BMPS& s, int site, const Mat& U,
+                              const std::vector<int>& qphys) {
+    const int d = (int)qphys.size();
+    for (auto& [q_L, blk] : s.A[site]) {
+        const auto cols = phys_groups(s.bond[site+1], q_L, +1, qphys);
+        Mat out = Mat::Zero(blk.rows(), blk.cols());
+        for (int r = 0; r < d; ++r)
+            for (int c = 0; c < d; ++c)
+                if (U(r, c) != S(0) && cols[c].width > 0)
+                    out.middleCols(cols[r].off, cols[r].width).noalias() +=
+                        U(r, c) * blk.middleCols(cols[c].off, cols[c].width);
+        blk = std::move(out);
+    }
+}
+
 // ---- Hamiltonian Variational Ansatz (VQE) circuit simulation -----------------
 // |psi(theta)> = prod_{l=1..p} e^{-i th_U^l H_U} e^{-i th_o^l H_odd} e^{-i th_e^l H_even}
 //                |psi_0>, the standard HVA for the Hubbard model: H_even/H_odd are the
@@ -3604,6 +3642,46 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
     }
 }
 
+// The same move by one-site QRs, for a circuit, where each gate moves the centre and none of
+// the moves truncates: move_centre's two-site SVD is the cost of a gate over again, to no
+// effect on the state. A QR keeps every column, but a move cannot add any: bonds grow only in
+// the gates, whose SVDs drop what carries no weight.
+static void qr_move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys) {
+    while (from < to) {                       // rightward
+        SiteMove mv = singlesite_split_LR(s.A[from], s.bond[from], s.bond[from+1], qphys, -1,
+                                          0.0, true);
+        std::map<int,Mat> next;
+        for (auto& [q, C] : mv.C) {
+            auto it = s.A[from+1].find(q);
+            if (it != s.A[from+1].end()) next[q] = C * it->second;
+        }
+        s.A[from] = std::move(mv.A);
+        s.A[from+1] = std::move(next);
+        s.bond[from+1] = mv.new_mid;
+        ++from;
+    }
+    while (from > to) {                       // leftward
+        SiteMove mv = singlesite_split_RL(s.A[from], true);
+        std::map<int,Mat> prev;
+        for (auto& [q_L, Ab] : s.A[from-1]) {
+            auto oldcols = phys_groups(s.bond[from], q_L, +1, qphys);
+            auto newcols = phys_groups(mv.new_mid, q_L, +1, qphys);
+            Mat Mb = Mat::Zero(Ab.rows(), phys_total(newcols));
+            for (int p = 0; p < (int)qphys.size(); ++p) {
+                auto it = mv.C.find(newcols[p].q);
+                if (newcols[p].width == 0 || it == mv.C.end()) continue;
+                Mb.middleCols(newcols[p].off, newcols[p].width) =
+                    Ab.middleCols(oldcols[p].off, oldcols[p].width) * it->second;
+            }
+            prev[q_L] = std::move(Mb);
+        }
+        s.A[from] = std::move(mv.A);
+        s.A[from-1] = std::move(prev);
+        s.bond[from] = mv.new_mid;
+        --from;
+    }
+}
+
 // Apply a two-site gate to the pair of MODES currently at sites (i, j), j > i, of a
 // chain, using a fermionic-swap network: walk j down to i+1, apply G there, walk it
 // back. 2*(j-i-1) swaps, each an ordinary two-site gate application. The swaps are
@@ -3622,7 +3700,7 @@ static void move_centre(BMPS& s, int from, int to, const std::vector<int>& qphys
 static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FSWAP,
                               int chi_max, double cutoff,
                               const std::vector<int>& qphys, int& centre,
-                              bool stable = false) {
+                              bool stable = false, double* total = nullptr, bool qr = false) {
     if (j <= i) throw std::runtime_error("apply_pair_gate: need j > i");
     // move_centre and apply_gate_at index s.A[k]/s.bond[k+1] with no bounds check of
     // their own, so an out-of-range mode pair is a heap overrun rather than an error.
@@ -3637,21 +3715,29 @@ static double apply_pair_gate(BMPS& s, int i, int j, const Mat& G, const Mat& FS
     // O(range^2) lossless SVDs instead of O(range) -- on a width-W cylinder, where
     // every x-hop has range W, that is the difference between W and W^2 per bond.
     double worst = 0;
+    auto count = [&](double err) {            // the largest discard, and their sum if asked
+        worst = std::max(worst, err);
+        if (total) *total += err;
+    };
+    auto move = [&](int from, int to) {
+        if (qr) qr_move_centre(s, from, to, qphys);
+        else move_centre(s, from, to, qphys, stable);
+    };
     int c = centre;                           // current centre, as stated by the caller
     for (int k = j - 1; k > i; --k) {         // bring mode j down to site i+1
-        move_centre(s, c, k, qphys, stable);
-        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
+        move(c, k);
+        count(apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
         c = k + 1;
     }
-    move_centre(s, c, i, qphys, stable);
-    worst = std::max(worst, apply_gate_at(s, i, G, chi_max, cutoff, qphys, stable));
+    move(c, i);
+    count(apply_gate_at(s, i, G, chi_max, cutoff, qphys, stable));
     c = i + 1;
     for (int k = i + 1; k < j; ++k) {         // and walk it back up
-        move_centre(s, c, k, qphys, stable);
-        worst = std::max(worst, apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
+        move(c, k);
+        count(apply_gate_at(s, k, FSWAP, chi_max, cutoff, qphys, stable));
         c = k + 1;
     }
-    move_centre(s, c, i + 1, qphys, stable);  // documented exit position
+    move(c, i + 1);                           // documented exit position
     centre = i + 1;
     return worst;
 }
@@ -5805,9 +5891,9 @@ const std::vector<int> U1_QUBIT_CHARGES = {+1, -1};   // |0>, |1>
 // The computational-basis product state |bits>. A product state needs no environments
 // (a circuit never builds any), and every site of it is both left- and right-canonical,
 // so the orthogonality centre may be taken anywhere.
-BlockDMRG<Cx>::BMPS u1_product_state(int n, const std::vector<int>& bits) {
+BlockDMRG<Cx>::BMPS u1_product_state(int n, const std::vector<int>& bits,
+                                     const std::vector<int>& qphys = U1_QUBIT_CHARGES) {
     using BD = BlockDMRG<Cx>;
-    const std::vector<int>& qphys = U1_QUBIT_CHARGES;
     BD::BMPS s;
     s.n = n;
     std::vector<int> qb(n + 1, 0);
@@ -5848,6 +5934,37 @@ std::vector<double> u1_z_profile(std::vector<std::map<int, BlockDMRG<Cx>::Mat>> 
     return z;
 }
 
+// A one- or two-qubit gate's matrix, row-major `u`, checked: the block update keeps only the
+// charge-conserving entries, so a gate that mixes charge sectors would be applied silently
+// in part. `at` names the gate in a refusal.
+BlockDMRG<Cx>::Mat checked_qubit_gate(const std::vector<Cx>& u, int arity,
+                                      const std::vector<int>& qphys, const std::string& at) {
+    using BD = BlockDMRG<Cx>;
+    const int dim = arity == 1 ? 2 : 4;
+    if ((int)u.size() != dim * dim)
+        throw std::runtime_error(at + "expected a " + std::to_string(dim) + "x" +
+                                 std::to_string(dim) + " matrix");
+    BD::Mat G(dim, dim);
+    for (int r = 0; r < dim; ++r)
+        for (int c = 0; c < dim; ++c) G(r, c) = u[r * dim + c];
+    const double unit = (G.adjoint() * G - BD::Mat::Identity(dim, dim)).cwiseAbs().maxCoeff();
+    if (!(unit <= 1e-10)) throw std::runtime_error(at + "not unitary (|U^dag U - 1| = " +
+                                                   std::to_string(unit) + ")");
+    // charge of a basis state: +1 per |0>, -1 per |1> (bit 1 of the 2x2, packed s1*2+s2)
+    auto charge = [&](int idx) {
+        if (arity == 1) return qphys[idx];
+        return qphys[idx >> 1] + qphys[idx & 1];
+    };
+    double leak = 0;
+    for (int r = 0; r < dim; ++r)
+        for (int c = 0; c < dim; ++c)
+            if (charge(r) != charge(c)) leak = std::max(leak, std::abs(G(r, c)));
+    if (!(leak <= 1e-10))
+        throw std::runtime_error(at + "does not conserve the number of |1>s (largest "
+                                 "charge-changing entry " + std::to_string(leak) + ")");
+    return G;
+}
+
 int u1_max_bond(const BlockDMRG<Cx>::BMPS& s) {
     int m = 1;
     for (const auto& b : s.bond) {
@@ -5875,38 +5992,15 @@ U1CircuitResult run_u1_circuit(int n, const std::vector<int>& bits,
     if (chi_max < 1) throw std::runtime_error("u1_circuit: max_bond must be >= 1");
     if (!(cutoff >= 0)) throw std::runtime_error("u1_circuit: cutoff must be >= 0");
 
-    // Every gate is checked here: the block update keeps only the charge-conserving
-    // entries, so a gate that mixes charge sectors would be applied silently in part.
+    // Every gate is checked before any runs.
     std::vector<BD::Mat> mats(gates.size());
     for (size_t k = 0; k < gates.size(); ++k) {
         const U1Gate& g = gates[k];
         const std::string at = "u1_circuit: gate " + std::to_string(k) + ": ";
         if (g.arity != 1 && g.arity != 2) throw std::runtime_error(at + "arity must be 1 or 2");
-        const int dim = g.arity == 1 ? 2 : 4;
-        if ((int)g.u.size() != dim * dim)
-            throw std::runtime_error(at + "expected a " + std::to_string(dim) + "x" +
-                                     std::to_string(dim) + " matrix");
         if (g.q < 0 || g.q + g.arity > n)
             throw std::runtime_error(at + "qubit index out of range");
-        BD::Mat G(dim, dim);
-        for (int r = 0; r < dim; ++r)
-            for (int c = 0; c < dim; ++c) G(r, c) = g.u[r * dim + c];
-        const double unit = (G.adjoint() * G - BD::Mat::Identity(dim, dim)).cwiseAbs().maxCoeff();
-        if (!(unit <= 1e-10)) throw std::runtime_error(at + "not unitary (|U^dag U - 1| = " +
-                                                       std::to_string(unit) + ")");
-        // charge of a basis state: +1 per |0>, -1 per |1> (bit 1 of the 2x2, packed s1*2+s2)
-        auto charge = [&](int idx) {
-            if (g.arity == 1) return qphys[idx];
-            return qphys[idx >> 1] + qphys[idx & 1];
-        };
-        double leak = 0;
-        for (int r = 0; r < dim; ++r)
-            for (int c = 0; c < dim; ++c)
-                if (charge(r) != charge(c)) leak = std::max(leak, std::abs(G(r, c)));
-        if (!(leak <= 1e-10))
-            throw std::runtime_error(at + "does not conserve the number of |1>s (largest "
-                                     "charge-changing entry " + std::to_string(leak) + ")");
-        mats[k] = G;
+        mats[k] = checked_qubit_gate(g.u, g.arity, qphys, at);
     }
     std::vector<int> when = measure_after;
     std::sort(when.begin(), when.end());
@@ -6325,6 +6419,226 @@ double mps_energy(MPSState& a, const std::vector<MPOSite>& H) {
     mps_check_model(a, H, "mps_energy");
     BD::rebuild_mpo_envs(a.s, H);
     return BD::bt_energy(a.s, H);
+}
+
+// ---- Qubit circuits on an MPS (M15) ---------------------------------------------------
+namespace {
+
+const std::vector<int> QUBIT_NO_CHARGES = {0, 0};
+
+void mps_check_qubits(const MPSState& a, const char* what) {
+    if (a.qphys != U1_QUBIT_CHARGES && a.qphys != QUBIT_NO_CHARGES)
+        throw std::runtime_error(std::string(what) + ": the state is not one of qubits");
+}
+
+// The amplitudes below (site i, left charge q) reached by the row vector v, written at their
+// indices in `out`. Depth-first, so it holds one vector per site; a charge sector the state
+// does not reach ends a branch early.
+void mps_walk(const BlockDMRG<Cx>::BMPS& s, const std::vector<int>& qphys, int i, int q,
+              const BlockDMRG<Cx>::Mat& v, unsigned long long index, Cx* out) {
+    if (i == s.n) {
+        out[index] = v(0, 0);
+        return;
+    }
+    const auto it = s.A[i].find(q);
+    if (it == s.A[i].end()) return;
+    const auto cols = phys_groups(s.bond[i + 1], q, +1, qphys);
+    for (int b = 0; b < 2; ++b) {
+        if (cols[b].width == 0) continue;
+        const BlockDMRG<Cx>::Mat w = v * it->second.middleCols(cols[b].off, cols[b].width);
+        mps_walk(s, qphys, i + 1, q + qphys[b], w, index | ((unsigned long long)b << (s.n - 1 - i)),
+                 out);
+    }
+}
+
+}  // namespace
+
+std::shared_ptr<MPSState> mps_qubits(int n, const std::vector<int>& bits, bool conserve) {
+    if (n < 1) throw std::runtime_error("mps qubits: need at least 1 qubit");
+    if ((int)bits.size() != n)
+        throw std::runtime_error("mps qubits: the state must give one bit per qubit");
+    for (int b : bits)
+        if (b != 0 && b != 1) throw std::runtime_error("mps qubits: bits must be 0 or 1");
+    auto st = std::make_shared<MPSState>();
+    st->qphys = conserve ? U1_QUBIT_CHARGES : QUBIT_NO_CHARGES;
+    st->s = u1_product_state(n, bits, st->qphys);
+    return st;
+}
+
+MPSGateStats mps_gates(MPSState& a, const std::vector<QubitGate>& gates, int max_bond,
+                       double cutoff, bool direct) {
+    using BD = BlockDMRG<Cx>;
+    std::lock_guard<std::mutex> lk(a.mu);
+    mps_check_qubits(a, "mps gates");
+    if (max_bond < 1) throw std::runtime_error("mps gates: max_bond must be >= 1");
+    if (!(cutoff >= 0)) throw std::runtime_error("mps gates: cutoff must be >= 0");
+    const auto t0 = std::chrono::steady_clock::now();
+    const int n = a.s.n;
+    // Every gate is checked before any runs, so a refused circuit leaves the state as it was.
+    std::vector<BD::Mat> mats(gates.size());
+    for (size_t k = 0; k < gates.size(); ++k) {
+        const QubitGate& g = gates[k];
+        const std::string at = "mps gates: gate " + std::to_string(k) + ": ";
+        const bool two = g.q1 >= 0;
+        if (g.q0 < 0 || g.q0 >= n || g.q1 >= n || g.q0 == g.q1)
+            throw std::runtime_error(at + "qubit index out of range, or repeated");
+        mats[k] = checked_qubit_gate(g.u, two ? 2 : 1, a.qphys, at);
+    }
+    BD::Mat swap = BD::Mat::Zero(4, 4);
+    swap(0, 0) = swap(3, 3) = Cx(1);
+    swap(1, 2) = swap(2, 1) = Cx(1);
+    MPSGateStats out;
+    int centre = 0;
+    for (size_t k = 0; k < gates.size(); ++k) {
+        const QubitGate& g = gates[k];
+        if (g.q1 < 0) {
+            BD::apply_site_matrix(a.s, g.q0, mats[k], a.qphys);
+            continue;
+        }
+        const int lo = std::min(g.q0, g.q1), hi = std::max(g.q0, g.q1);
+        const BD::Mat G = g.q0 < g.q1 ? mats[k] : BD::Mat(swap * mats[k] * swap);
+        double worst;
+        if (hi == lo + 1) {
+            BD::qr_move_centre(a.s, centre, lo, a.qphys);
+            worst = BD::apply_gate_at(a.s, lo, G, max_bond, cutoff, a.qphys, direct);
+            centre = lo + 1;
+            out.trunc_sum += worst;
+        } else {
+            worst = BD::apply_pair_gate(a.s, lo, hi, G, swap, max_bond, cutoff, a.qphys, centre,
+                                        direct, &out.trunc_sum, true);
+        }
+        out.trunc_max = std::max(out.trunc_max, worst);
+    }
+    BD::qr_move_centre(a.s, centre, 0, a.qphys);
+    out.max_bond = u1_max_bond(a.s);
+    out.wall_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+    return out;
+}
+
+std::vector<double> mps_pauli_expect(MPSState& a,
+                                     const std::vector<std::vector<std::pair<int, char>>>& terms) {
+    using BD = BlockDMRG<Cx>;
+    using Mat = BD::Mat;
+    std::lock_guard<std::mutex> lk(a.mu);
+    mps_check_qubits(a, "mps pauli");
+    const BD::BMPS& s = a.s;
+    const std::vector<int>& qphys = a.qphys;
+    const int n = s.n;
+    for (const auto& term : terms)
+        for (size_t k = 0; k < term.size(); ++k) {
+            if (term[k].first < 0 || term[k].first >= n)
+                throw std::runtime_error("mps pauli: site " + std::to_string(term[k].first) +
+                                         " is not in [0, " + std::to_string(n) + ")");
+            if (k > 0 && term[k].first <= term[k - 1].first)
+                throw std::runtime_error("mps pauli: the sites of a string must increase");
+        }
+    // The centre is on site 0, so the chain right of a string is right-canonical and closes to
+    // a trace. Left of it the sites are not left-canonical, and the environments are worked
+    // out once, here, for every string to start from.
+    const auto OL = BD::overlap_left_envs(s, s, qphys);
+    Cx norm2(0);
+    for (const auto& [q, E] : OL[n]) norm2 += E.trace();
+    static const Cx X[4] = {Cx(0), Cx(1), Cx(1), Cx(0)};
+    static const Cx Y[4] = {Cx(0), Cx(0, -1), Cx(0, 1), Cx(0)};
+    static const Cx Z[4] = {Cx(1), Cx(0), Cx(0), Cx(-1)};
+    std::vector<double> out(terms.size());
+#ifdef QX_HAS_LAPACKE
+    OpenBlasSingleThreadGuard _blas_guard;
+#endif
+    #pragma omp parallel for schedule(dynamic) if(terms.size() > 1)
+    for (long long t = 0; t < (long long)terms.size(); ++t) {
+        const auto& term = terms[t];
+        if (term.empty()) {
+            out[t] = 1.0;
+            continue;
+        }
+        // E[(q_bra, q_ket)]: an X or Y moves the two apart, by a charge; they meet again or
+        // the string's expectation is zero.
+        std::map<std::pair<int, int>, Mat> E;
+        for (const auto& [q, env] : OL[term.front().first]) E[{q, q}] = env;
+        size_t next = 0;
+        for (int i = term.front().first; i <= term.back().first; ++i) {
+            const Cx* op = nullptr;
+            if (next < term.size() && term[next].first == i) {
+                const char p = term[next++].second;
+                op = p == 'X' ? X : p == 'Y' ? Y : Z;
+            }
+            std::map<std::pair<int, int>, Mat> moved;
+            for (const auto& [qs, e] : E) {
+                const auto ib = s.A[i].find(qs.first);
+                const auto ik = s.A[i].find(qs.second);
+                if (ib == s.A[i].end() || ik == s.A[i].end()) continue;
+                const auto bc = phys_groups(s.bond[i + 1], qs.first, +1, qphys);
+                const auto kc = phys_groups(s.bond[i + 1], qs.second, +1, qphys);
+                for (int sk = 0; sk < 2; ++sk) {
+                    if (kc[sk].width == 0) continue;
+                    const Mat ek = e * ik->second.middleCols(kc[sk].off, kc[sk].width);
+                    for (int sb = 0; sb < 2; ++sb) {
+                        const Cx o = op ? op[sb * 2 + sk] : (sb == sk ? Cx(1) : Cx(0));
+                        if (o == Cx(0) || bc[sb].width == 0) continue;
+                        Mat t2 = o * (ib->second.middleCols(bc[sb].off, bc[sb].width).adjoint() * ek);
+                        Mat& dst = moved[{qs.first + qphys[sb], qs.second + qphys[sk]}];
+                        if (dst.size() == 0) dst = std::move(t2); else dst += t2;
+                    }
+                }
+            }
+            E = std::move(moved);
+        }
+        Cx v(0);
+        for (const auto& [qs, e] : E)
+            if (qs.first == qs.second) v += e.trace();
+        out[t] = (v / norm2).real();
+    }
+    return out;
+}
+
+void mps_sample(MPSState& a, unsigned long long shots, unsigned long long seed,
+                unsigned char* out) {
+    using BD = BlockDMRG<Cx>;
+    using Mat = BD::Mat;
+    std::lock_guard<std::mutex> lk(a.mu);
+    mps_check_qubits(a, "mps sample");
+    const BD::BMPS& s = a.s;
+    const std::vector<int>& qphys = a.qphys;
+    const int n = s.n;
+#ifdef QX_HAS_LAPACKE
+    OpenBlasSingleThreadGuard _blas_guard;
+#endif
+    // With the centre on site 0 every site right of the walk is right-canonical, so the norm of
+    // the vector after a site is the probability of the bits so far. A generator per shot, so
+    // a seed gives the same bits at any thread count.
+    #pragma omp parallel for schedule(dynamic, 16)
+    for (long long shot = 0; shot < (long long)shots; ++shot) {
+        std::mt19937_64 rng(seed + (unsigned long long)shot * 0x9E3779B97F4A7C15ULL);
+        std::uniform_real_distribution<double> u01(0.0, 1.0);
+        Mat v = Mat::Constant(1, 1, Cx(1));
+        int q = 0;
+        for (int i = 0; i < n; ++i) {
+            const auto it = s.A[i].find(q);
+            const auto cols = phys_groups(s.bond[i + 1], q, +1, qphys);
+            Mat w[2];
+            double p[2] = {0.0, 0.0};
+            for (int b = 0; b < 2; ++b)
+                if (it != s.A[i].end() && cols[b].width > 0) {
+                    w[b] = v * it->second.middleCols(cols[b].off, cols[b].width);
+                    p[b] = w[b].squaredNorm();
+                }
+            const int bit = u01(rng) * (p[0] + p[1]) < p[0] ? 0 : 1;
+            v = w[bit] / std::sqrt(p[bit]);
+            q += qphys[bit];
+            out[(unsigned long long)shot * n + i] = (unsigned char)bit;
+        }
+    }
+}
+
+void mps_amplitudes(MPSState& a, Cx* out, unsigned long long size) {
+    using BD = BlockDMRG<Cx>;
+    std::lock_guard<std::mutex> lk(a.mu);
+    mps_check_qubits(a, "mps amplitudes");
+    if (a.s.n > 30 || size != (1ULL << a.s.n))
+        throw std::runtime_error("mps amplitudes: the buffer must hold 2^n amplitudes, n <= 30");
+    std::fill(out, out + size, Cx(0));
+    mps_walk(a.s, a.qphys, 0, 0, BD::Mat::Constant(1, 1, Cx(1)), 0, out);
 }
 
 MPSInfo mps_info(MPSState& a) {
