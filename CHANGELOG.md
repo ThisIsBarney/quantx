@@ -86,13 +86,18 @@ bug-fixes and packaging corrections only.
   hopping, built as an MPO with its Jordan–Wigner strings, or the on-site term. It
   needs no circuit per angle, where central differences need two. Its cost in energy
   evaluations is set by bond dimensions, since H|ψ⟩ needs up to the Hamiltonian's MPO
-  bond dimension times ψ's. On a 16-site chain at max_bond 128 it is 32 at 2 layers and
-  6 at 32 layers, against 12 and 192 for central differences
-  (`benchmarks/hva_gradient_cost.py`). `gradient_truncation_error` and
-  `gradient_return_error` say what truncation cost it. Gated against the exact gradient
-  of an independent state vector (chain, ladder, strip, cylinder; to 1e-10 from product
-  starts with `svd="direct"`) and against central differences of the circuit's own
-  energy, to 1e-8 (`test_hva_gradient.py`). `qx_hva_circuit` takes `"gradient": true`.
+  bond dimension times ψ's. H|ψ⟩ is zipped up on ψ, site by site (Stoudenmire and
+  White), and truncated only where its weights are Schmidt weights. On a 16-site chain
+  at max_bond 128 the gradient costs 11 energy evaluations at 2 layers and 4 at 32
+  layers, against 12 and 192 for central differences (`benchmarks/hva_gradient_cost.py`).
+  `gradient_truncation_error` and `gradient_return_error` say what truncation cost it.
+  H|ψ⟩'s weights count against ⟨ψ|H²|ψ⟩, and so counted the gradient's error came out
+  1.3 to 2.8 times `gradient_truncation_error` on that chain; from 16 layers on,
+  max_bond 128 truncates it hard (0.14 at 16 layers, where the gradient is 0.28 off).
+  Gated against the exact gradient of an independent state vector (chain, ladder,
+  strip, cylinder; to 1e-10 from product starts with `svd="direct"`) and against
+  central differences of the circuit's own energy, to 1e-8 (`test_hva_gradient.py`).
+  `qx_hva_circuit` takes `"gradient": true`.
 - **`svd="direct"` for HVA circuits**: every split by a direct SVD instead of the Gram
   matrix's eigensolve. The default Gram route leaves Schmidt values below √ε of the
   largest imprecise, so a circuit whose bonds fill up carries a rounding noise of up to

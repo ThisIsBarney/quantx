@@ -445,7 +445,8 @@ hva_lattice_group_bonds(int Lx, int W, bool y_periodic);
 struct HVAGradient {
     std::vector<std::vector<double>> grad;
     // The largest single weight discarded computing it: H psi's compression to the
-    // circuit's max_bond, and the backward pass's truncations on both states.
+    // circuit's max_bond, and the backward pass's truncations on both states. H psi's
+    // weights count against its own squared norm, <psi|H^2|psi>.
     double trunc_err = 0;
     // 1 - |<psi_0|psi>| for the state the backward pass brings back to the start: zero
     // without truncation, and otherwise what the round trip's truncations cost.

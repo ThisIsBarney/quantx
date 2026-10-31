@@ -8,7 +8,9 @@ with the angles. The adjoint gradient's is set by bond dimensions instead. The b
 pass carries H|psi> as well as psi, and H|psi> needs up to w times psi's bond dimension
 (w the Hamiltonian's MPO bond dimension, 6 for the chain), up to max_bond. So the ratio
 is largest while psi's bonds are well below max_bond, and settles once the circuit
-fills them.
+fills them. Each row also gives what truncation cost: the circuit's truncation_error
+and the gradient's gradient_truncation_error. From 16 layers on, max_bond 128 truncates
+the chain hard, so those rows time an approximate gradient.
 
     python benchmarks/hva_gradient_cost.py              # a 16-site chain, chi = 128
     python benchmarks/hva_gradient_cost.py --quick      # a 6-site chain, a few seconds
@@ -55,7 +57,7 @@ def main():
     print(f"{model.L}-site chain, U = {model.U:g}, max_bond {chi}, product start; "
           f"{lay.angles_per_layer} angles per layer")
     print(f"{'layers':>6} {'angles':>6} {'energy s':>9} {'adjoint s':>10} {'ratio':>6} "
-          f"{'central s':>10} {'ratio':>6}")
+          f"{'central s':>10} {'ratio':>6} {'trunc':>8} {'grad trunc':>10}")
     ratios = []
     for p in depths:
         angles = rng.uniform(-0.6, 0.6, size=(p, lay.angles_per_layer))
@@ -77,8 +79,11 @@ def main():
             t_c, mark = 2 * n * t_e, "*"
         ratios.append(t_g / t_e)
         print(f"{p:>6} {n:>6} {t_e:>9.3f} {t_g:>10.3f} {t_g / t_e:>6.1f} "
-              f"{t_c:>9.2f}{mark:1s} {t_c / t_e:>6.1f}")
+              f"{t_c:>9.2f}{mark:1s} {t_c / t_e:>6.1f} {r.truncation_error:>8.1e} "
+              f"{rg.gradient_truncation_error:>10.1e}")
     print("* estimated as two circuits per angle")
+    print("trunc: the circuit's largest discarded weight; grad trunc: the gradient's, in "
+          "H|psi>'s compression and the backward pass")
     print(f"adjoint / energy: {min(ratios):.1f} to {max(ratios):.1f} over "
           f"{depths[0]} to {depths[-1]} layers")
     # the claim: no cost per angle. At the deepest circuit the adjoint gradient costs a few

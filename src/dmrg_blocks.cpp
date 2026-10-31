@@ -3988,6 +3988,147 @@ static BMPS apply_mpo_to_bmps(const BMPS& s, const std::vector<MPOSite>& W,
     return p;
 }
 
+// phi = W|s>, compressed to (chi_max, cutoff), for s right-canonical with its centre on
+// site 0 (as a circuit leaves it): the state apply_mpo_to_bmps gives, more cheaply. That
+// one builds the whole product, every bond w times s's (w the MPO's bond dimension), and
+// sweeps two-site SVDs over it. Here the product is zipped up (Stoudenmire and White, New
+// J. Phys. 12, 055026 (2010)): left to right, the carried C times W[i] times s.A[i] is
+// split by one SVD, whose U is the new site and whose S V^dag is carried on. Each split is
+// one-site, and only the MPO channels the product feeds get columns: on a chain, the
+// lattice MPO has 10 channels and its y-bond slots, 4 of them, are never fed. Like
+// compress_bmps's sweep out, the zip-up cuts only numerical zeros. Its right part, W times
+// s's right-canonical sites, is not orthonormal: the channel that has yet to apply H
+// carries the norm of H on the sites to its right, so the zip-up's singular values are
+// not Schmidt values, and truncating there discards more weight than it reports. On a
+// 16-site Hubbard chain at chi_max 128, a zip-up truncating to chi_max reported 3.9e-8
+// of a true 2.1e-7 and moved the gradient by 4e-5, to save a tenth of its time. The
+// truncation is the sweep back, by one-site SVDs on a state left-canonical behind them, so
+// what it discards are Schmidt weights, and `worst`, the largest of them, is what it says.
+// The centre ends on site 0.
+static BMPS apply_mpo_zipup(const BMPS& s, const std::vector<MPOSite>& W, int chi_max,
+                            double cutoff, bool stable = false, double* worst = nullptr) {
+    const int n = s.n;
+    const std::vector<int> wdelta = derive_mpo_sym(W).delta;
+    const std::vector<int>& qphys = W[0].phys_charge;
+    const int d = (int)qphys.size();
+    auto mpodim = [&](int ib) { return (ib == 0) ? W[0].chi_l : W[ib-1].chi_r; };
+    auto hbd    = [&](int ib, int b) { return (mpodim(ib) == 1) ? 0 : wdelta[b]; };
+    const int no_cap = std::numeric_limits<int>::max();
+    const double zero_cut = std::min(cutoff, 1e-14);
+    auto note = [&](double e) { if (worst) *worst = std::max(*worst, e); };
+    BMPS p; p.n = n; p.A.resize(n); p.bond.resize(n + 1);
+    p.L.assign(n + 1, BlockEnv()); p.R.assign(n + 1, BlockEnv());
+
+    // The carried C[q] (p.bond[i].dim(q) rows) maps p's bond-i sector q onto the combined
+    // bond of the same charge: the components (s's sector q_mps, W's channel b) with
+    // q = q_mps + delta_b, laid out as lay[q]. At bond 0 everything is one-dimensional.
+    struct Comp { int q_mps, b, off, dim; };
+    std::map<int, std::vector<Comp>> lay, lay_next;
+    std::map<int, Mat> C;
+    {
+        std::map<int, int> width;
+        for (int qi = 0; qi < s.bond[0].n_sectors(); ++qi)
+            for (int b = 0; b < mpodim(0); ++b) {
+                const int q = s.bond[0].qns[qi] + hbd(0, b);
+                lay[q].push_back({s.bond[0].qns[qi], b, width[q], s.bond[0].dims[qi]});
+                width[q] += s.bond[0].dims[qi];
+            }
+        p.bond[0] = BondSpace::from_pairs(std::vector<std::pair<int,int>>(width.begin(), width.end()));
+        for (auto& [q, w] : width) C[q] = Mat::Identity(w, w);
+    }
+    for (int i = 0; i < n; ++i) {
+        // theta[q_mid]: rows as a two-site theta's (the physical state s out, then p's
+        // bond-i sector q_mid - qphys[s]), columns the combined bond i+1 at q_mid. Pass 0
+        // finds the columns the product feeds and lays them out; pass 1 fills them, one
+        // GEMM per (C's component, A's physical group) whatever the number of MPO terms.
+        std::map<int, std::map<std::pair<int,int>, int>> cols;   // q_mid -> (b, q_mps) -> offset
+        std::map<int, std::vector<PhysGroup>> rows;
+        std::map<int, Mat> theta;
+        for (int pass = 0; pass < 2; ++pass) {
+            for (auto& [qL, Cq] : C) {
+                for (const Comp& c : lay.at(qL)) {
+                    auto itA = s.A[i].find(c.q_mps);
+                    if (itA == s.A[i].end()) continue;
+                    auto icols = phys_groups(s.bond[i+1], c.q_mps, +1, qphys);
+                    for (int sp = 0; sp < d; ++sp) {                 // s's physical (in)
+                        if (icols[sp].width == 0) continue;
+                        const int qR = c.q_mps + qphys[sp];
+                        Mat X;                                       // C's c times A's sp
+                        for (int bR = 0; bR < mpodim(i + 1); ++bR)
+                            for (int so = 0; so < d; ++so) {         // output physical
+                                const S w = mscal(W[i].W(c.b, bR)(so, sp));
+                                const int q_mid = qL + qphys[so];
+                                if (std::abs(w) < 1e-15 || q_mid != qR + hbd(i + 1, bR)) continue;
+                                if (pass == 0) { cols[q_mid][{bR, qR}] = 0; continue; }
+                                if (X.size() == 0)
+                                    X = Cq.middleCols(c.off, c.dim) *
+                                        itA->second.middleCols(icols[sp].off, icols[sp].width);
+                                theta[q_mid].block(rows[q_mid][so].off, cols[q_mid][{bR, qR}],
+                                                   X.rows(), X.cols()).noalias() += w * X;
+                            }
+                    }
+                }
+            }
+            if (pass == 1) break;
+            lay_next.clear();
+            for (auto& [q_mid, cm] : cols) {
+                int off = 0;
+                for (auto& [key, o] : cm) {
+                    o = off;
+                    lay_next[q_mid].push_back({key.second, key.first, off, s.bond[i+1].dim(key.second)});
+                    off += s.bond[i+1].dim(key.second);
+                }
+                rows[q_mid] = phys_groups(p.bond[i], q_mid, -1, qphys);
+                theta[q_mid] = Mat::Zero(phys_total(rows[q_mid]), off);
+            }
+        }
+        // (block_svd_truncate reads only the row side's bond)
+        auto svd = block_svd_truncate(theta, p.bond[i], BondSpace(), no_cap, zero_cut,
+                                      false, stable, qphys);
+        note(svd.trunc_err);
+        p.bond[i+1] = svd.new_mid_bs;
+        p.A[i] = bt_A_from_U(svd, p.bond[i], p.bond[i+1], qphys);
+        C = bt_center_LR(svd);
+        lay = std::move(lay_next);
+    }
+    // Both boundaries are one-dimensional, so the zip-up ends on a 1 x 1 C, the norm and
+    // a phase, which the last site takes, as the centre. No C: the product vanishes (the
+    // vacuum, or H = 0 on the sector), and p is left with empty bonds, the zero state as
+    // compress_bmps leaves it too, which the gates and mpo_sandwich take as zero.
+    for (auto& [q, Cq] : C)
+        for (auto& [qL, blk] : p.A[n-1]) blk *= Cq(0, 0);
+    // The sweep back: at site i, one SVD per left sector q of the centre (rows the bond-i
+    // sector, columns the physical state and bond i+1), truncated across sectors as every
+    // split is. block_svd_truncate groups a theta's rows by the left site's physical
+    // state; with the one charge-0 state {0} the rows are the left bond alone.
+    const std::vector<int> bond_rows = {0};
+    for (int i = n - 1; i > 0; --i) {
+        auto svd = block_svd_truncate(p.A[i], p.bond[i], BondSpace(), chi_max, cutoff,
+                                      false, stable, bond_rows);
+        note(svd.trunc_err);
+        std::map<int, Mat> US;                       // q -> U S, into site i-1's columns
+        for (auto& [q, U] : svd.U_grp[0]) {
+            Mat u = U;
+            const RVec& sv = svd.sv.at(q);
+            for (int k = 0; k < (int)u.cols(); ++k) u.col(k) *= sv[k];
+            US[q] = std::move(u);
+        }
+        for (auto& [qL, blk] : p.A[i-1]) {
+            auto oc = phys_groups(p.bond[i], qL, +1, qphys);
+            auto nc = phys_groups(svd.new_mid_bs, qL, +1, qphys);
+            Mat m = Mat::Zero(blk.rows(), phys_total(nc));
+            for (int so = 0; so < d; ++so)
+                if (nc[so].width > 0)
+                    m.middleCols(nc[so].off, nc[so].width).noalias() =
+                        blk.middleCols(oc[so].off, oc[so].width) * US.at(nc[so].q);
+            blk = std::move(m);
+        }
+        p.A[i] = std::move(svd.Vt);                  // right-canonical
+        p.bond[i] = svd.new_mid_bs;
+    }
+    return p;
+}
+
 // <bra| W |ket> for a block MPO W with any Sz-conserving bond structure, contracted
 // left to right through the transfer environments E[b][q_ket], each a
 // (d_bra(q_ket + delta_b) x d_ket(q_ket)) block. Exact: W|ket> is never formed, so
@@ -5520,10 +5661,11 @@ HVAResult run_hva_lattice(const std::vector<MPOSite>& lattice_mpo,
         // matrix element, then undoes U_k on both. That is one MPO product and three
         // passes through the circuit, whatever the number of angles, where central
         // differences take two circuits per angle; but lam needs up to the MPO's bond
-        // dimension times psi's, up to chi_max, and costs that much more per gate. The
-        // centres: s's is at 0 (above), lam's too (compress_bmps).
+        // dimension times psi's, up to chi_max, and costs that much more per gate. H psi
+        // is zipped up on the canonical psi (s's centre is at 0, above), and lam's centre
+        // ends at 0 too.
         double worst = 0;
-        BD::BMPS lam = BD::apply_mpo_to_bmps(s, lattice_mpo, chi_max, cutoff, &worst);
+        BD::BMPS lam = BD::apply_mpo_zipup(s, lattice_mpo, chi_max, cutoff, direct_svd, &worst);
         std::vector<std::vector<MPOSite>> gen;
         for (const auto& grp : groups) gen.push_back(hva_group_mpo(n, grp, hop_mpo));
         const std::vector<MPOSite> gen_u = hva_onsite_mpo(n, hs, qphys);
