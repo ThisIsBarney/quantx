@@ -1,0 +1,1154 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.bosonic - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.contrib.bosonic</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""M119: Bosonic codes — cat qubits and GKP (Gottesman-Kitaev-Preskill) codes.</span>
+
+<span class="sd">Provides hardware-biased-noise bosonic encodings that are at the centre of</span>
+<span class="sd">near-term fault-tolerant quantum computing roadmaps (AWS, Yale cat-qubit,</span>
+<span class="sd">INRIA/Alice&amp;Bob).</span>
+
+<span class="sd">Cat qubits</span>
+<span class="sd">----------</span>
+<span class="sd">A *Kerr-cat qubit* encodes a logical qubit in the two coherent-state</span>
+<span class="sd">superpositions |C_α±⟩ ∝ |α⟩ ± |−α⟩ inside a driven Kerr oscillator:</span>
+
+<span class="sd">    H = −K a†²a² + ε₂(a†² + a²)</span>
+
+<span class="sd">Bit-flip errors (X_L) are exponentially suppressed ~ exp(−2|α|²) while</span>
+<span class="sd">phase-flip errors (Z_L) scale polynomially, yielding a *biased* noise</span>
+<span class="sd">channel ideal for concatenation with a repetition code.</span>
+
+<span class="sd">GKP codes</span>
+<span class="sd">---------</span>
+<span class="sd">The Gottesman-Kitaev-Preskill code encodes a qubit in a harmonic oscillator</span>
+<span class="sd">whose Hilbert space is infinite-dimensional (or truncated at N_max photons).</span>
+<span class="sd">The logical code words are superpositions of squeezed states on a square</span>
+<span class="sd">phase-space lattice with spacing √π.  We implement the *finite-energy*</span>
+<span class="sd">(approximate) GKP state with Gaussian envelope parameter δ and the</span>
+<span class="sd">small-big-small (SBS) correction sequence for shift errors.</span>
+
+<span class="sd">Classes</span>
+<span class="sd">-------</span>
+<span class="sd">BosonicError</span>
+<span class="sd">CatNoiseModel</span>
+<span class="sd">CatQubit</span>
+<span class="sd">GKPState</span>
+<span class="sd">GKPDecoder</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Mirrahimi, M. et al. (2014). Dynamically protected cat-qubits: a new</span>
+<span class="sd">       paradigm for universal quantum computation. *New J. Phys.* 16, 045014.</span>
+<span class="sd">       https://doi.org/10.1088/1367-2630/16/4/045014</span>
+
+<span class="sd">.. [2] Gottesman, D., Kitaev, A. &amp; Preskill, J. (2001). Encoding a qubit in</span>
+<span class="sd">       an oscillator. *Phys. Rev. A* 64, 012310.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevA.64.012310</span>
+
+<span class="sd">.. [3] Cochrane, P. T., Milburn, G. J. &amp; Munro, W. J. (1999). Macroscopically</span>
+<span class="sd">       distinct quantum-superposition states as a bosonic code for amplitude</span>
+<span class="sd">       damping. *Phys. Rev. A* 59, 2631.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevA.59.2631</span>
+
+<span class="sd">Physical validation</span>
+<span class="sd">-------------------</span>
+<span class="sd">Cat qubit: Kerr-cat Hamiltonian H = -K a†²a² + epsilon_2(a†²+a²) has two</span>
+<span class="sd">degenerate ground states in Fock basis at large alpha. Verified via exact</span>
+<span class="sd">diagonalisation of the truncated Fock-space matrix.</span>
+<span class="sd">GKP state: finite-energy square-lattice code has displacement variance</span>
+<span class="sd">sigma^2 = Delta^2/(1 + Delta^2) [Gottesman2001].</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"BosonicError"</span><span class="p">,</span>
+    <span class="s2">"CatNoiseModel"</span><span class="p">,</span>
+    <span class="s2">"CatQubit"</span><span class="p">,</span>
+    <span class="s2">"GKPState"</span><span class="p">,</span>
+    <span class="s2">"GKPDecoder"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<div class="viewcode-block" id="BosonicError">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.BosonicError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BosonicError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised for invalid bosonic-code requests."""</span></div>
+
+
+
+<span class="c1"># ── Fock-space helpers ────────────────────────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_annihilation</span><span class="p">(</span><span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the N×N matrix representation of the bosonic annihilation operator a."""</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)),</span> <span class="n">k</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_number</span><span class="p">(</span><span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the number operator n̂ = a†a in the N-Fock truncation."""</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coherent_state</span><span class="p">(</span><span class="n">alpha</span><span class="p">:</span> <span class="nb">complex</span><span class="p">,</span> <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Fock-space representation of the coherent state |α⟩ (normalised)."""</span>
+    <span class="n">ns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="c1"># c_n = e^{-|α|²/2} α^n / sqrt(n!)</span>
+    <span class="n">log_c</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">ns</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-300</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">*</span> <span class="n">ns</span>
+    <span class="n">log_c</span> <span class="o">-=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">sum</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">k</span><span class="p">)</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">ns</span><span class="p">])</span>
+    <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_c</span><span class="p">)</span>
+    <span class="n">c</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">c</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wigner</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">xvec</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">pvec</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Wigner function W(x, p) via the Fock-state expansion.</span>
+
+<span class="sd">    Uses the iterative formula for the Wigner function matrix elements</span>
+<span class="sd">    W_{mn}(α) where α = (x + ip)/√2.</span>
+<span class="sd">    """</span>
+    <span class="n">N</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+    <span class="n">rho</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span>
+    <span class="n">X</span><span class="p">,</span> <span class="n">P</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">xvec</span><span class="p">,</span> <span class="n">pvec</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">"ij"</span><span class="p">)</span>
+    <span class="n">alpha</span> <span class="o">=</span> <span class="p">(</span><span class="n">X</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">P</span><span class="p">)</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+    <span class="c1"># Build Wigner function using the laguerre-based formula</span>
+    <span class="c1"># W(α) = (2/π) e^{-2|α|²} Σ_{mn} ρ_{mn} (-1)^m f_{mn}(α)</span>
+    <span class="c1"># For computational efficiency we use the iterative method.</span>
+    <span class="n">W</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">rho</span><span class="p">[</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mf">1e-14</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">W</span> <span class="o">+=</span> <span class="n">rho</span><span class="p">[</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">]</span> <span class="o">*</span> <span class="n">_wigner_element</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">W</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_wigner_element</span><span class="p">(</span><span class="n">m</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""W_{mn}(α) = (2/π)(−1)^m √(m!/n!) e^{-2|α|²} α^{n-m} L_m^{n-m}(4|α|²)."""</span>
+    <span class="c1"># Ensure m ≤ n (use conjugate symmetry otherwise)</span>
+    <span class="n">swap</span> <span class="o">=</span> <span class="n">m</span> <span class="o">&gt;</span> <span class="n">n</span>
+    <span class="k">if</span> <span class="n">swap</span><span class="p">:</span>
+        <span class="n">m</span><span class="p">,</span> <span class="n">n</span> <span class="o">=</span> <span class="n">n</span><span class="p">,</span> <span class="n">m</span>
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+    <span class="n">r2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span>
+    <span class="n">log_prefactor</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">math</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">m</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span> <span class="o">/</span> <span class="mf">2.0</span>
+    <span class="n">prefactor</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="n">m</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_prefactor</span><span class="p">)</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span> <span class="o">*</span> <span class="n">r2</span><span class="p">)</span>
+    <span class="n">power</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">**</span> <span class="p">(</span><span class="n">n</span> <span class="o">-</span> <span class="n">m</span><span class="p">)</span>
+    <span class="n">laguerre</span> <span class="o">=</span> <span class="n">_assoc_laguerre_vec</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="n">m</span><span class="p">,</span> <span class="mi">4</span> <span class="o">*</span> <span class="n">r2</span><span class="p">)</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">prefactor</span> <span class="o">*</span> <span class="n">power</span> <span class="o">*</span> <span class="n">laguerre</span>
+    <span class="k">if</span> <span class="n">swap</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">result</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_assoc_laguerre_vec</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">k</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Associated Laguerre polynomial L_n^k(x) via recurrence."""</span>
+    <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">L_prev</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="n">L_curr</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="n">k</span> <span class="o">-</span> <span class="n">x</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">):</span>
+        <span class="n">L_next</span> <span class="o">=</span> <span class="p">((</span><span class="mi">2</span> <span class="o">*</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="n">k</span> <span class="o">-</span> <span class="n">x</span><span class="p">)</span> <span class="o">*</span> <span class="n">L_curr</span> <span class="o">-</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="n">k</span><span class="p">)</span> <span class="o">*</span> <span class="n">L_prev</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">L_prev</span><span class="p">,</span> <span class="n">L_curr</span> <span class="o">=</span> <span class="n">L_curr</span><span class="p">,</span> <span class="n">L_next</span>
+    <span class="k">return</span> <span class="n">L_curr</span>
+
+
+<span class="c1"># ── CatNoiseModel ─────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CatNoiseModel">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatNoiseModel">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CatNoiseModel</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Noise model for a Kerr-cat qubit.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kappa_1 : float</span>
+<span class="sd">        Single-photon loss rate (κ₁).  Sets the overall photon-loss timescale.</span>
+<span class="sd">    kappa_phi : float</span>
+<span class="sd">        Pure dephasing rate (κ_φ) in the oscillator frame.</span>
+<span class="sd">    alpha_sq : float</span>
+<span class="sd">        Cat-state amplitude squared |α|².  Controls the biased-noise ratio.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The bit-flip rate scales as exp(−2|α|²·κ₁/κ₂) and the phase-flip rate</span>
+<span class="sd">    scales as |α|²·(κ₁ + κ_φ) (linear in cat size).</span>
+<span class="sd">    """</span>
+    <span class="n">kappa_1</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span>
+    <span class="n">kappa_phi</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.001</span>
+    <span class="n">alpha_sq</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kappa_1</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"kappa_1 must be ≥ 0, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">kappa_1</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kappa_phi</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"kappa_phi must be ≥ 0, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">kappa_phi</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha_sq</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"alpha_sq must be &gt; 0, got </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha_sq</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bit_flip_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical X error rate ~ exp(−2|α|²)·κ₁ (exponentially suppressed)."""</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha_sq</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">kappa_1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">phase_flip_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical Z error rate ~ |α|²·(κ₁ + κ_φ) (linear in cat size)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha_sq</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">kappa_1</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">kappa_phi</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bias_ratio</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""η = phase_flip_rate / bit_flip_rate (should be ≫ 1 for a useful cat)."""</span>
+        <span class="n">bf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bit_flip_rate</span>
+        <span class="k">if</span> <span class="n">bf</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">phase_flip_rate</span> <span class="o">/</span> <span class="n">bf</span></div>
+
+
+
+<span class="c1"># ── CatQubit ──────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CatQubit">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">CatQubit</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Kerr-cat qubit in a truncated Fock space.</span>
+
+<span class="sd">    The Kerr-cat Hamiltonian is</span>
+
+<span class="sd">        H = −K a†²a² + ε₂(a†² + a²)</span>
+
+<span class="sd">    which stabilises a two-component cat state with amplitude α = √(ε₂/K).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    K : float</span>
+<span class="sd">        Kerr nonlinearity (anharmonicity).  Must be &gt; 0.</span>
+<span class="sd">    eps2 : float</span>
+<span class="sd">        Two-photon drive amplitude.  Must be &gt; 0.</span>
+<span class="sd">    N_max : int</span>
+<span class="sd">        Fock-space truncation.  Should satisfy N_max ≫ 2|α|² + 10.</span>
+<span class="sd">    noise : CatNoiseModel | None</span>
+<span class="sd">        Optional noise model.  If None, uses CatNoiseModel defaults with</span>
+<span class="sd">        alpha_sq derived from eps2/K.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="CatQubit.__init__">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">K</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">eps2</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">4.0</span><span class="p">,</span>
+        <span class="n">N_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
+        <span class="n">noise</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">CatNoiseModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">kerr</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">truncation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Alias resolution</span>
+        <span class="k">if</span> <span class="n">kerr</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">K</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">kerr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">alpha</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># alpha = sqrt(eps2/K), so eps2 = alpha^2 * K</span>
+            <span class="n">eps2</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">truncation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">N_max</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">truncation</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">K</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"K must be &gt; 0, got </span><span class="si">{</span><span class="n">K</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">eps2</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"eps2 must be &gt; 0, got </span><span class="si">{</span><span class="n">eps2</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">N_max</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">N_max</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"N_max must be an integer ≥ 4, got </span><span class="si">{</span><span class="n">N_max</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">K</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">K</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">eps2</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">eps2</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span> <span class="o">=</span> <span class="n">N_max</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">eps2</span> <span class="o">/</span> <span class="n">K</span><span class="p">)</span>  <span class="c1"># steady-state cat amplitude</span>
+
+        <span class="n">alpha_sq</span> <span class="o">=</span> <span class="n">eps2</span> <span class="o">/</span> <span class="n">K</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">noise</span> <span class="o">=</span> <span class="n">noise</span> <span class="k">if</span> <span class="n">noise</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">CatNoiseModel</span><span class="p">(</span><span class="n">alpha_sq</span><span class="o">=</span><span class="n">alpha_sq</span><span class="p">)</span>
+
+        <span class="c1"># Build Fock-space operators</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">_annihilation</span><span class="p">(</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="n">adag</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">_number</span><span class="p">(</span><span class="n">N_max</span><span class="p">)</span>
+
+        <span class="c1"># Kerr-cat Hamiltonian</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_H</span> <span class="o">=</span> <span class="o">-</span><span class="n">K</span> <span class="o">*</span> <span class="p">(</span><span class="n">adag</span> <span class="o">@</span> <span class="n">adag</span> <span class="o">@</span> <span class="n">a</span> <span class="o">@</span> <span class="n">a</span><span class="p">)</span> <span class="o">+</span> <span class="n">eps2</span> <span class="o">*</span> <span class="p">(</span><span class="n">adag</span> <span class="o">@</span> <span class="n">adag</span> <span class="o">+</span> <span class="n">a</span> <span class="o">@</span> <span class="n">a</span><span class="p">)</span>
+
+        <span class="c1"># Logical operators</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_a</span> <span class="o">=</span> <span class="n">a</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_adag</span> <span class="o">=</span> <span class="n">adag</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n</span> <span class="o">=</span> <span class="n">n</span></div>
+
+
+    <span class="c1"># ── Encoded states ────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CatQubit.encode_0">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.encode_0">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">encode_0</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical |0_L⟩ = normalised even cat state |C_α+⟩."""</span>
+        <span class="n">plus</span> <span class="o">=</span> <span class="n">_coherent_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="n">minus</span> <span class="o">=</span> <span class="n">_coherent_state</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">plus</span> <span class="o">+</span> <span class="n">minus</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">norm</span> <span class="o">&lt;</span> <span class="mf">1e-12</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="s2">"Cat amplitude too small: |0_L⟩ is unnormalisable."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">state</span> <span class="o">/</span> <span class="n">norm</span></div>
+
+
+<div class="viewcode-block" id="CatQubit.encode_1">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.encode_1">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">encode_1</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical |1_L⟩ = normalised odd cat state |C_α−⟩."""</span>
+        <span class="n">plus</span> <span class="o">=</span> <span class="n">_coherent_state</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="n">minus</span> <span class="o">=</span> <span class="n">_coherent_state</span><span class="p">(</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">plus</span> <span class="o">-</span> <span class="n">minus</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">norm</span> <span class="o">&lt;</span> <span class="mf">1e-12</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="s2">"Cat amplitude too small: |1_L⟩ is unnormalisable."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">state</span> <span class="o">/</span> <span class="n">norm</span></div>
+
+
+    <span class="c1"># ── Logical operators ─────────────────────────────────────────────────────</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logical_z</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical Z operator: Z_L = exp(iπ n̂)  (photon-number parity)."""</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)))</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logical_x</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical X operator: swaps |C_α+⟩ ↔ |C_α−⟩ within the code subspace.</span>
+
+<span class="sd">        Constructs the unitary X_L = |1_L⟩⟨0_L| + |0_L⟩⟨1_L| + (I − P_code),</span>
+<span class="sd">        which acts as Pauli X on the {|0_L⟩, |1_L⟩} code subspace and as the</span>
+<span class="sd">        identity on its orthogonal complement.  This is exact for any α.</span>
+<span class="sd">        """</span>
+        <span class="n">psi0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encode_0</span><span class="p">()</span>   <span class="c1"># |0_L⟩ = |C_α+⟩</span>
+        <span class="n">psi1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">encode_1</span><span class="p">()</span>   <span class="c1"># |1_L⟩ = |C_α−⟩</span>
+        <span class="c1"># Code-space projector P = |0_L⟩⟨0_L| + |1_L⟩⟨1_L|</span>
+        <span class="n">P_code</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">psi0</span><span class="p">,</span> <span class="n">psi0</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">psi1</span><span class="p">,</span> <span class="n">psi1</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span>
+        <span class="c1"># X_L maps |0_L⟩↔|1_L⟩ and is identity outside the code space</span>
+        <span class="n">X_L</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">psi1</span><span class="p">,</span> <span class="n">psi0</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span>
+            <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">psi0</span><span class="p">,</span> <span class="n">psi1</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span>
+            <span class="o">+</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span> <span class="o">-</span> <span class="n">P_code</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">X_L</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">hamiltonian</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Full Kerr-cat Hamiltonian matrix (N_max × N_max)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_H</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+    <span class="c1"># ── Observables ───────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CatQubit.mean_photon_number">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.mean_photon_number">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mean_photon_number</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""⟨n̂⟩ for a Fock-space state vector."""</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span> <span class="o">@</span> <span class="n">state</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="CatQubit.photon_number_distribution">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.photon_number_distribution">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">photon_number_distribution</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""P(n) = |⟨n|ψ⟩|² for n = 0, …, N_max−1."""</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span></div>
+
+
+<div class="viewcode-block" id="CatQubit.wigner_function">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.wigner_function">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">wigner_function</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">xvec</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">pvec</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Wigner function W(x, p) on a phase-space grid.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        xvec : np.ndarray, shape (Nx,)</span>
+<span class="sd">        pvec : np.ndarray, shape (Np,)</span>
+<span class="sd">        W    : np.ndarray, shape (Nx, Np)</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">xvec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">xvec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">31</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pvec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">pvec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="o">-</span><span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">-</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">31</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="n">W</span> <span class="o">=</span> <span class="n">_wigner</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">xvec</span><span class="p">,</span> <span class="n">pvec</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">xvec</span><span class="p">,</span> <span class="n">pvec</span><span class="p">,</span> <span class="n">W</span></div>
+
+
+<div class="viewcode-block" id="CatQubit.bit_flip_time">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.bit_flip_time">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">bit_flip_time</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Characteristic logical bit-flip time T_X ~ 1/Γ_X."""</span>
+        <span class="n">rate</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise</span><span class="o">.</span><span class="n">bit_flip_rate</span>
+        <span class="k">if</span> <span class="n">rate</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="s2">"inf"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">rate</span></div>
+
+
+<div class="viewcode-block" id="CatQubit.phase_flip_rate">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.phase_flip_rate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">phase_flip_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Logical phase-flip rate Γ_Z (grows linearly with α²)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise</span><span class="o">.</span><span class="n">phase_flip_rate</span></div>
+
+
+    <span class="c1"># ── Ground state ──────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="CatQubit.ground_state">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.ground_state">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ground_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Ground state of the Kerr-cat Hamiltonian (lowest eigenvalue)."""</span>
+        <span class="n">eigvals</span><span class="p">,</span> <span class="n">eigvecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_H</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">eigvecs</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="CatQubit.energy_spectrum">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.CatQubit.energy_spectrum">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">energy_spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_levels</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">4</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the lowest n_levels eigenvalues of the Kerr-cat Hamiltonian.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        n_levels : int</span>
+<span class="sd">            Number of energy levels to return (default 4).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            Sorted eigenvalues, shape (n_levels,).</span>
+<span class="sd">        """</span>
+        <span class="n">eigvals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigvalsh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_H</span><span class="p">)</span>
+        <span class="n">eigvals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">eigvals</span><span class="o">.</span><span class="n">real</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">eigvals</span><span class="p">[:</span><span class="n">n_levels</span><span class="p">]</span></div>
+
+
+    <span class="c1"># ── Private helpers ───────────────────────────────────────────────────────</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_displacement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Displacement operator D(β) = exp(β a† − β* a) in Fock basis."""</span>
+        <span class="c1"># D(β) = exp(β a† − β a)  (β real here)</span>
+        <span class="n">exponent</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_adag</span> <span class="o">-</span> <span class="n">beta</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_a</span>
+        <span class="k">return</span> <span class="n">_matrix_exp</span><span class="p">(</span><span class="n">exponent</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"CatQubit(K=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">K</span><span class="si">}</span><span class="s2">, eps2=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">eps2</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"alpha=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, N_max=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_matrix_exp</span><span class="p">(</span><span class="n">M</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Matrix exponential via eigendecomposition (safe for small Hermitian-ish M)."""</span>
+    <span class="c1"># Use scipy if available; otherwise fall back to numpy eigendecomposition</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.linalg</span><span class="w"> </span><span class="kn">import</span> <span class="n">expm</span>  <span class="c1"># type: ignore</span>
+        <span class="k">return</span> <span class="n">expm</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="c1"># Fallback: use Padé approximation via repeated squaring (numpy only)</span>
+    <span class="c1"># For anti-Hermitian M = iA use eigh on A.</span>
+    <span class="n">eigvals</span><span class="p">,</span> <span class="n">eigvecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eig</span><span class="p">(</span><span class="n">M</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">eigvecs</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">eigvals</span><span class="p">))</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">eigvecs</span><span class="p">)</span>
+
+
+<span class="c1"># ── GKPState ──────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="GKPState">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GKPState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Finite-energy GKP (Gottesman-Kitaev-Preskill) code state.</span>
+
+<span class="sd">    The ideal GKP code encodes a qubit in a harmonic oscillator with</span>
+<span class="sd">    stabilisers S_q = e^{i2√π q̂} and S_p = e^{-i2√π p̂}.  The finite-energy</span>
+<span class="sd">    approximation uses a Gaussian envelope with width δ in Fock space.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    delta : float</span>
+<span class="sd">        Envelope/squeezing parameter δ &gt; 0.  Smaller δ → better code words</span>
+<span class="sd">        but more photons.  Physical squeezing in dB ≈ −20 log₁₀(δ/√(2π)).</span>
+<span class="sd">    N_max : int</span>
+<span class="sd">        Fock-space truncation.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    The code words are constructed as a superposition of displaced squeezed</span>
+<span class="sd">    vacuum states at lattice points n√π in phase space.</span>
+<span class="sd">    """</span>
+
+    <span class="n">_SQRT_PI</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GKPState.__init__">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">delta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">,</span> <span class="n">N_max</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">truncation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">truncation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">N_max</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">truncation</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">delta</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">delta</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"delta must be in (0, 1) for a valid GKP state, got </span><span class="si">{</span><span class="n">delta</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">N_max</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">N_max</span> <span class="o">&lt;</span> <span class="mi">8</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"N_max must be an integer ≥ 8, got </span><span class="si">{</span><span class="n">N_max</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">delta</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span> <span class="o">=</span> <span class="n">N_max</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n_terms</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="mi">4</span> <span class="o">/</span> <span class="n">delta</span><span class="p">))</span>  <span class="c1"># number of lattice terms to include</span>
+
+        <span class="c1"># Pre-build operators</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="n">_annihilation</span><span class="p">(</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_a</span> <span class="o">=</span> <span class="n">a</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_adag</span> <span class="o">=</span> <span class="n">a</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_x_op</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">+</span> <span class="n">a</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># q̂ = (a+a†)/√2</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_p_op</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">-</span> <span class="n">a</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">conj</span><span class="p">())</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>  <span class="c1"># p̂ = i(a†-a)/√2</span>
+
+        <span class="c1"># Cache the code words</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_code0</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_code1</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_squeezed_vacuum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Squeezed vacuum |r⟩ in Fock basis (squeezing parameter r)."""</span>
+        <span class="n">N</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">N_max</span>
+        <span class="c1"># c_{2n} = (-1)^n sqrt((2n)!) / (2^n n!) * tanh(r)^n / cosh(r)^{1/2}</span>
+        <span class="c1"># Only even Fock states are populated</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">N</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="n">tanh_r</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="n">cosh_r</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cosh</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span> <span class="o">//</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="n">two_n</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">n</span>
+            <span class="n">log_c</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="mf">0.5</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">two_n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="o">-</span> <span class="n">n</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                <span class="o">-</span> <span class="n">math</span><span class="o">.</span><span class="n">lgamma</span><span class="p">(</span><span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="o">+</span> <span class="n">n</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">tanh_r</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-300</span><span class="p">)</span>
+                <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">cosh_r</span><span class="p">)</span>
+            <span class="p">)</span>
+            <span class="n">psi</span><span class="p">[</span><span class="n">two_n</span><span class="p">]</span> <span class="o">=</span> <span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="n">n</span><span class="p">)</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">log_c</span><span class="p">)</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">psi</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">norm</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">psi</span> <span class="o">/=</span> <span class="n">norm</span>
+        <span class="k">return</span> <span class="n">psi</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_displace</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">complex</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply displacement D(β) to a Fock-space state."""</span>
+        <span class="c1"># D(β) = exp(β a† − β* a)</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="n">beta</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_adag</span> <span class="o">-</span> <span class="n">beta</span><span class="o">.</span><span class="n">conjugate</span><span class="p">()</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_a</span>
+        <span class="k">return</span> <span class="n">_matrix_exp</span><span class="p">(</span><span class="n">M</span><span class="p">)</span> <span class="o">@</span> <span class="n">state</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_envelope</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Gaussian envelope weight e^{-δ²π n²/2} for lattice site n."""</span>
+        <span class="k">return</span> <span class="n">math</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">n</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+
+<div class="viewcode-block" id="GKPState.code_word_0">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.code_word_0">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">code_word_0</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""|0_L⟩ = GKP logical zero code word."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code0</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_code0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_code_word</span><span class="p">(</span><span class="n">logical</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code0</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="GKPState.code_word_1">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.code_word_1">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">code_word_1</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""|1_L⟩ = GKP logical one code word."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code1</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_code1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_code_word</span><span class="p">(</span><span class="n">logical</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code1</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_code_word</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">logical</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build |logical_L⟩ as a sum of displaced squeezed states."""</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">delta</span><span class="p">)</span>  <span class="c1"># squeezing level: e^{-r} = δ</span>
+        <span class="n">sq_vac</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_squeezed_vacuum</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+        <span class="n">psi</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">complex</span><span class="p">)</span>
+        <span class="n">M</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n_terms</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="o">-</span><span class="n">M</span><span class="p">,</span> <span class="n">M</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="c1"># GKP lattice: displace by (2n + logical) * √π in q</span>
+            <span class="n">shift</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">n</span> <span class="o">+</span> <span class="n">logical</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_SQRT_PI</span>
+            <span class="n">displaced</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_displace</span><span class="p">(</span><span class="n">sq_vac</span><span class="p">,</span> <span class="n">shift</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>  <span class="c1"># β = shift/√2</span>
+            <span class="n">psi</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_envelope</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">n</span> <span class="o">+</span> <span class="n">logical</span><span class="p">)</span> <span class="o">*</span> <span class="n">displaced</span>
+
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">psi</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">norm</span> <span class="o">&lt;</span> <span class="mf">1e-10</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="s2">"GKP code word has negligible norm — increase N_max."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">psi</span> <span class="o">/</span> <span class="n">norm</span>
+
+<div class="viewcode-block" id="GKPState.squeezing_db">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.squeezing_db">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">squeezing_db</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Approximate squeezing in dB: s ≈ −20 log₁₀(δ/√(2π))."""</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mf">20.0</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">log10</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">delta</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="GKPState.mean_photon_number">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.mean_photon_number">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">mean_photon_number</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""⟨n̂⟩ for a Fock-space state."""</span>
+        <span class="n">n_op</span> <span class="o">=</span> <span class="n">_number</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="n">n_op</span> <span class="o">@</span> <span class="n">state</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="GKPState.overlap">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.overlap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">overlap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state_a</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">state_b</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">complex</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute ⟨a|b⟩."""</span>
+        <span class="k">return</span> <span class="nb">complex</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">state_a</span><span class="o">.</span><span class="n">conj</span><span class="p">(),</span> <span class="n">state_b</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="GKPState.logical_fidelity">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.logical_fidelity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logical_fidelity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">noisy_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">logical</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fidelity |⟨logical_L|noisy⟩|² after a shift error."""</span>
+        <span class="n">target</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">code_word_0</span><span class="p">()</span> <span class="k">if</span> <span class="n">logical</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">code_word_1</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">overlap</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="n">noisy_state</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GKPState.norm">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPState.norm">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">norm</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the norm of the logical |0_L⟩ code word (should be 1.0)."""</span>
+        <span class="n">psi</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">code_word_0</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">psi</span><span class="p">))</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"GKPState(delta=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">delta</span><span class="si">}</span><span class="s2">, N_max=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">N_max</span><span class="si">}</span><span class="s2">, squeezing=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">squeezing_db</span><span class="p">()</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> dB)"</span></div>
+
+
+
+<span class="c1"># ── GKPDecoder ────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="GKPDecoder">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPDecoder">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GKPDecoder</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Small-Big-Small (SBS) shift error correction for GKP codes.</span>
+
+<span class="sd">    The SBS sequence applies alternating small and big displacements to map</span>
+<span class="sd">    shift errors back toward the lattice points:</span>
+
+<span class="sd">        D_small(−ξ) · D_big(+ξ + correction) · D_small(−ξ)</span>
+
+<span class="sd">    where the correction direction is estimated from a syndrome measurement</span>
+<span class="sd">    of the shift-error magnitude.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gkp : GKPState</span>
+<span class="sd">        The GKP state object (defines δ, N_max, lattice).</span>
+<span class="sd">    n_rounds : int</span>
+<span class="sd">        Number of SBS correction rounds to apply.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="GKPDecoder.__init__">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPDecoder.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gkp</span><span class="p">:</span> <span class="n">GKPState</span><span class="p">,</span> <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n_rounds</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_rounds must be ≥ 1, got </span><span class="si">{</span><span class="n">n_rounds</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span> <span class="o">=</span> <span class="n">gkp</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_rounds</span> <span class="o">=</span> <span class="n">n_rounds</span></div>
+
+
+<div class="viewcode-block" id="GKPDecoder.apply_shift">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPDecoder.apply_shift">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">apply_shift</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">sigma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply a random Gaussian shift error in q and p.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state : np.ndarray</span>
+<span class="sd">            Input Fock-space state.</span>
+<span class="sd">        sigma : float</span>
+<span class="sd">            Standard deviation of the Gaussian shift distribution.</span>
+<span class="sd">        rng : np.random.Generator</span>
+<span class="sd">            Random number generator.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            Shifted Fock-space state (normalised).</span>
+<span class="sd">        """</span>
+        <span class="n">dq</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sigma</span><span class="p">))</span>
+        <span class="n">dp</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sigma</span><span class="p">))</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="p">(</span><span class="n">dq</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">dp</span><span class="p">)</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">shifted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">_displace</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">beta</span><span class="p">)</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">shifted</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">shifted</span> <span class="o">/</span> <span class="n">norm</span> <span class="k">if</span> <span class="n">norm</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">shifted</span></div>
+
+
+<div class="viewcode-block" id="GKPDecoder.correct">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPDecoder.correct">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">correct</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply SBS correction to estimate and remove shift errors.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        state : np.ndarray</span>
+<span class="sd">            Noisy Fock-space state.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray</span>
+<span class="sd">            Corrected state (normalised).</span>
+<span class="sd">        """</span>
+        <span class="n">corrected</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_rounds</span><span class="p">):</span>
+            <span class="n">corrected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sbs_round</span><span class="p">(</span><span class="n">corrected</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">corrected</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_sbs_round</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""One SBS round: estimate residual shift and apply correction."""</span>
+        <span class="c1"># Estimate shift from the expectation value of q and p modulo √π</span>
+        <span class="n">n_op</span> <span class="o">=</span> <span class="n">_number</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">N_max</span><span class="p">)</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">_a</span>
+        <span class="n">adag</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">_adag</span>
+
+        <span class="n">x_op</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">+</span> <span class="n">adag</span><span class="p">)</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">p_op</span> <span class="o">=</span> <span class="p">(</span><span class="n">a</span> <span class="o">-</span> <span class="n">adag</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
+
+        <span class="n">exp_x</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="n">x_op</span> <span class="o">@</span> <span class="n">state</span><span class="p">))</span>
+        <span class="n">exp_p</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="n">p_op</span> <span class="o">@</span> <span class="n">state</span><span class="p">))</span>
+
+        <span class="c1"># Round to nearest GKP lattice point (multiples of √π)</span>
+        <span class="n">sqrt_pi</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+        <span class="n">shift_q</span> <span class="o">=</span> <span class="n">exp_x</span> <span class="o">-</span> <span class="nb">round</span><span class="p">(</span><span class="n">exp_x</span> <span class="o">/</span> <span class="n">sqrt_pi</span><span class="p">)</span> <span class="o">*</span> <span class="n">sqrt_pi</span>
+        <span class="n">shift_p</span> <span class="o">=</span> <span class="n">exp_p</span> <span class="o">-</span> <span class="nb">round</span><span class="p">(</span><span class="n">exp_p</span> <span class="o">/</span> <span class="n">sqrt_pi</span><span class="p">)</span> <span class="o">*</span> <span class="n">sqrt_pi</span>
+
+        <span class="c1"># Apply correction displacement</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="n">shift_q</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">shift_p</span><span class="p">)</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">corrected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">_displace</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">beta</span><span class="p">)</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">corrected</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">corrected</span> <span class="o">/</span> <span class="n">norm</span> <span class="k">if</span> <span class="n">norm</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="n">corrected</span>
+
+<div class="viewcode-block" id="GKPDecoder.logical_error_rate">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.bosonic.GKPDecoder.logical_error_rate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logical_error_rate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">sigma</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Estimate the logical error rate after SBS correction.</span>
+
+<span class="sd">        Applies random shift errors of standard deviation σ to |0_L⟩,</span>
+<span class="sd">        corrects with SBS, and measures fidelity with the original code word.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        sigma : float</span>
+<span class="sd">            Shift noise standard deviation (in units of 1/√2).</span>
+<span class="sd">        n_shots : int</span>
+<span class="sd">            Number of Monte Carlo samples.</span>
+<span class="sd">        seed : int | None</span>
+<span class="sd">            Random seed.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            Estimated logical error rate (1 - mean fidelity).</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">sigma</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"sigma must be ≥ 0, got </span><span class="si">{</span><span class="n">sigma</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_shots</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">BosonicError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_shots must be ≥ 1, got </span><span class="si">{</span><span class="n">n_shots</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">code0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">code_word_0</span><span class="p">()</span>
+        <span class="n">total_fidelity</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_shots</span><span class="p">):</span>
+            <span class="n">noisy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_shift</span><span class="p">(</span><span class="n">code0</span><span class="p">,</span> <span class="n">sigma</span><span class="p">,</span> <span class="n">rng</span><span class="p">)</span>
+            <span class="n">corrected</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">correct</span><span class="p">(</span><span class="n">noisy</span><span class="p">)</span>
+            <span class="n">fid</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gkp</span><span class="o">.</span><span class="n">logical_fidelity</span><span class="p">(</span><span class="n">corrected</span><span class="p">,</span> <span class="n">logical</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">total_fidelity</span> <span class="o">+=</span> <span class="n">fid</span>
+
+        <span class="n">mean_fidelity</span> <span class="o">=</span> <span class="n">total_fidelity</span> <span class="o">/</span> <span class="n">n_shots</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">mean_fidelity</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

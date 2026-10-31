@@ -1,0 +1,841 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.thermal - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.thermal</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Finite-temperature statics and dynamics of the spin and Hubbard chains.</span>
+
+<span class="sd">The Gibbs state rho = e^{-beta H} / Z of an open chain is held on the native engine by</span>
+<span class="sd">ancilla purification. Each physical site is paired with an ancilla, and the pure state</span>
+<span class="sd">e^{-beta H/2}|I&gt; on the doubled chain (|I&gt; is the infinite-temperature state) is reached</span>
+<span class="sd">by imaginary-time block TEBD. Its real-time evolution gives the dynamical correlations.</span>
+<span class="sd">Three quantities are exposed:</span>
+
+<span class="sd">- :func:`statics`: the energy, local magnetization or density, correlations and the</span>
+<span class="sd">  uniform susceptibility over a range of inverse temperatures;</span>
+<span class="sd">- :func:`structure_factor`: the spin correlations C_j(t) = &lt;S^z_j(t) S^z_c(0)&gt;_beta,</span>
+<span class="sd">  whose Fourier transform is the dynamical structure factor S(k, omega, T);</span>
+<span class="sd">- :func:`current_correlation`: the current-current correlation &lt;J(t) J(0)&gt;_beta,</span>
+<span class="sd">  whose Fourier transform gives the optical conductivity sigma(omega, T).</span>
+
+<span class="sd">Example::</span>
+
+<span class="sd">    from quantx_engine import thermal</span>
+<span class="sd">    from quantx_engine.models import HubbardChain, XXZChain</span>
+
+<span class="sd">    st = thermal.statics(XXZChain(L=16), beta=2.0)</span>
+<span class="sd">    st.energy[-1]                          # &lt;H&gt; at beta = 2</span>
+
+<span class="sd">    sf = thermal.structure_factor(XXZChain(L=16), beta=1.0, t_max=6.0)</span>
+<span class="sd">    k, w, S = sf.spectrum()                # S(k, omega, T)</span>
+
+<span class="sd">    cc = thermal.current_correlation(HubbardChain(L=12, U=4.0, mu=2.0), beta=1.0, t_max=6.0)</span>
+<span class="sd">    w, sigma = cc.conductivity()           # Re sigma(omega, T)</span>
+
+<span class="sd">Conventions are those of :mod:`quantx_engine.models` (spins S = sigma/2). The ensemble is</span>
+<span class="sd">grand canonical: every S^z sector, and for Hubbard every particle number, with ``mu``</span>
+<span class="sd">setting the filling (``mu = U/2`` is half filling at every temperature).</span>
+
+<span class="sd">The models are :class:`~quantx_engine.models.XXZChain`,</span>
+<span class="sd">:class:`~quantx_engine.models.Spin1Chain` and :class:`~quantx_engine.models.HubbardChain`.</span>
+<span class="sd">:class:`~quantx_engine.models.J1J2Chain` and the Hubbard lattices have no purified form</span>
+<span class="sd">in the engine yet, and are refused.</span>
+
+<span class="sd">Everything here is gated against exact diagonalisation of the full Hilbert space</span>
+<span class="sd">(``tests/test_thermal_ed.py``), with the second-order Trotter error of the steps</span>
+<span class="sd">``dbeta`` and ``dt`` as the tolerance.</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">- Verstraete, Garcia-Ripoll and Cirac (2004). Phys. Rev. Lett. 93, 207204.</span>
+<span class="sd">  DOI: 10.1103/PhysRevLett.93.207204 (ancilla purification)</span>
+<span class="sd">- Karrasch, Bardarson and Moore (2012). Phys. Rev. Lett. 108, 227206.</span>
+<span class="sd">  DOI: 10.1103/PhysRevLett.108.227206 (the backward ancilla evolution, ``disentangle``)</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numbers</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">operator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ctypes</span><span class="w"> </span><span class="kn">import</span> <span class="n">c_char_p</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"ThermalError"</span><span class="p">,</span> <span class="s2">"ThermalStatics"</span><span class="p">,</span> <span class="s2">"ThermalStructureFactor"</span><span class="p">,</span>
+           <span class="s2">"ThermalCurrentCorrelation"</span><span class="p">,</span> <span class="s2">"statics"</span><span class="p">,</span> <span class="s2">"structure_factor"</span><span class="p">,</span>
+           <span class="s2">"current_correlation"</span><span class="p">]</span>
+
+
+<div class="viewcode-block" id="ThermalError">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.ThermalError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ThermalError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A finite-temperature run could not be done, with the reason."""</span></div>
+
+
+
+<span class="c1"># ── Models and their unit conversions ─────────────────────────────────────────</span>
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">_Kind</span><span class="p">:</span>
+    <span class="n">observable</span><span class="p">:</span> <span class="nb">str</span>     <span class="c1"># what "local" holds: "Sz" or "n"</span>
+    <span class="n">o_scale</span><span class="p">:</span> <span class="nb">float</span>      <span class="c1"># engine O_j (2Sz or n) -&gt; local observable</span>
+    <span class="n">s_scale</span><span class="p">:</span> <span class="nb">float</span>      <span class="c1"># engine C_{j,c} of S = 2Sz -&gt; &lt;S^z_j(t) S^z_c&gt;</span>
+    <span class="n">j_scale</span><span class="p">:</span> <span class="nb">float</span>      <span class="c1"># engine &lt;J(t)J&gt; -&gt; the documented current's</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_kind</span><span class="p">(</span><span class="n">model</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Kind</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.models</span><span class="w"> </span><span class="kn">import</span> <span class="n">HubbardChain</span><span class="p">,</span> <span class="n">Spin1Chain</span><span class="p">,</span> <span class="n">XXZChain</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">XXZChain</span><span class="p">):</span>
+        <span class="c1"># The engine runs J sigma.sigma with J/4; its current is i (J/4) sum (S+S- - h.c.),</span>
+        <span class="c1"># half the S^z current (iJ/2) sum (S+S- - h.c.) of H.</span>
+        <span class="k">return</span> <span class="n">_Kind</span><span class="p">(</span><span class="s2">"Sz"</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">Spin1Chain</span><span class="p">):</span>
+        <span class="c1"># The engine current is i J sum (S+S- - h.c.), twice the S^z current of H.</span>
+        <span class="k">return</span> <span class="n">_Kind</span><span class="p">(</span><span class="s2">"Sz"</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">HubbardChain</span><span class="p">):</span>
+        <span class="c1"># O_j is n_j; the structure factor's S is n_up - n_dn = 2 Sz; the current is the</span>
+        <span class="c1"># particle current (its sign is the engine's opposite, which &lt;J J&gt; does not see).</span>
+        <span class="k">return</span> <span class="n">_Kind</span><span class="p">(</span><span class="s2">"n"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+    <span class="n">name</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+    <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"finite temperature supports XXZChain, Spin1Chain and HubbardChain; "</span>
+                       <span class="sa">f</span><span class="s2">"the engine has no purified form for </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_positive</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">allow_zero</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">numbers</span><span class="o">.</span><span class="n">Real</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be a number, got </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">math</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="ow">or</span> <span class="n">x</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="p">(</span><span class="n">x</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">allow_zero</span><span class="p">):</span>
+        <span class="n">bound</span> <span class="o">=</span> <span class="s2">"&gt;= 0"</span> <span class="k">if</span> <span class="n">allow_zero</span> <span class="k">else</span> <span class="s2">"&gt; 0"</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be </span><span class="si">{</span><span class="n">bound</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">x</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_int</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">v</span><span class="p">,</span> <span class="n">low</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="n">operator</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">v</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be an int, got </span><span class="si">{</span><span class="n">v</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+    <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">low</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> must be &gt;= </span><span class="si">{</span><span class="n">low</span><span class="si">}</span><span class="s2">, got </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">i</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_run</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">quantx_engine.dmrg</span><span class="w"> </span><span class="kn">import</span> <span class="n">_resolve_engine</span>
+    <span class="n">lib</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_resolve_engine</span><span class="p">(</span><span class="n">engine</span><span class="p">,</span> <span class="s2">"thermal"</span><span class="p">,</span> <span class="n">ThermalError</span><span class="p">),</span> <span class="s2">"_lib"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">fn</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">lib</span><span class="p">,</span> <span class="s2">"qx_thermal"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">lib</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">fn</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="s2">"the loaded native library does not export qx_thermal"</span><span class="p">)</span>
+    <span class="n">fn</span><span class="o">.</span><span class="n">argtypes</span> <span class="o">=</span> <span class="p">[</span><span class="n">c_char_p</span><span class="p">,</span> <span class="n">c_char_p</span><span class="p">]</span>
+    <span class="n">fn</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">c_char_p</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">fn</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">problem</span><span class="p">())</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">options</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">()))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ok"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"error"</span><span class="p">,</span> <span class="s2">"unknown error from qx_thermal"</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">out</span>
+
+
+<span class="c1"># ── Statics ──────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="ThermalStatics">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.ThermalStatics">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ThermalStatics</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Thermal expectation values on a grid of inverse temperatures, from beta = 0 up.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    betas : np.ndarray, shape (n_beta,)</span>
+<span class="sd">    energy : np.ndarray, shape (n_beta,)</span>
+<span class="sd">        &lt;H&gt;, for the whole chain.</span>
+<span class="sd">    local : np.ndarray, shape (n_beta, L)</span>
+<span class="sd">        &lt;S^z_j&gt; for the spin chains, &lt;n_j&gt; for Hubbard (see ``observable``).</span>
+<span class="sd">    correlation : np.ndarray, shape (n_beta, L)</span>
+<span class="sd">        &lt;O_c O_j&gt; with the central site c = ``center`` and O = S^z or n.</span>
+<span class="sd">    susceptibility : np.ndarray, shape (n_beta,)</span>
+<span class="sd">        beta Var(sum_j O_j) / L: the uniform spin susceptibility per site, or for Hubbard</span>
+<span class="sd">        the compressibility. Zeros when not requested.</span>
+<span class="sd">    center : int</span>
+<span class="sd">    observable : str</span>
+<span class="sd">        ``"Sz"`` or ``"n"``.</span>
+<span class="sd">    max_bond : int</span>
+<span class="sd">        The largest bond dimension of the purified state.</span>
+<span class="sd">    wall_time_s : float</span>
+<span class="sd">    """</span>
+    <span class="n">betas</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">energy</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">local</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">correlation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">susceptibility</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">center</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">observable</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">wall_time_s</span><span class="p">:</span> <span class="nb">float</span></div>
+
+
+
+<div class="viewcode-block" id="statics">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.statics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">statics</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">dbeta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span>
+            <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-10</span><span class="p">,</span> <span class="n">stride</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span> <span class="n">susceptibility</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="n">engine</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThermalStatics</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Energy, local observables, correlations and susceptibility from beta = 0 to ``beta``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : XXZChain, Spin1Chain or HubbardChain</span>
+<span class="sd">    beta : float</span>
+<span class="sd">        The largest inverse temperature of the scan.</span>
+<span class="sd">    dbeta : float</span>
+<span class="sd">        The cooling step. ``beta / dbeta`` is rounded up to a whole number of steps, so</span>
+<span class="sd">        the step shrinks to end exactly at ``beta``. The error is second order in it.</span>
+<span class="sd">    max_bond : int</span>
+<span class="sd">        Bond dimension cap of the purified state.</span>
+<span class="sd">    cutoff : float</span>
+<span class="sd">        SVD truncation weight cutoff.</span>
+<span class="sd">    stride : int</span>
+<span class="sd">        Measure every ``stride``-th step (and at the end).</span>
+<span class="sd">    susceptibility : bool</span>
+<span class="sd">        Also compute the susceptibility, at the cost of L overlaps per measurement.</span>
+<span class="sd">    engine : quantx_engine.Engine, optional</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ThermalError</span>
+<span class="sd">        An unsupported model, a bad argument, no native library, or a solver failure.</span>
+<span class="sd">    """</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="n">_kind</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="n">opts</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"quantity"</span><span class="p">:</span> <span class="s2">"statics"</span><span class="p">,</span> <span class="s2">"beta"</span><span class="p">:</span> <span class="n">_check_positive</span><span class="p">(</span><span class="s2">"beta"</span><span class="p">,</span> <span class="n">beta</span><span class="p">),</span>
+            <span class="s2">"dbeta"</span><span class="p">:</span> <span class="n">_check_positive</span><span class="p">(</span><span class="s2">"dbeta"</span><span class="p">,</span> <span class="n">dbeta</span><span class="p">),</span>
+            <span class="s2">"max_bond"</span><span class="p">:</span> <span class="n">_check_int</span><span class="p">(</span><span class="s2">"max_bond"</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">),</span> <span class="s2">"cutoff"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span><span class="p">),</span>
+            <span class="s2">"stride"</span><span class="p">:</span> <span class="n">_check_int</span><span class="p">(</span><span class="s2">"stride"</span><span class="p">,</span> <span class="n">stride</span><span class="p">),</span> <span class="s2">"susceptibility"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">susceptibility</span><span class="p">)}</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_run</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">opts</span><span class="p">,</span> <span class="n">engine</span><span class="p">)</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">kind</span><span class="o">.</span><span class="n">o_scale</span>
+    <span class="k">return</span> <span class="n">ThermalStatics</span><span class="p">(</span>
+        <span class="n">betas</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"betas"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">energy</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"energy"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">local</span><span class="o">=</span><span class="n">s</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"O"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">correlation</span><span class="o">=</span><span class="n">s</span> <span class="o">*</span> <span class="n">s</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"OO"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">susceptibility</span><span class="o">=</span><span class="n">s</span> <span class="o">*</span> <span class="n">s</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"susceptibility"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">center</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"center"</span><span class="p">]),</span> <span class="n">observable</span><span class="o">=</span><span class="n">kind</span><span class="o">.</span><span class="n">observable</span><span class="p">,</span>
+        <span class="n">max_bond</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_bond"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span> <span class="n">wall_time_s</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"wall_time_s"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span></div>
+
+
+
+<span class="c1"># ── Dynamics ─────────────────────────────────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_window</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">eta</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Gaussian time window exp(-(eta t)^2 / 2); by default e^{-4.5} at the last time."""</span>
+    <span class="n">t_max</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">times</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="n">eta</span> <span class="o">=</span> <span class="mf">3.0</span> <span class="o">/</span> <span class="n">t_max</span> <span class="k">if</span> <span class="n">eta</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">eta</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">eta</span> <span class="o">*</span> <span class="n">times</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_omegas</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n_omega</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">omega_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span>
+            <span class="n">low</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""n_omega points on [low * omega_max, omega_max]; omega_max defaults to pi / dt."""</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">times</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">times</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="n">w</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="n">dt</span> <span class="k">if</span> <span class="n">omega_max</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">omega_max</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">low</span> <span class="o">*</span> <span class="n">w</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_omega</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fourier</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">C</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">omegas</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+             <span class="n">window</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""int dt e^{i w t} C(t) over [-t_max, t_max], from t &gt;= 0 and C(-t) = conj(C(t)).</span>
+
+<span class="sd">    The trapezoid rule: each t &gt; 0 also stands for -t, t = 0 counts once, and the two ends</span>
+<span class="sd">    +-t_max count half. C has time along its first axis; the result has omega first.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ThermalError</span><span class="p">(</span><span class="s2">"a spectrum needs at least two times: t_max must be &gt;= dt"</span><span class="p">)</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">times</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">times</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">wC</span> <span class="o">=</span> <span class="n">window</span><span class="o">.</span><span class="n">reshape</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,)</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="n">C</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span> <span class="o">*</span> <span class="n">C</span>
+    <span class="n">ewt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">omegas</span><span class="p">,</span> <span class="n">times</span><span class="p">))</span>                    <span class="c1"># (n_w, n_t)</span>
+    <span class="n">F</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">ewt</span><span class="p">,</span> <span class="n">wC</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)))</span> <span class="o">*</span> <span class="n">dt</span>    <span class="c1"># every t counted twice</span>
+    <span class="n">F</span> <span class="o">-=</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">wC</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="n">dt</span>                                       <span class="c1"># t = 0 once</span>
+    <span class="n">F</span> <span class="o">-=</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">multiply</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">ewt</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">wC</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span> <span class="o">*</span> <span class="n">dt</span>       <span class="c1"># +-t_max at half weight</span>
+    <span class="k">return</span> <span class="n">F</span>
+
+
+<div class="viewcode-block" id="ThermalStructureFactor">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.ThermalStructureFactor">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ThermalStructureFactor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Spin correlations C_j(t) = &lt;S^z_j(t) S^z_c(0)&gt;_beta of a thermal state.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    beta : float</span>
+<span class="sd">    times : np.ndarray, shape (n_t,)</span>
+<span class="sd">    correlation : np.ndarray, shape (n_t, L), complex</span>
+<span class="sd">        ``correlation[t, j]``; the source is the central site c = ``source``.</span>
+<span class="sd">    source : int</span>
+<span class="sd">    energy : float</span>
+<span class="sd">        &lt;H&gt; at ``beta``.</span>
+<span class="sd">    max_bond : int</span>
+<span class="sd">    bond_dims : np.ndarray, shape (n_t,)</span>
+<span class="sd">        The largest bond dimension at each time.</span>
+<span class="sd">    wall_time_s : float</span>
+<span class="sd">    """</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">correlation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">energy</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">bond_dims</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">wall_time_s</span><span class="p">:</span> <span class="nb">float</span>
+
+<div class="viewcode-block" id="ThermalStructureFactor.spectrum">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.ThermalStructureFactor.spectrum">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">spectrum</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">n_omega</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">401</span><span class="p">,</span> <span class="n">omega_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">eta</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""The dynamical structure factor S(k, omega, T).</span>
+
+<span class="sd">        S(k, omega) = sum_r e^{-i k r} int dt e^{i omega t} C_{c+r}(t), on the open chain</span>
+<span class="sd">        (r measured from the source), with C(-t) = conj(C(t)) for the negative times and</span>
+<span class="sd">        a Gaussian time window exp(-(eta t)^2 / 2) against the cut-off at the last time.</span>
+<span class="sd">        That extension is exact for the local correlation (H is real) and at every k on</span>
+<span class="sd">        an odd chain, whose centre is a mirror point; on an even chain it is the usual</span>
+<span class="sd">        open-chain approximation. At finite temperature both signs of omega carry</span>
+<span class="sd">        weight, related by detailed balance, S(k, -omega) = e^{-beta omega} S(k, omega),</span>
+<span class="sd">        up to the window's broadening.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        n_omega : int</span>
+<span class="sd">            Points of the omega grid on [-omega_max, omega_max].</span>
+<span class="sd">        omega_max : float, optional</span>
+<span class="sd">            Default pi / dt, the Nyquist frequency of the time grid.</span>
+<span class="sd">        eta : float, optional</span>
+<span class="sd">            Window width; default 3 / t_max.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ks : np.ndarray, shape (L,)</span>
+<span class="sd">            Momenta 2 pi m / L.</span>
+<span class="sd">        omegas : np.ndarray, shape (n_omega,)</span>
+<span class="sd">        S : np.ndarray, shape (L, n_omega), real</span>
+<span class="sd">        """</span>
+        <span class="n">L</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">correlation</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">ks</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">L</span><span class="p">)</span> <span class="o">/</span> <span class="n">L</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">L</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">source</span>
+        <span class="n">Ck</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">correlation</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">outer</span><span class="p">(</span><span class="n">ks</span><span class="p">,</span> <span class="n">r</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>       <span class="c1"># (n_t, n_k)</span>
+        <span class="n">omegas</span> <span class="o">=</span> <span class="n">_omegas</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">,</span> <span class="n">n_omega</span><span class="p">,</span> <span class="n">omega_max</span><span class="p">)</span>
+        <span class="n">S</span> <span class="o">=</span> <span class="n">_fourier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">,</span> <span class="n">Ck</span><span class="p">,</span> <span class="n">omegas</span><span class="p">,</span> <span class="n">_window</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">,</span> <span class="n">eta</span><span class="p">))</span>   <span class="c1"># (n_w, n_k)</span>
+        <span class="k">return</span> <span class="n">ks</span><span class="p">,</span> <span class="n">omegas</span><span class="p">,</span> <span class="n">S</span><span class="o">.</span><span class="n">T</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ThermalCurrentCorrelation">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.ThermalCurrentCorrelation">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ThermalCurrentCorrelation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Current-current correlation C(t) = &lt;J(t) J(0)&gt;_beta of a thermal state.</span>
+
+<span class="sd">    J is the current of the conserved charge: for the spin chains the S^z current</span>
+<span class="sd">    J = sum_l (i J / 2) (S+_l S-_{l+1} - h.c.), and for Hubbard the particle current</span>
+<span class="sd">    J = sum_{l,s} i t (c+_{l+1 s} c_{l s} - h.c.).</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    beta : float</span>
+<span class="sd">    times : np.ndarray, shape (n_t,)</span>
+<span class="sd">    correlation : np.ndarray, shape (n_t,), complex</span>
+<span class="sd">    n_sites : int</span>
+<span class="sd">    energy : float</span>
+<span class="sd">    max_bond : int</span>
+<span class="sd">    bond_dims : np.ndarray, shape (n_t,)</span>
+<span class="sd">    wall_time_s : float</span>
+<span class="sd">    """</span>
+    <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">correlation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">n_sites</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">energy</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">bond_dims</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">wall_time_s</span><span class="p">:</span> <span class="nb">float</span>
+
+<div class="viewcode-block" id="ThermalCurrentCorrelation.conductivity">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.ThermalCurrentCorrelation.conductivity">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">conductivity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">n_omega</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">401</span><span class="p">,</span> <span class="n">omega_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                     <span class="n">eta</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">"""Re sigma(omega, T), the optical conductivity per site, for omega &gt;= 0.</span>
+
+<span class="sd">        Re sigma(omega) = (1 - e^{-beta omega}) / (2 L omega) int dt e^{i omega t} C(t),</span>
+<span class="sd">        whose omega -&gt; 0 limit is beta / (2 L) times the integral. The Fourier transform</span>
+<span class="sd">        is the one of :meth:`ThermalStructureFactor.spectrum`. Re sigma is even in omega,</span>
+<span class="sd">        and only omega &gt;= 0 is computed: below zero the Kubo factor grows as</span>
+<span class="sd">        e^{beta |omega|}, against a windowed transform that is not exponentially small.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        n_omega : int</span>
+<span class="sd">            Points of the omega grid on [0, omega_max].</span>
+<span class="sd">        omega_max : float, optional</span>
+<span class="sd">            Default pi / dt, the Nyquist frequency of the time grid.</span>
+<span class="sd">        eta : float, optional</span>
+<span class="sd">            Window width; default 3 / t_max.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        omegas : np.ndarray, shape (n_omega,)</span>
+<span class="sd">        sigma : np.ndarray, shape (n_omega,)</span>
+<span class="sd">        """</span>
+        <span class="n">omegas</span> <span class="o">=</span> <span class="n">_omegas</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">,</span> <span class="n">n_omega</span><span class="p">,</span> <span class="n">omega_max</span><span class="p">,</span> <span class="n">low</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">Ct</span> <span class="o">=</span> <span class="n">_fourier</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">correlation</span><span class="p">,</span> <span class="n">omegas</span><span class="p">,</span> <span class="n">_window</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">,</span> <span class="n">eta</span><span class="p">))</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">beta</span>
+        <span class="k">with</span> <span class="n">np</span><span class="o">.</span><span class="n">errstate</span><span class="p">(</span><span class="n">divide</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">,</span> <span class="n">invalid</span><span class="o">=</span><span class="s2">"ignore"</span><span class="p">):</span>
+            <span class="n">factor</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">omegas</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">1e-12</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">expm1</span><span class="p">(</span><span class="o">-</span><span class="n">b</span> <span class="o">*</span> <span class="n">omegas</span><span class="p">)</span> <span class="o">/</span> <span class="n">omegas</span><span class="p">,</span> <span class="n">b</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">omegas</span><span class="p">,</span> <span class="n">factor</span> <span class="o">*</span> <span class="n">Ct</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_sites</span><span class="p">)</span></div>
+</div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_dynamics_options</span><span class="p">(</span><span class="n">quantity</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">t_max</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">dbeta</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">,</span>
+                      <span class="n">disentangle</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"quantity"</span><span class="p">:</span> <span class="n">quantity</span><span class="p">,</span> <span class="s2">"beta"</span><span class="p">:</span> <span class="n">_check_positive</span><span class="p">(</span><span class="s2">"beta"</span><span class="p">,</span> <span class="n">beta</span><span class="p">),</span>
+            <span class="s2">"t_max"</span><span class="p">:</span> <span class="n">_check_positive</span><span class="p">(</span><span class="s2">"t_max"</span><span class="p">,</span> <span class="n">t_max</span><span class="p">,</span> <span class="n">allow_zero</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="s2">"dt"</span><span class="p">:</span> <span class="n">_check_positive</span><span class="p">(</span><span class="s2">"dt"</span><span class="p">,</span> <span class="n">dt</span><span class="p">),</span> <span class="s2">"dbeta"</span><span class="p">:</span> <span class="n">_check_positive</span><span class="p">(</span><span class="s2">"dbeta"</span><span class="p">,</span> <span class="n">dbeta</span><span class="p">),</span>
+            <span class="s2">"max_bond"</span><span class="p">:</span> <span class="n">_check_int</span><span class="p">(</span><span class="s2">"max_bond"</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">),</span> <span class="s2">"cutoff"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">cutoff</span><span class="p">),</span>
+            <span class="s2">"disentangle"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="n">disentangle</span><span class="p">)}</span>
+
+
+<div class="viewcode-block" id="structure_factor">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.structure_factor">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">structure_factor</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+                     <span class="n">dbeta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-10</span><span class="p">,</span>
+                     <span class="n">disentangle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThermalStructureFactor</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Spin correlations &lt;S^z_j(t) S^z_c(0)&gt;_beta from the central site, up to ``t_max``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    model : XXZChain, Spin1Chain or HubbardChain</span>
+<span class="sd">        For Hubbard, S^z = (n_up - n_dn) / 2: the spin structure factor.</span>
+<span class="sd">    beta : float</span>
+<span class="sd">        Inverse temperature.</span>
+<span class="sd">    t_max, dt : float</span>
+<span class="sd">        The real-time window and step (second-order Trotter error in ``dt``).</span>
+<span class="sd">        ``t_max / dt`` is rounded up to a whole number of steps, so the step shrinks to</span>
+<span class="sd">        end exactly at ``t_max``.</span>
+<span class="sd">    dbeta : float</span>
+<span class="sd">        Cooling step (second-order error), rounded the same way to end at ``beta``.</span>
+<span class="sd">    max_bond, cutoff</span>
+<span class="sd">        Truncation of the purified states.</span>
+<span class="sd">    disentangle : bool</span>
+<span class="sd">        Evolve the ancillas backwards (Karrasch, Bardarson and Moore). Exact without</span>
+<span class="sd">        truncation, and it slows the growth of the bond dimension.</span>
+<span class="sd">    engine : quantx_engine.Engine, optional</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ThermalError</span>
+<span class="sd">    """</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="n">_kind</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_run</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">_dynamics_options</span><span class="p">(</span><span class="s2">"structure_factor"</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">t_max</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">dbeta</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">,</span>
+                                        <span class="n">cutoff</span><span class="p">,</span> <span class="n">disentangle</span><span class="p">),</span> <span class="n">engine</span><span class="p">)</span>
+    <span class="n">C</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"C_re"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"C_im"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ThermalStructureFactor</span><span class="p">(</span>
+        <span class="n">beta</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"beta"</span><span class="p">]),</span> <span class="n">times</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"times"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">correlation</span><span class="o">=</span><span class="n">kind</span><span class="o">.</span><span class="n">s_scale</span> <span class="o">*</span> <span class="n">C</span><span class="p">,</span> <span class="n">source</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"source"</span><span class="p">]),</span> <span class="n">energy</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"energy"</span><span class="p">]),</span>
+        <span class="n">max_bond</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_bond"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+        <span class="n">bond_dims</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"bond_t"</span><span class="p">,</span> <span class="p">[]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">),</span>
+        <span class="n">wall_time_s</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"wall_time_s"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span></div>
+
+
+
+<div class="viewcode-block" id="current_correlation">
+<a class="viewcode-back" href="../../api/generated/quantx_engine.thermal.html#quantx_engine.thermal.current_correlation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">current_correlation</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">beta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">t_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span> <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span>
+                        <span class="n">dbeta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">128</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-10</span><span class="p">,</span>
+                        <span class="n">disentangle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span> <span class="n">engine</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThermalCurrentCorrelation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Current-current correlation &lt;J(t) J(0)&gt;_beta up to ``t_max``.</span>
+
+<span class="sd">    The arguments are those of :func:`structure_factor`; see</span>
+<span class="sd">    :class:`ThermalCurrentCorrelation` for the current J.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ThermalError</span>
+<span class="sd">    """</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="n">_kind</span><span class="p">(</span><span class="n">model</span><span class="p">)</span>
+    <span class="n">out</span> <span class="o">=</span> <span class="n">_run</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">_dynamics_options</span><span class="p">(</span><span class="s2">"current"</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">t_max</span><span class="p">,</span> <span class="n">dt</span><span class="p">,</span> <span class="n">dbeta</span><span class="p">,</span> <span class="n">max_bond</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">,</span>
+                                        <span class="n">disentangle</span><span class="p">),</span> <span class="n">engine</span><span class="p">)</span>
+    <span class="n">C</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"C_re"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"C_im"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ThermalCurrentCorrelation</span><span class="p">(</span>
+        <span class="n">beta</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"beta"</span><span class="p">]),</span> <span class="n">times</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"times"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
+        <span class="n">correlation</span><span class="o">=</span><span class="n">kind</span><span class="o">.</span><span class="n">j_scale</span> <span class="o">*</span> <span class="n">C</span><span class="p">,</span> <span class="n">n_sites</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"n_sites"</span><span class="p">]),</span>
+        <span class="n">energy</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="p">[</span><span class="s2">"energy"</span><span class="p">]),</span> <span class="n">max_bond</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_bond"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+        <span class="n">bond_dims</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"bond_t"</span><span class="p">,</span> <span class="p">[]),</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">int</span><span class="p">),</span>
+        <span class="n">wall_time_s</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"wall_time_s"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)))</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

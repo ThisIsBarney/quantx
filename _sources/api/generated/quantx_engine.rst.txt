@@ -1,0 +1,12 @@
+﻿quantx\_engine
+==============
+
+.. automodule:: quantx_engine
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      backend_info
+   

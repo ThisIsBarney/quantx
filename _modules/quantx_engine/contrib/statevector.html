@@ -1,0 +1,1134 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.statevector - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.contrib.statevector</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Pure-Python dense statevector simulator (M160).</span>
+
+<span class="sd">A self-contained ~400-line NumPy statevector simulator that works with zero</span>
+<span class="sd">native dependencies.  It is the fallback backend used by</span>
+<span class="sd">:class:`~quantx_engine.engine.Engine` when the native C++ library is absent,</span>
+<span class="sd">and can also be used directly for rapid prototyping and testing.</span>
+
+<span class="sd">Supports up to 25 qubits (2^25 amplitudes ≈ 256 MB complex128).</span>
+
+<span class="sd">Standard gate set</span>
+<span class="sd">-----------------</span>
+<span class="sd">Single-qubit: H, X, Y, Z, S, T, Sdg, Tdg, Rx, Ry, Rz, P (phase), I</span>
+<span class="sd">Two-qubit:    CNOT (CX), CY, CZ, SWAP, iSWAP, CH</span>
+<span class="sd">Three-qubit:  CCX (Toffoli), CSWAP (Fredkin)</span>
+
+<span class="sd">Usage</span>
+<span class="sd">-----</span>
+<span class="sd">&gt;&gt;&gt; from quantx_engine.contrib.statevector import StatevectorSimulator</span>
+<span class="sd">&gt;&gt;&gt; sim = StatevectorSimulator(2)</span>
+<span class="sd">&gt;&gt;&gt; sim.h(0).cnot(0, 1)</span>
+<span class="sd">&gt;&gt;&gt; sv = sim.statevector()          # np.ndarray[complex128], shape (4,)</span>
+<span class="sd">&gt;&gt;&gt; probs = sim.probabilities()     # np.ndarray[float64],   shape (4,)</span>
+<span class="sd">&gt;&gt;&gt; counts = sim.sample(1024)       # Counter[str]  e.g. {"00": 512, "11": 512}</span>
+<span class="sd">&gt;&gt;&gt; e = sim.expectation("ZZ")       # float</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">Counter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># ── Constants ─────────────────────────────────────────────────────────────────</span>
+
+<span class="n">_MAX_QUBITS</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">25</span>
+<span class="n">_DTYPE</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">complex128</span>
+
+<span class="c1"># ── Single-qubit gate matrices ────────────────────────────────────────────────</span>
+
+<span class="n">_I</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_X</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_Y</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_Z</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_H</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span> <span class="o">/</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">_S</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="n">j</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_T</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">4</span><span class="p">)]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_Sdg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="n">j</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+<span class="n">_Tdg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">4</span><span class="p">)]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rx</span><span class="p">(</span><span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">c</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">s</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">s</span><span class="p">,</span> <span class="n">c</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ry</span><span class="p">(</span><span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">c</span><span class="p">,</span> <span class="o">-</span><span class="n">s</span><span class="p">],</span> <span class="p">[</span><span class="n">s</span><span class="p">,</span> <span class="n">c</span><span class="p">]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rz</span><span class="p">(</span><span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="mi">0</span><span class="p">],</span>
+         <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)]],</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_phase</span><span class="p">(</span><span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">lam</span><span class="p">)]],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_u3</span><span class="p">(</span><span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">phi</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""General single-qubit SU(2) gate (OpenQASM U3)."""</span>
+    <span class="n">c</span><span class="p">,</span> <span class="n">s</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[[</span><span class="n">c</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">lam</span><span class="p">)</span> <span class="o">*</span> <span class="n">s</span><span class="p">],</span>
+         <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">phi</span><span class="p">)</span> <span class="o">*</span> <span class="n">s</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="p">(</span><span class="n">phi</span> <span class="o">+</span> <span class="n">lam</span><span class="p">))</span> <span class="o">*</span> <span class="n">c</span><span class="p">]],</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="c1"># ── Core application helpers ──────────────────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_single</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">gate</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply a 2×2 gate to *qubit* in an n-qubit statevector."""</span>
+    <span class="c1"># Reshape to tensor with each qubit as an axis of size 2.</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+    <span class="c1"># Contract: sv[..., qubit, ...] = gate @ sv[..., qubit, ...]</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">gate</span><span class="p">,</span> <span class="n">sv</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">qubit</span><span class="p">]])</span>
+    <span class="c1"># tensordot moves contracted axis to position 0; move it back.</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">sv</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">sv</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">n</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_controlled</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">gate</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+                      <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Apply a controlled-U gate (control → target)."""</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+    <span class="c1"># Select the |1⟩ slice of the control qubit.</span>
+    <span class="n">idx_ctrl</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)]</span> <span class="o">*</span> <span class="n">n</span>
+    <span class="n">idx_ctrl</span><span class="p">[</span><span class="n">control</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">slice_ctrl</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">idx_ctrl</span><span class="p">)</span>
+    <span class="c1"># Apply gate only to the target axis within that slice.</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">sv</span><span class="p">[</span><span class="n">slice_ctrl</span><span class="p">]</span>               <span class="c1"># shape (2,)^(n-1), target axis still present</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">gate</span><span class="p">,</span> <span class="n">sub</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">target</span> <span class="k">if</span> <span class="n">target</span> <span class="o">&lt;</span> <span class="n">control</span> <span class="k">else</span> <span class="n">target</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]])</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">sub</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">target</span> <span class="k">if</span> <span class="n">target</span> <span class="o">&lt;</span> <span class="n">control</span> <span class="k">else</span> <span class="n">target</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">sv</span><span class="p">[</span><span class="n">slice_ctrl</span><span class="p">]</span> <span class="o">=</span> <span class="n">sub</span>
+    <span class="k">return</span> <span class="n">sv</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">n</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_swap</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Swap two qubits."""</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">sv</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">sv</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">n</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_toffoli</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">c0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">c1</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">t</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""CCX (Toffoli) gate: |c0=1, c1=1⟩ → X|t⟩."""</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)]</span> <span class="o">*</span> <span class="n">n</span>
+    <span class="n">idx</span><span class="p">[</span><span class="n">c0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">idx</span><span class="p">[</span><span class="n">c1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">sv</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
+    <span class="c1"># Apply X to the target (now shifted by number of controls before it)</span>
+    <span class="n">adjusted_t</span> <span class="o">=</span> <span class="n">t</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">c0</span> <span class="o">&lt;</span> <span class="n">t</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">c1</span> <span class="o">&lt;</span> <span class="n">t</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">_X</span><span class="p">,</span> <span class="n">sub</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">adjusted_t</span><span class="p">]])</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">sub</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">adjusted_t</span><span class="p">)</span>
+    <span class="n">sv</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">=</span> <span class="n">sub</span>
+    <span class="k">return</span> <span class="n">sv</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">n</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apply_cswap</span><span class="p">(</span><span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">ctrl</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""CSWAP (Fredkin) gate: when control=|1⟩, swap q0 and q1."""</span>
+    <span class="n">sv</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+    <span class="n">idx</span> <span class="o">=</span> <span class="p">[</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)]</span> <span class="o">*</span> <span class="n">n</span>
+    <span class="n">idx</span><span class="p">[</span><span class="n">ctrl</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">sv</span><span class="p">[</span><span class="n">s</span><span class="p">]</span>
+    <span class="c1"># Adjust target indices to exclude the control axis</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_adj</span><span class="p">(</span><span class="n">q</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">q</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">ctrl</span> <span class="o">&lt;</span> <span class="n">q</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">sub</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">swapaxes</span><span class="p">(</span><span class="n">sub</span><span class="p">,</span> <span class="n">_adj</span><span class="p">(</span><span class="n">q0</span><span class="p">),</span> <span class="n">_adj</span><span class="p">(</span><span class="n">q1</span><span class="p">))</span>
+    <span class="n">sv</span><span class="p">[</span><span class="n">s</span><span class="p">]</span> <span class="o">=</span> <span class="n">sub</span>
+    <span class="k">return</span> <span class="n">sv</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span> <span class="o">**</span> <span class="n">n</span><span class="p">)</span>
+
+
+<span class="c1"># ── Pauli expectation value ───────────────────────────────────────────────────</span>
+
+<span class="n">_PAULI_MATRIX</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"I"</span><span class="p">:</span> <span class="n">_I</span><span class="p">,</span> <span class="s2">"X"</span><span class="p">:</span> <span class="n">_X</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">:</span> <span class="n">_Y</span><span class="p">,</span> <span class="s2">"Z"</span><span class="p">:</span> <span class="n">_Z</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_pauli_string_matrix</span><span class="p">(</span><span class="n">pauli</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">qubits</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Build the full 2^n × 2^n matrix for a Pauli string.</span>
+
+<span class="sd">    *pauli* is a string like ``"ZI"`` or ``"XIZ"`` (length == n, left = qubit 0).</span>
+<span class="sd">    If *qubits* is given, *pauli* characters are mapped to those qubit indices.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span> <span class="o">!=</span> <span class="n">n</span> <span class="ow">and</span> <span class="n">qubits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"Pauli string length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span><span class="si">}</span><span class="s2"> != n_qubits </span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">. "</span>
+            <span class="s2">"Pass qubits= to specify which qubits the string acts on."</span>
+        <span class="p">)</span>
+    <span class="n">mats</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">_I</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+    <span class="k">if</span> <span class="n">qubits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">qubits</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Pauli string length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span><span class="si">}</span><span class="s2"> != len(qubits) </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">qubits</span><span class="p">)</span><span class="si">}</span><span class="s2">; "</span>
+                <span class="s2">"both must have the same number of elements."</span>
+            <span class="p">)</span>
+        <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">pauli</span><span class="p">,</span> <span class="n">qubits</span><span class="p">):</span>
+            <span class="n">mats</span><span class="p">[</span><span class="n">q</span><span class="p">]</span> <span class="o">=</span> <span class="n">_PAULI_MATRIX</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">upper</span><span class="p">()]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">pauli</span><span class="p">):</span>
+            <span class="n">mats</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">_PAULI_MATRIX</span><span class="p">[</span><span class="n">p</span><span class="o">.</span><span class="n">upper</span><span class="p">()]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">mats</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">mats</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">kron</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">m</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">_DTYPE</span><span class="p">)</span>
+
+
+<span class="c1"># ── StatevectorSimulator ──────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StatevectorSimulator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Dense statevector simulator backed by NumPy.</span>
+
+<span class="sd">    All gate methods return ``self`` so they can be chained::</span>
+
+<span class="sd">        sim = StatevectorSimulator(2)</span>
+<span class="sd">        sv  = sim.h(0).cnot(0, 1).statevector()</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        Number of qubits (1–25).</span>
+<span class="sd">    initial_state : int | np.ndarray | None</span>
+<span class="sd">        - ``int`` (default 0): computational basis state |initial_state⟩.</span>
+<span class="sd">        - ``np.ndarray`` of shape ``(2**n_qubits,)``: custom initial amplitudes</span>
+<span class="sd">          (will be normalised).</span>
+<span class="sd">        - ``None``: same as 0 (|0...0⟩).</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">initial_state</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">n_qubits</span> <span class="o">&lt;=</span> <span class="n">_MAX_QUBITS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"n_qubits must be in [1, </span><span class="si">{</span><span class="n">_MAX_QUBITS</span><span class="si">}</span><span class="s2">], got </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_n</span> <span class="o">=</span> <span class="n">n_qubits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dim</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">n_qubits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_state</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ── Initialisation helpers ────────────────────────────────────────────────</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_init_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">initial_state</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial_state</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="n">basis</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">initial_state</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">basis</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"initial_state </span><span class="si">{</span><span class="n">basis</span><span class="si">}</span><span class="s2"> out of range [0, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="si">}</span><span class="s2">)."</span>
+                <span class="p">)</span>
+            <span class="n">sv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+            <span class="n">sv</span><span class="p">[</span><span class="n">basis</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+            <span class="k">return</span> <span class="n">sv</span>
+        <span class="n">arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">initial_state</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"initial_state array length </span><span class="si">{</span><span class="n">arr</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2"> != 2**</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="si">}</span><span class="s2"> = </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="si">}</span><span class="s2">."</span>
+            <span class="p">)</span>
+        <span class="n">norm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">norm</span> <span class="o">&lt;</span> <span class="mf">1e-15</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"initial_state array has zero norm."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">arr</span> <span class="o">/</span> <span class="n">norm</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_qubit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"qubit"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">q</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> index </span><span class="si">{</span><span class="n">q</span><span class="si">}</span><span class="s2"> out of range [0, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="si">}</span><span class="s2">)."</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_1q</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gate</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">qubit</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_apply_single</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">,</span> <span class="n">gate</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_2q_ctrl</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gate</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="s2">"control"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">control</span> <span class="o">==</span> <span class="n">target</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"control and target qubits must differ."</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_apply_controlled</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">,</span> <span class="n">gate</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="c1"># ── Single-qubit gates ────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.i">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.i">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">i</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Identity gate (no-op; useful for explicit circuit notation)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_I</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.x">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.x">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">x</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Pauli-X (NOT) gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_X</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.y">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.y">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">y</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Pauli-Y gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_Y</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.z">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.z">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">z</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Pauli-Z gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_Z</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.h">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.h">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">h</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Hadamard gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_H</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.s">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.s">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">s</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""S gate (√Z, phase 90°)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_S</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.t">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.t">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">t</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""T gate (√S, phase 45°)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_T</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.sdg">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.sdg">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sdg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""S† gate (conjugate of S)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_Sdg</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.tdg">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.tdg">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">tdg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""T† gate (conjugate of T)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_Tdg</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.rx">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.rx">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Rotation around X axis by angle *theta* (radians)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_rx</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.ry">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.ry">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ry</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Rotation around Y axis by angle *theta* (radians)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_ry</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.rz">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.rz">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">rz</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Rotation around Z axis by angle *theta* (radians)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_rz</span><span class="p">(</span><span class="n">theta</span><span class="p">),</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.p">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.p">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">p</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Phase gate P(λ): |1⟩ → e^{iλ}|1⟩."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_phase</span><span class="p">(</span><span class="n">lam</span><span class="p">),</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.u3">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.u3">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">u3</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">phi</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""General single-qubit U3(θ, φ, λ) gate (OpenQASM U3)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_u3</span><span class="p">(</span><span class="n">theta</span><span class="p">,</span> <span class="n">phi</span><span class="p">,</span> <span class="n">lam</span><span class="p">),</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.custom">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.custom">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">custom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">qubit</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply an arbitrary 2×2 unitary gate to *qubit*."""</span>
+        <span class="n">m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"custom gate matrix must be 2×2, got </span><span class="si">{</span><span class="n">m</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">qubit</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ── Two-qubit gates ───────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.cnot">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.cnot">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cnot</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""CNOT (CX) gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_X</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.cx">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.cx">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for cnot()."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cnot</span><span class="p">(</span><span class="n">control</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.cy">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.cy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Controlled-Y gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_Y</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.cz">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.cz">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cz</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Controlled-Z gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_Z</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.ch">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.ch">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">control</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Controlled-H gate."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_H</span><span class="p">,</span> <span class="n">control</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.swap">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.swap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">swap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""SWAP gate."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">q0</span><span class="p">,</span> <span class="s2">"q0"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">q1</span><span class="p">,</span> <span class="s2">"q1"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">q0</span> <span class="o">==</span> <span class="n">q1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"SWAP qubits must differ."</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_apply_swap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.iswap">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.iswap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iswap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""iSWAP gate: SWAP with imaginary phase on swapped amplitudes."""</span>
+        <span class="n">_iSWAP</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="p">[[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+             <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+             <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="n">j</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+             <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]],</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">_DTYPE</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_unitary</span><span class="p">(</span><span class="n">_iSWAP</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_2q_unitary</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gate4</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply an arbitrary 4×4 unitary on qubits q0 and q1."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">q0</span><span class="p">,</span> <span class="s2">"q0"</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">q1</span><span class="p">,</span> <span class="s2">"q1"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">q0</span> <span class="o">==</span> <span class="n">q1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"2-qubit gate qubits must differ."</span><span class="p">)</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span>
+        <span class="n">sv</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">reshape</span><span class="p">([</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
+        <span class="c1"># Collect the (q0, q1) subspace</span>
+        <span class="n">gate</span> <span class="o">=</span> <span class="n">gate4</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>  <span class="c1"># [out0, out1, in0, in1]</span>
+        <span class="n">sv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tensordot</span><span class="p">(</span><span class="n">gate</span><span class="p">,</span> <span class="n">sv</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="p">[[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">]])</span>
+        <span class="c1"># tensordot result has shape (2, 2, ...) with out axes at positions 0,1</span>
+        <span class="n">sv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">moveaxis</span><span class="p">(</span><span class="n">sv</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">sv</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span>
+
+    <span class="c1"># ── Three-qubit gates ─────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.ccx">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.ccx">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ccx</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">c1</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Toffoli (CCX) gate."""</span>
+        <span class="k">for</span> <span class="n">q</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[(</span><span class="n">c0</span><span class="p">,</span> <span class="s2">"c0"</span><span class="p">),</span> <span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="s2">"c1"</span><span class="p">),</span> <span class="p">(</span><span class="n">target</span><span class="p">,</span> <span class="s2">"target"</span><span class="p">)]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">({</span><span class="n">c0</span><span class="p">,</span> <span class="n">c1</span><span class="p">,</span> <span class="n">target</span><span class="p">})</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"CCX requires three distinct qubits."</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_apply_toffoli</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">,</span> <span class="n">c0</span><span class="p">,</span> <span class="n">c1</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.toffoli">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.toffoli">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">toffoli</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">c1</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">target</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for ccx()."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ccx</span><span class="p">(</span><span class="n">c0</span><span class="p">,</span> <span class="n">c1</span><span class="p">,</span> <span class="n">target</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.cswap">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.cswap">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cswap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctrl</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Fredkin (CSWAP) gate: swap q0 and q1 when ctrl=|1⟩."""</span>
+        <span class="k">for</span> <span class="n">q</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">[(</span><span class="n">ctrl</span><span class="p">,</span> <span class="s2">"ctrl"</span><span class="p">),</span> <span class="p">(</span><span class="n">q0</span><span class="p">,</span> <span class="s2">"q0"</span><span class="p">),</span> <span class="p">(</span><span class="n">q1</span><span class="p">,</span> <span class="s2">"q1"</span><span class="p">)]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_check_qubit</span><span class="p">(</span><span class="n">q</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">({</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">})</span> <span class="o">!=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"CSWAP requires three distinct qubits."</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="n">_apply_cswap</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">,</span> <span class="n">ctrl</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.fredkin">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.fredkin">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fredkin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ctrl</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q0</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">q1</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Alias for cswap()."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">cswap</span><span class="p">(</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ── Measurement &amp; observables ─────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.statevector">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.statevector">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">statevector</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a copy of the current state as a complex128 NumPy array.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray, shape (2**n_qubits,), dtype complex128</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.probabilities">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.probabilities">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the measurement probability of each computational basis state.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        np.ndarray, shape (2**n_qubits,), dtype float64</span>
+<span class="sd">            ``probs[i]`` = |⟨i|ψ⟩|².</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="p">)</span><span class="o">.</span><span class="n">real</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.sample">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Counter</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Sample computational basis measurements.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        n_shots : int</span>
+<span class="sd">            Number of measurement shots.</span>
+<span class="sd">        seed : int | None</span>
+<span class="sd">            RNG seed for reproducibility.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        Counter[str]</span>
+<span class="sd">            Mapping from bitstring (big-endian, qubit 0 = leftmost) to count.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">n_shots</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_shots must be &gt;= 1, got </span><span class="si">{</span><span class="n">n_shots</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span><span class="p">()</span>
+        <span class="c1"># Normalise to guard against floating-point drift</span>
+        <span class="n">probs</span> <span class="o">/=</span> <span class="n">probs</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">probs</span><span class="p">)</span>
+        <span class="n">fmt</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="se">{{</span><span class="s2">:0</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="si">}</span><span class="s2">b</span><span class="se">}}</span><span class="s2">"</span>
+        <span class="k">return</span> <span class="n">Counter</span><span class="p">(</span><span class="n">fmt</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">indices</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.expectation">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.expectation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">expectation</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">pauli</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">qubits</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Compute ⟨ψ|P|ψ⟩ for a Pauli string P.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        pauli : str</span>
+<span class="sd">            Pauli string, e.g. ``"ZZ"`` or ``"XIZ"``.</span>
+<span class="sd">            - If *qubits* is ``None``: length must equal n_qubits; character i</span>
+<span class="sd">              applies to qubit i.</span>
+<span class="sd">            - If *qubits* is given: ``pauli[k]`` applies to ``qubits[k]``.</span>
+<span class="sd">        qubits : sequence of int | None</span>
+<span class="sd">            Qubit indices for each character in *pauli*.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        float</span>
+<span class="sd">            Real part of the expectation value (imaginary part is zero for</span>
+<span class="sd">            Hermitian observables).</span>
+<span class="sd">        """</span>
+        <span class="n">pauli</span> <span class="o">=</span> <span class="n">pauli</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">qubits</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">qubits</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Pauli string length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span><span class="si">}</span><span class="s2"> != len(qubits) </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">qubits</span><span class="p">)</span><span class="si">}</span><span class="s2">; "</span>
+                    <span class="s2">"both must have the same number of elements."</span>
+                <span class="p">)</span>
+            <span class="n">pauli_map</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">pauli</span><span class="p">,</span> <span class="n">qubits</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"Pauli string length </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pauli</span><span class="p">)</span><span class="si">}</span><span class="s2"> != n_qubits </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="si">}</span><span class="s2">. "</span>
+                    <span class="s2">"Pass qubits= to specify which qubits the string acts on."</span>
+                <span class="p">)</span>
+            <span class="n">pauli_map</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">pauli</span><span class="p">,</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">)))</span>
+
+        <span class="c1"># Apply each non-identity Pauli factor to a working copy of the state.</span>
+        <span class="c1"># This scales as O(n × 2^n) instead of the O(4^n) kron-matrix approach,</span>
+        <span class="c1"># enabling the full 25-qubit range without OOM.</span>
+        <span class="n">ket</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">p</span><span class="p">,</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">pauli_map</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">p</span> <span class="o">!=</span> <span class="s2">"I"</span><span class="p">:</span>
+                <span class="n">ket</span> <span class="o">=</span> <span class="n">_apply_single</span><span class="p">(</span><span class="n">ket</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="p">,</span> <span class="n">_PAULI_MATRIX</span><span class="p">[</span><span class="n">p</span><span class="p">],</span> <span class="n">q</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span> <span class="o">@</span> <span class="n">ket</span><span class="p">)</span><span class="o">.</span><span class="n">real</span><span class="p">)</span></div>
+
+
+    <span class="c1"># ── Utility ───────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.reset">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.reset">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">initial_state</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Reset the simulator to a new initial state.</span>
+
+<span class="sd">        Returns ``self`` so it can be chained.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_init_state</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.copy">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.copy">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">copy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a deep copy of this simulator."""</span>
+        <span class="n">new</span> <span class="o">=</span> <span class="n">StatevectorSimulator</span><span class="o">.</span><span class="fm">__new__</span><span class="p">(</span><span class="n">StatevectorSimulator</span><span class="p">)</span>
+        <span class="n">new</span><span class="o">.</span><span class="n">_n</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span>
+        <span class="n">new</span><span class="o">.</span><span class="n">_dim</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dim</span>
+        <span class="n">new</span><span class="o">.</span><span class="n">_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_state</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">new</span></div>
+
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_qubits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Number of qubits."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_n</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">dim</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Hilbert space dimension (2**n_qubits)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dim</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"StatevectorSimulator(n_qubits=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"dim=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_dim</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"StatevectorSimulator(</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">_n</span><span class="si">}</span><span class="s2"> qubits)"</span>
+
+    <span class="c1"># ── Dict-based circuit execution (Engine bridge) ──────────────────────────</span>
+
+<div class="viewcode-block" id="StatevectorSimulator.from_circuit_dict">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.from_circuit_dict">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_circuit_dict</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">circuit</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"StatevectorSimulator"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Build and execute a circuit from the native QuantX circuit dict.</span>
+
+<span class="sd">        This bridges the ``Engine.run_circuit()`` schema to the simulator,</span>
+<span class="sd">        enabling pure-Python fallback when the native library is absent.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        circuit : dict</span>
+<span class="sd">            QuantX native circuit dict with keys:</span>
+<span class="sd">            ``qubits``, ``operations``, ``shots``, ``seed``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        StatevectorSimulator</span>
+<span class="sd">            Simulator at the final state after all operations.</span>
+<span class="sd">        """</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"qubits"</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"seed"</span><span class="p">,</span> <span class="mi">42</span><span class="p">))</span>
+        <span class="n">sim</span> <span class="o">=</span> <span class="bp">cls</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"operations"</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="n">sim</span><span class="o">.</span><span class="n">_apply_circuit_op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">sim</span></div>
+
+
+<div class="viewcode-block" id="StatevectorSimulator.run_circuit_dict">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.statevector.html#quantx_engine.contrib.statevector.StatevectorSimulator.run_circuit_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run_circuit_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">circuit</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Execute a QuantX circuit dict and return a result dict.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict</span>
+<span class="sd">            Contains ``"ok"``, ``"state"`` (list of [re, im] pairs),</span>
+<span class="sd">            ``"counts"`` (dict mapping bitstring → count), ``"backend"``.</span>
+<span class="sd">        """</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"qubits"</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">shots</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"shots"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">seed</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"seed"</span><span class="p">,</span> <span class="mi">42</span><span class="p">))</span>
+        <span class="n">sim</span> <span class="o">=</span> <span class="n">StatevectorSimulator</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">op</span> <span class="ow">in</span> <span class="n">circuit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"operations"</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="n">sim</span><span class="o">.</span><span class="n">_apply_circuit_op</span><span class="p">(</span><span class="n">op</span><span class="p">)</span>
+        <span class="n">sv</span> <span class="o">=</span> <span class="n">sim</span><span class="o">.</span><span class="n">statevector</span><span class="p">()</span>
+        <span class="n">counts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">shots</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">counts</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">sim</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">shots</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">))</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"ok"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"backend"</span><span class="p">:</span> <span class="s2">"pure_python_statevector"</span><span class="p">,</span>
+            <span class="s2">"state"</span><span class="p">:</span> <span class="p">[[</span><span class="n">c</span><span class="o">.</span><span class="n">real</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">imag</span><span class="p">]</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">sv</span><span class="p">],</span>
+            <span class="s2">"counts"</span><span class="p">:</span> <span class="n">counts</span><span class="p">,</span>
+            <span class="s2">"n_qubits"</span><span class="p">:</span> <span class="n">n</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_circuit_op</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">op</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Apply a single circuit operation dict to this simulator."""</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">op</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="n">targets</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">op</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"targets"</span><span class="p">,</span> <span class="p">[])]</span>
+        <span class="n">controls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">q</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="n">op</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"controls"</span><span class="p">,</span> <span class="p">[])]</span>
+        <span class="n">params</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">p</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">op</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"params"</span><span class="p">,</span> <span class="p">[])]</span>
+
+        <span class="n">_SINGLE</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"H"</span><span class="p">:</span> <span class="n">_H</span><span class="p">,</span> <span class="s2">"X"</span><span class="p">:</span> <span class="n">_X</span><span class="p">,</span> <span class="s2">"Y"</span><span class="p">:</span> <span class="n">_Y</span><span class="p">,</span> <span class="s2">"Z"</span><span class="p">:</span> <span class="n">_Z</span><span class="p">,</span>
+            <span class="s2">"S"</span><span class="p">:</span> <span class="n">_S</span><span class="p">,</span> <span class="s2">"T"</span><span class="p">:</span> <span class="n">_T</span><span class="p">,</span> <span class="s2">"SDG"</span><span class="p">:</span> <span class="n">_Sdg</span><span class="p">,</span> <span class="s2">"TDG"</span><span class="p">:</span> <span class="n">_Tdg</span><span class="p">,</span> <span class="s2">"I"</span><span class="p">:</span> <span class="n">_I</span><span class="p">,</span>
+            <span class="s2">"IDENTITY"</span><span class="p">:</span> <span class="n">_I</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_SINGLE</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">targets</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_SINGLE</span><span class="p">[</span><span class="n">name</span><span class="p">],</span> <span class="n">t</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"RX"</span><span class="p">,</span> <span class="s2">"U1X"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_rx</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"RY"</span><span class="p">,</span> <span class="s2">"U1Y"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_ry</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"RZ"</span><span class="p">,</span> <span class="s2">"U1Z"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_rz</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"P"</span><span class="p">,</span> <span class="s2">"PHASE"</span><span class="p">,</span> <span class="s2">"U1"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_phase</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"U3"</span><span class="p">,</span> <span class="s2">"U"</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_1q</span><span class="p">(</span><span class="n">_u3</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"CNOT"</span><span class="p">,</span> <span class="s2">"CX"</span><span class="p">):</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_X</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"CY"</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_Y</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"CZ"</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_Z</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"CH"</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_apply_2q_ctrl</span><span class="p">(</span><span class="n">_H</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"SWAP"</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">swap</span><span class="p">(</span><span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">targets</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"ISWAP"</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">iswap</span><span class="p">(</span><span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">targets</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"CCX"</span><span class="p">,</span> <span class="s2">"TOFFOLI"</span><span class="p">):</span>
+            <span class="n">c0</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">controls</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">c1</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">controls</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="mi">2</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="n">targets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">ccx</span><span class="p">(</span><span class="n">c0</span><span class="p">,</span> <span class="n">c1</span><span class="p">,</span> <span class="n">t</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"CSWAP"</span><span class="p">,</span> <span class="s2">"FREDKIN"</span><span class="p">):</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">controls</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">cswap</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">targets</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                       <span class="n">targets</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">controls</span> <span class="k">else</span> <span class="n">targets</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"MEASURE"</span><span class="p">,</span> <span class="s2">"M"</span><span class="p">,</span> <span class="s2">"MEAS"</span><span class="p">):</span>
+            <span class="k">pass</span>  <span class="c1"># Non-destructive; handled by shots sampling</span>
+        <span class="k">elif</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"BARRIER"</span><span class="p">:</span>
+            <span class="k">pass</span>  <span class="c1"># No-op in ideal simulation</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Unknown gate: </span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2">.  "</span>
+                <span class="s2">"Supported: H, X, Y, Z, S, T, Sdg, Tdg, Rx, Ry, Rz, P, U3, "</span>
+                <span class="s2">"CNOT/CX, CY, CZ, CH, SWAP, iSWAP, CCX/Toffoli, CSWAP/Fredkin."</span>
+            <span class="p">)</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

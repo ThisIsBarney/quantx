@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="500" viewBox="0 0 780 500" font-family="Segoe UI, Arial, sans-serif">
+<rect width="780" height="500" fill="white"/>
+<line x1="92" y1="426.2" x2="630" y2="426.2" stroke="#eee" stroke-width="1"/>
+<text x="84" y="430.2" text-anchor="end" font-size="11" fill="#444">-0.9</text>
+<line x1="92" y1="367.1" x2="630" y2="367.1" stroke="#eee" stroke-width="1"/>
+<text x="84" y="371.1" text-anchor="end" font-size="11" fill="#444">-0.8</text>
+<line x1="92" y1="308.1" x2="630" y2="308.1" stroke="#eee" stroke-width="1"/>
+<text x="84" y="312.1" text-anchor="end" font-size="11" fill="#444">-0.7</text>
+<line x1="92" y1="249.0" x2="630" y2="249.0" stroke="#eee" stroke-width="1"/>
+<text x="84" y="253.0" text-anchor="end" font-size="11" fill="#444">-0.6</text>
+<line x1="92" y1="189.9" x2="630" y2="189.9" stroke="#eee" stroke-width="1"/>
+<text x="84" y="193.9" text-anchor="end" font-size="11" fill="#444">-0.5</text>
+<line x1="92" y1="130.9" x2="630" y2="130.9" stroke="#eee" stroke-width="1"/>
+<text x="84" y="134.9" text-anchor="end" font-size="11" fill="#444">-0.4</text>
+<line x1="215.0" y1="438" x2="215.0" y2="443" stroke="#444" stroke-width="1"/>
+<text x="215.0" y="458" text-anchor="middle" font-size="11" fill="#444">16</text>
+<line x1="337.9" y1="438" x2="337.9" y2="443" stroke="#444" stroke-width="1"/>
+<text x="337.9" y="458" text-anchor="middle" font-size="11" fill="#444">32</text>
+<line x1="460.9" y1="438" x2="460.9" y2="443" stroke="#444" stroke-width="1"/>
+<text x="460.9" y="458" text-anchor="middle" font-size="11" fill="#444">48</text>
+<line x1="583.9" y1="438" x2="583.9" y2="443" stroke="#444" stroke-width="1"/>
+<text x="583.9" y="458" text-anchor="middle" font-size="11" fill="#444">64</text>
+<line x1="92" y1="60" x2="92" y2="438" stroke="#444" stroke-width="1.2"/>
+<line x1="92" y1="438" x2="630" y2="438" stroke="#444" stroke-width="1.2"/>
+<text x="361" y="474" text-anchor="middle" font-size="13" fill="#222">chain length  N  (half-filling)</text>
+<text x="24" y="249" text-anchor="middle" font-size="13" fill="#222" transform="rotate(-90 24 249)">bulk energy density  e_bulk  (t=1)</text>
+<text x="361" y="26" text-anchor="middle" font-size="15" font-weight="bold" fill="#111">Fermionic Hubbard chain: fast block path vs exact Lieb-Wu Bethe-ansatz</text>
+<text x="361" y="44" text-anchor="middle" font-size="12" fill="#555">d=4 Jordan-Wigner MPO via run_dmrg_blocks; dashed = exact e(U), points = (E_N&#8722;E_{N&#8722;dN})/dN</text>
+<line x1="92" y1="393.3" x2="630" y2="393.3" stroke="#1f77b4" stroke-width="1.3" stroke-dasharray="6 4" opacity="0.75"/>
+<text x="638" y="390.3" font-size="12" font-weight="bold" fill="#1f77b4">U=2</text>
+<text x="638" y="405.3" font-size="9.5" fill="#666">e=-0.8444</text>
+<text x="638" y="417.3" font-size="9" fill="#999">err 8e-05</text>
+<polyline points="337.9,393.1 460.9,393.3 583.9,393.3" fill="none" stroke="#1f77b4" stroke-width="2.2"/>
+<circle cx="337.9" cy="393.1" r="3.6" fill="#1f77b4"/>
+<circle cx="460.9" cy="393.3" r="3.6" fill="#1f77b4"/>
+<circle cx="583.9" cy="393.3" r="3.6" fill="#1f77b4"/>
+<line x1="92" y1="233.5" x2="630" y2="233.5" stroke="#d62728" stroke-width="1.3" stroke-dasharray="6 4" opacity="0.75"/>
+<text x="638" y="230.5" font-size="12" font-weight="bold" fill="#d62728">U=4</text>
+<text x="638" y="245.5" font-size="9.5" fill="#666">e=-0.5737</text>
+<text x="638" y="257.5" font-size="9" fill="#999">err 5e-05</text>
+<polyline points="337.9,233.3 460.9,233.4 583.9,233.5" fill="none" stroke="#d62728" stroke-width="2.2"/>
+<circle cx="337.9" cy="233.3" r="3.6" fill="#d62728"/>
+<circle cx="460.9" cy="233.4" r="3.6" fill="#d62728"/>
+<circle cx="583.9" cy="233.5" r="3.6" fill="#d62728"/>
+<line x1="92" y1="88.1" x2="630" y2="88.1" stroke="#2ca02c" stroke-width="1.3" stroke-dasharray="6 4" opacity="0.75"/>
+<text x="638" y="85.1" font-size="12" font-weight="bold" fill="#2ca02c">U=8</text>
+<text x="638" y="100.1" font-size="9.5" fill="#666">e=-0.3275</text>
+<text x="638" y="112.1" font-size="9" fill="#999">err 3e-05</text>
+<polyline points="337.9,88.0 460.9,88.0 583.9,88.1" fill="none" stroke="#2ca02c" stroke-width="2.2"/>
+<circle cx="337.9" cy="88.0" r="3.6" fill="#2ca02c"/>
+<circle cx="460.9" cy="88.0" r="3.6" fill="#2ca02c"/>
+<circle cx="583.9" cy="88.1" r="3.6" fill="#2ca02c"/>
+<text x="361" y="491" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">Mott regime (U&gt;0, gapped charge -&gt; area law, &#967;=128 converged). Brute-force ED is impossible at these N; Lieb-Wu (1968) is exact.</text>
+</svg>

@@ -1,0 +1,23 @@
+﻿quantx\_engine.contrib.dyndecouple
+==================================
+
+.. automodule:: quantx_engine.contrib.dyndecouple
+
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      DDRunResult
+      DDSequence
+      DynamicalDecoupling
+      FilterFunctionResult
+      MemoryResult
+      QuantumMemory
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      DDError
+   

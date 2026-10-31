@@ -1,0 +1,87 @@
+QuantX
+======
+
+**QuantX** is a tensor-network engine for quantum many-body physics. It runs
+block-sparse MPS algorithms (DMRG, TDVP and fermionic HVA circuits) that conserve U(1),
+U(1)×U(1) and SU(2) charges exactly. The core is C++20, with a Python API.
+
+These pages document what the engine does from Python and how each capability is
+checked. Everything else in the package is marked experimental.
+
+What is verified, and against what
+----------------------------------
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 30 36
+
+   * - Capability
+     - Python
+     - Checked against
+   * - Ground states of the XXZ, J1-J2, spin-1 Heisenberg and Fermi-Hubbard chains, in a
+       chosen symmetry sector
+     - :func:`~quantx_engine.dmrg.ground_state` with the models of
+       :mod:`quantx_engine.models`
+     - exact diagonalisation, written independently of the engine, to 1e-10
+   * - Hubbard ground states on ladders, strips and cylinders
+     - ``ground_state(HubbardLattice(...))``
+     - exact diagonalisation on a ladder and a cylinder, where the fermion signs are
+       physical, to 1e-10
+   * - Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy,
+       entanglement entropy, truncation
+     - :func:`~quantx_engine.hva.circuit`, :func:`~quantx_engine.hva.layout`
+     - an independent state vector: energy and entropies to 1e-10 from a product start;
+       to 1e-6 from the default U = 0 start (about 1e-8 measured)
+   * - The gradient of an HVA circuit's energy in every angle, by the adjoint method: one
+       pass back through the circuit, with no circuit per angle
+     - ``hva.circuit(..., gradient=True)``
+     - the exact gradient of the same independent state vector, to 1e-10 with
+       ``svd="direct"`` (1e-6 on the default, faster route, whose rounding puts it a
+       few 1e-9 off), and central differences of the engine's own energy, to 1e-8; from
+       a product start
+   * - Finite-temperature statics, the dynamical structure factor S(k, ω, T) and the
+       optical conductivity σ(ω, T) of the XXZ, spin-1 and Hubbard chains
+     - :mod:`quantx_engine.thermal`
+     - exact diagonalisation of the whole Hilbert space, to the second-order Trotter
+       error of the steps: below 1e-3 at the default step 0.05, falling by 4 at half
+       the step; the transforms against Lehmann sums to 1e-8
+   * - Zero-temperature dynamics of the XXZ chain: a Neel quench, the correlations
+       behind S(k, ω), the Loschmidt echo and the current-current correlator, by TEBD
+       with either Trotter scheme -- the default sweep, or TeNPy's even/odd splitting,
+       whose layers batch their SVDs
+     - ``tdvp.TDVPSolver``, ``tdvp.LoschmidtSolver``,
+       ``structure_factor.StructureFactorSolver`` and ``ConductivitySolver``, with
+       ``scheme="sweep"`` or ``scheme="even_odd"``
+     - exact diagonalisation, to the second-order Trotter error of the steps: below
+       1e-3 for the quench at step 0.02, below 8e-3 for the correlations at 0.05
+
+These checks run in CI on a Linux build of the engine (``test_models_ed.py``,
+``test_hva_statevector.py``, ``test_hva_gradient.py``, ``test_thermal_ed.py`` and
+``test_tebd_schemes.py`` in ``python/quantx_engine/tests/``).
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting started
+
+   installation
+   quickstart
+   results
+
+.. toctree::
+   :maxdepth: 2
+   :caption: API reference
+
+   api/engine
+   api/index
+
+.. toctree::
+   :maxdepth: 1
+   :caption: More
+
+   rest_api
+   changelog
+
+The project's `roadmap <https://github.com/ThisIsBarney/quantx/blob/master/ROADMAP.md>`_
+says where it is going, and the
+`contributing guide <https://github.com/ThisIsBarney/quantx/blob/master/CONTRIBUTING.md>`_
+says how to take part. QuantX is released under the MIT License.

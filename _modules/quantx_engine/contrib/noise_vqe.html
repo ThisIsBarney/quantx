@@ -1,0 +1,1065 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.noise_vqe - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.contrib.noise_vqe</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""Noise-aware VQE — M95.</span>
+
+<span class="sd">Extends the existing VQE machinery with:</span>
+
+<span class="sd">* **Shot noise** — expectation values are estimated from a finite number of</span>
+<span class="sd">  measurement samples rather than exact computation.</span>
+<span class="sd">* **Hardware noise model** — each gate application is followed by the</span>
+<span class="sd">  appropriate depolarizing / amplitude-damping channel (via the density-matrix</span>
+<span class="sd">  simulator in :mod:`quantx_engine.contrib.primitives`).</span>
+<span class="sd">* **SPSA optimizer** — Simultaneous Perturbation Stochastic Approximation uses</span>
+<span class="sd">  only 2 function evaluations per iteration regardless of parameter count and</span>
+<span class="sd">  is therefore well-suited for noisy landscapes.</span>
+<span class="sd">* **Nelder-Mead fallback** — included for noiseless or low-shot settings.</span>
+
+<span class="sd">Classes</span>
+<span class="sd">-------</span>
+<span class="sd">* :class:`NoiseVQEError` — base exception.</span>
+<span class="sd">* :class:`SPSAOptimizer` — gradient-free SPSA optimizer.</span>
+<span class="sd">* :class:`NoiseAwareVQEResult` — result container.</span>
+<span class="sd">* :class:`NoiseAwareVQE` — main solver.</span>
+
+<span class="sd">Functions</span>
+<span class="sd">---------</span>
+<span class="sd">* :func:`hardware_efficient_vqe` — convenience wrapper.</span>
+<span class="sd">* :func:`build_hea_circuit` — construct a hardware-efficient ansatz circuit dict.</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Kandala, A. et al. (2017). Hardware-efficient variational quantum</span>
+<span class="sd">       eigensolver for small molecules and quantum magnets.</span>
+<span class="sd">       *Nature* 549, 242–246.</span>
+<span class="sd">       https://doi.org/10.1038/nature23879</span>
+
+<span class="sd">.. [2] Temme, K., Bravyi, S. &amp; Gambetta, J. M. (2017). Error mitigation for</span>
+<span class="sd">       short-depth quantum circuits. *Phys. Rev. Lett.* 119, 180509.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevLett.119.180509</span>
+
+<span class="sd">.. [3] Spall, J. C. (1992). Multivariate stochastic approximation using a</span>
+<span class="sd">       simultaneous perturbation gradient approximation.</span>
+<span class="sd">       *IEEE Trans. Autom. Control* 37, 332–341.</span>
+<span class="sd">       https://doi.org/10.1109/9.119632</span>
+
+<span class="sd">Physical validation</span>
+<span class="sd">-------------------</span>
+<span class="sd">Noise-aware VQE on H2 minimal basis converges to a final energy within 10%</span>
+<span class="sd">of the noiseless FCI value for depolarising error rate p &lt;= 0.01 per gate.</span>
+<span class="sd">ZNE (zero-noise extrapolation) Richardson extrapolation reduces the bias</span>
+<span class="sd">by an order of magnitude compared to uncorrected noisy VQE [Temme2017].</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Callable</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+
+<span class="c1"># ── Imports from existing modules (lazy where optional) ─────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_pauli_matrix</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">obs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Get dense matrix for a SparsePauliOp or ndarray observable."""</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">obs</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">complex</span><span class="p">)</span>
+    <span class="c1"># SparsePauliOp path</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.primitives</span><span class="w"> </span><span class="kn">import</span> <span class="n">_sparse_pauli_to_matrix</span>
+    <span class="k">return</span> <span class="n">_sparse_pauli_to_matrix</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_simulate_dm</span><span class="p">(</span><span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">],</span> <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">noise_model</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Run density-matrix simulation of a circuit with optional noise."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.primitives</span><span class="w"> </span><span class="kn">import</span> <span class="n">_dm_simulate</span>
+    <span class="k">return</span> <span class="n">_dm_simulate</span><span class="p">(</span><span class="n">ops</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">,</span> <span class="n">noise_model</span><span class="p">,</span> <span class="n">param_values</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+
+<span class="c1"># ── Exception ─────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="NoiseVQEError">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.NoiseVQEError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NoiseVQEError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised on invalid noise-aware VQE inputs."""</span></div>
+
+
+
+<span class="c1"># ── HEA circuit builder ───────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="build_hea_circuit">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.build_hea_circuit">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">build_hea_circuit</span><span class="p">(</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">theta</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">entanglement</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Build a hardware-efficient ansatz (HEA) as a list of gate operations.</span>
+
+<span class="sd">    Architecture::</span>
+
+<span class="sd">        [RY(θ) on each qubit] × n_layers</span>
+<span class="sd">        with CNOT(i, i+1) entanglement after each layer</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        Number of qubits.</span>
+<span class="sd">    n_layers : int</span>
+<span class="sd">        Number of parameterised layers (each layer has n_qubits RY gates plus</span>
+<span class="sd">        n_qubits-1 CNOT gates).</span>
+<span class="sd">    theta : ndarray, shape (n_qubits * n_layers,)</span>
+<span class="sd">        Rotation angles.  Qubit-major order: layer 0 qubits 0..N-1, then</span>
+<span class="sd">        layer 1 qubits 0..N-1, etc.</span>
+<span class="sd">    entanglement : str</span>
+<span class="sd">        ``"linear"`` (chain: q0→q1→…→qN-1) or ``"full"`` (all pairs).</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list[dict]</span>
+<span class="sd">        Circuit as a sequence of gate operation dicts compatible with</span>
+<span class="sd">        :func:`quantx_engine.contrib.primitives._dm_simulate`.</span>
+<span class="sd">    """</span>
+    <span class="n">n_params</span> <span class="o">=</span> <span class="n">n_qubits</span> <span class="o">*</span> <span class="n">n_layers</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">n_params</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"HEA with </span><span class="si">{</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits × </span><span class="si">{</span><span class="n">n_layers</span><span class="si">}</span><span class="s2"> layers needs "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">n_params</span><span class="si">}</span><span class="s2"> parameters, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+        <span class="p">)</span>
+
+    <span class="n">ops</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_layers</span><span class="p">):</span>
+        <span class="c1"># Rotation layer</span>
+        <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">):</span>
+            <span class="n">angle</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="n">layer</span> <span class="o">*</span> <span class="n">n_qubits</span> <span class="o">+</span> <span class="n">q</span><span class="p">])</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">"name"</span><span class="p">:</span> <span class="s2">"ry"</span><span class="p">,</span> <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">q</span><span class="p">],</span> <span class="s2">"params"</span><span class="p">:</span> <span class="p">[</span><span class="n">angle</span><span class="p">]})</span>
+
+        <span class="c1"># Entanglement layer</span>
+        <span class="k">if</span> <span class="n">entanglement</span> <span class="o">==</span> <span class="s2">"linear"</span><span class="p">:</span>
+            <span class="n">pairs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">q</span><span class="p">,</span> <span class="n">q</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">q</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)]</span>
+        <span class="k">elif</span> <span class="n">entanglement</span> <span class="o">==</span> <span class="s2">"full"</span><span class="p">:</span>
+            <span class="n">pairs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">q0</span><span class="p">,</span> <span class="n">q1</span><span class="p">)</span> <span class="k">for</span> <span class="n">q0</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">)</span>
+                     <span class="k">for</span> <span class="n">q1</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">q0</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">n_qubits</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Unknown entanglement pattern </span><span class="si">{</span><span class="n">entanglement</span><span class="si">!r}</span><span class="s2">. "</span>
+                <span class="s2">"Use 'linear' or 'full'."</span>
+            <span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">ctrl</span><span class="p">,</span> <span class="n">tgt</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="n">ops</span><span class="o">.</span><span class="n">append</span><span class="p">({</span>
+                <span class="s2">"name"</span><span class="p">:</span> <span class="s2">"cx"</span><span class="p">,</span>
+                <span class="s2">"qubits"</span><span class="p">:</span> <span class="p">[</span><span class="n">ctrl</span><span class="p">,</span> <span class="n">tgt</span><span class="p">],</span>
+                <span class="s2">"params"</span><span class="p">:</span> <span class="p">[],</span>
+                <span class="s2">"controls"</span><span class="p">:</span> <span class="p">[</span><span class="n">ctrl</span><span class="p">],</span>
+                <span class="s2">"targets"</span><span class="p">:</span> <span class="p">[</span><span class="n">tgt</span><span class="p">],</span>
+            <span class="p">})</span>
+
+    <span class="k">return</span> <span class="n">ops</span></div>
+
+
+
+<div class="viewcode-block" id="n_hea_params">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.n_hea_params">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">n_hea_params</span><span class="p">(</span><span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Number of parameters for a hardware-efficient ansatz."""</span>
+    <span class="k">return</span> <span class="n">n_qubits</span> <span class="o">*</span> <span class="n">n_layers</span></div>
+
+
+
+<span class="c1"># ── Shot-noise expectation value ──────────────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_expect_noisy</span><span class="p">(</span>
+    <span class="n">rho</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">H_mat</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">rng</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">Generator</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Estimate ⟨H⟩ from a density matrix with optional shot noise.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    rho : ndarray, shape (d, d)</span>
+<span class="sd">        Density matrix (trace-1, positive semi-definite).</span>
+<span class="sd">    H_mat : ndarray, shape (d, d)</span>
+<span class="sd">        Observable matrix (Hermitian).</span>
+<span class="sd">    n_shots : int</span>
+<span class="sd">        Number of measurement shots. If ``&lt;=0`` use exact expectation.</span>
+<span class="sd">    rng : Generator</span>
+<span class="sd">        NumPy random generator for reproducibility.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    float</span>
+<span class="sd">    """</span>
+    <span class="c1"># Exact expectation value</span>
+    <span class="n">exact</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">trace</span><span class="p">(</span><span class="n">H_mat</span> <span class="o">@</span> <span class="n">rho</span><span class="p">)))</span>
+
+    <span class="k">if</span> <span class="n">n_shots</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">exact</span>
+
+    <span class="c1"># Shot-noise: draw eigenvalue samples weighted by Born probabilities</span>
+    <span class="c1"># Diagonalise H_mat and sample according to the outcome probabilities</span>
+    <span class="n">eigvals</span><span class="p">,</span> <span class="n">eigvecs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigh</span><span class="p">(</span><span class="n">H_mat</span><span class="p">)</span>
+    <span class="c1"># Probability of outcome k: p_k = ⟨k|ρ|k⟩</span>
+    <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">real</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,jk,ki-&gt;i"</span><span class="p">,</span> <span class="n">eigvecs</span><span class="o">.</span><span class="n">conj</span><span class="p">()</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">rho</span><span class="p">,</span> <span class="n">eigvecs</span><span class="p">))</span>
+    <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">probs</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="n">probs</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">total</span> <span class="o">&lt;</span> <span class="mf">1e-20</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">exact</span>
+    <span class="n">probs</span> <span class="o">/=</span> <span class="n">total</span>
+
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">eigvals</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">probs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">samples</span><span class="p">))</span>
+
+
+<span class="c1"># ── SPSA Optimizer ────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="SPSAOptimizer">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.SPSAOptimizer">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SPSAOptimizer</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Simultaneous Perturbation Stochastic Approximation (SPSA) optimizer.</span>
+
+<span class="sd">    Uses only 2 function evaluations per iteration regardless of parameter</span>
+<span class="sd">    count, making it efficient for noisy energy landscapes.</span>
+
+<span class="sd">    The gradient estimate is::</span>
+
+<span class="sd">        ĝ_k = [f(θ_k + c_k Δ_k) − f(θ_k − c_k Δ_k)] / (2 c_k) · Δ_k⁻¹</span>
+
+<span class="sd">    where ``Δ_k`` is a random ±1 Bernoulli vector (Rademacher distribution).</span>
+
+<span class="sd">    Update rule::</span>
+
+<span class="sd">        θ_{k+1} = θ_k − a_k ĝ_k</span>
+<span class="sd">        a_k = a / (A + k + 1)^α</span>
+<span class="sd">        c_k = c / (k + 1)^γ</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : float</span>
+<span class="sd">        Initial step size numerator (controls learning rate magnitude).</span>
+<span class="sd">    c : float</span>
+<span class="sd">        Initial perturbation size (should be ≈ noise level in ``f``).</span>
+<span class="sd">    A : float</span>
+<span class="sd">        Stability constant (typically set to ≈ 10 % of ``max_iter``).</span>
+<span class="sd">    alpha : float</span>
+<span class="sd">        Step-size decay exponent (theory: 0.602).</span>
+<span class="sd">    gamma : float</span>
+<span class="sd">        Perturbation-size decay exponent (theory: 0.101).</span>
+<span class="sd">    seed : int or None</span>
+<span class="sd">        Random seed for reproducibility.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="SPSAOptimizer.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.SPSAOptimizer.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">a</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">c</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">A</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.602</span><span class="p">,</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.101</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">42</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">=</span> <span class="n">a</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">c</span> <span class="o">=</span> <span class="n">c</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">=</span> <span class="n">A</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span> <span class="o">=</span> <span class="n">gamma</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SPSAOptimizer.minimize">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.SPSAOptimizer.minimize">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">minimize</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">f</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="nb">float</span><span class="p">],</span>
+        <span class="n">x0</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
+        <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-5</span><span class="p">,</span>
+        <span class="n">callback</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Minimise ``f`` starting from ``x0``.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        f : callable</span>
+<span class="sd">            Objective function.</span>
+<span class="sd">        x0 : ndarray</span>
+<span class="sd">            Initial parameter vector.</span>
+<span class="sd">        max_iter : int</span>
+<span class="sd">            Maximum number of iterations.</span>
+<span class="sd">        tol : float</span>
+<span class="sd">            Stop when ``|f(θ) - f(θ_prev)| &lt; tol`` for 5 consecutive steps.</span>
+<span class="sd">        callback : callable, optional</span>
+<span class="sd">            Called as ``callback(iter, theta, fval)`` after each step.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        theta_opt : ndarray</span>
+<span class="sd">        fval_history : list[float]</span>
+<span class="sd">        """</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="n">x0</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">float</span><span class="p">)</span>
+        <span class="n">history</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">patience</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iter</span><span class="p">):</span>
+            <span class="n">ak</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">a</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span> <span class="o">+</span> <span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span>
+            <span class="n">ck</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">c</span> <span class="o">/</span> <span class="p">(</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="bp">self</span><span class="o">.</span><span class="n">gamma</span>
+
+            <span class="c1"># Rademacher perturbation</span>
+            <span class="n">delta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">],</span> <span class="n">size</span><span class="o">=</span><span class="n">theta</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+
+            <span class="n">fp</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">theta</span> <span class="o">+</span> <span class="n">ck</span> <span class="o">*</span> <span class="n">delta</span><span class="p">)</span>
+            <span class="n">fm</span> <span class="o">=</span> <span class="n">f</span><span class="p">(</span><span class="n">theta</span> <span class="o">-</span> <span class="n">ck</span> <span class="o">*</span> <span class="n">delta</span><span class="p">)</span>
+            <span class="n">grad_est</span> <span class="o">=</span> <span class="p">(</span><span class="n">fp</span> <span class="o">-</span> <span class="n">fm</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">ck</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">delta</span><span class="p">)</span>
+
+            <span class="n">theta</span> <span class="o">-=</span> <span class="n">ak</span> <span class="o">*</span> <span class="n">grad_est</span>
+            <span class="n">fval</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">fp</span> <span class="o">+</span> <span class="n">fm</span><span class="p">)</span>  <span class="c1"># midpoint estimate</span>
+            <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fval</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">callback</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">callback</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">theta</span><span class="o">.</span><span class="n">copy</span><span class="p">(),</span> <span class="n">fval</span><span class="p">)</span>
+
+            <span class="c1"># Convergence check</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="o">&gt;</span> <span class="mi">5</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">6</span><span class="p">])</span> <span class="o">&lt;</span> <span class="n">tol</span><span class="p">:</span>
+                <span class="n">patience</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">patience</span> <span class="o">&gt;=</span> <span class="mi">5</span><span class="p">:</span>
+                    <span class="k">break</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">patience</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="k">return</span> <span class="n">theta</span><span class="p">,</span> <span class="n">history</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"SPSAOptimizer(a=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">a</span><span class="si">}</span><span class="s2">, c=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">c</span><span class="si">}</span><span class="s2">, A=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">A</span><span class="si">}</span><span class="s2">)"</span></div>
+
+
+
+<span class="c1"># ── Nelder-Mead (deterministic fallback) ─────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_nelder_mead</span><span class="p">(</span>
+    <span class="n">func</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="nb">float</span><span class="p">],</span>
+    <span class="n">x0</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
+    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Minimal Nelder-Mead simplex method."""</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">x0</span><span class="p">)</span>
+    <span class="n">alpha</span><span class="p">,</span> <span class="n">gamma</span><span class="p">,</span> <span class="n">rho</span><span class="p">,</span> <span class="n">sigma</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span>
+
+    <span class="c1"># Initialise simplex</span>
+    <span class="n">simplex</span> <span class="o">=</span> <span class="p">[</span><span class="n">x0</span><span class="o">.</span><span class="n">copy</span><span class="p">()]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="n">xi</span> <span class="o">=</span> <span class="n">x0</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">xi</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+=</span> <span class="mf">0.05</span> <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">x0</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mf">1e-8</span> <span class="k">else</span> <span class="mf">0.05</span>
+        <span class="n">simplex</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">xi</span><span class="p">)</span>
+    <span class="n">fvals</span> <span class="o">=</span> <span class="p">[</span><span class="n">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">simplex</span><span class="p">]</span>
+    <span class="n">history</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="nb">min</span><span class="p">(</span><span class="n">fvals</span><span class="p">)]</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iter</span><span class="p">):</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">fvals</span><span class="p">)</span>
+        <span class="n">simplex</span> <span class="o">=</span> <span class="p">[</span><span class="n">simplex</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">order</span><span class="p">]</span>
+        <span class="n">fvals</span> <span class="o">=</span> <span class="p">[</span><span class="n">fvals</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">order</span><span class="p">]</span>
+
+        <span class="n">centroid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">simplex</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">xr</span> <span class="o">=</span> <span class="n">centroid</span> <span class="o">+</span> <span class="n">alpha</span> <span class="o">*</span> <span class="p">(</span><span class="n">centroid</span> <span class="o">-</span> <span class="n">simplex</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">fr</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">xr</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">fvals</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">fr</span> <span class="o">&lt;</span> <span class="n">fvals</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]:</span>
+            <span class="n">simplex</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">xr</span>
+            <span class="n">fvals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">fr</span>
+        <span class="k">elif</span> <span class="n">fr</span> <span class="o">&lt;</span> <span class="n">fvals</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">xe</span> <span class="o">=</span> <span class="n">centroid</span> <span class="o">+</span> <span class="n">gamma</span> <span class="o">*</span> <span class="p">(</span><span class="n">xr</span> <span class="o">-</span> <span class="n">centroid</span><span class="p">)</span>
+            <span class="n">fe</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">xe</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fe</span> <span class="o">&lt;</span> <span class="n">fr</span><span class="p">:</span>
+                <span class="n">simplex</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">xe</span>
+                <span class="n">fvals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">fe</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">simplex</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">xr</span>
+                <span class="n">fvals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">fr</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">xc</span> <span class="o">=</span> <span class="n">centroid</span> <span class="o">+</span> <span class="n">rho</span> <span class="o">*</span> <span class="p">(</span><span class="n">simplex</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">centroid</span><span class="p">)</span>
+            <span class="n">fc</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">xc</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">fc</span> <span class="o">&lt;</span> <span class="n">fvals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="n">simplex</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">xc</span>
+                <span class="n">fvals</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">fc</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">best</span> <span class="o">=</span> <span class="n">simplex</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">simplex</span> <span class="o">=</span> <span class="p">[</span><span class="n">best</span> <span class="o">+</span> <span class="n">sigma</span> <span class="o">*</span> <span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">best</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">simplex</span><span class="p">]</span>
+                <span class="n">fvals</span> <span class="o">=</span> <span class="p">[</span><span class="n">func</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">simplex</span><span class="p">]</span>
+
+        <span class="n">history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">fvals</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">6</span><span class="p">])</span> <span class="o">&lt;</span> <span class="n">tol</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="c1"># Return the actual best vertex, not simplex[0] which may be stale</span>
+    <span class="c1"># if the last iteration updated a non-0 slot to a better value.</span>
+    <span class="n">best_idx</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmin</span><span class="p">(</span><span class="n">fvals</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">simplex</span><span class="p">[</span><span class="n">best_idx</span><span class="p">],</span> <span class="n">history</span>
+
+
+<span class="c1"># ── NoiseAwareVQEResult ───────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="NoiseAwareVQEResult">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.NoiseAwareVQEResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NoiseAwareVQEResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of :class:`NoiseAwareVQE`.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    energy : float</span>
+<span class="sd">        Final estimated energy.</span>
+<span class="sd">    theta : ndarray</span>
+<span class="sd">        Optimal parameter vector.</span>
+<span class="sd">    n_iterations : int</span>
+<span class="sd">        Number of optimizer iterations.</span>
+<span class="sd">    energies : list[float]</span>
+<span class="sd">        Energy estimate after each iteration.</span>
+<span class="sd">    shots_per_eval : int</span>
+<span class="sd">        Shots used per energy evaluation (0 = exact).</span>
+<span class="sd">    converged : bool</span>
+<span class="sd">        Whether the optimizer satisfied its convergence criterion.</span>
+<span class="sd">    noise_description : str</span>
+<span class="sd">        Human-readable description of the noise model used.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        Number of qubits.</span>
+<span class="sd">    n_layers : int</span>
+<span class="sd">        Number of ansatz layers.</span>
+<span class="sd">    """</span>
+
+    <span class="n">energy</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">theta</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">n_iterations</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">energies</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+    <span class="n">shots_per_eval</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">converged</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">noise_description</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"NoiseAwareVQEResult(energy=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">energy</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"n_iter=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iterations</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"shots=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">shots_per_eval</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"converged=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">converged</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="c1"># ── NoiseAwareVQE ─────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="NoiseAwareVQE">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.NoiseAwareVQE">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">NoiseAwareVQE</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Variational Quantum Eigensolver with hardware noise and shot noise.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hamiltonian : SparsePauliOp or ndarray</span>
+<span class="sd">        Observable whose ground-state energy to minimise.</span>
+<span class="sd">        If an ndarray, it must be Hermitian with shape ``(2^n, 2^n)``.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        Number of qubits.</span>
+<span class="sd">    n_layers : int</span>
+<span class="sd">        Number of HEA layers.</span>
+<span class="sd">    noise_model : NoiseModel or None</span>
+<span class="sd">        Hardware noise model (e.g.</span>
+<span class="sd">        :class:`~quantx_engine.contrib.noise.DepolarizingNoise`,</span>
+<span class="sd">        :class:`~quantx_engine.contrib.noise.ThermalRelaxationNoise`, …).</span>
+<span class="sd">        If ``None`` no hardware noise is applied.</span>
+<span class="sd">    n_shots : int</span>
+<span class="sd">        Shots per energy evaluation.  Set to 0 for exact (noiseless)</span>
+<span class="sd">        expectation values.</span>
+<span class="sd">    optimizer : str</span>
+<span class="sd">        ``"spsa"`` (default, recommended for noisy settings) or</span>
+<span class="sd">        ``"nelder-mead"``.</span>
+<span class="sd">    max_iter : int</span>
+<span class="sd">        Maximum optimizer iterations.</span>
+<span class="sd">    tol : float</span>
+<span class="sd">        Convergence tolerance on energy change.</span>
+<span class="sd">    entanglement : str</span>
+<span class="sd">        HEA entanglement pattern: ``"linear"`` (default) or ``"full"``.</span>
+<span class="sd">    spsa_a : float</span>
+<span class="sd">        SPSA step-size parameter *a*.</span>
+<span class="sd">    spsa_c : float</span>
+<span class="sd">        SPSA perturbation parameter *c*.</span>
+<span class="sd">    seed : int or None</span>
+<span class="sd">        Random seed.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="NoiseAwareVQE.__init__">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.NoiseAwareVQE.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">hamiltonian</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="n">noise_model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"spsa"</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">150</span><span class="p">,</span>
+        <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+        <span class="n">entanglement</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+        <span class="n">spsa_a</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">spsa_c</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">42</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">n_qubits</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span><span class="s2">"n_qubits must be &gt;= 1"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_layers</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span><span class="s2">"n_layers must be &gt;= 1"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">max_iter</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span><span class="s2">"max_iter must be &gt;= 1"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">optimizer</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"spsa"</span><span class="p">,</span> <span class="s2">"nelder-mead"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"optimizer must be 'spsa' or 'nelder-mead', got </span><span class="si">{</span><span class="n">optimizer</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">hamiltonian</span> <span class="o">=</span> <span class="n">hamiltonian</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span> <span class="o">=</span> <span class="n">n_qubits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span> <span class="o">=</span> <span class="n">n_layers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">noise_model</span> <span class="o">=</span> <span class="n">noise_model</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_shots</span> <span class="o">=</span> <span class="n">n_shots</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">optimizer_name</span> <span class="o">=</span> <span class="n">optimizer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_iter</span> <span class="o">=</span> <span class="n">max_iter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tol</span> <span class="o">=</span> <span class="n">tol</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">entanglement</span> <span class="o">=</span> <span class="n">entanglement</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_H_mat</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># lazily computed</span>
+
+        <span class="c1"># SPSA hyperparams</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spsa_a</span> <span class="o">=</span> <span class="n">spsa_a</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_spsa_c</span> <span class="o">=</span> <span class="n">spsa_c</span></div>
+
+
+    <span class="c1"># ── Internal helpers ──────────────────────────────────────────────────────</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_H_matrix</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_H_mat</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_H_mat</span> <span class="o">=</span> <span class="n">_get_pauli_matrix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">hamiltonian</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_H_mat</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Evaluate ⟨H⟩ for a given parameter vector."""</span>
+        <span class="n">ops</span> <span class="o">=</span> <span class="n">build_hea_circuit</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">,</span> <span class="n">theta</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">entanglement</span>
+        <span class="p">)</span>
+        <span class="n">rho</span> <span class="o">=</span> <span class="n">_simulate_dm</span><span class="p">(</span><span class="n">ops</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise_model</span><span class="p">)</span>
+        <span class="n">H_mat</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_H_matrix</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">_expect_noisy</span><span class="p">(</span><span class="n">rho</span><span class="p">,</span> <span class="n">H_mat</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_noise_description</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">"none"</span>
+        <span class="n">nd</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">noise_model</span><span class="o">.</span><span class="n">to_dict</span><span class="p">()</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="s2">"depolarizing_prob"</span> <span class="ow">in</span> <span class="n">nd</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"depolarizing(p=</span><span class="si">{</span><span class="n">nd</span><span class="p">[</span><span class="s1">'depolarizing_prob'</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s2">"amplitude_damping_gamma"</span> <span class="ow">in</span> <span class="n">nd</span><span class="p">:</span>
+            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"amplitude_damping(γ=</span><span class="si">{</span><span class="n">nd</span><span class="p">[</span><span class="s1">'amplitude_damping_gamma'</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">)"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="s2">" + "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="k">if</span> <span class="n">parts</span> <span class="k">else</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">noise_model</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
+
+    <span class="c1"># ── Main solver ───────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="NoiseAwareVQE.run">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.NoiseAwareVQE.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">theta_init</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"NoiseAwareVQEResult"</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run noise-aware VQE optimisation.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        theta_init : ndarray, optional</span>
+<span class="sd">            Initial parameters.  Defaults to small random values near zero.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        NoiseAwareVQEResult</span>
+<span class="sd">        """</span>
+        <span class="n">n_params</span> <span class="o">=</span> <span class="n">n_hea_params</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">theta_init</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">theta0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">theta_init</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">theta0</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="n">n_params</span><span class="p">,):</span>
+                <span class="k">raise</span> <span class="n">NoiseVQEError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"theta_init has shape </span><span class="si">{</span><span class="n">theta0</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">; "</span>
+                    <span class="sa">f</span><span class="s2">"expected (</span><span class="si">{</span><span class="n">n_params</span><span class="si">}</span><span class="s2">,) for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2"> qubits × "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="si">}</span><span class="s2"> layers."</span>
+                <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">theta0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rng</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">4</span><span class="p">,</span> <span class="n">math</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">4</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="n">n_params</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">optimizer_name</span> <span class="o">==</span> <span class="s2">"spsa"</span><span class="p">:</span>
+            <span class="n">opt</span> <span class="o">=</span> <span class="n">SPSAOptimizer</span><span class="p">(</span>
+                <span class="n">a</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_spsa_a</span><span class="p">,</span>
+                <span class="n">c</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_spsa_c</span><span class="p">,</span>
+                <span class="n">A</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_iter</span><span class="p">),</span>
+                <span class="n">seed</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">seed</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">theta_opt</span><span class="p">,</span> <span class="n">history</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span><span class="p">,</span> <span class="n">theta0</span><span class="p">,</span>
+                <span class="n">max_iter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_iter</span><span class="p">,</span>
+                <span class="n">tol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">theta_opt</span><span class="p">,</span> <span class="n">history</span> <span class="o">=</span> <span class="n">_nelder_mead</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span><span class="p">,</span> <span class="n">theta0</span><span class="p">,</span>
+                <span class="n">max_iter</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_iter</span><span class="p">,</span>
+                <span class="n">tol</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">tol</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">final_energy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_energy</span><span class="p">(</span><span class="n">theta_opt</span><span class="p">)</span>
+        <span class="n">converged</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">5</span> <span class="ow">and</span>
+            <span class="nb">abs</span><span class="p">(</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">history</span><span class="p">[</span><span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="p">)</span> <span class="o">-</span> <span class="mi">6</span><span class="p">)])</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">tol</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">NoiseAwareVQEResult</span><span class="p">(</span>
+            <span class="n">energy</span><span class="o">=</span><span class="n">final_energy</span><span class="p">,</span>
+            <span class="n">theta</span><span class="o">=</span><span class="n">theta_opt</span><span class="p">,</span>
+            <span class="n">n_iterations</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="p">),</span>
+            <span class="n">energies</span><span class="o">=</span><span class="n">history</span><span class="p">,</span>
+            <span class="n">shots_per_eval</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span>
+            <span class="n">converged</span><span class="o">=</span><span class="n">converged</span><span class="p">,</span>
+            <span class="n">noise_description</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_noise_description</span><span class="p">(),</span>
+            <span class="n">n_qubits</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="p">,</span>
+            <span class="n">n_layers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"NoiseAwareVQE(n_qubits=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_qubits</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"n_layers=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_layers</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"optimizer=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">optimizer_name</span><span class="si">!r}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"n_shots=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_shots</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="c1"># ── Convenience function ──────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="hardware_efficient_vqe">
+<a class="viewcode-back" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html#quantx_engine.contrib.noise_vqe.hardware_efficient_vqe">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">hardware_efficient_vqe</span><span class="p">(</span>
+    <span class="n">hamiltonian</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">n_qubits</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">n_layers</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="n">noise_model</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">150</span><span class="p">,</span>
+    <span class="n">optimizer</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"spsa"</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="mi">42</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"NoiseAwareVQEResult"</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Run noise-aware VQE with a hardware-efficient ansatz.</span>
+
+<span class="sd">    Convenience wrapper for :class:`NoiseAwareVQE`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hamiltonian : SparsePauliOp or ndarray</span>
+<span class="sd">        Observable to minimise.</span>
+<span class="sd">    n_qubits : int</span>
+<span class="sd">        Number of qubits.</span>
+<span class="sd">    n_layers : int</span>
+<span class="sd">        Ansatz depth (default 2).</span>
+<span class="sd">    noise_model : NoiseModel, optional</span>
+<span class="sd">        Hardware noise to apply during simulation.</span>
+<span class="sd">    n_shots : int</span>
+<span class="sd">        Shots per evaluation (0 = exact).</span>
+<span class="sd">    max_iter : int</span>
+<span class="sd">        Optimizer iterations.</span>
+<span class="sd">    optimizer : str</span>
+<span class="sd">        ``"spsa"`` or ``"nelder-mead"``.</span>
+<span class="sd">    seed : int or None</span>
+<span class="sd">        Random seed.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    NoiseAwareVQEResult</span>
+<span class="sd">    """</span>
+    <span class="n">vqe</span> <span class="o">=</span> <span class="n">NoiseAwareVQE</span><span class="p">(</span>
+        <span class="n">hamiltonian</span><span class="o">=</span><span class="n">hamiltonian</span><span class="p">,</span>
+        <span class="n">n_qubits</span><span class="o">=</span><span class="n">n_qubits</span><span class="p">,</span>
+        <span class="n">n_layers</span><span class="o">=</span><span class="n">n_layers</span><span class="p">,</span>
+        <span class="n">noise_model</span><span class="o">=</span><span class="n">noise_model</span><span class="p">,</span>
+        <span class="n">n_shots</span><span class="o">=</span><span class="n">n_shots</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
+        <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span>
+        <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">vqe</span><span class="o">.</span><span class="n">run</span><span class="p">()</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

@@ -1,0 +1,1134 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.contrib.ftqc_pipeline - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/generated/quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for quantx_engine.contrib.ftqc_pipeline</h1><div class="highlight"><pre>
+<span></span><span class="sd">"""M112: Fault-tolerant QC end-to-end pipeline.</span>
+
+<span class="sd">Ties :class:`~quantx_engine.contrib.qec.SurfaceCode` and</span>
+<span class="sd">:class:`~quantx_engine.contrib.qec.MWPMDecoder` into a single :class:`FTQCPipeline`</span>
+<span class="sd">object that simulates the complete error-correction cycle:</span>
+
+<span class="sd">    encode → (logical gate →)* n_rounds × syndrome extraction → MWPM decode → check</span>
+
+<span class="sd">Two noise models are supported:</span>
+
+<span class="sd">* **Code-capacity** (``n_rounds=1``, ``p_meas=0``): ideal stabilizer measurements;</span>
+<span class="sd">  only data qubit errors are injected.</span>
+<span class="sd">* **Phenomenological** (``n_rounds &gt; 1``, ``p_meas &gt; 0``): every syndrome</span>
+<span class="sd">  measurement may flip independently with probability ``p_meas``; data errors</span>
+<span class="sd">  accumulate across rounds and the final ideal syndrome is decoded.</span>
+
+<span class="sd">The :func:`threshold_curve` function sweeps ``p_phys`` over a range for</span>
+<span class="sd">multiple code distances and estimates the threshold crossing point — the</span>
+<span class="sd">physical error rate below which increasing *d* strictly improves the logical</span>
+<span class="sd">error rate.</span>
+
+<span class="sd">Classes</span>
+<span class="sd">-------</span>
+<span class="sd">FTQCPipelineError</span>
+<span class="sd">    Exception for invalid pipeline operations.</span>
+<span class="sd">PipelineResult</span>
+<span class="sd">    Result of a single :meth:`FTQCPipeline.run` call.</span>
+<span class="sd">ThresholdCurveResult</span>
+<span class="sd">    Threshold curve across multiple distances.</span>
+
+<span class="sd">Functions</span>
+<span class="sd">---------</span>
+<span class="sd">threshold_curve(...)</span>
+<span class="sd">    Sweep p_phys for several distances; estimate the threshold crossing.</span>
+<span class="sd">threshold_crossing(result)</span>
+<span class="sd">    Extract (or refine) the threshold estimate from a :class:`ThresholdCurveResult`.</span>
+
+<span class="sd">Example::</span>
+
+<span class="sd">    from quantx_engine.contrib.ftqc_pipeline import FTQCPipeline, threshold_curve</span>
+
+<span class="sd">    # Single-pipeline run</span>
+<span class="sd">    pipe = FTQCPipeline(code_distance=5, p_physical=0.01)</span>
+<span class="sd">    result = pipe.run(n_shots=2000, seed=0)</span>
+<span class="sd">    print(result.logical_error_rate)   # should be ≪ 0.01 below threshold</span>
+
+<span class="sd">    # Threshold curve</span>
+<span class="sd">    curve = threshold_curve(distances=[3, 5, 7], n_shots=500, seed=42)</span>
+<span class="sd">    print(f"threshold ≈ {curve.threshold:.4f}")</span>
+
+<span class="sd">References</span>
+<span class="sd">----------</span>
+<span class="sd">.. [1] Fowler, A. M. et al. (2012). Surface codes: Towards practical</span>
+<span class="sd">       large-scale quantum computation. *Phys. Rev. A* 86, 032324.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevA.86.032324</span>
+
+<span class="sd">.. [2] Litinski, D. (2019). A game of surface codes: Large-scale quantum</span>
+<span class="sd">       computing with lattice surgery. *Quantum* 3, 128.</span>
+<span class="sd">       https://doi.org/10.22331/q-2019-03-05-128</span>
+
+<span class="sd">.. [3] Jones, C. et al. (2012). Layered architecture for quantum computing.</span>
+<span class="sd">       *Phys. Rev. X* 2, 031007.</span>
+<span class="sd">       https://doi.org/10.1103/PhysRevX.2.031007</span>
+<span class="sd">"""</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">.qec</span><span class="w"> </span><span class="kn">import</span> <span class="n">SurfaceCode</span><span class="p">,</span> <span class="n">MWPMDecoder</span><span class="p">,</span> <span class="n">QECError</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"FTQCPipelineError"</span><span class="p">,</span>
+    <span class="s2">"PipelineResult"</span><span class="p">,</span>
+    <span class="s2">"ThresholdCurveResult"</span><span class="p">,</span>
+    <span class="s2">"FTQCPipeline"</span><span class="p">,</span>
+    <span class="s2">"threshold_curve"</span><span class="p">,</span>
+    <span class="s2">"threshold_crossing"</span><span class="p">,</span>
+    <span class="s2">"ResourceEstimate"</span><span class="p">,</span>
+    <span class="s2">"FTQCResourceEstimator"</span><span class="p">,</span>
+<span class="p">]</span>
+
+
+<span class="c1"># ── Exception ─────────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="FTQCPipelineError">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCPipelineError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FTQCPipelineError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Raised for invalid fault-tolerant pipeline operations."""</span></div>
+
+
+
+<span class="c1"># ── Result dataclasses ────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="PipelineResult">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.PipelineResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PipelineResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Result of a :meth:`FTQCPipeline.run` Monte Carlo simulation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    code_distance : int</span>
+<span class="sd">    p_physical : float</span>
+<span class="sd">        Physical error rate per qubit per round.</span>
+<span class="sd">    p_meas : float</span>
+<span class="sd">        Syndrome measurement error rate.</span>
+<span class="sd">    n_rounds : int</span>
+<span class="sd">        Number of syndrome extraction rounds per trial.</span>
+<span class="sd">    n_shots : int</span>
+<span class="sd">        Number of Monte Carlo trials.</span>
+<span class="sd">    n_logical_errors : int</span>
+<span class="sd">        Number of trials that resulted in a logical error.</span>
+<span class="sd">    logical_error_rate : float</span>
+<span class="sd">        ``n_logical_errors / n_shots``.</span>
+<span class="sd">    decoder : str</span>
+<span class="sd">        Decoder used (``"mwpm"`` or ``"greedy"``).</span>
+<span class="sd">    """</span>
+    <span class="n">code_distance</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">p_physical</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">p_meas</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">n_logical_errors</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">logical_error_rate</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">decoder</span><span class="p">:</span> <span class="nb">str</span>
+
+<div class="viewcode-block" id="PipelineResult.to_dict">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.PipelineResult.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"code_distance"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">code_distance</span><span class="p">,</span>
+            <span class="s2">"p_physical"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_physical</span><span class="p">,</span>
+            <span class="s2">"p_meas"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_meas</span><span class="p">,</span>
+            <span class="s2">"n_rounds"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_rounds</span><span class="p">,</span>
+            <span class="s2">"n_shots"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_shots</span><span class="p">,</span>
+            <span class="s2">"n_logical_errors"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_logical_errors</span><span class="p">,</span>
+            <span class="s2">"logical_error_rate"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">logical_error_rate</span><span class="p">,</span>
+            <span class="s2">"decoder"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">,</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ThresholdCurveResult">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.ThresholdCurveResult">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ThresholdCurveResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Threshold curve data across multiple code distances.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    distances : list[int]</span>
+<span class="sd">        Code distances used.</span>
+<span class="sd">    p_phys : list[float]</span>
+<span class="sd">        Physical error rates swept.</span>
+<span class="sd">    p_logical : dict[int, list[float]]</span>
+<span class="sd">        Logical error rates per distance: ``p_logical[d][i]`` is the rate at</span>
+<span class="sd">        ``p_phys[i]`` for distance ``d``.</span>
+<span class="sd">    threshold : float | None</span>
+<span class="sd">        Estimated threshold crossing point, or ``None`` if not detectable.</span>
+<span class="sd">    decoder : str</span>
+<span class="sd">    n_rounds : int</span>
+<span class="sd">    """</span>
+    <span class="n">distances</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">p_phys</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+    <span class="n">p_logical</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span>
+    <span class="n">threshold</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+    <span class="n">decoder</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span>
+
+<div class="viewcode-block" id="ThresholdCurveResult.to_dict">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.ThresholdCurveResult.to_dict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_dict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">"distances"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">distances</span><span class="p">,</span>
+            <span class="s2">"p_phys"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_phys</span><span class="p">,</span>
+            <span class="s2">"p_logical"</span><span class="p">:</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">d</span><span class="p">):</span> <span class="n">v</span> <span class="k">for</span> <span class="n">d</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_logical</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+            <span class="s2">"threshold"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span><span class="p">,</span>
+            <span class="s2">"decoder"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">,</span>
+            <span class="s2">"n_rounds"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_rounds</span><span class="p">,</span>
+        <span class="p">}</span></div>
+</div>
+
+
+
+<span class="c1"># ── FTQCPipeline ──────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="FTQCPipeline">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCPipeline">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FTQCPipeline</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""End-to-end fault-tolerant QC pipeline for a single logical qubit.</span>
+
+<span class="sd">    Simulates the full error-correction cycle:</span>
+
+<span class="sd">    1. Encode logical |0⟩ (or |1⟩) using a distance-*d* surface code.</span>
+<span class="sd">    2. Inject independent depolarizing noise on each data qubit per round.</span>
+<span class="sd">    3. Extract stabilizer syndromes (optionally with measurement errors).</span>
+<span class="sd">    4. Decode with MWPM (or greedy) to get a Pauli correction.</span>
+<span class="sd">    5. Determine whether a logical error occurred.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    code_distance : int</span>
+<span class="sd">        Surface code distance d (must be ≥ 3, odd recommended).</span>
+<span class="sd">    p_physical : float</span>
+<span class="sd">        Physical error rate per qubit per error-correction round (0 &lt; p &lt; 0.5).</span>
+<span class="sd">    p_meas : float, default 0.0</span>
+<span class="sd">        Syndrome measurement error probability per stabilizer per round.</span>
+<span class="sd">        Set to 0 for the ideal code-capacity noise model.</span>
+<span class="sd">    decoder : {"mwpm", "greedy"}, default "mwpm"</span>
+<span class="sd">        Syndrome decoder.  ``"mwpm"`` uses minimum-weight perfect matching;</span>
+<span class="sd">        ``"greedy"`` uses the built-in greedy matching in :class:`SurfaceCode`.</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="FTQCPipeline.__init__">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCPipeline.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">code_distance</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">p_physical</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">p_meas</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">decoder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"mwpm"</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">code_distance</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">or</span> <span class="n">code_distance</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"code_distance must be an integer ≥ 3, got </span><span class="si">{</span><span class="n">code_distance</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;</span> <span class="n">p_physical</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"p_physical must be in (0, 1), got </span><span class="si">{</span><span class="n">p_physical</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">p_meas</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"p_meas must be in [0, 1), got </span><span class="si">{</span><span class="n">p_meas</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">decoder</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"mwpm"</span><span class="p">,</span> <span class="s2">"greedy"</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"decoder must be 'mwpm' or 'greedy', got </span><span class="si">{</span><span class="n">decoder</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">code_distance</span> <span class="o">=</span> <span class="n">code_distance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p_physical</span> <span class="o">=</span> <span class="n">p_physical</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">p_meas</span> <span class="o">=</span> <span class="n">p_meas</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">=</span> <span class="n">decoder</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_code</span> <span class="o">=</span> <span class="n">SurfaceCode</span><span class="p">(</span><span class="n">code_distance</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mwpm</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">MWPMDecoder</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">MWPMDecoder</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_code</span><span class="p">)</span> <span class="k">if</span> <span class="n">decoder</span> <span class="o">==</span> <span class="s2">"mwpm"</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span></div>
+
+
+    <span class="c1"># ── Core simulation ───────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="FTQCPipeline.run">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCPipeline.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+        <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PipelineResult</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run a Monte Carlo simulation of the error-correction pipeline.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        n_shots : int</span>
+<span class="sd">            Number of independent trials.</span>
+<span class="sd">        n_rounds : int</span>
+<span class="sd">            Syndrome extraction rounds per trial.  Use ``n_rounds=1`` for the</span>
+<span class="sd">            ideal code-capacity model; use larger values with ``p_meas &gt; 0``</span>
+<span class="sd">            for the phenomenological noise model.</span>
+<span class="sd">        seed : int | None</span>
+<span class="sd">            Random seed for reproducibility.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        PipelineResult</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">n_shots</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_shots must be ≥ 1, got </span><span class="si">{</span><span class="n">n_shots</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">n_rounds</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_rounds must be ≥ 1, got </span><span class="si">{</span><span class="n">n_rounds</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+
+        <span class="n">rng</span> <span class="o">=</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+        <span class="n">n_logical_errors</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="mi">1</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_shots</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_trial</span><span class="p">(</span><span class="n">rng</span><span class="p">,</span> <span class="n">n_rounds</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">PipelineResult</span><span class="p">(</span>
+            <span class="n">code_distance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">code_distance</span><span class="p">,</span>
+            <span class="n">p_physical</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">p_physical</span><span class="p">,</span>
+            <span class="n">p_meas</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">p_meas</span><span class="p">,</span>
+            <span class="n">n_rounds</span><span class="o">=</span><span class="n">n_rounds</span><span class="p">,</span>
+            <span class="n">n_shots</span><span class="o">=</span><span class="n">n_shots</span><span class="p">,</span>
+            <span class="n">n_logical_errors</span><span class="o">=</span><span class="n">n_logical_errors</span><span class="p">,</span>
+            <span class="n">logical_error_rate</span><span class="o">=</span><span class="n">n_logical_errors</span> <span class="o">/</span> <span class="n">n_shots</span><span class="p">,</span>
+            <span class="n">decoder</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FTQCPipeline.logical_error_rate">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCPipeline.logical_error_rate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">logical_error_rate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
+        <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Convenience wrapper — returns only the logical error rate float."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">n_shots</span><span class="o">=</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">n_rounds</span><span class="o">=</span><span class="n">n_rounds</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">)</span><span class="o">.</span><span class="n">logical_error_rate</span></div>
+
+
+    <span class="c1"># ── Trial internals ───────────────────────────────────────────────────────</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_trial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">rng</span><span class="p">:</span> <span class="n">random</span><span class="o">.</span><span class="n">Random</span><span class="p">,</span> <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Run one error-correction trial; return True if a logical error occurs."""</span>
+        <span class="n">code</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">n</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_physical</span>
+        <span class="n">p_m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">p_meas</span>
+
+        <span class="c1"># Accumulated data-qubit errors across all rounds</span>
+        <span class="n">x_err</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+        <span class="n">z_err</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span>
+
+        <span class="k">if</span> <span class="n">n_rounds</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">p_m</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># ── Code-capacity model ──────────────────────────────────────────</span>
+            <span class="c1"># Single round, perfect syndrome measurement.</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p</span><span class="p">:</span>
+                    <span class="n">x_err</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p</span><span class="p">:</span>
+                    <span class="n">z_err</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="mi">1</span>
+
+            <span class="n">syn_z</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">z_syndrome</span><span class="p">(</span><span class="n">x_err</span><span class="p">)</span>
+            <span class="n">syn_x</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">x_syndrome</span><span class="p">(</span><span class="n">z_err</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># ── Phenomenological model ───────────────────────────────────────</span>
+            <span class="c1"># Rounds 0..n_rounds-2: data errors + *noisy* syndrome measurement.</span>
+            <span class="c1"># Round n_rounds-1 (final): data errors + *ideal* syndrome.</span>
+            <span class="c1">#</span>
+            <span class="c1"># Syndrome "change detection" (spacetime event accumulation):</span>
+            <span class="c1">#   Each syndrome bit is tracked across rounds.  The XOR</span>
+            <span class="c1">#   accumulation of per-round changes gives the decoder a</span>
+            <span class="c1">#   syndrome that encodes both data-qubit errors and measurement</span>
+            <span class="c1">#   errors as spacetime events.  For p_meas &gt; 0, a spurious</span>
+            <span class="c1">#   flip in round r creates a change event at r and another</span>
+            <span class="c1">#   when the syndrome returns to its true value — the MWPM</span>
+            <span class="c1">#   decoder must pair these time-domain events, which degrades</span>
+            <span class="c1">#   performance compared to p_meas = 0.</span>
+            <span class="n">nz</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">n_z_syndromes</span>
+            <span class="n">nx</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">n_x_syndromes</span>
+            <span class="n">prev_z</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">nz</span>
+            <span class="n">prev_x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">nx</span>
+            <span class="n">change_z</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">nz</span>
+            <span class="n">change_x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">nx</span>
+
+            <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_rounds</span><span class="p">):</span>
+                <span class="c1"># Data errors this round</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p</span><span class="p">:</span>
+                        <span class="n">x_err</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="mi">1</span>
+                    <span class="k">if</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p</span><span class="p">:</span>
+                        <span class="n">z_err</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="mi">1</span>
+
+                <span class="c1"># Syndrome measurement: noisy for intermediate rounds,</span>
+                <span class="c1"># ideal (p_meas = 0) for the final round.</span>
+                <span class="n">ideal_z</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">z_syndrome</span><span class="p">(</span><span class="n">x_err</span><span class="p">)</span>
+                <span class="n">ideal_x</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">x_syndrome</span><span class="p">(</span><span class="n">z_err</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">r</span> <span class="o">&lt;</span> <span class="n">n_rounds</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">p_m</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">curr_z</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="o">^</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p_m</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+                               <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">ideal_z</span><span class="p">]</span>
+                    <span class="n">curr_x</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span> <span class="o">^</span> <span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="n">p_m</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+                               <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">ideal_x</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">curr_z</span> <span class="o">=</span> <span class="n">ideal_z</span>
+                    <span class="n">curr_x</span> <span class="o">=</span> <span class="n">ideal_x</span>
+
+                <span class="c1"># Accumulate XOR of successive syndrome differences</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nz</span><span class="p">):</span>
+                    <span class="n">change_z</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="n">curr_z</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^</span> <span class="n">prev_z</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nx</span><span class="p">):</span>
+                    <span class="n">change_x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^=</span> <span class="n">curr_x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">^</span> <span class="n">prev_x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+                <span class="n">prev_z</span> <span class="o">=</span> <span class="n">curr_z</span>
+                <span class="n">prev_x</span> <span class="o">=</span> <span class="n">curr_x</span>
+
+            <span class="c1"># The accumulated change syndrome is used for decoding.</span>
+            <span class="c1"># With p_meas = 0, change_z == final ideal syndrome (correct).</span>
+            <span class="c1"># With p_meas &gt; 0, spurious events inflate the syndrome, causing</span>
+            <span class="c1"># the decoder to over-correct and raising the logical error rate.</span>
+            <span class="n">syn_z</span> <span class="o">=</span> <span class="n">change_z</span>
+            <span class="n">syn_x</span> <span class="o">=</span> <span class="n">change_x</span>
+
+        <span class="c1"># ── Decode ────────────────────────────────────────────────────────────</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mwpm</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">corr_x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mwpm</span><span class="o">.</span><span class="n">decode_x</span><span class="p">(</span><span class="n">syn_z</span><span class="p">)</span>
+            <span class="n">corr_z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_mwpm</span><span class="o">.</span><span class="n">decode_z</span><span class="p">(</span><span class="n">syn_x</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">corr_x</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">decode_x</span><span class="p">(</span><span class="n">syn_z</span><span class="p">)</span>
+            <span class="n">corr_z</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">decode_z</span><span class="p">(</span><span class="n">syn_x</span><span class="p">)</span>
+
+        <span class="c1"># ── Logical error check ───────────────────────────────────────────────</span>
+        <span class="n">lx</span><span class="p">,</span> <span class="n">lz</span> <span class="o">=</span> <span class="n">code</span><span class="o">.</span><span class="n">logical_error</span><span class="p">(</span><span class="n">x_err</span><span class="p">,</span> <span class="n">z_err</span><span class="p">,</span> <span class="n">corr_x</span><span class="p">,</span> <span class="n">corr_z</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">lx</span> <span class="ow">or</span> <span class="n">lz</span>
+
+    <span class="c1"># ── Properties ───────────────────────────────────────────────────────────</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_physical_qubits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Number of physical data qubits (d²)."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_code</span><span class="o">.</span><span class="n">n</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">n_correctable</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Maximum number of correctable errors ⌊(d−1)/2⌋."""</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">code_distance</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"FTQCPipeline(d=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">code_distance</span><span class="si">}</span><span class="s2">, p=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">p_physical</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"p_meas=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">p_meas</span><span class="si">}</span><span class="s2">, decoder=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="si">!r}</span><span class="s2">)"</span>
+        <span class="p">)</span></div>
+
+
+
+<span class="c1"># ── threshold_curve ───────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="threshold_curve">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.threshold_curve">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">threshold_curve</span><span class="p">(</span>
+    <span class="n">distances</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">p_phys_range</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.005</span><span class="p">,</span> <span class="mf">0.20</span><span class="p">),</span>
+    <span class="n">n_points</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">15</span><span class="p">,</span>
+    <span class="n">n_shots</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">500</span><span class="p">,</span>
+    <span class="n">n_rounds</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
+    <span class="n">decoder</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"mwpm"</span><span class="p">,</span>
+    <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThresholdCurveResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Sweep ``p_phys`` for multiple distances and estimate the threshold.</span>
+
+<span class="sd">    For each ``(d, p_phys)`` pair, a :class:`FTQCPipeline` is constructed and</span>
+<span class="sd">    ``n_shots`` trials are run.  The threshold is estimated as the average of</span>
+<span class="sd">    pairwise crossing points between adjacent distance curves (see</span>
+<span class="sd">    :func:`threshold_crossing`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    distances : list[int] | None</span>
+<span class="sd">        Code distances to sweep.  Defaults to ``[3, 5, 7]``.</span>
+<span class="sd">    p_phys_range : (float, float)</span>
+<span class="sd">        ``(p_min, p_max)`` interval for the sweep.</span>
+<span class="sd">    n_points : int</span>
+<span class="sd">        Number of evenly-spaced points in ``p_phys_range``.</span>
+<span class="sd">    n_shots : int</span>
+<span class="sd">        Monte Carlo shots per (d, p_phys) point.</span>
+<span class="sd">    n_rounds : int</span>
+<span class="sd">        Syndrome extraction rounds per trial.</span>
+<span class="sd">    decoder : {"mwpm", "greedy"}</span>
+<span class="sd">    seed : int | None</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    ThresholdCurveResult</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">distances</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">7</span><span class="p">]</span>
+    <span class="n">distances</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">distances</span><span class="p">))</span>
+
+    <span class="n">p_min</span><span class="p">,</span> <span class="n">p_max</span> <span class="o">=</span> <span class="n">p_phys_range</span>
+    <span class="k">if</span> <span class="n">p_min</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">p_max</span> <span class="o">&gt;=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">p_min</span> <span class="o">&gt;=</span> <span class="n">p_max</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"p_phys_range must satisfy 0 &lt; p_min &lt; p_max &lt; 1, got </span><span class="si">{</span><span class="n">p_phys_range</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+    <span class="n">p_list</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">p_min</span> <span class="o">+</span> <span class="p">(</span><span class="n">p_max</span> <span class="o">-</span> <span class="n">p_min</span><span class="p">)</span> <span class="o">*</span> <span class="n">i</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_points</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_points</span><span class="p">)</span>
+    <span class="p">]</span>
+
+    <span class="n">rng_seed</span> <span class="o">=</span> <span class="n">seed</span>
+    <span class="n">p_logical</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">distances</span><span class="p">:</span>
+        <span class="n">rates</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">p_list</span><span class="p">):</span>
+            <span class="n">trial_seed</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rng_seed</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">rng_seed</span> <span class="o">+</span> <span class="n">d</span> <span class="o">*</span> <span class="mi">1000</span> <span class="o">+</span> <span class="n">j</span>
+            <span class="n">pipe</span> <span class="o">=</span> <span class="n">FTQCPipeline</span><span class="p">(</span>
+                <span class="n">code_distance</span><span class="o">=</span><span class="n">d</span><span class="p">,</span>
+                <span class="n">p_physical</span><span class="o">=</span><span class="n">p</span><span class="p">,</span>
+                <span class="n">decoder</span><span class="o">=</span><span class="n">decoder</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">rate</span> <span class="o">=</span> <span class="n">pipe</span><span class="o">.</span><span class="n">logical_error_rate</span><span class="p">(</span>
+                <span class="n">n_shots</span><span class="o">=</span><span class="n">n_shots</span><span class="p">,</span> <span class="n">n_rounds</span><span class="o">=</span><span class="n">n_rounds</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">trial_seed</span>
+            <span class="p">)</span>
+            <span class="n">rates</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">rate</span><span class="p">)</span>
+        <span class="n">p_logical</span><span class="p">[</span><span class="n">d</span><span class="p">]</span> <span class="o">=</span> <span class="n">rates</span>
+
+    <span class="n">threshold</span> <span class="o">=</span> <span class="n">_estimate_threshold</span><span class="p">(</span><span class="n">p_list</span><span class="p">,</span> <span class="n">p_logical</span><span class="p">,</span> <span class="n">distances</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">ThresholdCurveResult</span><span class="p">(</span>
+        <span class="n">distances</span><span class="o">=</span><span class="n">distances</span><span class="p">,</span>
+        <span class="n">p_phys</span><span class="o">=</span><span class="n">p_list</span><span class="p">,</span>
+        <span class="n">p_logical</span><span class="o">=</span><span class="n">p_logical</span><span class="p">,</span>
+        <span class="n">threshold</span><span class="o">=</span><span class="n">threshold</span><span class="p">,</span>
+        <span class="n">decoder</span><span class="o">=</span><span class="n">decoder</span><span class="p">,</span>
+        <span class="n">n_rounds</span><span class="o">=</span><span class="n">n_rounds</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="c1"># ── threshold_crossing ────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="threshold_crossing">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.threshold_crossing">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">threshold_crossing</span><span class="p">(</span><span class="n">result</span><span class="p">:</span> <span class="n">ThresholdCurveResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Re-estimate the threshold crossing from a :class:`ThresholdCurveResult`.</span>
+
+<span class="sd">    Uses pairwise linear interpolation between consecutive distance curves to</span>
+<span class="sd">    find the ``p_phys`` value where larger distance transitions from *worse*</span>
+<span class="sd">    (above threshold) to *better* (below threshold).</span>
+
+<span class="sd">    Returns ``None`` if no crossing is detectable.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">_estimate_threshold</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">p_phys</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">p_logical</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">distances</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># ── Internal helpers ──────────────────────────────────────────────────────────</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_estimate_threshold</span><span class="p">(</span>
+    <span class="n">p_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
+    <span class="n">p_logical</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]],</span>
+    <span class="n">distances</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Estimate threshold as the mean of pairwise crossing points."""</span>
+    <span class="n">crossings</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">sorted_d</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">distances</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">sorted_d</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">d_lo</span><span class="p">,</span> <span class="n">d_hi</span> <span class="o">=</span> <span class="n">sorted_d</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">sorted_d</span><span class="p">[</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">d_lo</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">p_logical</span> <span class="ow">or</span> <span class="n">d_hi</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">p_logical</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">rates_lo</span> <span class="o">=</span> <span class="n">p_logical</span><span class="p">[</span><span class="n">d_lo</span><span class="p">]</span>
+        <span class="n">rates_hi</span> <span class="o">=</span> <span class="n">p_logical</span><span class="p">[</span><span class="n">d_hi</span><span class="p">]</span>
+
+        <span class="c1"># Find sign change in (rates_lo - rates_hi)</span>
+        <span class="c1"># Below threshold: rates_lo &gt; rates_hi (smaller code is worse)</span>
+        <span class="c1"># Above threshold: rates_lo &lt; rates_hi</span>
+        <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">p_list</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="n">diff_j</span> <span class="o">=</span> <span class="n">rates_lo</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">-</span> <span class="n">rates_hi</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+            <span class="n">diff_j1</span> <span class="o">=</span> <span class="n">rates_lo</span><span class="p">[</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">rates_hi</span><span class="p">[</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">diff_j</span> <span class="o">*</span> <span class="n">diff_j1</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># sign change</span>
+                <span class="c1"># Linear interpolation</span>
+                <span class="n">frac</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">diff_j</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">diff_j</span><span class="p">)</span> <span class="o">+</span> <span class="nb">abs</span><span class="p">(</span><span class="n">diff_j1</span><span class="p">))</span>
+                <span class="n">crossing</span> <span class="o">=</span> <span class="n">p_list</span><span class="p">[</span><span class="n">j</span><span class="p">]</span> <span class="o">+</span> <span class="n">frac</span> <span class="o">*</span> <span class="p">(</span><span class="n">p_list</span><span class="p">[</span><span class="n">j</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">p_list</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">crossings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">crossing</span><span class="p">)</span>
+                <span class="k">break</span>  <span class="c1"># first crossing per pair</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">crossings</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">crossings</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">crossings</span><span class="p">)</span>
+
+
+<span class="c1"># ── FTQCResourceEstimator ─────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="ResourceEstimate">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.ResourceEstimate">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ResourceEstimate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Resource estimate for a fault-tolerant quantum computation.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    code_distance : int</span>
+<span class="sd">        Minimum surface code distance achieving the target logical error rate.</span>
+<span class="sd">    physical_qubits : int</span>
+<span class="sd">        Total physical qubits = 2·d² (data + ancilla for one logical qubit).</span>
+<span class="sd">    logical_error_rate : float</span>
+<span class="sd">        Estimated logical error rate at the chosen distance.</span>
+<span class="sd">    magic_states_per_t : int</span>
+<span class="sd">        Number of 15-to-1 magic state distillation levels (each level = ~200 qubits).</span>
+<span class="sd">    physical_qubits_for_t : int</span>
+<span class="sd">        Additional physical qubits for one round of T-gate distillation.</span>
+<span class="sd">    cycles : int</span>
+<span class="sd">        Surface code QEC cycles per logical gate (≈ d rounds).</span>
+<span class="sd">    physical_error_rate : float</span>
+<span class="sd">        Input physical error rate.</span>
+<span class="sd">    target_logical_error_rate : float</span>
+<span class="sd">        Input target logical error rate.</span>
+<span class="sd">    """</span>
+    <span class="n">code_distance</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">physical_qubits</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">logical_error_rate</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">magic_states_per_t</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">physical_qubits_for_t</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">cycles</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">physical_error_rate</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">target_logical_error_rate</span><span class="p">:</span> <span class="nb">float</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"ResourceEstimate(d=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">code_distance</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"p_phys=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">physical_error_rate</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"p_target=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">target_logical_error_rate</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"qubits=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">physical_qubits</span><span class="si">}</span><span class="s2">, "</span>
+            <span class="sa">f</span><span class="s2">"p_logical=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">logical_error_rate</span><span class="si">:</span><span class="s2">.2e</span><span class="si">}</span><span class="s2">)"</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="FTQCResourceEstimator">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCResourceEstimator">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">FTQCResourceEstimator</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Estimate physical qubit and magic-state resources for fault-tolerant QC.</span>
+
+<span class="sd">    Uses the surface code threshold model from Fowler et al. (2012).  The</span>
+<span class="sd">    logical error rate per round scales as</span>
+
+<span class="sd">        p_L ≈ A × (p_phys / p_th)^{⌊(d+1)/2⌋}</span>
+
+<span class="sd">    where A ≈ 0.1, p_th ≈ 0.01 (1% threshold for the depolarizing model).</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ----------</span>
+<span class="sd">    .. [Fowler2012] Fowler, A. G. et al. (2012). Surface codes: Towards practical</span>
+<span class="sd">                    large-scale quantum computation. *Phys. Rev. A* 86, 032324.</span>
+<span class="sd">                    https://doi.org/10.1103/PhysRevA.86.032324</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    target_logical_error_rate : float</span>
+<span class="sd">        Desired logical error rate per logical gate.</span>
+<span class="sd">    physical_error_rate : float</span>
+<span class="sd">        Physical qubit error rate (must be &lt; threshold ≈ 0.01).</span>
+<span class="sd">    threshold : float, default 0.01</span>
+<span class="sd">        Surface code threshold (default: 1%).</span>
+<span class="sd">    prefactor : float, default 0.1</span>
+<span class="sd">        Pre-exponential constant A in p_L = A * (p/p_th)^t.</span>
+<span class="sd">    max_distance : int, default 51</span>
+<span class="sd">        Maximum code distance to search.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; est = FTQCResourceEstimator(target_logical_error_rate=1e-10,</span>
+<span class="sd">    ...                             physical_error_rate=1e-3)</span>
+<span class="sd">    &gt;&gt;&gt; result = est.estimate()</span>
+<span class="sd">    &gt;&gt;&gt; print(result)</span>
+<span class="sd">    ResourceEstimate(d=7, p_phys=1.00e-03, p_target=1.00e-10, qubits=98, p_logical=...)</span>
+<span class="sd">    """</span>
+
+<div class="viewcode-block" id="FTQCResourceEstimator.__init__">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCResourceEstimator.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">target_logical_error_rate</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">physical_error_rate</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.01</span><span class="p">,</span>
+        <span class="n">prefactor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">max_distance</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">51</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;</span> <span class="n">target_logical_error_rate</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"target_logical_error_rate must be in (0, 1), got </span><span class="si">{</span><span class="n">target_logical_error_rate</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;</span> <span class="n">physical_error_rate</span> <span class="o">&lt;</span> <span class="n">threshold</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">FTQCPipelineError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"physical_error_rate must be in (0, threshold=</span><span class="si">{</span><span class="n">threshold</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">), "</span>
+                <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">physical_error_rate</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">target_logical_error_rate</span> <span class="o">=</span> <span class="n">target_logical_error_rate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">physical_error_rate</span> <span class="o">=</span> <span class="n">physical_error_rate</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span> <span class="o">=</span> <span class="n">threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">prefactor</span> <span class="o">=</span> <span class="n">prefactor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_distance</span> <span class="o">=</span> <span class="n">max_distance</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_logical_error_rate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Estimate p_L for a given distance d using the Fowler 2012 formula."""</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+        <span class="n">t</span> <span class="o">=</span> <span class="p">(</span><span class="n">d</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">physical_error_rate</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">threshold</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">prefactor</span> <span class="o">*</span> <span class="p">(</span><span class="n">r</span> <span class="o">**</span> <span class="n">t</span><span class="p">)</span>
+
+<div class="viewcode-block" id="FTQCResourceEstimator.estimate">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCResourceEstimator.estimate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">estimate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ResourceEstimate</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Find the minimum code distance and associated resource count.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ResourceEstimate</span>
+<span class="sd">        """</span>
+        <span class="c1"># Find minimum d (odd) where p_L &lt; target</span>
+        <span class="n">chosen_d</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">chosen_p_L</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_distance</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>  <span class="c1"># odd d only</span>
+            <span class="n">p_L</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logical_error_rate</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">p_L</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_logical_error_rate</span><span class="p">:</span>
+                <span class="n">chosen_d</span> <span class="o">=</span> <span class="n">d</span>
+                <span class="n">chosen_p_L</span> <span class="o">=</span> <span class="n">p_L</span>
+                <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">chosen_d</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Could not meet target even at max distance</span>
+            <span class="n">chosen_d</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_distance</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_distance</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_distance</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">chosen_p_L</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logical_error_rate</span><span class="p">(</span><span class="n">chosen_d</span><span class="p">)</span>
+
+        <span class="c1"># Physical qubit count: 2d² (d² data + d²-1 ancilla ≈ d² ancilla)</span>
+        <span class="n">physical_qubits</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">chosen_d</span> <span class="o">*</span> <span class="n">chosen_d</span>
+
+        <span class="c1"># Magic state distillation levels for T gates</span>
+        <span class="c1"># Each 15-to-1 level: p_out = 35 * p_in^3; target p_T = target_logical_error_rate</span>
+        <span class="n">p_in</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">physical_error_rate</span>
+        <span class="n">levels</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">p_current</span> <span class="o">=</span> <span class="n">p_in</span>
+        <span class="k">while</span> <span class="n">p_current</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">target_logical_error_rate</span><span class="p">:</span>
+            <span class="n">p_current</span> <span class="o">=</span> <span class="mf">35.0</span> <span class="o">*</span> <span class="n">p_current</span> <span class="o">**</span> <span class="mi">3</span>
+            <span class="n">levels</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">levels</span> <span class="o">&gt;</span> <span class="mi">20</span><span class="p">:</span>  <span class="c1"># safety cap</span>
+                <span class="k">break</span>
+
+        <span class="c1"># Each distillation factory: ~200 physical qubits per level (rough estimate)</span>
+        <span class="n">physical_qubits_for_t</span> <span class="o">=</span> <span class="n">levels</span> <span class="o">*</span> <span class="mi">200</span>
+
+        <span class="c1"># QEC cycles per logical gate ≈ d syndrome rounds</span>
+        <span class="n">cycles</span> <span class="o">=</span> <span class="n">chosen_d</span>
+
+        <span class="k">return</span> <span class="n">ResourceEstimate</span><span class="p">(</span>
+            <span class="n">code_distance</span><span class="o">=</span><span class="n">chosen_d</span><span class="p">,</span>
+            <span class="n">physical_qubits</span><span class="o">=</span><span class="n">physical_qubits</span><span class="p">,</span>
+            <span class="n">logical_error_rate</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">chosen_p_L</span><span class="p">),</span>
+            <span class="n">magic_states_per_t</span><span class="o">=</span><span class="n">levels</span><span class="p">,</span>
+            <span class="n">physical_qubits_for_t</span><span class="o">=</span><span class="n">physical_qubits_for_t</span><span class="p">,</span>
+            <span class="n">cycles</span><span class="o">=</span><span class="n">cycles</span><span class="p">,</span>
+            <span class="n">physical_error_rate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">physical_error_rate</span><span class="p">,</span>
+            <span class="n">target_logical_error_rate</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">target_logical_error_rate</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FTQCResourceEstimator.sweep_distances">
+<a class="viewcode-back" href="../../../api/qec.html#quantx_engine.contrib.ftqc_pipeline.FTQCResourceEstimator.sweep_distances">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sweep_distances</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">distances</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return {d: p_logical} for a range of code distances.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        distances : list[int] | None</span>
+<span class="sd">            Distances to evaluate. Defaults to [3, 5, 7, 9, 11, 13, 15].</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict[int, float]</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">distances</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">11</span><span class="p">,</span> <span class="mi">13</span><span class="p">,</span> <span class="mi">15</span><span class="p">]</span>
+        <span class="k">return</span> <span class="p">{</span><span class="n">d</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logical_error_rate</span><span class="p">(</span><span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">distances</span><span class="p">}</span></div>
+</div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>
