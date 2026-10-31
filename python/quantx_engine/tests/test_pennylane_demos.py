@@ -1,10 +1,11 @@
-"""M15 gate: PennyLane's own demos on ``quantx.statevector``.
+"""M15 gate: PennyLane's own demos on ``quantx.statevector`` and ``quantx.mps``.
 
 The circuits and optimisers of the demos at pennylane.ai/qml/demos, in the small: qubit
 rotation, variational eigensolver, QAOA, a variational classifier, Grover's search, phase
-estimation and the templates a demo builds on. Each runs on this device and on
+estimation and the templates a demo builds on. Each runs on both devices and on
 ``default.qubit`` from the same start, and must reach the same numbers; where a demo has a
-known answer it must reach that too.
+known answer it must reach that too. The demo on simulating circuits with tensor networks
+runs on ``quantx.mps``, against the state vector where one reaches.
 """
 from __future__ import annotations
 
@@ -20,15 +21,26 @@ pnp = qml.numpy
 TOL = 1e-9
 
 
-@pytest.fixture(scope="module")
-def device():
+def _load(name):
     try:
-        from quantx_engine.pennylane_device import StatevectorDevice
-        StatevectorDevice(wires=1)
+        import quantx_engine.pennylane_device as devices
+        cls = getattr(devices, name)
+        cls(wires=1)
     except Exception as e:      # CI's native job sets QX_REQUIRE_NATIVE=1: there it must load
         unavailable = pytest.fail if os.environ.get("QX_REQUIRE_NATIVE") == "1" else pytest.skip
         unavailable(f"native engine unavailable: {e}")
-    return StatevectorDevice
+    return cls
+
+
+@pytest.fixture(scope="module", params=["StatevectorDevice", "MPSDevice"],
+                ids=["statevector", "mps"])
+def device(request):
+    return _load(request.param)
+
+
+@pytest.fixture(scope="module")
+def mps():
+    return _load("MPSDevice")
 
 
 def _both(device, circuit, wires, **kwargs):
@@ -146,9 +158,8 @@ def test_variational_classifier(device):
     assert abs(float(results[0][1]) - float(results[1][1])) < TOL
 
 
-def test_strongly_entangling_gradient_is_one_pass(device):
-    # Quantum gradients: the same Jacobian as backprop, at the price of a forward and a
-    # backward pass whatever the number of parameters.
+def test_strongly_entangling_gradient(device):
+    # Quantum gradients: the same Jacobian as backprop, by whichever method the device has.
     def circuit(w):
         qml.StronglyEntanglingLayers(w, wires=range(4))
         return qml.expval(qml.Z(0) @ qml.X(3))
@@ -215,3 +226,38 @@ def test_templates(device, build):
     n = max(wires_of(), 3)
     node, ref = _both(device, circuit, n)
     assert np.max(np.abs(node() - ref())) < 1e-11
+
+
+def _tensor_network_demo(n, theta=0.5, phi=0.1):
+    # The circuit of PennyLane's demo on simulating quantum circuits with tensor networks.
+    def circuit():
+        for q in range(n - 4):
+            qml.X(wires=q)
+            qml.RX(theta, wires=q + 1)
+            qml.CNOT(wires=[q, q + 1])
+            qml.DoubleExcitation(phi, wires=[q, q + 1, q + 3, q + 4])
+            qml.CSWAP(wires=[q + 1, q + 3, q + 4])
+            qml.RY(theta, wires=q + 1)
+            qml.Toffoli(wires=[q + 1, q + 3, q + 4])
+        return [qml.expval(qml.Z(0)),
+                qml.expval(qml.Hamiltonian([0.1, 0.2], [qml.Z(0), qml.Y(1)])),
+                qml.expval(qml.Y(n - 1))]
+    return circuit
+
+
+def test_tensor_network_demo_is_exact_where_a_state_vector_reaches(mps):
+    n = 12
+    circuit = _tensor_network_demo(n)
+    got = qml.QNode(circuit, mps(wires=n))()
+    want = qml.QNode(circuit, qml.device("default.qubit", wires=n))()
+    assert np.max(np.abs(np.array(got) - np.array(want))) < 1e-10
+
+
+def test_tensor_network_demo_at_fifty_qubits_converges_with_the_bond(mps):
+    # The demo's own size and bond, 50. No state vector reaches it, so the check is that a
+    # doubled bond, past what the demo uses, does not move the answer beyond the demo's cap.
+    n = 50
+    circuit = _tensor_network_demo(n)
+    a = np.array(qml.QNode(circuit, mps(wires=n, max_bond=50))())
+    b = np.array(qml.QNode(circuit, mps(wires=n, max_bond=100))())
+    assert np.max(np.abs(a - b)) < 1e-3

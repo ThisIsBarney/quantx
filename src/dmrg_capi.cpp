@@ -314,15 +314,18 @@ long long mps_put(std::shared_ptr<MPSState> s) {
     return h;
 }
 
-std::shared_ptr<MPSState> mps_get(const nlj& req, const char* key) {
-    if (!req.contains(key) || !req[key].is_number_integer())
-        throw std::runtime_error(std::string("mps: '") + key + "' must be a state handle");
-    const long long h = req[key].get<long long>();
+std::shared_ptr<MPSState> mps_find(long long h) {
     std::lock_guard<std::mutex> lk(g_mps_mu);
     auto it = g_mps.find(h);
     if (it == g_mps.end())
         throw std::runtime_error("mps: no live state has handle " + std::to_string(h));
     return it->second;
+}
+
+std::shared_ptr<MPSState> mps_get(const nlj& req, const char* key) {
+    if (!req.contains(key) || !req[key].is_number_integer())
+        throw std::runtime_error(std::string("mps: '") + key + "' must be a state handle");
+    return mps_find(req[key].get<long long>());
 }
 
 void mps_keys(const nlj& req, std::initializer_list<const char*> allowed) {
@@ -1059,6 +1062,61 @@ QX_API const char* qx_mps(const char* request_json) {
                 return dmrg_error("mps product: 'config' must list one local state per site");
             const auto config = req["config"].get<std::vector<int>>();
             out["handle"] = mps_put(mps_product(m.mpo, (int)m.mpo.size(), config));
+        } else if (op == "qubits") {
+            mps_keys(req, {"n_qubits", "bits", "conserve"});
+            const int n = req.value("n_qubits", 0);
+            if (n > 4000) return dmrg_error("mps qubits: n_qubits exceeds max (4000)");
+            std::vector<int> bits(std::max(n, 0), 0);
+            if (req.contains("bits")) bits = req["bits"].get<std::vector<int>>();
+            out["handle"] = mps_put(mps_qubits(n, bits, req.value("conserve", false)));
+        } else if (op == "gates") {
+            mps_keys(req, {"handle", "gates", "max_bond", "cutoff", "direct"});
+            auto st = mps_get(req, "handle");
+            if (!req.contains("gates") || !req["gates"].is_array())
+                return dmrg_error("mps gates: 'gates' must be a list of {q, u}");
+            std::vector<QubitGate> gates;
+            gates.reserve(req["gates"].size());
+            for (const auto& g : req["gates"]) {
+                QubitGate qg;
+                const auto q = g.at("q").get<std::vector<int>>();
+                if (q.empty() || q.size() > 2)
+                    throw std::runtime_error("mps gates: a gate acts on one qubit or two");
+                qg.q0 = q[0];
+                if (q.size() == 2) {
+                    if (q[1] < 0) throw std::runtime_error("mps gates: qubit index out of range");
+                    qg.q1 = q[1];
+                }
+                const auto u = g.at("u").get<std::vector<double>>();
+                qg.u.resize(u.size() / 2);
+                for (size_t i = 0; i < qg.u.size(); ++i) qg.u[i] = {u[2 * i], u[2 * i + 1]};
+                gates.push_back(std::move(qg));
+            }
+            const MPSGateStats r = mps_gates(*st, gates, req.value("max_bond", 256),
+                                             req.value("cutoff", 1e-10),
+                                             req.value("direct", true));
+            out["max_bond"] = r.max_bond;
+            out["truncation_sum"] = r.trunc_sum;
+            out["truncation_max"] = r.trunc_max;
+            out["wall_time_s"] = r.wall_s;
+        } else if (op == "pauli") {
+            mps_keys(req, {"handle", "terms"});
+            auto st = mps_get(req, "handle");
+            if (!req.contains("terms") || !req["terms"].is_array())
+                return dmrg_error("mps pauli: 'terms' must be a list of [[site, letter], ...]");
+            std::vector<std::vector<std::pair<int, char>>> terms;
+            terms.reserve(req["terms"].size());
+            for (const auto& t : req["terms"]) {
+                std::vector<std::pair<int, char>> term;
+                term.reserve(t.size());
+                for (const auto& p : t) {
+                    const std::string letter = p.at(1).get<std::string>();
+                    if (letter != "X" && letter != "Y" && letter != "Z")
+                        throw std::runtime_error("mps pauli: a string's letters are X, Y and Z");
+                    term.emplace_back(p.at(0).get<int>(), letter[0]);
+                }
+                terms.push_back(std::move(term));
+            }
+            out["values"] = mps_pauli_expect(*st, terms);
         } else if (op == "copy") {
             mps_keys(req, {"handle"});
             out["handle"] = mps_put(mps_copy(*mps_get(req, "handle")));
@@ -1122,9 +1180,35 @@ QX_API const char* qx_mps(const char* request_json) {
             out["handles"] = (long long)g_mps.size();
         } else {
             return dmrg_error("mps: unknown op '" + op + "' (expected ground_state, product, "
-                              "copy, apply, evolve, overlap, expect, energy, info, free or live)");
+                              "qubits, gates, pauli, copy, apply, evolve, overlap, expect, "
+                              "energy, info, free or live)");
         }
         tl_dmrg_buf = out.dump();
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_mps_sample(long long handle, unsigned long long shots,
+                                 unsigned long long seed, unsigned char* samples) {
+    try {
+        if (samples == nullptr) return dmrg_error("mps sample: there is no buffer");
+        mps_sample(*mps_find(handle), shots, seed, samples);
+        tl_dmrg_buf = "{\"ok\":true}";
+        return tl_dmrg_buf.c_str();
+    } catch (const std::exception& e) {
+        return dmrg_error(e.what());
+    }
+}
+
+QX_API const char* qx_mps_amplitudes(long long handle, double* state,
+                                     unsigned long long amplitudes) {
+    try {
+        if (state == nullptr) return dmrg_error("mps amplitudes: there is no buffer");
+        mps_amplitudes(*mps_find(handle), reinterpret_cast<std::complex<double>*>(state),
+                       amplitudes);
+        tl_dmrg_buf = "{\"ok\":true}";
         return tl_dmrg_buf.c_str();
     } catch (const std::exception& e) {
         return dmrg_error(e.what());

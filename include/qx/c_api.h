@@ -298,8 +298,35 @@ QX_API const char* qx_u1_circuit(const char* problem_json, const char* options_j
 // sector), for a block-sparse type; evolve and energy may take another model of the same
 // length and local space than the state's (a quench). Local states are in the engine's
 // order: spin 1/2 (up, down), spin 1 (+1, 0, -1), Hubbard (empty, up, down, double).
+// Qubit states, for circuits: |0> is local state 0, as Z = +1.
+//   qubits       {n_qubits, bits?, conserve?}                  -> {handle}   (a product state,
+//                 default all 0. With conserve (default false) every bond carries the number
+//                 of |1>s to its left as an exact charge, and gates must conserve it. Without,
+//                 a bond is one block and any gate runs: the same kernels, no symmetry)
+//   gates        {handle, gates: [{q, u}, ...], max_bond?, cutoff?, direct?}
+//                 -> {max_bond, truncation_sum, truncation_max, wall_time_s}  (in place. q is
+//                 [i] or [i, j], any two distinct qubits, u the row-major 2x2 or 4x4 entries as
+//                 re, im, re, im, ..., qubit i the high bit. A non-adjacent pair is brought
+//                 together by SWAPs, each a truncating update. direct (default true): direct
+//                 SVDs, not the Gram route. max_bond default 256, cutoff 1e-10, as in
+//                 qx_u1_circuit. Each gate is checked unitary to 1e-10, and conserving the
+//                 charge, before any runs, so a refusal leaves the state as it was)
+//   pauli        {handle, terms: [[[site, "X"|"Y"|"Z"], ...], ...]}
+//                 -> {values}  (<P>/<psi|psi> for each string, sites increasing; an empty
+//                 string is 1. Truncation leaves a state of norm below 1, and this divides
+//                 it out)
 // Unknown keys and handles are refused. Returns thread-local JSON with "ok".
 QX_API const char* qx_mps(const char* request_json);
+// `shots` bitstrings from a qubit state by perfect sampling, normalized by its norm: writes
+// samples[shot * n + site] = 0 or 1, in a buffer of shots * n bytes. The same seed gives the
+// same bits at any number of threads. Returns thread-local JSON with "ok".
+QX_API const char* qx_mps_sample(long long handle, unsigned long long shots,
+                                 unsigned long long seed, unsigned char* samples);
+// A qubit state's amplitudes, not renormalized: `amplitudes` = 2^n complex doubles (re, im
+// interleaved, n <= 30), site 0 the high bit of an amplitude's index. Returns thread-local JSON
+// with "ok". Costs 2^n vector-matrix products, so it is for small states.
+QX_API const char* qx_mps_amplitudes(long long handle, double* state,
+                                     unsigned long long amplitudes);
 
 #ifdef __cplusplus
 }

@@ -27,6 +27,24 @@ bug-fixes and packaging corrections only.
   12, 16 and 20 qubits on two threads, against 14, 65 and 981 ms for `lightning.qubit` and 90
   and 685 ms for `default.qubit` (`benchmarks/pennylane_gradient.py`). The circuit runtime's
   gate kernels thread above 2^14 amplitudes.
+- **`quantx.mps`, a PennyLane device on the block-sparse MPS** (M15):
+  `qml.device("quantx.mps", wires=n, max_bond=chi)`, at any number of wires. Any gate on one
+  or two wires runs, on any pair: one that is not adjacent is brought together by SWAPs, each
+  a truncating update, and a larger gate is decomposed. `max_bond` is unlimited by default,
+  so a circuit is exact unless told otherwise, and `qml.Tracker` records each run's
+  `truncation_sum`, `max_bond` and whether the charge was used. When every gate conserves the
+  number of qubits in `|1>`, which `conserve="auto"` finds by itself, that number is an exact
+  charge: it holds at any truncation and the tensors split into blocks. Expectation values
+  of anything with a Pauli form, variances, samples and finite shots run in the engine at any
+  width, and so do the probabilities of up to 16 wires; a measurement with no form on an MPS
+  reads the amplitudes up to 20 qubits and is refused beyond. Gradients are by parameter
+  shift. Passes PennyLane's device test suite analytically and at 10,000 shots, runs its
+  demos including the 50-qubit one on tensor networks, and matches an independent state
+  vector to 1e-11 with and without the charge. Against `default.tensor` on two threads, with
+  a bond cap that binds on both: on a 48-qubit XY chain, which conserves the number of excitations, 0.52, 2.0 and 8.2 s at caps 64, 128 and 256 against 3.7, 16.7 and 64.8 s; on a 40-qubit circuit that conserves nothing, 1.2, 4.4 and 19.9 s at caps 32, 64 and 128 against 1.2, 3.1 and 13.2 s (with `svd="gram"`, 0.67, 2.9 and 14.8 s) (`benchmarks/pennylane_mps.py`).
+- **Qubit states on the MPS handles**: the `qx_mps` operations `qubits`, `gates` and `pauli`,
+  with `qx_mps_sample` for perfect sampling and `qx_mps_amplitudes`. A state without the charge
+  runs on the block kernels with every local state at charge 0, so a bond is one block.
 - **`qx_run_circuit_state`**: a circuit's final state written to the caller's buffer, from a
   start state in another, without JSON. `qx_run_circuit`'s JSON never carried the state.
 - **An even/odd real-time TEBD scheme** (M12): `scheme="even_odd"` on

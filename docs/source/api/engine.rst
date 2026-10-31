@@ -47,7 +47,9 @@ Python gate yet.
        state passing through Python.
    * - :mod:`quantx_engine.pennylane_device`
      - ``qml.device("quantx.statevector", wires=n)``: PennyLane circuits on the engine's
-       state vector, up to 25 qubits, with adjoint gradients run in the engine. Needs
+       state vector, up to 25 qubits, with adjoint gradients run in the engine.
+       ``qml.device("quantx.mps", wires=n, max_bond=chi)``: the same on its block-sparse
+       MPS, at any width, with an exact charge when the gates conserve one. Both need
        PennyLane 0.45 or later (``pip install "quantx-engine[pennylane]"``), and so Python
        3.11.
    * - :mod:`quantx_engine.tdvp`
