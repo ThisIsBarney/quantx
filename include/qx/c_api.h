@@ -110,10 +110,14 @@ QX_API const char* qx_mps_energy(const char* problem_json);
 // The four entries below were exported from the library but missing from this header, so a
 // C caller could only reach them by declaring the symbols itself. All take
 // (problem_json, options_json), return thread-local JSON with "ok", and support the
-// Heisenberg/XXZ chain (problem type "heisenberg", fields n_qubits, J, delta).
+// Heisenberg/XXZ chain (problem type "heisenberg", fields n_qubits, J, delta). All four take
+// the option "scheme" for their real-time TEBD: "sweep" (the default) or "even_odd", TeNPy's
+// splitting, whose layers batch their eigensolves on the GPU. It is faster at moderate chi
+// and slower at large chi. The TEBD results carry the scheme under the same key.
 
 // Real- or imaginary-time evolution from a Neel state (block TEBD/TDVP2 by default; falls
-// back to non-block TDVP for n_qubits < 3). Options: dt, n_steps, chi_max, imag, block.
+// back to non-block TDVP for n_qubits < 3). Options: dt, n_steps, chi_max, imag, block,
+// scheme. "even_odd" runs in real time on the block TEBD only, and is refused elsewhere.
 QX_API const char* qx_tdvp_evolve(const char* problem_json, const char* options_json);
 // Ground-state dynamical structure factor data. Block-sparse only: n_qubits >= 3.
 QX_API const char* qx_spectral(const char* problem_json, const char* options_json);
