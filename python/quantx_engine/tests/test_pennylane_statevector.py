@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import zlib
 from ctypes import POINTER, c_char_p, c_double, c_ulonglong, c_void_p, cast
 
 import numpy as np
@@ -288,7 +289,7 @@ GATES = [
 @pytest.mark.parametrize("cls, k, p", GATES, ids=lambda g: getattr(g, "__name__", None))
 def test_gate_vs_default_qubit(device_class, ref, cls, k, p):
     n = 5
-    rng = np.random.default_rng(abs(hash((cls.__name__, k))) % 2 ** 32)
+    rng = np.random.default_rng(zlib.crc32(f"{cls.__name__}{k}".encode()))
     dev = device_class(wires=n)
     for _ in range(4):
         psi = _random_state(rng, n)
