@@ -13,6 +13,26 @@ bug-fixes and packaging corrections only.
 
 ### Added
 
+- **An even/odd real-time TEBD scheme** (M12): `scheme="even_odd"` on
+  `TDVPSolver.evolve`, `LoschmidtSolver.echo`, `StructureFactorSolver.correlations` and
+  `ConductivitySolver.correlator` (`"scheme"` in their C API calls). It is TeNPy's Trotter
+  splitting (the even bonds for dt/2, the odd for dt, the even for dt/2) on an MPS in B
+  form, with the Schmidt values kept on every bond, so a layer updates all its bonds at
+  once and their eigensolves run as one batch: on the GPU build, one
+  `cusolverDnXsyevBatched` per padded size class, the classes on concurrent streams.
+  With LAPACK's direct SVD it reproduces TeNPy's own TEBD to 3e-10 in the energy. The
+  update needs the singular vectors of small singular values to ~ε, which the Gram trick
+  cannot give, so a block whose Schmidt values reach below 1e-5 takes a direct SVD on the
+  CPU; with the Gram route everywhere the state blew up. Same session, one CPU thread
+  each, χ = 256: 1.33× TeNPy at N = 32 and 1.40× at N = 64, where the default sweep is
+  0.93× and 0.81×. At χ = 1024 the Schmidt values run deeper, most of the work needs the
+  direct SVD, and the scheme only matches TeNPy (141 s against the sweep's 64 s at N = 32,
+  where the sweep is 2.20× TeNPy), so the sweep stays the default. Gated against exact diagonalisation for the XXZ quench,
+  S(k, ω) correlations, Loschmidt echo and spin conductivity (`qx_tdvp_blocks_test`,
+  `test_tebd_schemes.py`) and for the Hubbard quench and spin and charge correlators
+  (`qx_hubbard_test`); the batched eigensolver against Eigen (`qx_gpu_svd_test`).
+  `qx_tebd_bench` takes the scheme as a sixth argument, and
+  `benchmarks/gpu_vs_tenpy_quench.py` times both schemes.
 - **`quantx_engine.u1_circuit`** (M16): qubit circuits that conserve the number of |1>s,
   run on the block-sparse engine with that number as an exact charge, so no truncation
   moves the state out of its sector. `from_qasm` reads OpenQASM 2 (one register, the

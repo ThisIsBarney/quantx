@@ -92,6 +92,11 @@ static double g_tebd_theta = 0, g_tebd_gate = 0, g_tebd_svd = 0, g_tebd_recomb =
 static long long g_tebd_maxblk = 0, g_tebd_nsvd = 0, g_tebd_nlapacke = 0, g_tebd_ngpu = 0;
 // fine SVD split (QX_SVD_PROFILE=1, run single-thread): Gram-GEMM / eigensolve / back.
 static double g_svd_gemm = 0, g_svd_eig = 0, g_svd_back = 0;
+// B-form TEBD layers and their block-SVD sizes k = min(rows, cols), binned (profile).
+static const int g_kbin_edge[] = {8, 16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 1 << 30};
+static long long g_eo_layers = 0, g_kbin_n[12] = {0}, g_eo_direct = 0, g_eo_redone = 0, g_eo_direct_big = 0;
+static double g_eo_k3_all = 0, g_eo_k3_direct = 0;
+static double g_kbin_k3[12] = {0};
 static bool g_svd_prof = false;
 
 #ifdef QX_USE_CUDA
@@ -147,6 +152,17 @@ static bool gpu_fp32_mode(bool allow) {
     if (env <= 0) return false;     // default: FP64
     if (env >= 2) return true;      // force FP32 everywhere (testing)
     return allow;                   // env==1: FP32 only where the caller permits it
+}
+// Smallest block min-dim the B-form TEBD sends to the batched GPU eigensolver (M12),
+// env QX_GPU_BATCH_MIN; 0 (or no usable GPU) disables the batch, leaving the blocks
+// on the per-block route.
+static int gpu_batch_min() {
+    static int v = []() {
+        if (!qx_gpu::gpu_available()) return 0;
+        const char* e = std::getenv("QX_GPU_BATCH_MIN");
+        return e ? std::max(0, std::atoi(e)) : 48;
+    }();
+    return v;
 }
 #endif
 
@@ -1755,6 +1771,94 @@ static bool thin_svd_gram_gpu(const Mat& M, Mat& U, Mat& V, RVec& sv, bool allow
 }
 #endif
 
+// One block's thin SVD M = U diag(s) V^dag by block_svd_truncate's route: the direct
+// SVD when `stable` (see there), else the GPU for large blocks, LAPACK xgesdd, LAPACK's
+// Gram eigensolve (opt-in), or Eigen's Gram eigensolve. Called from OMP loops.
+static void svd_block_route(const Mat& M, Mat& U, Mat& V, RVec& s, bool allow_fp32,
+                            bool stable, int d, bool* direct = nullptr) {
+    if (direct) *direct = true;
+    if (stable) {
+        // The stability requirement is a DIRECT SVD (no Gram condition-squaring).
+        // LAPACK xgesdd is exactly that -- same guarantee as Eigen's BDCSVD, but
+        // several times faster on the mid/large blocks that dominate the GS sweep
+        // (BDCSVD's constant factor was why the Hubbard chi=256 GS lost to TeNPy).
+        // Fall back to BDCSVD for small blocks (lower fixed overhead) and on any
+        // gesdd failure. The Majumdar-Ghosh degeneracy regression (deterministic,
+        // variational) guards this path.
+#ifdef QX_HAS_LAPACKE
+        if (std::min(M.rows(), M.cols()) >= gesdd_min() && thin_svd_gesdd(M, U, V, s))
+            { g_tebd_nlapacke++; return; }
+#endif
+        auto bsvd = qx::robust_thin_bdcsvd(M);
+        U = std::move(bsvd.U); V = std::move(bsvd.V); s = std::move(bsvd.s);
+        return;
+    }
+#ifdef QX_USE_CUDA
+    // Large blocks -> GPU (cuSOLVER) Gram-eigensolve; the dominant central-Sz
+    // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
+    // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
+    if (std::min(M.rows(), M.cols()) >= gpu_min_blk(d) &&
+        thin_svd_gram_gpu(M, U, V, s, allow_fp32))
+        { _Pragma("omp atomic") g_tebd_ngpu++; if (direct) *direct = false; return; }
+#endif
+#ifdef QX_HAS_LAPACKE
+    // Direct LAPACK xgesdd for LARGE blocks: its divide-and-conquer beats Eigen's
+    // per-block Gram eigensolve (the spin-1 large-chi bottleneck) and is condition-
+    // stable. Small/rectangular blocks stay on the Gram trick (it eigensolves the
+    // smaller dimension, with lower fixed overhead).
+    if (std::min(M.rows(), M.cols()) >= gesdd_min() && thin_svd_gesdd(M, U, V, s))
+        { _Pragma("omp atomic") g_tebd_nlapacke++; return; }
+    // Gram eigensolve via LAPACK xsyevd/xheevd -- disabled by default (wrong
+    // results on this box's OpenBLAS); only for blocks >= lapacke_min.
+    if (std::min(M.rows(), M.cols()) >= lapacke_min() && thin_svd_lapacke(M, U, V, s))
+        { _Pragma("omp atomic") g_tebd_nlapacke++; if (direct) *direct = false; return; }
+#endif
+    thin_svd_gram(M, U, V, s);
+    if (direct) *direct = false;
+}
+
+// A direct SVD (no Gram matrix), accurate to ~eps of the largest singular value:
+// LAPACK xgesdd where the build has it, else Eigen's BDCSVD.
+static void svd_direct(const Mat& M, Mat& U, Mat& V, RVec& s) {
+#ifdef QX_HAS_LAPACKE
+    if (thin_svd_gesdd(M, U, V, s)) return;
+#endif
+    auto b = qx::robust_thin_bdcsvd(M);
+    U = std::move(b.U); V = std::move(b.V); s = std::move(b.s);
+}
+
+// How many of a bond's singular values sv(0) >= sv(1) >= ... (count of them) to keep:
+// drop the tail whose weight is within cutoff^2 of the total, cap at max_bond, then
+// drop values below cutoff * |theta|. Shared by block_svd_truncate and the B-form TEBD.
+template <class SV>
+static int trunc_keep(int count, const SV& sv, int max_bond, double cutoff) {
+    double sv2_total = 0;
+    for (int k = 0; k < count; ++k) sv2_total += sv(k) * sv(k);
+    int n_keep = count;
+    if (sv2_total > 0 && cutoff > 0) {
+        double discard = 0;
+        for (int k = count - 1; k >= 0; --k) {
+            discard += sv(k) * sv(k);
+            if (discard / sv2_total > cutoff * cutoff) { n_keep = k + 1; break; }
+        }
+    }
+    n_keep = std::max(1, std::min(n_keep, max_bond));
+    // Guard the degenerate all-zero theta: the zero-block skip can leave the spectrum
+    // empty (unreachable for a normalized MPS -- total norm ~1 guarantees a surviving
+    // block -- but the skip removed that invariant), and the max(1,...) would otherwise
+    // index past it. Clamp so the callers' keep/trunc loops are no-ops on an empty one.
+    n_keep = std::min(n_keep, count);
+    // Per-value floor (matches e.g. tenpy's svd_min): drop Schmidt values below
+    // cutoff*||theta||.  Without this, the cumulative criterion above keeps a long
+    // tail of negligible states, inflating the bond dimension and doing wasted
+    // O(chi^3) work when the physical entanglement is far below max_bond.
+    if (cutoff > 0 && count > 0) {
+        double floor = cutoff * std::sqrt(sv2_total);
+        while (n_keep > 1 && sv(n_keep - 1) < floor) --n_keep;
+    }
+    return n_keep;
+}
+
 static BlockSVDResult block_svd_truncate(
     const std::map<int,Mat>& theta,
     const BondSpace& bs_L,
@@ -1812,48 +1916,9 @@ static BlockSVDResult block_svd_truncate(
     // (g_svd_gemm/eig/back, plain doubles in thin_svd_gram) are +='d in this loop, so
     // parallel profiling would both race them and make the split meaningless.
     #pragma omp parallel for schedule(dynamic) if(svq.size() > 1 && !g_svd_prof)
-    for (int i = 0; i < (int)svq.size(); ++i) {
-        if (stable) {
-            // The stability requirement is a DIRECT SVD (no Gram condition-squaring).
-            // LAPACK xgesdd is exactly that -- same guarantee as Eigen's BDCSVD, but
-            // several times faster on the mid/large blocks that dominate the GS sweep
-            // (BDCSVD's constant factor was why the Hubbard chi=256 GS lost to TeNPy).
-            // Fall back to BDCSVD for small blocks (lower fixed overhead) and on any
-            // gesdd failure. The Majumdar-Ghosh degeneracy regression (deterministic,
-            // variational) guards this path.
-#ifdef QX_HAS_LAPACKE
-            if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gesdd_min() &&
-                thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
-                { g_tebd_nlapacke++; continue; }
-#endif
-            auto bsvd = qx::robust_thin_bdcsvd(*svblk[i]);
-            sb[i].U = std::move(bsvd.U); sb[i].V = std::move(bsvd.V); sb[i].s = std::move(bsvd.s);
-            continue;
-        }
-#ifdef QX_USE_CUDA
-        // Large blocks -> GPU (cuSOLVER) Gram-eigensolve; the dominant central-Sz
-        // block is the O(chi^3) Amdahl bottleneck this is meant to crush. Tiny tail
-        // blocks stay on the CPU (transfer-bound). Falls back to CPU on any error.
-        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gpu_min_blk((int)qphys.size()) &&
-            thin_svd_gram_gpu(*svblk[i], sb[i].U, sb[i].V, sb[i].s, allow_fp32))
-            { _Pragma("omp atomic") g_tebd_ngpu++; continue; }
-#endif
-#ifdef QX_HAS_LAPACKE
-        // Direct LAPACK xgesdd for LARGE blocks: its divide-and-conquer beats Eigen's
-        // per-block Gram eigensolve (the spin-1 large-chi bottleneck) and is condition-
-        // stable. Small/rectangular blocks stay on the Gram trick (it eigensolves the
-        // smaller dimension, with lower fixed overhead).
-        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= gesdd_min() &&
-            thin_svd_gesdd(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
-            { _Pragma("omp atomic") g_tebd_nlapacke++; continue; }
-        // Gram eigensolve via LAPACK xsyevd/xheevd -- disabled by default (wrong
-        // results on this box's OpenBLAS); only for blocks >= lapacke_min.
-        if (std::min(svblk[i]->rows(), svblk[i]->cols()) >= lapacke_min() &&
-            thin_svd_lapacke(*svblk[i], sb[i].U, sb[i].V, sb[i].s))
-            { _Pragma("omp atomic") g_tebd_nlapacke++; continue; }
-#endif
-        thin_svd_gram(*svblk[i], sb[i].U, sb[i].V, sb[i].s);
-    }
+    for (int i = 0; i < (int)svq.size(); ++i)
+        svd_block_route(*svblk[i], sb[i].U, sb[i].V, sb[i].s, allow_fp32, stable,
+                        (int)qphys.size());
     std::map<int, SVDBlk*> svds;
     for (int i = 0; i < (int)svq.size(); ++i) svds[svq[i]] = &sb[i];
 
@@ -1864,32 +1929,8 @@ static BlockSVDResult block_svd_truncate(
         for (int k = 0; k < s->s.size(); ++k)
             all_sv.push_back({s->s[k], q, k});
     std::sort(all_sv.begin(), all_sv.end(), [](auto& a, auto& b){ return a.sv > b.sv; });
-
-    // Apply cutoff
-    double sv2_total = 0;
-    for (auto& e : all_sv) sv2_total += e.sv * e.sv;
-    int n_keep = (int)all_sv.size();
-    if (sv2_total > 0 && cutoff > 0) {
-        double discard = 0;
-        for (int k = (int)all_sv.size()-1; k >= 0; --k) {
-            discard += all_sv[k].sv * all_sv[k].sv;
-            if (discard / sv2_total > cutoff * cutoff) { n_keep = k+1; break; }
-        }
-    }
-    n_keep = std::max(1, std::min(n_keep, max_bond));
-    // Guard the degenerate all-zero theta: the zero-block skip above can leave all_sv
-    // empty (unreachable for a normalized MPS -- total norm ~1 guarantees a surviving
-    // block -- but the skip removed that invariant), and the max(1,...) would otherwise
-    // index all_sv[0] below. Clamp so the keep/trunc loops are no-ops on an empty spectrum.
-    n_keep = std::min(n_keep, (int)all_sv.size());
-    // Per-value floor (matches e.g. tenpy's svd_min): drop Schmidt values below
-    // cutoff*||theta||.  Without this, the cumulative criterion above keeps a long
-    // tail of negligible states, inflating the bond dimension and doing wasted
-    // O(chi^3) work when the physical entanglement is far below max_bond.
-    if (cutoff > 0 && !all_sv.empty()) {
-        double floor = cutoff * std::sqrt(sv2_total);
-        while (n_keep > 1 && all_sv[n_keep - 1].sv < floor) --n_keep;
-    }
+    const int n_keep = trunc_keep((int)all_sv.size(), [&](int k) { return all_sv[k].sv; },
+                                  max_bond, cutoff);
 
     std::map<int,int> keep_per_q;
     for (int k = 0; k < n_keep; ++k) keep_per_q[all_sv[k].q]++;
@@ -2610,6 +2651,384 @@ static void tebd2_step_blocks(BMPS& s, double dt, bool imag, int chi_max,
     }
 }
 
+// ===== Even/odd block TEBD in B form: the opt-in real-time scheme (M12) =====
+// TeNPy's TEBD2. Every A[i > 0] is right-canonical (a "B" tensor), every bond basis
+// is a Schmidt basis, and lam[b] holds bond b's Schmidt values, normalised; A[0]
+// carries the norm. That is the centre-at-0 BMPS the measurements here read, so the
+// callers measure between steps as before. A step is three layers -- the even bonds
+// (i even) for dt/2, the odd bonds for dt, the even bonds for dt/2 -- and a layer's
+// bonds share no site, so all their SVDs are independent: one batch, where the sweep
+// above SVDs its bonds one after another. A bond (i, i+1) update, by Hastings' trick,
+// never divides by a Schmidt value:
+//   C = G B_i B_{i+1},   theta = lam_i C = X Y Z  (truncated),
+//   B_{i+1} = Z,   B_i = C Z^dag / |Y|,   lam_{i+1} = Y / |Y|.
+// The truncation's norm loss goes into A[0], as the sweep's does. A truncated B_i is
+// right-canonical only up to the discarded weight, so the measurements that must be
+// exact contract overlaps (gauge-free). Real time only: the trick needs unitary gates.
+//
+// The price is accuracy. The update needs the vectors of small singular values to
+// ~eps (eo_layer), which the Gram trick cannot give, so every block whose spectrum
+// reaches small values takes a direct SVD on the CPU. The scheme therefore wins where
+// the Schmidt values stay large -- bonds truncated by chi_max at moderate chi: 1.3-1.4x
+// TeNPy at chi = 256 on the GPU build, where the sweep is 0.8-0.9x -- and loses where
+// the spectra run deep: at chi = 1024 it took 140 s against the sweep's 64 s. So the
+// sweep stays the default, and this scheme is opt-in.
+using Lam = std::vector<std::map<int,RVec>>;   // lam[b][q]: Schmidt values on bond b
+
+// A block of the B-form update is fragile (a direct SVD, see eo_layer) when its rows
+// carry a Schmidt value below kEOGram, or when it keeps a singular value below kEOGram
+// of its bond's largest. At 1e-5 the energies matched an all-direct-SVD run to all 9
+// printed digits (chi = 256, N = 32 and 64); the kept-value test alone was off by
+// 4e-8 at 1e-6, by 3e-4 at 1e-7, and with no test the state blew up (norm^2 1.4).
+static constexpr double kEOGram = 1e-5;
+
+// Bring s to B form and fill lam: a left-canonical sweep, then a right-canonical one,
+// whose SVDs are the Schmidt decompositions. Both are lossless -- each split is capped
+// at its bond's current dimension, which drops only the Gram SVD's numerical zeros
+// (see move_centre) -- and the norm ends in A[0].
+static void eo_canonicalize(BMPS& s, Lam& lam, const std::vector<int>& qphys) {
+    const int n = s.n;
+    const std::map<int,RVec> no_sv;
+    lam.assign(n + 1, {});
+    for (int i = 0; i + 1 < n; ++i) {
+        auto th = form_theta(s.A[i], s.A[i+1], no_sv, s.bond[i], s.bond[i+1], s.bond[i+2],
+                             true, qphys);
+        auto svd = block_svd_truncate(th, s.bond[i], s.bond[i+2], bond_total(s.bond[i+1]),
+                                      0.0, false, false, qphys);
+        s.bond[i+1] = svd.new_mid_bs;
+        s.A[i]   = bt_A_from_U(svd, s.bond[i], s.bond[i+1], qphys);
+        s.A[i+1] = bt_center_LR(svd);
+    }
+    for (int i = n - 2; i >= 0; --i) {
+        auto th = form_theta(s.A[i], s.A[i+1], no_sv, s.bond[i], s.bond[i+1], s.bond[i+2],
+                             true, qphys);
+        auto svd = block_svd_truncate(th, s.bond[i], s.bond[i+2], bond_total(s.bond[i+1]),
+                                      0.0, false, /*stable=*/true, qphys);
+        s.bond[i+1] = svd.new_mid_bs;
+        s.A[i+1] = svd.Vt;
+        s.A[i]   = bt_center_RL(svd, s.bond[i], s.bond[i+1], qphys);
+        double w = 0;
+        for (auto& [q, v] : svd.sv) w += v.squaredNorm();
+        const double r = w > 0 ? 1.0 / std::sqrt(w) : 1.0;
+        for (auto& [q, v] : svd.sv) lam[i+1][q] = v * r;
+    }
+    for (int b : {0, n})
+        for (int k = 0; k < s.bond[b].n_sectors(); ++k)
+            lam[b][s.bond[b].qns[k]] = RVec::Ones(s.bond[b].dims[k]);
+}
+
+// The gates of one time step tau: the d = 2 XXZ gate, or (d > 2) the three MPO gates
+// whose on-site terms are weighted by bond membership, as in tebd2_step_blocks.
+struct EOGate { Gate g{}; Mat mid, lft, rgt; };
+static EOGate eo_gate(Cx tau, int n, int d, double J, double delta,
+                      const std::vector<MPOSite>* mpo) {
+    EOGate G;
+    if (d == 2) { G.g = build_xxz_gate(J, delta, tau); return G; }
+    G.mid = build_gate_from_mpo(*mpo, tau, 0.5, 0.5);
+    G.lft = build_gate_from_mpo(*mpo, tau, 1.0, (n == 2) ? 1.0 : 0.5);
+    G.rgt = build_gate_from_mpo(*mpo, tau, 0.5, 1.0);
+    return G;
+}
+
+// One layer: the bonds (i, i+1) for i = parity, parity + 2, ..., which share no site.
+static void eo_layer(BMPS& s, Lam& lam, int parity, const EOGate& G, int d,
+                     const std::vector<int>& qphys, int chi_max, double cutoff) {
+    const int n = s.n;
+    const std::map<int,RVec> no_sv;
+    std::vector<int> bonds;
+    for (int i = parity; i + 1 < n; i += 2) bonds.push_back(i);
+    const int nb = (int)bonds.size();
+    if (nb == 0) return;
+    const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
+    using pclk = std::chrono::steady_clock;
+    auto ptick = [&](double& acc, pclk::time_point t0) {
+        if (prof) acc += std::chrono::duration<double>(pclk::now() - t0).count(); };
+
+    // 1. C = G B_i B_{i+1}, bond by bond (form_theta parallelises inside).
+    auto tt = pclk::now();
+    std::vector<std::map<int,Mat>> C(nb);
+    for (int b = 0; b < nb; ++b) {
+        const int i = bonds[b];
+        C[b] = form_theta(s.A[i], s.A[i+1], no_sv, s.bond[i], s.bond[i+1], s.bond[i+2],
+                          true, qphys);
+        bt_expand_theta(C[b], s.bond[i], s.bond[i+2], qphys);
+        if (d == 2) apply_gate_theta(C[b], s.bond[i], s.bond[i+2], G.g);
+        else apply_gate_theta_general(C[b], s.bond[i], s.bond[i+2],
+                                      i == 0 ? G.lft : i == n - 2 ? G.rgt : G.mid, d, qphys);
+    }
+    ptick(g_tebd_theta, tt); tt = pclk::now();
+
+    // 2. The SVD of theta = lam_i C, every block of every bond in one batch. The
+    //    update needs the singular values and the right vectors only -- but those of
+    //    the small singular values accurately: B_i = C Z^dag multiplies Z by C, which
+    //    is theta with its rows divided by lam_i, so an error in Z comes back times
+    //    1 / lam_i. The Gram route (fast, and batched on the GPU) resolves singular
+    //    values only down to ~sqrt(eps) of a block's largest; below that its vectors
+    //    are noise, and 1 / lam_i amplified them until the state blew up (its norm^2
+    //    reached 1.4). So a block takes a direct SVD, accurate to ~eps, when it is
+    //    fragile: when its rows carry a Schmidt value lam_i < kEOGram, or when it keeps
+    //    a singular value below kEOGram of the bond's largest. The rest keep the Gram
+    //    route, and the GPU batch: about half the work (by k^3) at chi = 256, a fifth
+    //    at chi = 1024, where the spectra run deeper.
+    struct Job { int b, q; long long work; RVec s; Mat V; bool direct; };
+    std::vector<Job> jobs;
+    for (int b = 0; b < nb; ++b)
+        for (auto& [q, blk] : C[b])
+            if (blk.size() != 0) {
+                const long long r = blk.rows(), c = blk.cols();
+                jobs.push_back({b, q, std::min(r, c) * std::min(r, c) * std::max(r, c), {}, {}, false});
+            }
+    std::stable_sort(jobs.begin(), jobs.end(),
+                     [](const Job& x, const Job& y) { return x.work > y.work; });
+    std::vector<char> fragile(jobs.size(), 0);
+    for (int j = 0; j < (int)jobs.size(); ++j) {   // rows with a small Schmidt value
+        const int i = bonds[jobs[j].b];
+        auto rows = phys_groups(s.bond[i], jobs[j].q, -1, qphys);
+        for (int s1 = 0; s1 < (int)qphys.size(); ++s1) {
+            if (rows[s1].width == 0) continue;
+            auto it = lam[i].find(rows[s1].q);
+            if (it != lam[i].end() && it->second.size() && it->second.minCoeff() < kEOGram)
+                fragile[j] = 1;
+        }
+    }
+    auto scaled = [&](const Job& j) {        // theta's block: rows of left sector q_L * lam
+        const int i = bonds[j.b];
+        Mat t = C[j.b].at(j.q);
+        auto rows = phys_groups(s.bond[i], j.q, -1, qphys);
+        for (int s1 = 0; s1 < (int)qphys.size(); ++s1) {
+            if (rows[s1].width == 0) continue;
+            auto it = lam[i].find(rows[s1].q);
+            for (int k = 0; k < rows[s1].width; ++k)
+                t.row(rows[s1].off + k) *= (it != lam[i].end() && k < it->second.size())
+                                           ? it->second[k] : 0.0;
+        }
+        return t;
+    };
+    std::vector<char> done(jobs.size(), 0);
+#ifdef QX_USE_CUDA
+    if constexpr (std::is_same_v<S, Cx>) if (gpu_batch_min() > 0) {
+        // The batch the layer exists for: the large blocks' Gram eigensolves in one
+        // cusolverDnXsyevBatched per size class (eigh_batched_z). The Gram matrices
+        // and the back-transform V = theta^dag U / sv stay on the CPU.
+        std::vector<int> sel;
+        for (int j = 0; j < (int)jobs.size(); ++j) {
+            const Mat& c = C[jobs[j].b].at(jobs[j].q);
+            if (!fragile[j] && std::min(c.rows(), c.cols()) >= gpu_batch_min()) sel.push_back(j);
+        }
+        const int ns = (int)sel.size();
+        std::vector<Mat> T(ns), Gm(ns);
+        std::vector<RVec> W(ns);
+        {
+#ifdef QX_HAS_LAPACKE
+            OpenBlasSingleThreadGuard _blas_guard;
+#endif
+            #pragma omp parallel for schedule(dynamic) if(ns > 1)
+            for (int t = 0; t < ns; ++t) {
+                T[t] = scaled(jobs[sel[t]]);
+                if (T[t].squaredNorm() <= 1e-24) { T[t].resize(0, 0); continue; }   // zero block
+                if (T[t].rows() <= T[t].cols()) Gm[t].noalias() = T[t] * T[t].adjoint();
+                else                            Gm[t].noalias() = T[t].adjoint() * T[t];
+                W[t].resize(Gm[t].rows());
+            }
+        }
+        std::vector<Cx*> gp; std::vector<int> gn, at; std::vector<double*> wp;
+        for (int t = 0; t < ns; ++t)
+            if (Gm[t].size()) { gp.push_back(Gm[t].data()); gn.push_back((int)Gm[t].rows());
+                                wp.push_back(W[t].data()); at.push_back(t); }
+        std::vector<int> ok(gp.size(), 0);
+        if (!gp.empty())
+            qx_gpu::eigh_batched_z((int)gp.size(), gp.data(), gn.data(), wp.data(),
+                                   /*fp32=*/false, ok.data());
+        {
+#ifdef QX_HAS_LAPACKE
+            OpenBlasSingleThreadGuard _blas_guard;
+#endif
+            #pragma omp parallel for schedule(dynamic) if(gp.size() > 1)
+            for (int u = 0; u < (int)gp.size(); ++u) {
+                const int t = at[u];
+                Job& jb = jobs[sel[t]];
+                if (!ok[u]) {                        // not converged on the device
+                    Mat U;
+                    svd_block_route(T[t], U, jb.V, jb.s, /*allow_fp32=*/false, false, d,
+                                    &jb.direct);
+                    continue;
+                }
+                const int k = (int)Gm[t].rows();
+                jb.s.resize(k);
+                for (int c = 0; c < k; ++c) jb.s(c) = std::sqrt(std::max(W[t](k - 1 - c), 0.0));
+                const Mat Q = Gm[t].rowwise().reverse();   // eigenvectors, descending
+                if (T[t].rows() > T[t].cols()) { jb.V = Q; continue; }   // Gram theta^dag theta
+                jb.V = T[t].adjoint() * Q;                                 // theta^dag U, then / sv
+                const double smax = jb.s(0) > 0 ? jb.s(0) : 1.0;
+                for (int c = 0; c < k; ++c)
+                    if (jb.s(c) > 1e-14 * smax) jb.V.col(c) /= jb.s(c);
+                    else { jb.V.col(c).setZero(); jb.s(c) = 0; }
+            }
+        }
+        g_tebd_ngpu += std::count(ok.begin(), ok.end(), 1);
+        for (int j : sel) done[j] = 1;
+    }
+#endif
+    {
+#ifdef QX_HAS_LAPACKE
+        OpenBlasSingleThreadGuard _blas_guard;
+#endif
+        #pragma omp parallel for schedule(dynamic) if(jobs.size() > 1 && !g_svd_prof)
+        for (int j = 0; j < (int)jobs.size(); ++j) {
+            if (done[j]) continue;
+            Mat t = scaled(jobs[j]);
+            if (t.squaredNorm() <= 1e-24) continue;   // a zero block (block_svd_truncate)
+            Mat U;
+            if (fragile[j]) { svd_direct(t, U, jobs[j].V, jobs[j].s); jobs[j].direct = true; }
+            else svd_block_route(t, U, jobs[j].V, jobs[j].s, /*allow_fp32=*/false, false, d,
+                                 &jobs[j].direct);
+        }
+    }
+    for (auto& j : jobs)
+        if (j.s.size()) {
+            g_tebd_nsvd++;
+            g_tebd_maxblk = std::max(g_tebd_maxblk, (long long)j.s.size());
+            if (prof) {
+                int bin = 0;
+                while (j.s.size() > g_kbin_edge[bin]) ++bin;
+                g_kbin_n[bin]++;
+                g_kbin_k3[bin] += std::pow((double)j.s.size(), 3);
+            }
+        }
+    if (prof) g_eo_layers++;
+    ptick(g_tebd_svd, tt); tt = pclk::now();
+
+    // 3. Per bond: truncate, redo the Gram blocks that turn out fragile (they keep a
+    //    singular value below kEOGram of the bond's largest) by a direct SVD, then
+    //    B_{i+1} = Z, B_i = C Z^dag / |Y|, lam_{i+1} = Y / |Y|.
+    std::vector<std::vector<int>> mine(nb);
+    for (int j = 0; j < (int)jobs.size(); ++j)
+        if (jobs[j].s.size()) mine[jobs[j].b].push_back(j);
+    std::vector<double> renorm(nb, 1.0);
+    std::vector<std::string> err(nb);
+    long long redone = 0;
+    {
+#ifdef QX_HAS_LAPACKE
+        OpenBlasSingleThreadGuard _blas_guard;
+#endif
+        #pragma omp parallel for schedule(dynamic) if(nb > 1) reduction(+:redone)
+        for (int b = 0; b < nb; ++b) {
+            const int i = bonds[b];
+            struct SVE { double sv; int j; };
+            std::vector<SVE> all;
+            std::map<int,int> keep;                  // job -> kept count
+            int n_keep = 0;
+            for (int pass = 0; pass < 2; ++pass) {
+                all.clear(); keep.clear();
+                for (int j : mine[b])
+                    for (int k = 0; k < jobs[j].s.size(); ++k)
+                        if (jobs[j].s[k] > 0) all.push_back({jobs[j].s[k], j});
+                std::sort(all.begin(), all.end(),
+                          [](const SVE& x, const SVE& y) { return x.sv > y.sv; });
+                n_keep = trunc_keep((int)all.size(), [&](int k) { return all[k].sv; },
+                                    chi_max, cutoff);
+                for (int k = 0; k < n_keep; ++k) keep[all[k].j]++;
+                if (pass == 1 || n_keep == 0) break;
+                bool again = false;                  // kept values the Gram route cannot resolve
+                for (int k = 0; k < n_keep; ++k) {
+                    Job& jb = jobs[all[k].j];
+                    if (jb.direct || all[k].sv >= kEOGram * all[0].sv) continue;
+                    Mat U;
+                    svd_direct(scaled(jb), U, jb.V, jb.s);
+                    jb.direct = true; again = true; ++redone;
+                }
+                if (!again) break;
+            }
+            if (n_keep == 0) { err[b] = "TEBD: bond " + std::to_string(i + 1) +
+                                        " lost every state"; continue; }
+            double kept2 = 0;
+            for (int k = 0; k < n_keep; ++k) kept2 += all[k].sv * all[k].sv;
+            const double r = std::sqrt(kept2);
+            renorm[b] = r;
+            BlockSVDResult f;                        // B_i's row groups, as bt_A_from_U reads them
+            f.U_grp.assign(qphys.size(), {});
+            std::map<int,Mat> Bn;
+            std::map<int,RVec> ln;
+            std::vector<std::pair<int,int>> secs;
+            for (auto& [j, kj] : keep) {
+                const Job& jb = jobs[j];
+                const Mat Vk = jb.V.leftCols(kj);
+                Bn[jb.q] = Vk.adjoint();
+                Mat W = C[b].at(jb.q) * Vk;           // C Z^dag
+                if (i > 0) W /= r;                   // A[0] carries the norm instead
+                auto rows = phys_groups(s.bond[i], jb.q, -1, qphys);
+                for (int s1 = 0; s1 < (int)qphys.size(); ++s1)
+                    if (rows[s1].width > 0)
+                        f.U_grp[s1][jb.q] = W.middleRows(rows[s1].off, rows[s1].width);
+                ln[jb.q] = jb.s.head(kj) / r;
+                secs.emplace_back(jb.q, kj);
+            }
+            std::sort(secs.begin(), secs.end());
+            s.bond[i+1] = BondSpace::from_pairs(secs);
+            s.A[i]   = bt_A_from_U(f, s.bond[i], s.bond[i+1], qphys);
+            s.A[i+1] = std::move(Bn);
+            lam[i+1] = std::move(ln);
+        }
+    }
+    for (auto& e : err) if (!e.empty()) throw std::runtime_error(e);
+    double loss = 1.0;                               // the truncation's norm loss
+    for (int b = 0; b < nb; ++b) if (bonds[b] > 0) loss *= renorm[b];
+    if (loss != 1.0) for (auto& [q, blk] : s.A[0]) blk *= loss;
+    if (prof) {
+        long long ndirect = 0;
+        for (auto& j : jobs) {
+            ndirect += (j.s.size() && j.direct);
+            if (j.s.size()) { const double k3 = std::pow((double)j.s.size(), 3);
+                              g_eo_k3_all += k3; if (j.direct) g_eo_k3_direct += k3;
+                              if (j.direct && j.s.size() >= 48) g_eo_direct_big++; }
+        }
+        g_eo_direct += ndirect; g_eo_redone += redone;
+    }
+    ptick(g_tebd_recomb, tt);
+}
+
+// One TEBD2 step on a B-form state (eo_canonicalize): even bonds dt/2, odd bonds dt,
+// even bonds dt/2 -- TeNPy's order-2 step, with the same gates as the sweep. Always in
+// FP64: single precision resolves singular values only to ~3e-4 of a block's largest,
+// far coarser than the update needs (kEOGram).
+static void tebd_eo_step(BMPS& s, Lam& lam, double dt, int chi_max, double cutoff,
+                         double J = 1.0, double delta = 1.0,
+                         const std::vector<MPOSite>* mpo = nullptr) {
+    const int n = s.n;
+    const int d = (mpo && !mpo->empty()) ? (*mpo)[0].d : 2;
+    const std::vector<int>& qphys = (d > 2) ? (*mpo)[0].phys_charge : SPIN_HALF_CHARGES;
+    const EOGate half = eo_gate(Cx(0, -dt / 2), n, d, J, delta, mpo);
+    const EOGate full = eo_gate(Cx(0, -dt), n, d, J, delta, mpo);
+    eo_layer(s, lam, 0, half, d, qphys, chi_max, cutoff);
+    eo_layer(s, lam, 1, full, d, qphys, chi_max, cutoff);
+    eo_layer(s, lam, 0, half, d, qphys, chi_max, cutoff);
+}
+
+// <(2Sz or N)_i> staggered over the chain, (1/n) sum (-1)^i <O_i>, exactly for any
+// gauge: overlap environments instead of measure_stag's walk, which assumes the
+// right part is right-canonical (a truncated B-form state is so only approximately).
+static double measure_stag_exact(const BMPS& s, const std::vector<int>& qphys) {
+    const int n = s.n;
+    auto OL = overlap_left_envs(s, s, qphys);
+    auto OR = overlap_right_envs(s, s, qphys);
+    std::vector<double> w(qphys.size());
+    for (size_t k = 0; k < qphys.size(); ++k) w[k] = obs_of_charge(qphys[k]);
+    auto v = measure_sz_all(s, s, OL, OR, qphys, &w);
+    double z = 0;
+    for (auto& [q, blk] : OL[n]) z += rp(blk(0, 0));
+    double m = 0;
+    for (int i = 0; i < n; ++i) m += ((i % 2 == 0) ? 1.0 : -1.0) * rp(v[i]);
+    return z > 0 ? m / (z * n) : 0.0;
+}
+
+// <H> = <s|H|s> / <s|s>, exactly for any gauge (bt_energy assumes canonical form).
+static double energy_exact(const BMPS& s, const std::vector<MPOSite>& mpo) {
+    auto OL = overlap_left_envs(s, s, mpo[0].phys_charge);
+    double z = 0;
+    for (auto& [q, blk] : OL[s.n]) z += rp(blk(0, 0));
+    return rp(mpo_sandwich(s, mpo, s)) / z;
+}
+
 // Energy <H> via the two-site H_eff at the centre (assumes centre at site 0).
 static double bt_energy(const BMPS& s, const std::vector<MPOSite>& mpo) {
     const std::map<int,RVec> no_sv;
@@ -2662,7 +3081,7 @@ static TDVP2Out run_tdvp2(const std::vector<MPOSite>& mpo, int n,
 static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
                           double dt, int n_steps, int chi_max, double cutoff,
                           bool imag, int measure_stride = 1,
-                          double J = 1.0, double delta = 1.0) {
+                          double J = 1.0, double delta = 1.0, bool even_odd = false) {
     static_assert(std::is_same_v<S, Cx>, "TEBD2 requires complex scalar");
     using clk = std::chrono::steady_clock;
     const std::vector<int>& qphys = mpo[0].phys_charge;   // spin-1/2 {+1,-1}, spin-1 {+2,0,-2}, ...
@@ -2670,17 +3089,28 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
     for (int i=0;i<n;++i) neel[i] = (i%2==0) ? qphys.front() : qphys.back();
     BMPS s = cps_init(mpo, n, neel, qphys);
     const bool prof = (std::getenv("QX_TEBD_PROFILE") != nullptr);
-    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0; }
+    if (prof) { g_tebd_theta=g_tebd_gate=g_tebd_svd=g_tebd_recomb=0; g_tebd_maxblk=g_tebd_nsvd=g_tebd_nlapacke=g_tebd_ngpu=0;
+                g_eo_layers = 0; g_eo_direct = 0; g_eo_redone = 0; g_eo_direct_big = 0;
+                g_eo_k3_all = 0; g_eo_k3_direct = 0;
+                for (int k = 0; k < 12; ++k) { g_kbin_n[k] = 0; g_kbin_k3[k] = 0; } }
     g_svd_prof = (std::getenv("QX_SVD_PROFILE") != nullptr);
     if (g_svd_prof) { g_svd_gemm=g_svd_eig=g_svd_back=0; }
 
     TDVP2Out out;
     auto t0 = clk::now();
+    if (even_odd && imag)
+        throw std::invalid_argument("TEBD: the even/odd scheme is real-time only "
+                                    "(its update needs unitary gates)");
+    const bool eo = even_odd;
+    Lam lam;
+    if (eo) eo_canonicalize(s, lam, qphys);
     for (int step = 0; step < n_steps; ++step) {
-        tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta, /*allow_fp32=*/!imag, &mpo);
+        if (eo) tebd_eo_step(s, lam, dt, chi_max, cutoff, J, delta, &mpo);
+        else    tebd2_step_blocks(s, dt, imag, chi_max, cutoff, J, delta, /*allow_fp32=*/!imag, &mpo);
         if (measure_stride > 0 && (step % measure_stride == 0 || step == n_steps - 1)) {
             out.times.push_back((step+1)*dt);
-            out.stag.push_back(measure_stag(s.A, s.bond, n, qphys));
+            out.stag.push_back(eo ? measure_stag_exact(s, qphys)
+                                  : measure_stag(s.A, s.bond, n, qphys));
         }
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
@@ -2692,14 +3122,28 @@ static TDVP2Out run_tebd2(const std::vector<MPOSite>& mpo, int n,
             (int)g_tebd_maxblk, g_tebd_nsvd);
         std::fprintf(stderr, "   nsvd=%lld nlapacke=%lld ngpu=%lld (large blocks: LAPACK zheevd / GPU cuSOLVER)\n",
                      g_tebd_nsvd, g_tebd_nlapacke, g_tebd_ngpu);
+        if (g_eo_layers) {   // B-form: SVDs per layer by size k, and their share of sum k^3
+            double k3 = 0; for (int k = 0; k < 12; ++k) k3 += g_kbin_k3[k];
+            std::fprintf(stderr, "   B-form: %lld layers; per layer, blocks by k (share of k^3):", g_eo_layers);
+            for (int k = 0, lo = 1; k < 12; lo = g_kbin_edge[k] + 1, ++k)
+                if (g_kbin_n[k]) std::fprintf(stderr, " %d-%d:%.1f(%.0f%%)", lo,
+                                              k == 11 ? 99999 : g_kbin_edge[k],
+                                              (double)g_kbin_n[k] / g_eo_layers, 100 * g_kbin_k3[k] / k3);
+            std::fprintf(stderr, "\n   B-form: %lld direct SVDs (%lld redone after a Gram SVD; %lld with k >= 48; %.0f%% of sum k^3)\n",
+                         g_eo_direct, g_eo_redone, g_eo_direct_big,
+                         g_eo_k3_all > 0 ? 100 * g_eo_k3_direct / g_eo_k3_all : 0.0);
+        }
     }
     if (g_svd_prof) {
         double st = g_svd_gemm+g_svd_eig+g_svd_back;
         std::fprintf(stderr, "   [SVD split] gram-gemm=%.3f(%.0f%%) eigensolve=%.3f(%.0f%%) back=%.3f(%.0f%%)  (of %.3fs gram-SVD)\n",
             g_svd_gemm,100*g_svd_gemm/st, g_svd_eig,100*g_svd_eig/st, g_svd_back,100*g_svd_back/st, st);
     }
-    rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
-    out.energy = bt_energy(s, mpo);
+    if (eo) out.energy = energy_exact(s, mpo);
+    else {
+        rebuild_mpo_envs(s, mpo);   // TEBD does not maintain MPO envs; bt_energy needs them
+        out.energy = bt_energy(s, mpo);
+    }
     out.max_bond = 0;
     for (auto& b : s.bond) { int t=0; for (int d : b.dims) t+=d; out.max_bond = std::max(out.max_bond, t); }
     return out;
@@ -3329,7 +3773,8 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
                                 int n_sweeps, double J = 1.0, double delta = 1.0,
                                 int total_charge = 0,
                                 const std::vector<int>* init_config = nullptr,
-                                const std::vector<double>* op_wts = nullptr) {
+                                const std::vector<double>* op_wts = nullptr,
+                                bool even_odd = false) {
     static_assert(std::is_same_v<S, Cx>, "spectral requires complex scalar");
     using clk = std::chrono::steady_clock;
     SpectralOut out; out.n = n; out.l0 = n / 2;
@@ -3362,6 +3807,9 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
 
     // 3. real-time evolve, measuring C_{j,l0}(t) at each step
     auto t0 = clk::now();
+    const bool eo = even_odd;
+    Lam lam;
+    if (eo) eo_canonicalize(phi, lam, qphys);
     for (int step = 0; step <= n_steps; ++step) {
         double t = step * dt;
         auto OL = overlap_left_envs(psi0, phi, qphys);
@@ -3372,7 +3820,9 @@ static SpectralOut run_spectral(const std::vector<MPOSite>& mpo, int n,
         for (int j = 0; j < n; ++j) { S c = phase * ov[j] / S(Z); re[j] = c.real(); im[j] = c.imag(); }
         out.C_re.push_back(re); out.C_im.push_back(im); out.times.push_back(t);
         for (auto& b : phi.bond) { int s=0; for (int d2 : b.dims) s+=d2; out.max_bond = std::max(out.max_bond, s); }
-        if (step < n_steps)
+        if (step < n_steps && eo)
+            tebd_eo_step(phi, lam, dt, chi_max, cutoff, J, delta, d > 2 ? &mpo : nullptr);
+        else if (step < n_steps)
             tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta,
                               /*allow_fp32=*/true, d > 2 ? &mpo : nullptr);  // fast NN route
     }
@@ -3394,7 +3844,8 @@ struct LoschmidtOut {
 // the overlap-convention constant both cancel.
 static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
                                   double dt, int n_steps, int chi_max, double cutoff,
-                                  int n_sweeps, double Jf, double deltaf) {
+                                  int n_sweeps, double Jf, double deltaf,
+                                  bool even_odd = false) {
     static_assert(std::is_same_v<S, Cx>, "loschmidt requires complex scalar");
     using clk = std::chrono::steady_clock;
     LoschmidtOut out; out.n = n;
@@ -3409,6 +3860,9 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
 
     BMPS psi = psi0;
     auto t0 = clk::now();
+    const bool eo = even_odd;
+    Lam lam;
+    if (eo) eo_canonicalize(psi, lam, SPIN_HALF_CHARGES);
     for (int step = 0; step <= n_steps; ++step) {
         auto OLc = overlap_left_envs(psi0, psi);
         auto OLn = overlap_left_envs(psi,  psi);
@@ -3419,7 +3873,9 @@ static LoschmidtOut run_loschmidt(const std::vector<MPOSite>& mpo_i, int n,
         out.L.push_back(L);
         out.rate.push_back(L > 1e-300 ? -std::log(L) / n : 1e30);
         for (auto& b : psi.bond) { int s=0; for (int d : b.dims) s+=d; out.max_bond = std::max(out.max_bond, s); }
-        if (step < n_steps)
+        if (step < n_steps && eo)
+            tebd_eo_step(psi, lam, dt, chi_max, cutoff, Jf, deltaf);
+        else if (step < n_steps)
             tebd2_step_blocks(psi, dt, /*imag*/false, chi_max, cutoff, Jf, deltaf,
                               /*allow_fp32=*/true);
     }
@@ -3729,7 +4185,7 @@ struct ConductivityOut {
 static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n,
                                         double dt, int n_steps, int chi_max,
                                         double cutoff, int n_sweeps,
-                                        double J, double delta) {
+                                        double J, double delta, bool even_odd = false) {
     static_assert(std::is_same_v<S, Cx>, "conductivity requires complex scalar");
     using clk = std::chrono::steady_clock;
     ConductivityOut out; out.n = n;
@@ -3746,6 +4202,9 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
     BMPS phi  = phi0;
 
     auto t0 = clk::now();
+    const bool eo = even_odd;
+    Lam lam;
+    if (eo) eo_canonicalize(phi, lam, SPIN_HALF_CHARGES);
     for (int step = 0; step <= n_steps; ++step) {
         auto OL = overlap_left_envs(phi0, phi);
         S ov = OL[n].count(0) ? OL[n].at(0)(0,0) : S(0);
@@ -3753,8 +4212,11 @@ static ConductivityOut run_conductivity(const std::vector<MPOSite>& mpo_H, int n
         out.times.push_back(step * dt);
         out.C_re.push_back(c.real()); out.C_im.push_back(c.imag());
         for (auto& b : phi.bond) { int s=0; for (int dm : b.dims) s+=dm; out.max_bond = std::max(out.max_bond, s); }
-        if (step < n_steps) tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta,
-                                              /*allow_fp32=*/true);
+        if (step < n_steps && eo)
+            tebd_eo_step(phi, lam, dt, chi_max, cutoff, J, delta);
+        else if (step < n_steps)
+            tebd2_step_blocks(phi, dt, /*imag*/false, chi_max, cutoff, J, delta,
+                              /*allow_fp32=*/true);
     }
     out.wall_s = std::chrono::duration<double>(clk::now() - t0).count();
     return out;
@@ -5936,9 +6398,10 @@ TDVPBlockResult run_tdvp2_blocks(const std::vector<MPOSite>& mpo, int n,
 TDVPBlockResult run_tebd2_blocks(const std::vector<MPOSite>& mpo, int n,
                                  double dt, int n_steps, int chi_max,
                                  double cutoff, bool imag, int measure_stride,
-                                 double J, double delta) {
+                                 double J, double delta, bool even_odd) {
     require_uniform_local_dim(mpo, "run_tebd2_blocks");   // gate built from the MPO for d>2
-    auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride, J, delta);
+    auto o = BlockDMRG<Cx>::run_tebd2(mpo, n, dt, n_steps, chi_max, cutoff, imag, measure_stride,
+                                      J, delta, even_odd);
     TDVPBlockResult r;
     r.energy = o.energy; r.times = o.times; r.stag = o.stag;
     r.max_bond = o.max_bond; r.wall_time_s = o.wall_s;
@@ -5951,10 +6414,11 @@ SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
                                    double cutoff, int n_sweeps, double J, double delta,
                                    int total_charge,
                                    const std::vector<int>* init_config,
-                                   const std::vector<double>* op_wts) {
+                                   const std::vector<double>* op_wts, bool even_odd) {
     require_uniform_local_dim(mpo, "run_spectral_blocks");   // d>2 evolves via the MPO gate
     auto o = BlockDMRG<Cx>::run_spectral(mpo, n, dt, n_steps, chi_max, cutoff, n_sweeps,
-                                         J, delta, total_charge, init_config, op_wts);
+                                         J, delta, total_charge, init_config, op_wts,
+                                         even_odd);
     SpectralResult r;
     r.times = o.times; r.l0 = o.l0; r.n = o.n; r.max_bond = o.max_bond;
     r.E0 = o.E0; r.wall_time_s = o.wall_s; r.C_re = o.C_re; r.C_im = o.C_im;
@@ -5965,10 +6429,10 @@ SpectralResult run_spectral_blocks(const std::vector<MPOSite>& mpo, int n,
 LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
                                      double dt, int n_steps, int chi_max,
                                      double cutoff, int n_sweeps,
-                                     double Jf, double deltaf) {
+                                     double Jf, double deltaf, bool even_odd) {
     require_local_dim2(mpo_i, "run_loschmidt_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_loschmidt(mpo_i, n, dt, n_steps, chi_max, cutoff,
-                                          n_sweeps, Jf, deltaf);
+                                          n_sweeps, Jf, deltaf, even_odd);
     LoschmidtResult r;
     r.times = o.times; r.L = o.L; r.rate = o.rate;
     r.n = o.n; r.max_bond = o.max_bond; r.E0 = o.E0; r.wall_time_s = o.wall_s;
@@ -5979,10 +6443,10 @@ LoschmidtResult run_loschmidt_blocks(const std::vector<MPOSite>& mpo_i, int n,
 ConductivityResult run_conductivity_blocks(const std::vector<MPOSite>& mpo_H, int n,
                                            double dt, int n_steps, int chi_max,
                                            double cutoff, int n_sweeps,
-                                           double J, double delta) {
+                                           double J, double delta, bool even_odd) {
     require_local_dim2(mpo_H, "run_conductivity_blocks");   // TEBD-gate evolution is spin-1/2-only
     auto o = BlockDMRG<Cx>::run_conductivity(mpo_H, n, dt, n_steps, chi_max, cutoff,
-                                             n_sweeps, J, delta);
+                                             n_sweeps, J, delta, even_odd);
     ConductivityResult r;
     r.times = o.times; r.C_re = o.C_re; r.C_im = o.C_im;
     r.n = o.n; r.max_bond = o.max_bond; r.E0 = o.E0; r.wall_time_s = o.wall_s;

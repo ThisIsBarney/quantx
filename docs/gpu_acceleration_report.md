@@ -32,6 +32,11 @@ speedup is monotonic in size; Phase A captures its SVD part (4.3× on the SVD ph
 at χ=1024) and Phase B adds the theta part (7× on that phase), together turning the
 χ=1024 step from 7.2 s (CPU) into **1.63 s**.
 
+**M12 (2026-10-28)** adds an opt-in even/odd TEBD scheme whose layers batch their
+eigensolves on the GPU: same session, 1.33× and 1.40× TeNPy at χ = 256 (N = 32 and 64),
+where the default sweep is 0.93× and 0.81×; at χ = 1024 the sweep keeps 2.20× (see
+[M12](#m12--batched-eigensolves-on-the-gpu-and-the-evenodd-tebd-scheme-they-need)).
+
 ## What was built
 
 - `src/gpu_svd.cu` / `src/gpu_svd.hpp` — `thin_svd_gram_gpu_z`: the Gram-trick thin
@@ -363,6 +368,79 @@ OpenBLAS (the bulk of the small-χ speedup, and correct), with the eigensolve ba
 Eigen. χ=512 is now correct. **Follow-up: add a large-χ DMRG-energy regression test**
 (the gap that hid this).
 
+## M12 — batched eigensolves on the GPU, and the even/odd TEBD scheme they need
+
+M12 asked for χ = 256 no slower than TeNPy, the χ = 1024 lead kept, and the CPU path
+intact. Everything below was measured on this box (RTX 4090, i5-13600KF) between
+2026-10-21 and 10-28, one CPU thread per engine.
+
+**Where the χ = 256 time goes.** `QX_TEBD_PROFILE=1` on the N = 32, χ = 256 quench
+(50 steps): 93 % SVD, 6 % forming θ, 1 % gate and recombination. Within the SVD, the Gram
+route's eigensolve takes 80 %. cuTENSOR's block-sparse contractions could only reach θ's
+6 %, so for TEBD they are not the lever (they may be for TDVP and DMRG at large χ, which
+are contraction-bound). Nor does the per-block GPU route help at this size: blocks of up
+to ~150 cost the GPU in latency what they cost the CPU in arithmetic, and lowering its
+threshold made the run slower (18.7 s at 96, 23.0 s at 64, 28.1 s at 32, against
+14.1 s at 128).
+
+**Batching needs independent bonds.** `cusolverDnXsyevBatched` solves a batch of
+equal-size Hermitian matrices 4–12× faster than Eigen on one thread (n = 64–128,
+8–32 at once), and batches of different sizes on separate streams overlap: three of
+them took 14 ms together against 26 ms one after another. But the sweep updates its bonds
+one after another, and one bond holds ~8 blocks of different sizes: batches of one.
+TeNPy's even/odd splitting updates the bonds of a layer independently, so a layer's
+blocks (~100 at N = 32) go into one call, `qx_gpu::eigh_batched_z`: it pads them into
+size classes (multiples of 16 up to 64, of 32 up to 256, then of 64 and 128) and runs one
+`cusolverDnXsyevBatched` per class, each class on its own stream. A padded matrix carries
+−trace on its extra diagonal, below all of its own eigenvalues, so the padding's
+eigenpairs sort first and never mix with its own.
+
+**The scheme needs accurate SVDs.** The even/odd update keeps the MPS in B form
+(right-canonical tensors, the Schmidt values on every bond) and uses Hastings' trick,
+B_i = C Z†, so as never to divide by a Schmidt value. But C is θ with its rows divided by
+the left bond's Schmidt values, so an error in the singular vectors comes back times
+1/λ. The Gram trick resolves singular values only to ~√ε of a block's largest. With it
+everywhere the state blew up on the GPU (‖ψ‖² = 1.42 after 40 layers) and drifted on the
+CPU (B tensors O(1) from right-canonical within 5 layers); TeNPy uses a direct SVD and
+does not meet the problem. So a block is fragile, and takes a direct SVD on the CPU
+(LAPACK `gesdd` where the build has it, else Eigen's BDCSVD), when its rows carry a
+Schmidt value below 10⁻⁵ or when it keeps a singular value below 10⁻⁵ of its bond's
+largest. That reproduces an all-direct-SVD run to all 9 printed digits of the energy;
+testing the kept values alone was off by 4·10⁻⁸ at 10⁻⁶ and by 3·10⁻⁴ at 10⁻⁷. The GPU's
+own direct SVDs do not help: `gesvdp` takes 19 ms and `gesvdj` 195 ms for a 150 × 300
+block, against ~31 ms for Eigen's BDCSVD on one CPU thread, and neither overlaps on
+streams.
+
+With direct SVDs throughout, the scheme reproduces TeNPy's own TEBD to 3·10⁻¹⁰ in the
+final energy (N = 12 at χ = 64 and N = 16 at χ = 256, both untruncated); the sweep, a
+different splitting, differs from TeNPy there by 6·10⁻³ and 9·10⁻³.
+
+**Results** (`benchmarks/gpu_vs_tenpy_quench.py`, same session, min of 2, one CPU thread
+each, 50 steps of dt = 0.05; QX-EO is `scheme="even_odd"`):
+
+| N | χ | TeNPy | QX sweep | QX sweep, FP32 | QX even/odd | sweep / TeNPy | FP32 / TeNPy | even/odd / TeNPy |
+|---|---|---|---|---|---|---|---|---|
+| 32 | 256 | 11.84 s | 12.77 s | 9.79 s | 8.93 s | 0.93× | 1.21× | **1.33×** |
+| 64 | 256 | 32.44 s | 40.29 s | 30.36 s | 23.11 s | 0.81× | 1.07× | **1.40×** |
+| 32 | 1024 | 141.19 s | 64.07 s | 50.50 s | 141.09 s | **2.20×** | **2.80×** | 1.00× |
+
+The share of the eigensolve work (Σk³) that takes the direct SVD is 46 % at N = 32,
+χ = 256, 45 % at N = 64, and 79 % at N = 32, χ = 1024, where the kept Schmidt values run
+deeper.
+
+- **χ = 256: the even/odd scheme closes the mid-χ gap**, 1.33× and 1.40× TeNPy where the
+  sweep is 0.93× and 0.81× (FP32: 1.21× and 1.07×).
+- **χ = 1024: the sweep keeps its lead**, 2.20× (2.80× with FP32), and the even/odd
+  scheme falls back to TeNPy's speed, 1.00×: most of its work needs the CPU's direct SVD,
+  which is what TeNPy runs, while the sweep, whose orthogonality centre carries the
+  weights, is content with the GPU's Gram SVD.
+- So the sweep stays the default, and `scheme="even_odd"` is the opt-in for moderate χ.
+  It is not chosen automatically by χ: the two are different Trotter splittings, and a
+  study converging in χ would change its splitting partway.
+- The CPU path is unchanged. Without a GPU the even/odd scheme runs every block on the CPU
+  and is slightly faster than the sweep at χ = 256 (13.4 s against 14.5 s at N = 32, 40.8 s
+  against 44.6 s at N = 64; 2026-10-21).
+
 ## Limitations / next
 
 - **Thermal noise dominates the absolute ratios** on this consumer box (no clock
@@ -372,11 +450,12 @@ Eigen. χ=512 is now correct. **Follow-up: add a large-χ DMRG-energy regression
   the exact multiple as ±~2×.** A clock-pinned/server box would tighten it.
 - **Real scalar (DMRG) stays on CPU** by design (the wrapper returns false for
   `S=double`); DMRG is already a strong CPU win and not the target.
-- **Mid-χ (χ≈256)** is the weakest regime (blocks below the GPU threshold, TeNPy's MKL
-  efficient). Levers: lower `QX_GPU_MIN_BLK` (watch the transfer crossover) or batch the
-  small blocks (`cusolverDnZheevjBatched`).
-- **Phase D frontier:** the χ=1024 step is now ~80% SVD; batch the small-block SVD
-  tail (`cusolverDnZheevjBatched`) and keep A/U/V resident across bonds (drop the
-  per-bond host round-trips) for the next step up.
+- **Mid-χ (χ≈256)** was the weakest regime for the sweep (blocks below the GPU
+  threshold, TeNPy's MKL efficient). The even/odd scheme (M12, above) closes it, opt-in,
+  by batching a layer's eigensolves; lowering `QX_GPU_MIN_BLK` makes the sweep slower.
+- **Phase D frontier:** the χ=1024 step is now ~80% SVD. The sweep cannot batch its
+  bonds' SVDs (each waits on the last), and the even/odd scheme, which can, needs direct
+  SVDs at this χ. What is left for the sweep is keeping A/U/V resident across bonds
+  (dropping the per-bond host round-trips).
 - **FP32 is opt-in and modest** (eigensolver-bound, see Phase C); a faster robust FP32
   eigensolver (or a batched Jacobi) is the lever to make it a bigger win.

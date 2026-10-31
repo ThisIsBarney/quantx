@@ -49,7 +49,7 @@ configurations below set them small.
 | Two-leg Hubbard ladder, Lx = 16, U = 8: 1.36× site-split ([universal_mpo.md](../docs/universal_mpo.md), ladder) | `hubbard_ladder_vs_tenpy.py` | `qx_hubbard_showcase` |
 | W = 4 Hubbard cylinder, 8×4, U = 8, 12 sweeps: 2.06× after the optimisation round, TeNPy lower in energy by 4.6e-4 ([universal_mpo.md](../docs/universal_mpo.md), cylinder) | `hubbard_cylinder_vs_tenpy.py` | `qx_hubbard_showcase` |
 | Hubbard chain ground state against ITensor ([universal_mpo.md](../docs/universal_mpo.md), ITensor) | `hubbard_dmrg_vs_itensor.py` | `qx_hubbard_showcase` |
-| GPU Néel-quench TEBD against single-thread TeNPy: 0.91×, 1.12×, 2.17× at χ = 256, 512, 1024 ([gpu_acceleration_report.md](../docs/gpu_acceleration_report.md)) | `gpu_vs_tenpy_quench.py` | `qx_tebd_bench`, CUDA build |
+| GPU Néel-quench TEBD against single-thread TeNPy, N = 32: the default sweep 0.93× at χ = 256 and 2.20× at 1024; the even/odd scheme (M12) 1.33× at 256 (1.40× at N = 64) and 1.00× at 1024 ([gpu_acceleration_report.md](../docs/gpu_acceleration_report.md), M12) | `gpu_vs_tenpy_quench.py` | `qx_tebd_bench`, CUDA build |
 
 ## What the S(k, ω) comparison compares
 

@@ -107,14 +107,17 @@ against an exact answer computed without the engine. CI runs it on every wheel.
 - **Real-time evolution** (TDVP and TEBD). From Python, only the XXZ chain is reachable:
   `tdvp.TDVPSolver` and `tdvp.LoschmidtSolver`, and the zero-temperature S(k, ω) and
   current correlator through `structure_factor.StructureFactorSolver` and
-  `ConductivitySolver`. These keep the engine's Pauli convention, J σ·σ = 4 J S·S. See
-  [docs/dmrg_tdvp_report.md](docs/dmrg_tdvp_report.md).
+  `ConductivitySolver`. These keep the engine's Pauli convention, J σ·σ = 4 J S·S. Their
+  TEBD takes `scheme="sweep"` (the default) or `scheme="even_odd"`, TeNPy's splitting,
+  whose layers batch their SVDs on the GPU: faster at moderate bond dimension, slower at
+  large. See [docs/dmrg_tdvp_report.md](docs/dmrg_tdvp_report.md).
 - **SU(2)-symmetric DMRG.** From Python, only the Heisenberg chain is reachable, through
   `dmrg.DMRGSolver(engine).solve(..., method="su2")`: J σ·σ for spin 1/2, and J S·S
   with `phys_spin=1`. See
   [docs/dmrg_su2_benchmark_report.md](docs/dmrg_su2_benchmark_report.md).
-- **GPU acceleration** (cuSOLVER) of the block-sparse kernels, in source builds:
-  [docs/gpu_acceleration_report.md](docs/gpu_acceleration_report.md).
+- **GPU acceleration** (cuSOLVER) of the block-sparse kernels, in source builds: the large
+  blocks' SVDs, and with the even/odd TEBD scheme a whole layer's eigensolves in batches.
+  See [docs/gpu_acceleration_report.md](docs/gpu_acceleration_report.md).
 
 The comparisons with TeNPy in those reports depend on hardware, bond dimension and build
 options. Read them there, with their caveats, rather than as a single number;
