@@ -4,3 +4,5 @@ furo>=2024.1.29
 sphinx-copybutton>=0.5
 sphinx-autodoc-typehints>=1.25
 myst-parser>=3.0
+# quantx_engine.pennylane_device subclasses PennyLane's Device, so autodoc must import it.
+pennylane>=0.45

@@ -13,6 +13,22 @@ bug-fixes and packaging corrections only.
 
 ### Added
 
+- **`quantx.statevector` runs on the native engine** (M15): `qml.device("quantx.statevector",
+  wires=n)`, up to 25 qubits. The engine evolves the state and PennyLane's own code measures
+  it, so every measurement and shot setting behaves as on `default.qubit`. A gate on up to
+  four wires runs as its matrix (the circuit runtime's new `UNITARY` gate), and a larger one
+  is decomposed if it can be. Gradients are adjoint by default, both passes in the engine
+  (`qx_circuit_adjoint`), one pass back whatever the number of parameters; where the adjoint
+  method does not apply, `diff_method="best"` falls back to parameter shift. Mid-circuit
+  measurements are deferred; noise channels and postselection are refused. Passes PennyLane's
+  own device test suite, analytically and at 10,000 shots, and its demos (qubit rotation, VQE
+  on H2, QAOA, a variational classifier, Grover, phase estimation, the templates), in the
+  native CI job. An adjoint gradient of StronglyEntanglingLayers takes 20, 73 and 862 ms at
+  12, 16 and 20 qubits on two threads, against 14, 65 and 981 ms for `lightning.qubit` and 90
+  and 685 ms for `default.qubit` (`benchmarks/pennylane_gradient.py`). The circuit runtime's
+  gate kernels thread above 2^14 amplitudes.
+- **`qx_run_circuit_state`**: a circuit's final state written to the caller's buffer, from a
+  start state in another, without JSON. `qx_run_circuit`'s JSON never carried the state.
 - **An even/odd real-time TEBD scheme** (M12): `scheme="even_odd"` on
   `TDVPSolver.evolve`, `LoschmidtSolver.echo`, `StructureFactorSolver.correlations` and
   `ConductivitySolver.correlator` (`"scheme"` in their C API calls). It is TeNPy's Trotter
@@ -104,6 +120,15 @@ bug-fixes and packaging corrections only.
   ~1e-10 in its energy (1.2e-10 measured on Linux, for a 6-site chain of three layers).
   The direct route keeps the energy smooth in the angles to ~1e-14, at up to twice the
   cost.
+
+### Changed
+
+- **`quantx.statevector` needs the native library and PennyLane 0.45 or later**, and so
+  Python 3.11. It was a pure-Python simulator on PennyLane's legacy device interface, and
+  there is no fallback to it: a wheel carries the engine, and without one the device says so
+  when built. It lives in `quantx_engine.pennylane_device`, whose `StatevectorDevice` is what
+  the entry point loads; `quantx_engine.contrib.pennylane_plugin.QuantXDevice` is the same
+  class.
 
 ## [0.2.0] — 2026-10-18
 

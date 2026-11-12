@@ -54,10 +54,18 @@ What is verified, and against what
        ``scheme="sweep"`` or ``scheme="even_odd"``
      - exact diagonalisation, to the second-order Trotter error of the steps: below
        1e-3 for the quench at step 0.02, below 8e-3 for the correlations at 0.05
+   * - PennyLane circuits on the engine's state vector, up to 25 qubits, with adjoint gradients run in the engine
+     - ``qml.device("quantx.statevector", wires=n)``, from
+       :mod:`quantx_engine.pennylane_device`
+     - PennyLane's own device test suite, analytic and at finite shots, and its demos;
+       every gate, measurement and gradient against ``default.qubit``; the kernels
+       against an independent state vector to 1e-12, and the backward pass against
+       central differences to 1e-8
 
 These checks run in CI on a Linux build of the engine (``test_models_ed.py``,
-``test_hva_statevector.py``, ``test_hva_gradient.py``, ``test_thermal_ed.py`` and
-``test_tebd_schemes.py`` in ``python/quantx_engine/tests/``).
+``test_hva_statevector.py``, ``test_hva_gradient.py``, ``test_thermal_ed.py``,
+``test_tebd_schemes.py``, ``test_pennylane_statevector.py`` and
+``test_pennylane_demos.py`` in ``python/quantx_engine/tests/``).
 
 .. toctree::
    :maxdepth: 1

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import math
+import os
+
 import pytest
 
 try:
@@ -22,6 +24,17 @@ pytestmark = pytest.mark.skipif(
 )
 
 from quantx_engine.contrib.pennylane_plugin import QuantXDevice, QuantXPluginError  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _native_engine():
+    # The device runs on the engine since M15. CI's native job sets QX_REQUIRE_NATIVE=1: there a
+    # load failure must fail, not quietly skip.
+    try:
+        QuantXDevice(wires=1)
+    except Exception as e:
+        unavailable = pytest.fail if os.environ.get("QX_REQUIRE_NATIVE") == "1" else pytest.skip
+        unavailable(f"native engine unavailable: {e}")
 
 
 # ---------------------------------------------------------------------------

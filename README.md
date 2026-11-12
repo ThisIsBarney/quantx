@@ -17,10 +17,13 @@ checked. Everything else in the package is marked experimental below.
 | Fermionic HVA (VQE) circuits on chains, ladders, strips and cylinders: energy, entanglement entropy, truncation | `hva.circuit`, `hva.layout` | an independent state-vector simulation: energy and entropies to 1e-10 from a product start (`init="product"`); to 1e-6 from the default U = 0 start, measured at about 1e-8 (see below) |
 | The gradient of an HVA circuit's energy in every angle, by the adjoint method: one pass back through the circuit, with no circuit per angle | `hva.circuit(..., gradient=True)` | the exact gradient of the same independent state vector, to 1e-10 with `svd="direct"` (1e-6 on the default, faster route, whose rounding puts it a few 1e-9 off), and central differences of the engine's own energy, to 1e-8; from a product start |
 | Finite-temperature statics, the dynamical structure factor S(k, ω, T) and the optical conductivity σ(ω, T) of the XXZ, spin-1 and Hubbard chains | `thermal.statics`, `thermal.structure_factor(...).spectrum()`, `thermal.current_correlation(...).conductivity()` | exact diagonalisation of the whole Hilbert space, to the second-order Trotter error of the steps: below 1e-3 at the default step 0.05, and falling by 4 at half the step; the transforms against Lehmann sums to 1e-8 |
+| PennyLane circuits on the engine's state vector, up to 25 qubits, with adjoint gradients run in the engine | `qml.device("quantx.statevector", wires=n)` | PennyLane's own device test suite, analytic and at finite shots, and its demos; every gate, measurement and gradient against `default.qubit`; the kernels against an independent state vector to 1e-12, and the backward pass against central differences to 1e-8 |
 
 These checks run in CI against a fresh Linux build of the engine (`test_models_ed.py`,
-`test_hva_statevector.py`, `test_hva_gradient.py` and `test_thermal_ed.py` in `python/quantx_engine/tests/`). The macOS and Windows
-wheels are checked only for loading the engine.
+`test_hva_statevector.py`, `test_hva_gradient.py`, `test_thermal_ed.py`,
+`test_pennylane_statevector.py` and `test_pennylane_demos.py` in
+`python/quantx_engine/tests/`). The macOS and Windows wheels are checked only for loading
+the engine.
 
 ## Install
 
@@ -71,6 +74,20 @@ from quantx_engine import thermal
 sf = thermal.structure_factor(XXZChain(L=12), beta=1.0, t_max=4.0)  # ~10 s on a desktop CPU
 k, w, S = sf.spectrum()                     # S(k, omega, T), both signs of omega
 # Converged at the default max_bond 128: the correlations move by 1e-5 at 256.
+```
+
+```python
+import pennylane as qml                      # pip install "quantx-engine[pennylane]"
+
+dev = qml.device("quantx.statevector", wires=4)
+
+@qml.qnode(dev)
+def circuit(weights):
+    qml.StronglyEntanglingLayers(weights, wires=range(4))
+    return qml.expval(qml.Z(0) @ qml.Z(3))
+
+weights = qml.numpy.random.random((3, 4, 3), requires_grad=True)
+qml.grad(circuit)(weights)                   # one pass back, for all 36 parameters
 ```
 
 Finite temperature works by purification, in the grand-canonical ensemble. The Hubbard
@@ -129,7 +146,7 @@ Everything else in the package is experimental, and lives in `quantx_engine.cont
 API may change, and the checks above do not cover it. That is 63 modules, almost all pure
 Python without the engine (VQE and quantum chemistry, quantum error correction and
 decoders, noise models and error mitigation, quantum walks, bosonic codes, an IBM Quantum
-connector, a PennyLane device, and more); `lindblad` and `cached_dmrg` are older
+connector, and more); `lindblad` and `cached_dmrg` are older
 interfaces to parts of the engine. Import them from there, as in
 `from quantx_engine.contrib.qec import SurfaceCode`. Their old paths
 (`import quantx_engine.qec`, `from quantx_engine import SurfaceCode`) still work until

@@ -80,6 +80,71 @@ extern "C" const char* qx_run_circuit(const char* circuit_json, const char* opti
   }
 }
 
+// C entrypoint for circuit execution into the caller's state buffer.
+extern "C" const char* qx_run_circuit_state(const char* circuit_json, const char* options_json,
+                                            const double* initial, double* state,
+                                            unsigned long long amplitudes) {
+  try {
+    const std::string c = circuit_json ? circuit_json : "{}";
+    const std::string o = options_json ? options_json : "{}";
+    qx::QuantumCircuit circuit = qx::circuit_from_json(c);
+    // The width is checked first: run_circuit refuses one this large with its own error.
+    if (circuit.qubits < 26) {
+      if (state == nullptr || amplitudes != (1ULL << circuit.qubits)) {
+        throw qx::CircuitError("QX_INVALID_CIRCUIT",
+                               "the state buffer must hold 2^qubits amplitudes");
+      }
+      if (initial != nullptr) {
+        const auto* first = reinterpret_cast<const std::complex<double>*>(initial);
+        circuit.initial_state.assign(first, first + amplitudes);
+      }
+    }
+    const auto result = qx::run_circuit(circuit, qx::options_from_json(o));
+    std::memcpy(state, result.state.data(), amplitudes * sizeof(std::complex<double>));
+    return copy_to_cstr(qx::circuit_result_to_json(result));
+  } catch (const qx::CircuitError& ex) {
+    return copy_to_cstr(wrap_error("circuit", ex.code(), ex.what()));
+  } catch (const std::exception& ex) {
+    return copy_to_cstr(wrap_error("runtime", "QX_RUNTIME_ERROR", ex.what()));
+  } catch (...) {
+    return copy_to_cstr(wrap_error("unknown", "QX_UNKNOWN_ERROR", "unknown exception"));
+  }
+}
+
+// C entrypoint for the adjoint gradient's backward pass.
+extern "C" const char* qx_circuit_adjoint(const char* request_json, const double* ket,
+                                          const double* bras, unsigned long long amplitudes,
+                                          unsigned long long n_bras, double* jacobian,
+                                          unsigned long long columns) {
+  try {
+    std::uint32_t qubits = 0;
+    const auto steps = qx::adjoint_steps_from_json(request_json ? request_json : "{}", qubits);
+    if (qubits == 0 || qubits >= 26 || amplitudes != (1ULL << qubits)) {
+      throw qx::CircuitError("QX_INVALID_CIRCUIT",
+                             "the buffers must hold 2^qubits amplitudes, for 1 to 25 qubits");
+    }
+    if (ket == nullptr || jacobian == nullptr || (bras == nullptr && n_bras != 0)) {
+      throw qx::CircuitError("QX_INVALID_CIRCUIT", "the adjoint pass needs its buffers");
+    }
+    const auto* k = reinterpret_cast<const std::complex<double>*>(ket);
+    const auto* b = reinterpret_cast<const std::complex<double>*>(bras);
+    std::vector<std::vector<std::complex<double>>> bra_list;
+    bra_list.reserve(n_bras);
+    for (unsigned long long r = 0; r < n_bras; ++r) {
+      bra_list.emplace_back(b + r * amplitudes, b + (r + 1) * amplitudes);
+    }
+    qx::adjoint_gradient(qubits, steps, std::vector<std::complex<double>>(k, k + amplitudes),
+                         std::move(bra_list), columns, jacobian);
+    return copy_to_cstr("{\"ok\":true}");
+  } catch (const qx::CircuitError& ex) {
+    return copy_to_cstr(wrap_error("circuit", ex.code(), ex.what()));
+  } catch (const std::exception& ex) {
+    return copy_to_cstr(wrap_error("runtime", "QX_RUNTIME_ERROR", ex.what()));
+  } catch (...) {
+    return copy_to_cstr(wrap_error("unknown", "QX_UNKNOWN_ERROR", "unknown exception"));
+  }
+}
+
 // C entrypoint for circuit capability introspection.
 extern "C" const char* qx_circuit_capabilities(void) {
   try {

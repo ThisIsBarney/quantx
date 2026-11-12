@@ -22,6 +22,29 @@ QX_API const char* qx_explain_backend_choice(const char* problem_json, const cha
 // Run circuit simulation from JSON inputs and return heap-allocated JSON output.
 // Error payloads are append-only JSON objects with ok/error_kind/error_code/error_message/error.
 QX_API const char* qx_run_circuit(const char* circuit_json, const char* options_json);
+// Run a circuit and write its final state to `state`, the caller's buffer of `amplitudes`
+// = 2^qubits complex doubles (re, im interleaved), where qubit q is bit q of the amplitude's
+// index. `initial` is the start state in the same layout, or null for |0...0>. The circuit is
+// qx_run_circuit's, whose gates include UNITARY: `targets` the k qubits, targets[0] the high bit
+// of the matrix's index, `params` the 4^k row-major entries as (re, im) pairs. Returns
+// qx_run_circuit's JSON, with the same error payloads; on an error `state` is not written.
+QX_API const char* qx_run_circuit_state(const char* circuit_json, const char* options_json,
+                                        const double* initial, double* state,
+                                        unsigned long long amplitudes);
+// The backward pass of the adjoint gradient (Jones and Gacon 2020), from qx_run_circuit_state's
+// final state. request_json: {qubits, steps: [{inverse, targets?, derivative?, column?}, ...]},
+// last gate of the circuit first. `inverse` is U^dagger as a circuit op. A differentiated gate
+// also gives dU/dtheta: `derivative` its row-major entries as (re, im) pairs on the qubits
+// `targets`, targets[0] the high bit, and `column`, the Jacobian column of theta.
+// `ket` is the final state, `bras` holds n_bras vectors one after the other, each 2 O_r |ket>
+// for an observable O_r, all of `amplitudes` complex doubles laid out as in
+// qx_run_circuit_state. Writes jacobian[r * columns + c] = d<O_r>/dtheta_c, and neither input.
+// Returns {ok}, or the same error payloads as qx_run_circuit; on an error the Jacobian is not
+// written.
+QX_API const char* qx_circuit_adjoint(const char* request_json, const double* ket,
+                                      const double* bras, unsigned long long amplitudes,
+                                      unsigned long long n_bras, double* jacobian,
+                                      unsigned long long columns);
 // Query gate-model capability metadata and return heap-allocated JSON output.
 QX_API const char* qx_circuit_capabilities(void);
 // Validate problem JSON payload and return JSON status.

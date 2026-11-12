@@ -31,7 +31,8 @@ when called: :func:`~quantx_engine.dmrg.ground_state` raises
 Optional extras
 ---------------
 
-These serve the experimental modules.
+``pennylane`` serves :mod:`quantx_engine.pennylane_device`, which needs Python 3.11 or
+later, as PennyLane 0.45 does. The others serve the experimental modules.
 
 .. list-table::
    :header-rows: 1
@@ -41,7 +42,7 @@ These serve the experimental modules.
      - What it adds
      - Install command
    * - ``pennylane``
-     - the :class:`~quantx_engine.contrib.pennylane_plugin.QuantXDevice` plugin for PennyLane
+     - PennyLane, for the ``quantx.statevector`` device
      - ``pip install "quantx-engine[pennylane]"``
    * - ``gpu``
      - CuPy (CUDA 12), for the GPU statevector of :mod:`quantx_engine.contrib.gpu`
