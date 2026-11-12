@@ -3312,10 +3312,13 @@ static void apply_site_diag(BMPS& s, int site, const std::vector<S>& diag,
     }
 }
 
-// Apply a row-major d x d matrix on the physical index of one site, in place. Every state a
-// nonzero entry connects must share a charge, so that their column groups line up: a qubit
-// gate on a state of no charges, or a diagonal one on any state. A unitary keeps the site an
-// isometry, so it needs no SVD and the orthogonality centre stays where it is.
+// Apply a row-major d x d matrix on the physical index of one site, in place. Only entries
+// between states of one charge are applied, whose column groups line up: on a state of no
+// charges, every entry. An entry between charges is dropped, as the two-site update drops it,
+// so the caller must have checked that it is zero to rounding (checked_qubit_gate, to 1e-10:
+// RX(2 pi) has 1e-16). Added in, it read a group of another width, and past the block. A
+// unitary keeps the site an isometry, so it needs no SVD and the orthogonality centre stays
+// where it is.
 static void apply_site_matrix(BMPS& s, int site, const Mat& U,
                               const std::vector<int>& qphys) {
     const int d = (int)qphys.size();
@@ -3324,7 +3327,7 @@ static void apply_site_matrix(BMPS& s, int site, const Mat& U,
         Mat out = Mat::Zero(blk.rows(), blk.cols());
         for (int r = 0; r < d; ++r)
             for (int c = 0; c < d; ++c)
-                if (U(r, c) != S(0) && cols[c].width > 0)
+                if (qphys[r] == qphys[c] && U(r, c) != S(0) && cols[c].width > 0)
                     out.middleCols(cols[r].off, cols[r].width).noalias() +=
                         U(r, c) * blk.middleCols(cols[c].off, cols[c].width);
         blk = std::move(out);

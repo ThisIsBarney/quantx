@@ -289,6 +289,35 @@ def test_engine_refuses_a_gate_that_changes_a_conserved_charge(lib):
     _ok(lib, op="free", handle=handle)
 
 
+def test_engine_drops_what_a_conserving_gate_has_between_charges(lib):
+    # The check passes a gate as conserving with charge-changing entries up to 1e-10, and
+    # RX(2 pi) has 1e-16 of them. They join column groups of different charges, so of
+    # different widths, and must be dropped: the state is then, bit for bit, the one the
+    # same gate with them zeroed makes.
+    rng = np.random.default_rng(8)
+    n = 6
+    bits = [1, 0] * (n // 2)
+    handle = _ok(lib, op="qubits", n_qubits=n, bits=bits, conserve=True)["handle"]
+    want = _basis(bits)
+    gates = []
+    for _ in range(20):
+        q, u = [int(w) for w in rng.permutation(n)[:2]], _random_conserving(rng)
+        gates.append({"q": q, "u": _pairs(u)})
+        want = _apply(want, u, q, n)
+    _ok(lib, op="gates", handle=handle, gates=gates, max_bond=64, cutoff=0.0)
+    other = _ok(lib, op="copy", handle=handle)["handle"]
+    rx = qml.RX.compute_matrix(2 * np.pi)
+    assert 0 < abs(rx[0, 1]) < 1e-10
+    for h, u in ((handle, rx), (other, np.diag(np.diag(rx)))):
+        _ok(lib, op="gates", handle=h, gates=[{"q": [w], "u": _pairs(u)} for w in range(n)],
+            max_bond=64, cutoff=0.0)
+    got, exact = _amplitudes(lib, handle, n), _amplitudes(lib, other, n)
+    _ok(lib, op="free", handle=handle)
+    _ok(lib, op="free", handle=other)
+    assert np.array_equal(got, exact)
+    assert np.max(np.abs(got - want)) < TOL           # (-1)^6: the tail is the identity
+
+
 @pytest.mark.parametrize("terms, message", [
     ([[[9, "Z"]]], "site 9"),
     ([[[1, "Z"], [0, "X"]]], "increase"),
@@ -670,8 +699,9 @@ def _conserved(dev, circuit):
     (lambda: (qml.RZ(0.3, wires=0), qml.CZ([0, 1]), qml.SWAP([1, 2])), True),
     (lambda: (qml.PauliX(0), qml.IsingXY(0.2, wires=[0, 1]), qml.PauliX(0)), False),
     (lambda: qml.RX(0.3, wires=0), False),
+    (lambda: qml.RX(2 * np.pi, wires=0), True),
     (lambda: qml.CNOT([0, 1]), False),
-], ids=["excitation", "leading-x", "phases", "late-x", "rx", "cnot"])
+], ids=["excitation", "leading-x", "phases", "late-x", "rx", "rx-2pi", "cnot"])
 def test_auto_finds_when_the_charge_is_conserved(device_class, build, expected):
     def circuit():
         build()
