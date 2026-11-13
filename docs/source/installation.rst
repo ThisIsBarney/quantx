@@ -42,7 +42,7 @@ later, as PennyLane 0.45 does. The others serve the experimental modules.
      - What it adds
      - Install command
    * - ``pennylane``
-     - PennyLane, for the ``quantx.statevector`` device
+     - PennyLane, for the ``quantx.statevector`` and ``quantx.mps`` devices
      - ``pip install "quantx-engine[pennylane]"``
    * - ``gpu``
      - CuPy (CUDA 12), for the GPU statevector of :mod:`quantx_engine.contrib.gpu`
