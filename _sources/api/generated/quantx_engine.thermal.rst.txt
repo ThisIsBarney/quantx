@@ -1,0 +1,28 @@
+﻿quantx\_engine.thermal
+======================
+
+.. automodule:: quantx_engine.thermal
+
+   
+   .. rubric:: Functions
+
+   .. autosummary::
+   
+      current_correlation
+      statics
+      structure_factor
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      ThermalCurrentCorrelation
+      ThermalStatics
+      ThermalStructureFactor
+   
+   .. rubric:: Exceptions
+
+   .. autosummary::
+   
+      ThermalError
+   

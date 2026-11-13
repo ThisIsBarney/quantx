@@ -1,0 +1,946 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="quantx_engine.u1_circuit" href="quantx_engine.u1_circuit.html"><link rel="prev" title="quantx_engine.thermal" href="quantx_engine.thermal.html">
+
+    <!-- Generated with Sphinx 9.1.1 and Furo 2025.12.19 -->
+        <title>quantx_engine.pennylane_device - QuantX Engine 0.2.0</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">QuantX Engine 0.2.0</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">QuantX Engine 0.2.0</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Getting started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../quickstart.html">Quick start</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../results.html">Results</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">API reference</span></p>
+<ul class="current">
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../engine.html">Engine API</a><input aria-label="Toggle navigation of Engine API" checked="" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.models.html">quantx_engine.models</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.dmrg.html">quantx_engine.dmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.hva.html">quantx_engine.hva</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.thermal.html">quantx_engine.thermal</a></li>
+<li class="toctree-l2 current current-page"><a class="current reference internal" href="#">quantx_engine.pennylane_device</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.u1_circuit.html">quantx_engine.u1_circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.mps.html">quantx_engine.mps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.tdvp.html">quantx_engine.tdvp</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.structure_factor.html">quantx_engine.structure_factor</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../index.html">Experimental modules</a><input aria-label="Toggle navigation of Experimental modules" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../core.html">Core Engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../circuit_gate.html">Circuit &amp; Gate-Model</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../many_body.html">Many-Body Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../chemistry.html">Chemistry &amp; Optimization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../qec.html">Quantum Error Correction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../algorithms.html">Quantum Algorithms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../networking.html">Quantum Networking &amp; Protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../hardware_control.html">Hardware &amp; Control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../ml_characterization.html">Machine Learning &amp; Characterisation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../advanced_physics.html">Advanced Physics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../interfaces.html">Interfaces &amp; Integrations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.html">quantx_engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.engine.html">quantx_engine.engine</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.lanczos.html">quantx_engine.contrib.lanczos</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.trotter.html">quantx_engine.contrib.trotter</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mclachlan.html">quantx_engine.contrib.mclachlan</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.noise.html">quantx_engine.contrib.noise</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mitigation.html">quantx_engine.contrib.mitigation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.lindblad.html">quantx_engine.contrib.lindblad</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.adapters.html">quantx_engine.contrib.adapters</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.transpiler.html">quantx_engine.contrib.transpiler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qasm.html">quantx_engine.contrib.qasm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.templates.html">quantx_engine.contrib.templates</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.hardware.html">quantx_engine.contrib.hardware</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ibm.html">quantx_engine.contrib.ibm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.many_body.html">quantx_engine.contrib.many_body</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.finite_size.html">quantx_engine.contrib.finite_size</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mps_simulator.html">quantx_engine.contrib.mps_simulator</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.tensor_network.html">quantx_engine.contrib.tensor_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.tdmrg.html">quantx_engine.contrib.tdmrg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.spectral.html">quantx_engine.contrib.spectral</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.chemistry.html">quantx_engine.contrib.chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.advanced_chemistry.html">quantx_engine.contrib.advanced_chemistry</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.oovqe.html">quantx_engine.contrib.oovqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.noise_vqe.html">quantx_engine.contrib.noise_vqe</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qaoa_optim.html">quantx_engine.contrib.qaoa_optim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qec.html">quantx_engine.contrib.qec</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.fault_tolerant.html">quantx_engine.contrib.fault_tolerant</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ft_tgate.html">quantx_engine.contrib.ft_tgate</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.clifford_sim.html">quantx_engine.contrib.clifford_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.clifford_t.html">quantx_engine.contrib.clifford_t</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ftqc_pipeline.html">quantx_engine.contrib.ftqc_pipeline</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qldpc.html">quantx_engine.contrib.qldpc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.bosonic.html">quantx_engine.contrib.bosonic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_walk.html">quantx_engine.contrib.quantum_walk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qsp_qsvt.html">quantx_engine.contrib.qsp_qsvt</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.excited_state.html">quantx_engine.contrib.excited_state</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.dynamic.html">quantx_engine.contrib.dynamic</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.sweep.html">quantx_engine.contrib.sweep</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.mbqc.html">quantx_engine.contrib.mbqc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_network.html">quantx_engine.contrib.quantum_network</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_protocols.html">quantx_engine.contrib.quantum_protocols</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.pulse.html">quantx_engine.contrib.pulse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.optimal_control.html">quantx_engine.contrib.optimal_control</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.dyndecouple.html">quantx_engine.contrib.dyndecouple</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.crosstalk.html">quantx_engine.contrib.crosstalk</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.gpu.html">quantx_engine.contrib.gpu</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.ray_sim.html">quantx_engine.contrib.ray_sim</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qml.html">quantx_engine.contrib.qml</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.qbm.html">quantx_engine.contrib.qbm</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.quantum_kernel.html">quantx_engine.contrib.quantum_kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.rb_qv.html">quantx_engine.contrib.rb_qv</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.noise_char.html">quantx_engine.contrib.noise_char</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.xeb.html">quantx_engine.contrib.xeb</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.tomography.html">quantx_engine.contrib.tomography</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.floquet.html">quantx_engine.contrib.floquet</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.neqdyn.html">quantx_engine.contrib.neqdyn</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.rydberg.html">quantx_engine.contrib.rydberg</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.pennylane_plugin.html">quantx_engine.contrib.pennylane_plugin</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.primitives.html">quantx_engine.contrib.primitives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.jupyter_widgets.html">quantx_engine.contrib.jupyter_widgets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.circuit.html">quantx_engine.contrib.circuit</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quantx_engine.contrib.statevector.html">quantx_engine.contrib.statevector</a></li>
+</ul>
+</li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">More</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../rest_api.html">REST API</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../changelog.html">Changelog</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/blob/master/docs/source/api/generated/quantx_engine.pennylane_device.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/ThisIsBarney/quantx/edit/master/docs/source/api/generated/quantx_engine.pennylane_device.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-quantx_engine.pennylane_device">
+<span id="quantx-engine-pennylane-device"></span><h1>quantx_engine.pennylane_device<a class="headerlink" href="#module-quantx_engine.pennylane_device" title="Link to this heading">¶</a></h1>
+<p>PennyLane devices on the native engine (M15).</p>
+<p><code class="docutils literal notranslate"><span class="pre">quantx.statevector</span></code> runs a circuit on the engine’s state vector, up to 25 qubits:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pennylane</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qml</span>
+
+<span class="n">dev</span> <span class="o">=</span> <span class="n">qml</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">"quantx.statevector"</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+<span class="nd">@qml</span><span class="o">.</span><span class="n">qnode</span><span class="p">(</span><span class="n">dev</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">circuit</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="n">qml</span><span class="o">.</span><span class="n">RX</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">qml</span><span class="o">.</span><span class="n">CNOT</span><span class="p">(</span><span class="n">wires</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">qml</span><span class="o">.</span><span class="n">expval</span><span class="p">(</span><span class="n">qml</span><span class="o">.</span><span class="n">Z</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+<span class="n">qml</span><span class="o">.</span><span class="n">grad</span><span class="p">(</span><span class="n">circuit</span><span class="p">)(</span><span class="n">qml</span><span class="o">.</span><span class="n">numpy</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</pre></div>
+</div>
+<p>The engine evolves the state; what is measured on it is PennyLane’s own code, so every
+measurement and shot setting behaves as on <code class="docutils literal notranslate"><span class="pre">default.qubit</span></code>. A gate on up to four wires
+runs as its matrix, and a larger one is decomposed if it has a decomposition. Gradients are
+adjoint by default, both passes in the engine: one pass back through the circuit, however
+many parameters it has. Where the adjoint method does not apply (finite shots, a variance)
+<code class="docutils literal notranslate"><span class="pre">diff_method=&quot;best&quot;</span></code> falls back to parameter shift.</p>
+<p><code class="docutils literal notranslate"><span class="pre">quantx.mps</span></code> runs one on the engine’s block-sparse matrix-product state, at any number of
+wires, with the entanglement as its limit rather than the width:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">dev</span> <span class="o">=</span> <span class="n">qml</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">"quantx.mps"</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">max_bond</span><span class="o">=</span><span class="mi">256</span><span class="p">)</span>
+
+<span class="nd">@qml</span><span class="o">.</span><span class="n">qnode</span><span class="p">(</span><span class="n">dev</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">circuit</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+    <span class="n">qml</span><span class="o">.</span><span class="n">Hadamard</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">99</span><span class="p">):</span>
+        <span class="n">qml</span><span class="o">.</span><span class="n">CRX</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="p">[</span><span class="n">w</span><span class="p">,</span> <span class="n">w</span> <span class="o">+</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">qml</span><span class="o">.</span><span class="n">expval</span><span class="p">(</span><span class="n">qml</span><span class="o">.</span><span class="n">Z</span><span class="p">(</span><span class="mi">50</span><span class="p">)</span> <span class="o">@</span> <span class="n">qml</span><span class="o">.</span><span class="n">Z</span><span class="p">(</span><span class="mi">51</span><span class="p">))</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">max_bond</span></code> caps the bond dimension, and is unlimited by default, so a circuit is exact
+unless it is told otherwise: set it for a circuit that entangles much, and raise it until the
+answer stops moving. <code class="docutils literal notranslate"><span class="pre">qml.Tracker</span></code> records each run’s <code class="docutils literal notranslate"><span class="pre">truncation_sum</span></code>, <code class="docutils literal notranslate"><span class="pre">max_bond</span></code> and
+<code class="docutils literal notranslate"><span class="pre">conserved</span></code>, whether the charge below was used.
+Gates on more than two wires are decomposed, and a pair that is not adjacent is brought
+together by SWAPs, each a truncating update, so a chain’s order of wires is the cheap one.</p>
+<p>When every gate conserves the number of qubits in <code class="docutils literal notranslate"><span class="pre">|1&gt;</span></code> (leading X gates and a BasisState
+only set where the count starts), the state runs with that number as an exact charge: it is
+conserved at any truncation, and each tensor splits into blocks. <code class="docutils literal notranslate"><span class="pre">conserve=&quot;auto&quot;</span></code>, the
+default, finds this by itself; True refuses a circuit that does not conserve it, False never
+uses it. It looks at the gates as they run, so a gate on more than two wires counts by its
+decomposition: a DoubleExcitation conserves the count, the CNOTs it decomposes into do not.</p>
+<p>Expectation values of anything with a Pauli form, variances, samples and shots run in the
+engine at any width, as do the probabilities of a few wires. A measurement with no form on an
+MPS (the state itself, a reduced density matrix, an entropy) reads the amplitudes up to 20
+qubits and is refused beyond. Gradients are by parameter shift.</p>
+<p>On both devices mid-circuit measurements are deferred, and need a free wire if the measured
+wire is reused, and noise channels are refused: these are pure-state simulators. The devices
+need the native library, which the wheels carry; there is no pure-Python fallback. They need
+PennyLane 0.45 or later, which needs Python 3.11.</p>
+<p class="rubric">Classes</p>
+<div class="table-wrapper autosummary longtable docutils container">
+<table class="autosummary longtable docutils align-default">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice" title="quantx_engine.pennylane_device.MPSDevice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">MPSDevice</span></code></a>([wires, shots, seed, max_bond, ...])</p></td>
+<td><p>Matrix-product-state simulation on the native engine.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice" title="quantx_engine.pennylane_device.StatevectorDevice"><code class="xref py py-obj docutils literal notranslate"><span class="pre">StatevectorDevice</span></code></a>([wires, shots, seed])</p></td>
+<td><p>State-vector simulation on the native engine.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.pennylane_device.</span></span><span class="sig-name descname"><span class="pre">StatevectorDevice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wires</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'global'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Device</span></code></p>
+<p>State-vector simulation on the native engine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wires</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><em>sequence</em>) – the device’s wires, at most 25, or None to take them from
+each circuit.</p></li>
+<li><p><strong>shots</strong> – the default shots, as on any PennyLane device.</p></li>
+<li><p><strong>seed</strong> – seeds the sampling of finite-shot measurements, as on <code class="docutils literal notranslate"><span class="pre">default.qubit</span></code>; the
+state evolution is deterministic. <code class="docutils literal notranslate"><span class="pre">&quot;global&quot;</span></code> draws it from NumPy’s global state.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'quantx.statevector'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.short_name">
+<span class="sig-name descname"><span class="pre">short_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'quantx.statevector'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.short_name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.version">
+<span class="sig-name descname"><span class="pre">version</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'0.2.0'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.version" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.author">
+<span class="sig-name descname"><span class="pre">author</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'QuantX'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.author" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wires</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'global'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.__init__" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.execute"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.execute" title="Link to this definition">¶</a></dt>
+<dd><p>Execute a circuit or a batch of circuits and turn it into results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>circuits</strong> (<em>Union</em><em>[</em><em>QuantumTape</em><em>, </em><em>Sequence</em><em>[</em><em>QuantumTape</em><em>]</em><em>]</em>) – the quantum circuits to be executed</p></li>
+<li><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – a datastructure with additional information required for execution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A numeric result of the computation.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>TensorLike, <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[TensorLike], <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[TensorLike]]</p>
+</dd>
+</dl>
+<p><strong>Interface parameters:</strong></p>
+<p>The provided <code class="docutils literal notranslate"><span class="pre">circuits</span></code> may contain interface specific data-types like <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> or <code class="docutils literal notranslate"><span class="pre">jax.Array</span></code> when
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">gradient_method</span></code> of <code class="docutils literal notranslate"><span class="pre">&quot;backprop&quot;</span></code> is requested. If the gradient method is not backpropagation,
+then only vanilla numpy parameters or builtins will be present in the circuits.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives">
+<span class="sig-name descname"><span class="pre">supports_derivatives</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">circuit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.supports_derivatives"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives" title="Link to this definition">¶</a></dt>
+<dd><p>Determine whether or not a device provided derivative is potentially available.</p>
+<p>Default behaviour assumes first order device derivatives for all circuits exist if <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compute_derivatives()</span></code></a> is overriden.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – A description of the hyperparameters for the desired computation.</p></li>
+<li><p><strong>circuit</strong> (<em>None</em><em>, </em><em>QuantumTape</em>) – A specific circuit to check differentation for.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Bool</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)">bool</a></p>
+</dd>
+</dl>
+<p>The device can support multiple different types of “device derivatives”, chosen via <code class="docutils literal notranslate"><span class="pre">execution_config.gradient_method</span></code>.
+For example, a device can natively calculate <code class="docutils literal notranslate"><span class="pre">&quot;parameter-shift&quot;</span></code> derivatives, in which case <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compute_derivatives()</span></code></a>
+will be called for the derivative instead of <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute" title="quantx_engine.pennylane_device.StatevectorDevice.execute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">execute()</span></code></a> with a batch of circuits.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">ExecutionConfig</span><span class="p">(</span><span class="n">gradient_method</span><span class="o">=</span><span class="s2">"parameter-shift"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">custom_device</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p>In this case, <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compute_derivatives()</span></code></a> or <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">execute_and_compute_derivatives()</span></code></a> will be called instead of <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute" title="quantx_engine.pennylane_device.StatevectorDevice.execute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">execute()</span></code></a> with
+a batch of circuits.</p>
+<p>If <code class="docutils literal notranslate"><span class="pre">circuit</span></code> is not provided, then the method should return whether or not device derivatives exist for <strong>any</strong> circuit.</p>
+<p><strong>Example:</strong></p>
+<p>For example, the Python device will support device differentiation via the adjoint differentiation algorithm
+if the order is <code class="docutils literal notranslate"><span class="pre">1</span></code> and the execution occurs with no shots (<code class="docutils literal notranslate"><span class="pre">shots=None</span></code>).</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">ExecutionConfig</span><span class="p">(</span><span class="n">derivative_order</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gradient_method</span><span class="o">=</span><span class="s2">"adjoint"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dev</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">circuit_analytic</span> <span class="o">=</span> <span class="n">qp</span><span class="o">.</span><span class="n">tape</span><span class="o">.</span><span class="n">QuantumScript</span><span class="p">([</span><span class="n">qp</span><span class="o">.</span><span class="n">RX</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="p">[</span><span class="n">qp</span><span class="o">.</span><span class="n">expval</span><span class="p">(</span><span class="n">qp</span><span class="o">.</span><span class="n">Z</span><span class="p">(</span><span class="mi">0</span><span class="p">))],</span> <span class="n">shots</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dev</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">circuit</span><span class="o">=</span><span class="n">circuit_analytic</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">circuit_finite_shots</span> <span class="o">=</span> <span class="n">qp</span><span class="o">.</span><span class="n">tape</span><span class="o">.</span><span class="n">QuantumScript</span><span class="p">([</span><span class="n">qp</span><span class="o">.</span><span class="n">RX</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="p">[</span><span class="n">qp</span><span class="o">.</span><span class="n">expval</span><span class="p">(</span><span class="n">qp</span><span class="o">.</span><span class="n">Z</span><span class="p">(</span><span class="mi">0</span><span class="p">))],</span> <span class="n">shots</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dev</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">circuit</span> <span class="o">=</span> <span class="n">circuit_finite_shots</span><span class="p">)</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">ExecutionConfig</span><span class="p">(</span><span class="n">derivative_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">gradient_method</span><span class="o">=</span><span class="s2">"adjoint"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dev</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+<p>Adjoint differentiation will only be supported for circuits with expectation value measurements.
+If a circuit is provided and it cannot be converted to a form supported by differentiation method by
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">preprocess()</span></code>, then <code class="docutils literal notranslate"><span class="pre">supports_derivatives</span></code> should return False.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">ExecutionConfig</span><span class="p">(</span><span class="n">derivative_order</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gradient_method</span><span class="o">=</span><span class="s2">"adjoint"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">circuit</span> <span class="o">=</span> <span class="n">qp</span><span class="o">.</span><span class="n">tape</span><span class="o">.</span><span class="n">QuantumScript</span><span class="p">([</span><span class="n">qp</span><span class="o">.</span><span class="n">RX</span><span class="p">(</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="p">[</span><span class="n">qp</span><span class="o">.</span><span class="n">probs</span><span class="p">(</span><span class="n">wires</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">))])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dev</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">circuit</span><span class="o">=</span><span class="n">circuit</span><span class="p">)</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+<p>If the circuit is not natively supported by the differentiation method but can be converted into a form
+that is supported, it should still return <code class="docutils literal notranslate"><span class="pre">True</span></code>.  For example, <code class="xref py py-class docutils literal notranslate"><span class="pre">Rot</span></code> gates are not natively
+supported by adjoint differentation, as they do not have a generator, but they can be compiled into
+operations supported by adjoint differentiation. Therefore this method may reproduce compilation
+and validation steps performed by <code class="xref py py-meth docutils literal notranslate"><span class="pre">preprocess()</span></code>.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">ExecutionConfig</span><span class="p">(</span><span class="n">derivative_order</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">gradient_method</span><span class="o">=</span><span class="s2">"adjoint"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">circuit</span> <span class="o">=</span> <span class="n">qp</span><span class="o">.</span><span class="n">tape</span><span class="o">.</span><span class="n">QuantumScript</span><span class="p">([</span><span class="n">qp</span><span class="o">.</span><span class="n">Rot</span><span class="p">(</span><span class="mf">1.2</span><span class="p">,</span> <span class="mf">2.3</span><span class="p">,</span> <span class="mf">3.4</span><span class="p">,</span> <span class="n">wires</span><span class="o">=</span><span class="mi">0</span><span class="p">)],</span> <span class="p">[</span><span class="n">qp</span><span class="o">.</span><span class="n">expval</span><span class="p">(</span><span class="n">qp</span><span class="o">.</span><span class="n">Z</span><span class="p">(</span><span class="mi">0</span><span class="p">))])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">dev</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">circuit</span><span class="o">=</span><span class="n">circuit</span><span class="p">)</span>
+<span class="go">True</span>
+</pre></div>
+</div>
+<p><strong>Backpropagation:</strong></p>
+<p>This method is also used be to validate support for backpropagation derivatives. Backpropagation
+is only supported if the device is transparent to the machine learning framework from start to finish.</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">config</span> <span class="o">=</span> <span class="n">ExecutionConfig</span><span class="p">(</span><span class="n">gradient_method</span><span class="o">=</span><span class="s2">"backprop"</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">python_device</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="go">True</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">cpp_device</span><span class="o">.</span><span class="n">supports_derivatives</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
+<span class="go">False</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives">
+<span class="sig-name descname"><span class="pre">compute_derivatives</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.compute_derivatives"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives" title="Link to this definition">¶</a></dt>
+<dd><p>Calculate the jacobian of either a single or a batch of circuits on the device.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>circuits</strong> (<em>Union</em><em>[</em><em>QuantumTape</em><em>, </em><em>Sequence</em><em>[</em><em>QuantumTape</em><em>]</em><em>]</em>) – the circuits to calculate derivatives for</p></li>
+<li><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – a datastructure with all additional information required for execution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The jacobian for each trainable parameter</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple</p>
+</dd>
+</dl>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">supports_derivatives()</span></code></a> and <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">execute_and_compute_derivatives()</span></code></a>.</p>
+</div>
+<p><strong>Execution Config:</strong></p>
+<p>The execution config has <code class="docutils literal notranslate"><span class="pre">gradient_method</span></code> and <code class="docutils literal notranslate"><span class="pre">order</span></code> property that describes the order of differentiation requested. If the requested
+method or order of gradient is not provided, the device should raise a <code class="docutils literal notranslate"><span class="pre">NotImplementedError</span></code>. The <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">supports_derivatives()</span></code></a>
+method can pre-validate supported orders and gradient methods.</p>
+<p><strong>Return Shape:</strong></p>
+<p>If a batch of quantum scripts is provided, this method should return a tuple with each entry being the gradient of
+each individual quantum script. If the batch is of length 1, then the return tuple should still be of length 1, not squeezed.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives">
+<span class="sig-name descname"><span class="pre">execute_and_compute_derivatives</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.execute_and_compute_derivatives"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives" title="Link to this definition">¶</a></dt>
+<dd><p>Compute the results and jacobians of circuits at the same time.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>circuits</strong> (<em>Union</em><em>[</em><em>QuantumTape</em><em>, </em><em>Sequence</em><em>[</em><em>QuantumTape</em><em>]</em><em>]</em>) – the circuits or batch of circuits</p></li>
+<li><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – a datastructure with all additional information required for execution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A numeric result of the computation and the gradient.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a></p>
+</dd>
+</dl>
+<p>See <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute" title="quantx_engine.pennylane_device.StatevectorDevice.execute"><code class="xref py py-meth docutils literal notranslate"><span class="pre">execute()</span></code></a> and <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compute_derivatives()</span></code></a> for more information about return shapes and behaviour.
+If <a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives" title="quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives"><code class="xref py py-meth docutils literal notranslate"><span class="pre">compute_derivatives()</span></code></a> is defined, this method should be as well.</p>
+<p>This method can be used when the result and execution need to be computed at the same time, such as
+during a forward mode calculation of gradients. For certain gradient methods, such as adjoint
+diff gradients, calculating the result and gradient at the same can save computational work.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.setup_execution_config">
+<span class="sig-name descname"><span class="pre">setup_execution_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">circuit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.setup_execution_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.setup_execution_config" title="Link to this definition">¶</a></dt>
+<dd><p>Sets up an <code class="docutils literal notranslate"><span class="pre">ExecutionConfig</span></code> that configures the execution behaviour.</p>
+<p>The execution config stores information on how the device should perform the execution,
+as well as how PennyLane should interact with the device. See <code class="xref py py-class docutils literal notranslate"><span class="pre">ExecutionConfig</span></code>
+for all available options and what they mean.</p>
+<p>An <code class="docutils literal notranslate"><span class="pre">ExecutionConfig</span></code> is constructed from arguments passed to the <code class="docutils literal notranslate"><span class="pre">QNode</span></code>, and this
+method allows the device to update the config object based on device-specific requirements
+or preferences. See <span class="xref std std-ref">execution_config</span> for more details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> (<em>ExecutionConfig</em>) – The initial ExecutionConfig object that describes the
+parameters needed to configure the execution behaviour.</p></li>
+<li><p><strong>circuit</strong> (<em>QuantumScript</em>) – The quantum circuit to customize the execution config for.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The updated ExecutionConfig object</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ExecutionConfig</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.StatevectorDevice.preprocess_transforms">
+<span class="sig-name descname"><span class="pre">preprocess_transforms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#StatevectorDevice.preprocess_transforms"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.StatevectorDevice.preprocess_transforms" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the compile pileline to preprocess a circuit for execution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – The execution configuration object</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A compile pileline that is called before execution</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>CompilePipeline</p>
+</dd>
+</dl>
+<p>The compile pileline is composed of a list of individual transforms, which may include:</p>
+<ul class="simple">
+<li><p>Decomposition of operations and measurements to what is supported by the device.</p></li>
+<li><p>Splitting a circuit with measurements of non-commuting observables or Hamiltonians into multiple executions.</p></li>
+<li><p>Splitting a circuit with batched parameters into multiple executions.</p></li>
+<li><p>Validation of wires, measurements, and observables.</p></li>
+<li><p>Gradient specific preprocessing, such as making sure trainable operators have generators.</p></li>
+</ul>
+<p><strong>Example</strong></p>
+<p>All transforms that are part of the preprocessing compile pileline need to respect the
+transform contract defined in <code class="xref py py-func docutils literal notranslate"><span class="pre">pennylane.transform()</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pennylane.tape</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuantumScriptBatch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pennylane.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostprocessingFn</span>
+
+<span class="nd">@qp</span><span class="o">.</span><span class="n">transform</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_preprocessing_transform</span><span class="p">(</span><span class="n">tape</span><span class="p">:</span> <span class="n">qp</span><span class="o">.</span><span class="n">tape</span><span class="o">.</span><span class="n">QuantumScript</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">QuantumScriptBatch</span><span class="p">,</span> <span class="n">PostprocessingFn</span><span class="p">]:</span>
+    <span class="c1"># e.g. valid the measurements, expand the tape for the hardware execution, ...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">blank_processing_fn</span><span class="p">(</span><span class="n">results</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="p">[</span><span class="n">tape</span><span class="p">],</span> <span class="n">processing_fn</span>
+</pre></div>
+</div>
+<p>A compile pileline can hold an arbitrary number of individual transforms:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">preprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+    <span class="n">program</span> <span class="o">=</span> <span class="n">CompilePipeline</span><span class="p">()</span>
+    <span class="n">program</span><span class="o">.</span><span class="n">add_transform</span><span class="p">(</span><span class="n">my_preprocessing_transform</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">program</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">transform()</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">CompilePipeline</span></code></p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">quantx_engine.pennylane_device.</span></span><span class="sig-name descname"><span class="pre">MPSDevice</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wires</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'global'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_bond</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-14</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conserve</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">svd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'direct'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#MPSDevice"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Device</span></code></p>
+<p>Matrix-product-state simulation on the native engine.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wires</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> or </em><em>sequence</em>) – the device’s wires in chain order, or None to take them from
+each circuit.</p></li>
+<li><p><strong>shots</strong> – the default shots, as on any PennyLane device.</p></li>
+<li><p><strong>seed</strong> – seeds the sampling of finite-shot measurements. <code class="docutils literal notranslate"><span class="pre">&quot;global&quot;</span></code> draws it from
+NumPy’s global state.</p></li>
+<li><p><strong>max_bond</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – the largest bond dimension, or None for no limit: exact, at whatever
+bond dimension the circuit needs.</p></li>
+<li><p><strong>cutoff</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Schmidt values below this fraction of a two-site tensor’s norm are
+dropped at every update.</p></li>
+<li><p><strong>conserve</strong> – “auto” uses the number of <a href="#id1"><span class="problematic" id="id2">``</span></a><a href="#id3"><span class="problematic" id="id4">|</span></a>1&gt;``s as an exact charge when every gate
+conserves it; True refuses a circuit that does not, and False never uses it.</p></li>
+<li><p><strong>svd</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – “direct”, or “gram”, a faster SVD by the eigensolve of the Gram matrix, which
+resolves Schmidt values only down to the square root of machine precision.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.name">
+<span class="sig-name descname"><span class="pre">name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'quantx.mps'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.short_name">
+<span class="sig-name descname"><span class="pre">short_name</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'quantx.mps'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.short_name" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.version">
+<span class="sig-name descname"><span class="pre">version</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'0.2.0'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.version" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.author">
+<span class="sig-name descname"><span class="pre">author</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'QuantX'</span></span><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.author" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.__init__">
+<span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wires</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shots</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">seed</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'global'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_bond</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cutoff</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1e-14</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">conserve</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'auto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">svd</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'direct'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#MPSDevice.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.__init__" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.execute">
+<span class="sig-name descname"><span class="pre">execute</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">circuits</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#MPSDevice.execute"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.execute" title="Link to this definition">¶</a></dt>
+<dd><p>Execute a circuit or a batch of circuits and turn it into results.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>circuits</strong> (<em>Union</em><em>[</em><em>QuantumTape</em><em>, </em><em>Sequence</em><em>[</em><em>QuantumTape</em><em>]</em><em>]</em>) – the quantum circuits to be executed</p></li>
+<li><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – a datastructure with additional information required for execution</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A numeric result of the computation.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>TensorLike, <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[TensorLike], <a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)">tuple</a>[TensorLike]]</p>
+</dd>
+</dl>
+<p><strong>Interface parameters:</strong></p>
+<p>The provided <code class="docutils literal notranslate"><span class="pre">circuits</span></code> may contain interface specific data-types like <code class="docutils literal notranslate"><span class="pre">torch.Tensor</span></code> or <code class="docutils literal notranslate"><span class="pre">jax.Array</span></code> when
+<code class="xref py py-attr docutils literal notranslate"><span class="pre">gradient_method</span></code> of <code class="docutils literal notranslate"><span class="pre">&quot;backprop&quot;</span></code> is requested. If the gradient method is not backpropagation,
+then only vanilla numpy parameters or builtins will be present in the circuits.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.setup_execution_config">
+<span class="sig-name descname"><span class="pre">setup_execution_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">circuit</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#MPSDevice.setup_execution_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.setup_execution_config" title="Link to this definition">¶</a></dt>
+<dd><p>Sets up an <code class="docutils literal notranslate"><span class="pre">ExecutionConfig</span></code> that configures the execution behaviour.</p>
+<p>The execution config stores information on how the device should perform the execution,
+as well as how PennyLane should interact with the device. See <code class="xref py py-class docutils literal notranslate"><span class="pre">ExecutionConfig</span></code>
+for all available options and what they mean.</p>
+<p>An <code class="docutils literal notranslate"><span class="pre">ExecutionConfig</span></code> is constructed from arguments passed to the <code class="docutils literal notranslate"><span class="pre">QNode</span></code>, and this
+method allows the device to update the config object based on device-specific requirements
+or preferences. See <span class="xref std std-ref">execution_config</span> for more details.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>config</strong> (<em>ExecutionConfig</em>) – The initial ExecutionConfig object that describes the
+parameters needed to configure the execution behaviour.</p></li>
+<li><p><strong>circuit</strong> (<em>QuantumScript</em>) – The quantum circuit to customize the execution config for.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The updated ExecutionConfig object</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>ExecutionConfig</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="quantx_engine.pennylane_device.MPSDevice.preprocess_transforms">
+<span class="sig-name descname"><span class="pre">preprocess_transforms</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">execution_config</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/quantx_engine/pennylane_device.html#MPSDevice.preprocess_transforms"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#quantx_engine.pennylane_device.MPSDevice.preprocess_transforms" title="Link to this definition">¶</a></dt>
+<dd><p>Returns the compile pileline to preprocess a circuit for execution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>execution_config</strong> (<em>ExecutionConfig</em>) – The execution configuration object</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A compile pileline that is called before execution</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>CompilePipeline</p>
+</dd>
+</dl>
+<p>The compile pileline is composed of a list of individual transforms, which may include:</p>
+<ul class="simple">
+<li><p>Decomposition of operations and measurements to what is supported by the device.</p></li>
+<li><p>Splitting a circuit with measurements of non-commuting observables or Hamiltonians into multiple executions.</p></li>
+<li><p>Splitting a circuit with batched parameters into multiple executions.</p></li>
+<li><p>Validation of wires, measurements, and observables.</p></li>
+<li><p>Gradient specific preprocessing, such as making sure trainable operators have generators.</p></li>
+</ul>
+<p><strong>Example</strong></p>
+<p>All transforms that are part of the preprocessing compile pileline need to respect the
+transform contract defined in <code class="xref py py-func docutils literal notranslate"><span class="pre">pennylane.transform()</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pennylane.tape</span><span class="w"> </span><span class="kn">import</span> <span class="n">QuantumScriptBatch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pennylane.typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostprocessingFn</span>
+
+<span class="nd">@qp</span><span class="o">.</span><span class="n">transform</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">my_preprocessing_transform</span><span class="p">(</span><span class="n">tape</span><span class="p">:</span> <span class="n">qp</span><span class="o">.</span><span class="n">tape</span><span class="o">.</span><span class="n">QuantumScript</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">QuantumScriptBatch</span><span class="p">,</span> <span class="n">PostprocessingFn</span><span class="p">]:</span>
+    <span class="c1"># e.g. valid the measurements, expand the tape for the hardware execution, ...</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">blank_processing_fn</span><span class="p">(</span><span class="n">results</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">results</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">return</span> <span class="p">[</span><span class="n">tape</span><span class="p">],</span> <span class="n">processing_fn</span>
+</pre></div>
+</div>
+<p>A compile pileline can hold an arbitrary number of individual transforms:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">preprocess</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+    <span class="n">program</span> <span class="o">=</span> <span class="n">CompilePipeline</span><span class="p">()</span>
+    <span class="n">program</span><span class="o">.</span><span class="n">add_transform</span><span class="p">(</span><span class="n">my_preprocessing_transform</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">program</span>
+</pre></div>
+</div>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><code class="xref py py-func docutils literal notranslate"><span class="pre">transform()</span></code> and <code class="xref py py-class docutils literal notranslate"><span class="pre">CompilePipeline</span></code></p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="quantx_engine.u1_circuit.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">quantx_engine.u1_circuit</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="quantx_engine.thermal.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">quantx_engine.thermal</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2026, QuantX Contributors
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            
+          </div>
+          <div class="right-details">
+            <div class="icons">
+              <a class="muted-link fa-brands fa-github fa-2x" href="https://github.com/ThisIsBarney/quantx" aria-label="GitHub"></a>
+              
+            </div>
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">quantx_engine.pennylane_device</a><ul>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.name"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.name</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.short_name"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.short_name</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.version"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.version</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.author"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.author</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.__init__"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.execute()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.supports_derivatives"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.supports_derivatives()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.compute_derivatives"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.compute_derivatives()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.execute_and_compute_derivatives"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.execute_and_compute_derivatives()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.setup_execution_config"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.setup_execution_config()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.StatevectorDevice.preprocess_transforms"><code class="docutils literal notranslate"><span class="pre">StatevectorDevice.preprocess_transforms()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice"><code class="docutils literal notranslate"><span class="pre">MPSDevice</span></code></a><ul>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.name"><code class="docutils literal notranslate"><span class="pre">MPSDevice.name</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.short_name"><code class="docutils literal notranslate"><span class="pre">MPSDevice.short_name</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.version"><code class="docutils literal notranslate"><span class="pre">MPSDevice.version</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.author"><code class="docutils literal notranslate"><span class="pre">MPSDevice.author</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.__init__"><code class="docutils literal notranslate"><span class="pre">MPSDevice.__init__()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.execute"><code class="docutils literal notranslate"><span class="pre">MPSDevice.execute()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.setup_execution_config"><code class="docutils literal notranslate"><span class="pre">MPSDevice.setup_execution_config()</span></code></a></li>
+<li><a class="reference internal" href="#quantx_engine.pennylane_device.MPSDevice.preprocess_transforms"><code class="docutils literal notranslate"><span class="pre">MPSDevice.preprocess_transforms()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=95e61db4"></script>
+    <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

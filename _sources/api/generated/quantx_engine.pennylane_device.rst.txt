@@ -1,0 +1,13 @@
+﻿quantx\_engine.pennylane\_device
+================================
+
+.. automodule:: quantx_engine.pennylane_device
+
+   
+   .. rubric:: Classes
+
+   .. autosummary::
+   
+      MPSDevice
+      StatevectorDevice
+   

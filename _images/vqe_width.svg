@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="830" height="452" viewBox="0 0 830 452" font-family="Segoe UI, Arial, sans-serif">
+<rect width="830" height="452" fill="white"/>
+<text x="415" y="28" text-anchor="middle" font-size="15.5" font-weight="bold" fill="#111">Width, not qubit count, is what a fermionic VQE pays for</text>
+<text x="415" y="48" text-anchor="middle" font-size="11.5" fill="#555">chain / ladder / cylinder at 12 qubits &#8212; same representation (d=4), same MPS length, same balanced cut, all lossless at &#967;=64</text>
+<text x="415" y="66" text-anchor="middle" font-size="10.5" fill="#777">each width optimised at its OWN optimum, identical search protocol; the wider ones get MORE angles per layer (W=1: 3, W=2: 4, W=3: 4)</text>
+<text x="236" y="102" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">relative energy error</text>
+<line x1="76" y1="340.0" x2="396" y2="340.0" stroke="#eee"/>
+<text x="69" y="344.0" text-anchor="end" font-size="10" fill="#444">10<tspan baseline-shift="super" font-size="8">-2</tspan></text>
+<line x1="76" y1="228.0" x2="396" y2="228.0" stroke="#eee"/>
+<text x="69" y="232.0" text-anchor="end" font-size="10" fill="#444">10<tspan baseline-shift="super" font-size="8">-1</tspan></text>
+<line x1="76" y1="116.0" x2="396" y2="116.0" stroke="#eee"/>
+<text x="69" y="120.0" text-anchor="end" font-size="10" fill="#444">10<tspan baseline-shift="super" font-size="8">0</tspan></text>
+<polyline points="76.0,134.7 121.7,239.7 167.4,254.6 213.1,272.6 258.9,286.2 304.6,317.4 350.3,321.7 396.0,339.4" fill="none" stroke="#1f77b4" stroke-width="2.2"/>
+<circle cx="76.0" cy="134.7" r="3.3" fill="#1f77b4"/>
+<circle cx="121.7" cy="239.7" r="3.3" fill="#1f77b4"/>
+<circle cx="167.4" cy="254.6" r="3.3" fill="#1f77b4"/>
+<circle cx="213.1" cy="272.6" r="3.3" fill="#1f77b4"/>
+<circle cx="258.9" cy="286.2" r="3.3" fill="#1f77b4"/>
+<circle cx="304.6" cy="317.4" r="3.3" fill="#1f77b4"/>
+<circle cx="350.3" cy="321.7" r="3.3" fill="#1f77b4"/>
+<circle cx="396.0" cy="339.4" r="3.3" fill="#1f77b4"/>
+<polyline points="76.0,145.8 121.7,188.5 167.4,214.9 213.1,258.9 258.9,268.1 304.6,283.1 350.3,289.4 396.0,298.8" fill="none" stroke="#ff7f0e" stroke-width="2.2"/>
+<circle cx="76.0" cy="145.8" r="3.3" fill="#ff7f0e"/>
+<circle cx="121.7" cy="188.5" r="3.3" fill="#ff7f0e"/>
+<circle cx="167.4" cy="214.9" r="3.3" fill="#ff7f0e"/>
+<circle cx="213.1" cy="258.9" r="3.3" fill="#ff7f0e"/>
+<circle cx="258.9" cy="268.1" r="3.3" fill="#ff7f0e"/>
+<circle cx="304.6" cy="283.1" r="3.3" fill="#ff7f0e"/>
+<circle cx="350.3" cy="289.4" r="3.3" fill="#ff7f0e"/>
+<circle cx="396.0" cy="298.8" r="3.3" fill="#ff7f0e"/>
+<polyline points="76.0,161.6 121.7,195.1 167.4,217.0 213.1,225.0 258.9,255.0 304.6,258.0 350.3,276.2 396.0,277.3" fill="none" stroke="#d62728" stroke-width="2.2"/>
+<circle cx="76.0" cy="161.6" r="3.3" fill="#d62728"/>
+<circle cx="121.7" cy="195.1" r="3.3" fill="#d62728"/>
+<circle cx="167.4" cy="217.0" r="3.3" fill="#d62728"/>
+<circle cx="213.1" cy="225.0" r="3.3" fill="#d62728"/>
+<circle cx="258.9" cy="255.0" r="3.3" fill="#d62728"/>
+<circle cx="304.6" cy="258.0" r="3.3" fill="#d62728"/>
+<circle cx="350.3" cy="276.2" r="3.3" fill="#d62728"/>
+<circle cx="396.0" cy="277.3" r="3.3" fill="#d62728"/>
+<text x="638" y="102" text-anchor="middle" font-size="12.5" font-weight="bold" fill="#222">entropy across the balanced 6|6-qubit cut</text>
+<line x1="478" y1="340.0" x2="798" y2="340.0" stroke="#eee"/>
+<text x="471" y="344.0" text-anchor="end" font-size="10" fill="#444">0.0</text>
+<line x1="478" y1="299.9" x2="798" y2="299.9" stroke="#eee"/>
+<text x="471" y="303.9" text-anchor="end" font-size="10" fill="#444">0.5</text>
+<line x1="478" y1="259.9" x2="798" y2="259.9" stroke="#eee"/>
+<text x="471" y="263.9" text-anchor="end" font-size="10" fill="#444">1.0</text>
+<line x1="478" y1="219.8" x2="798" y2="219.8" stroke="#eee"/>
+<text x="471" y="223.8" text-anchor="end" font-size="10" fill="#444">1.5</text>
+<line x1="478" y1="179.8" x2="798" y2="179.8" stroke="#eee"/>
+<text x="471" y="183.8" text-anchor="end" font-size="10" fill="#444">2.0</text>
+<line x1="478" y1="139.7" x2="798" y2="139.7" stroke="#eee"/>
+<text x="471" y="143.7" text-anchor="end" font-size="10" fill="#444">2.5</text>
+<polyline points="478.0,224.6 523.7,231.5 569.4,232.8 615.1,240.6 660.9,246.6 706.6,247.3 752.3,247.3 798.0,247.1" fill="none" stroke="#1f77b4" stroke-width="2.2"/>
+<circle cx="478.0" cy="224.6" r="3.3" fill="#1f77b4"/>
+<circle cx="523.7" cy="231.5" r="3.3" fill="#1f77b4"/>
+<circle cx="569.4" cy="232.8" r="3.3" fill="#1f77b4"/>
+<circle cx="615.1" cy="240.6" r="3.3" fill="#1f77b4"/>
+<circle cx="660.9" cy="246.6" r="3.3" fill="#1f77b4"/>
+<circle cx="706.6" cy="247.3" r="3.3" fill="#1f77b4"/>
+<circle cx="752.3" cy="247.3" r="3.3" fill="#1f77b4"/>
+<circle cx="798.0" cy="247.1" r="3.3" fill="#1f77b4"/>
+<polyline points="478.0,150.2 523.7,153.9 569.4,161.4 615.1,168.8 660.9,169.3 706.6,169.0 752.3,169.1 798.0,169.9" fill="none" stroke="#ff7f0e" stroke-width="2.2"/>
+<circle cx="478.0" cy="150.2" r="3.3" fill="#ff7f0e"/>
+<circle cx="523.7" cy="153.9" r="3.3" fill="#ff7f0e"/>
+<circle cx="569.4" cy="161.4" r="3.3" fill="#ff7f0e"/>
+<circle cx="615.1" cy="168.8" r="3.3" fill="#ff7f0e"/>
+<circle cx="660.9" cy="169.3" r="3.3" fill="#ff7f0e"/>
+<circle cx="706.6" cy="169.0" r="3.3" fill="#ff7f0e"/>
+<circle cx="752.3" cy="169.1" r="3.3" fill="#ff7f0e"/>
+<circle cx="798.0" cy="169.9" r="3.3" fill="#ff7f0e"/>
+<polyline points="478.0,228.9 523.7,222.5 569.4,219.1 615.1,219.6 660.9,218.0 706.6,217.3 752.3,217.5 798.0,217.8" fill="none" stroke="#d62728" stroke-width="2.2"/>
+<circle cx="478.0" cy="228.9" r="3.3" fill="#d62728"/>
+<circle cx="523.7" cy="222.5" r="3.3" fill="#d62728"/>
+<circle cx="569.4" cy="219.1" r="3.3" fill="#d62728"/>
+<circle cx="615.1" cy="219.6" r="3.3" fill="#d62728"/>
+<circle cx="660.9" cy="218.0" r="3.3" fill="#d62728"/>
+<circle cx="706.6" cy="217.3" r="3.3" fill="#d62728"/>
+<circle cx="752.3" cy="217.5" r="3.3" fill="#d62728"/>
+<circle cx="798.0" cy="217.8" r="3.3" fill="#d62728"/>
+<line x1="76.0" y1="340" x2="76.0" y2="345" stroke="#444"/>
+<text x="76.0" y="359" text-anchor="middle" font-size="10" fill="#444">1</text>
+<line x1="121.7" y1="340" x2="121.7" y2="345" stroke="#444"/>
+<text x="121.7" y="359" text-anchor="middle" font-size="10" fill="#444">2</text>
+<line x1="167.4" y1="340" x2="167.4" y2="345" stroke="#444"/>
+<text x="167.4" y="359" text-anchor="middle" font-size="10" fill="#444">3</text>
+<line x1="213.1" y1="340" x2="213.1" y2="345" stroke="#444"/>
+<text x="213.1" y="359" text-anchor="middle" font-size="10" fill="#444">4</text>
+<line x1="258.9" y1="340" x2="258.9" y2="345" stroke="#444"/>
+<text x="258.9" y="359" text-anchor="middle" font-size="10" fill="#444">5</text>
+<line x1="304.6" y1="340" x2="304.6" y2="345" stroke="#444"/>
+<text x="304.6" y="359" text-anchor="middle" font-size="10" fill="#444">6</text>
+<line x1="350.3" y1="340" x2="350.3" y2="345" stroke="#444"/>
+<text x="350.3" y="359" text-anchor="middle" font-size="10" fill="#444">7</text>
+<line x1="396.0" y1="340" x2="396.0" y2="345" stroke="#444"/>
+<text x="396.0" y="359" text-anchor="middle" font-size="10" fill="#444">8</text>
+<line x1="76" y1="116" x2="76" y2="340" stroke="#444" stroke-width="1.2"/>
+<line x1="76" y1="340" x2="396" y2="340" stroke="#444" stroke-width="1.2"/>
+<text x="236" y="378.0" text-anchor="middle" font-size="11.5" fill="#222">circuit depth p</text>
+<line x1="478.0" y1="340" x2="478.0" y2="345" stroke="#444"/>
+<text x="478.0" y="359" text-anchor="middle" font-size="10" fill="#444">1</text>
+<line x1="523.7" y1="340" x2="523.7" y2="345" stroke="#444"/>
+<text x="523.7" y="359" text-anchor="middle" font-size="10" fill="#444">2</text>
+<line x1="569.4" y1="340" x2="569.4" y2="345" stroke="#444"/>
+<text x="569.4" y="359" text-anchor="middle" font-size="10" fill="#444">3</text>
+<line x1="615.1" y1="340" x2="615.1" y2="345" stroke="#444"/>
+<text x="615.1" y="359" text-anchor="middle" font-size="10" fill="#444">4</text>
+<line x1="660.9" y1="340" x2="660.9" y2="345" stroke="#444"/>
+<text x="660.9" y="359" text-anchor="middle" font-size="10" fill="#444">5</text>
+<line x1="706.6" y1="340" x2="706.6" y2="345" stroke="#444"/>
+<text x="706.6" y="359" text-anchor="middle" font-size="10" fill="#444">6</text>
+<line x1="752.3" y1="340" x2="752.3" y2="345" stroke="#444"/>
+<text x="752.3" y="359" text-anchor="middle" font-size="10" fill="#444">7</text>
+<line x1="798.0" y1="340" x2="798.0" y2="345" stroke="#444"/>
+<text x="798.0" y="359" text-anchor="middle" font-size="10" fill="#444">8</text>
+<line x1="478" y1="116" x2="478" y2="340" stroke="#444" stroke-width="1.2"/>
+<line x1="478" y1="340" x2="798" y2="340" stroke="#444" stroke-width="1.2"/>
+<text x="638" y="378.0" text-anchor="middle" font-size="11.5" fill="#222">circuit depth p</text>
+<line x1="92" y1="124" x2="116" y2="124" stroke="#1f77b4" stroke-width="2.6"/>
+<circle cx="104" cy="124" r="3.3" fill="#1f77b4"/>
+<text x="123" y="128" font-size="11" fill="#333">chain W=1 (Lx=6)</text>
+<line x1="92" y1="142" x2="116" y2="142" stroke="#ff7f0e" stroke-width="2.6"/>
+<circle cx="104" cy="142" r="3.3" fill="#ff7f0e"/>
+<text x="123" y="146" font-size="11" fill="#333">ladder W=2 (Lx=3)</text>
+<line x1="92" y1="160" x2="116" y2="160" stroke="#d62728" stroke-width="2.6"/>
+<circle cx="104" cy="160" r="3.3" fill="#d62728"/>
+<text x="123" y="164" font-size="11" fill="#333">cylinder W=3 (Lx=2)</text>
+<text x="415" y="424" text-anchor="middle" font-size="11" fill="#0a7d28" font-weight="bold">At depth 8 the error grows monotonically with width, &#215;3.6 from W=1 to W=3. Entropy across the balanced cut does NOT order the same way &#8212; peak at W=2.</text>
+<text x="415" y="442" text-anchor="middle" font-size="9.5" fill="#777" font-style="italic">Same qubits, same simulator, same optimiser, more variational freedom for the wider lattices &#8212; only the graph differs. At 12 qubits the W=2 balanced cut slices a rung; the W=3 one is a clean column boundary.</text>
+</svg>
