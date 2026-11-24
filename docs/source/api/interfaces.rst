@@ -23,22 +23,31 @@ kernel on the engine's block-sparse MPS. A Python program selects it as any othe
     cudaq.set_target("quantx")
 
 or, unchanged, with ``CUDAQ_DEFAULT_SIMULATOR=quantx`` in its environment, or ``--target
-quantx`` on its command line when it calls ``cudaq.parse_args()``.
+quantx`` on its command line when it calls ``cudaq.parse_args()``. A C++ program is compiled
+for it::
 
-It is built against an existing CUDA-Q installation, so far tested on Linux (from pip,
-``cudaq-core`` carries the headers and CMake files a simulator builds against), and installed
-into it::
+    nvq++ --target quantx program.cpp -o program
+
+It is built against an existing CUDA-Q installation and installed into it, so far on Linux:
+for Python, CUDA-Q's pip packages (``cudaq-core`` carries the headers and CMake files a
+simulator builds against); for C++, an installation with ``nvq++``, such as CUDA-Q's container::
 
     cmake -S . -B build -DQX_ENABLE_CUDAQ=ON -DNVQIR_DIR=<cudaq>/lib/cmake/nvqir
     cmake --build build --target nvqir-quantx
     cmake --install build
 
 The install puts ``libnvqir-quantx`` and the ``libquantx`` it calls beside CUDA-Q's own
-simulators, the one place CUDA-Q 0.17 loads a simulator from, and ``quantx.yml`` into
-``plugins/quantx/targets`` beside them. From pip, ``NVQIR_DIR`` is ``lib/cmake/nvqir`` under
-``site-packages/cudaq_core/cudaq/core``. The target declares the CUDA-Q version it was built
-for, which CMake takes from the CUDA-Q that Python imports (``QX_CUDAQ_VERSION`` overrides it);
-under another version CUDA-Q warns, as it does for any plugin.
+simulators, the one place CUDA-Q 0.17 loads a simulator from, and the target's description into
+``plugins/quantx/targets`` beside them. ``nvq++`` takes a target from outside CUDA-Q's catalogue
+only as a compiled description, ``quantx.so``, which the build generates with CUDA-Q's
+``cudaq-target-db-gen``; that ships with ``nvq++`` (in CUDA-Q's installer and container), and
+Python reads the compiled description too. The pip packages have neither tool, and there the
+description is ``quantx.yml``, which only Python reads. From
+pip, ``NVQIR_DIR`` is ``lib/cmake/nvqir`` under ``site-packages/cudaq_core/cudaq/core``; in
+CUDA-Q's container, ``/opt/nvidia/cudaq/lib/cmake/nvqir``. The target declares the CUDA-Q version
+it was built for, which CMake takes from the installation's ``nvq++``, or else from the CUDA-Q
+that Python imports (``QX_CUDAQ_VERSION`` overrides it); under another version CUDA-Q warns, as
+it does for any plugin.
 
 The gates of a kernel are kept until a result is needed, then fused, greedily, into clusters of
 at most two qubits that each conserve the number of qubits in ``|1>``. When every cluster closes,
@@ -71,7 +80,11 @@ initial state vector and noise models are not supported. The options are environ
 check the target against CUDA-Q's own CPU state vector, ``qpp-cpu``, in CI: amplitudes and exact
 expectation values to 1e-10, sampled distributions, mid-circuit measurement and reset, gates
 with many controls, and the examples of CUDA-Q's documentation; at 40 to 100 qubits, answers
-known in closed form.
+known in closed form. ``test_cudaq_cpp.py`` compiles one C++ program with ``nvq++`` for
+``quantx`` and for ``qpp-cpu`` and compares what the two print: amplitudes, exact expectation
+values and samples, and at 32 qubits under a bond cap of 8 a number of qubits in ``|1>`` that
+stays exact. CI runs it in CUDA-Q's container, by ``scripts/cudaq_cpp_check.sh``, and the two
+Python files again there, on the compiled description.
 
 Qiskit V2 Primitives
 ---------------------

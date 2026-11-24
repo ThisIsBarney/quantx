@@ -1,10 +1,13 @@
 name: CUDA-Q target
 
-# M14: the CUDA-Q target "quantx" (src/cudaq/), built against CUDA-Q's pip packages and run
-# against CUDA-Q's own CPU state vector, qpp-cpu (python/quantx_engine/tests/test_cudaq_target.py,
-# and test_cudaq_examples.py for the examples of CUDA-Q's documentation).
-# cudaq-core carries the headers and the CMake configuration a native backend builds against;
-# cuda-quantum-cu12 adds the Python front end. Everything runs on the runner's CPU.
+# M14: the CUDA-Q target "quantx" (src/cudaq/), run against CUDA-Q's own CPU state vector,
+# qpp-cpu, from both of CUDA-Q's languages. Python: built against CUDA-Q's pip packages
+# (python/quantx_engine/tests/test_cudaq_target.py, and test_cudaq_examples.py for the examples
+# of CUDA-Q's documentation); cudaq-core carries the headers and the CMake configuration a native
+# backend builds against, and cuda-quantum-cu12 adds the Python front end. C++: built in CUDA-Q's
+# container, which has nvq++ (scripts/cudaq_cpp_check.sh, test_cudaq_cpp.py), where the Python
+# tests run again, on the compiled description of the target nvq++ needs. Everything runs on the
+# runner's CPU.
 
 on:
   push:
@@ -15,6 +18,8 @@ on:
       - "CMakeLists.txt"
       - "python/quantx_engine/tests/test_cudaq_target.py"
       - "python/quantx_engine/tests/test_cudaq_examples.py"
+      - "python/quantx_engine/tests/test_cudaq_cpp.py"
+      - "scripts/cudaq_cpp_check.sh"
       - ".github/workflows/cudaq-target.yml"
   pull_request:
     branches: ["master", "main"]
@@ -24,6 +29,8 @@ on:
       - "CMakeLists.txt"
       - "python/quantx_engine/tests/test_cudaq_target.py"
       - "python/quantx_engine/tests/test_cudaq_examples.py"
+      - "python/quantx_engine/tests/test_cudaq_cpp.py"
+      - "scripts/cudaq_cpp_check.sh"
       - ".github/workflows/cudaq-target.yml"
   workflow_dispatch:
 
@@ -76,3 +83,21 @@ jobs:
           python -m pytest -v \
             python/quantx_engine/tests/test_cudaq_target.py \
             python/quantx_engine/tests/test_cudaq_examples.py
+
+  cudaq-container:
+    # nvq++ --target quantx: CUDA-Q's C++ toolchain is in its container, not in the pip packages.
+    name: CUDA-Q target in CUDA-Q's container, C++ and Python (M14)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull CUDA-Q's container
+        run: docker pull nvcr.io/nvidia/quantum/cuda-quantum:cu12-0.17.0
+
+      - name: Programs compiled by nvq++, and Python kernels, on quantx against qpp-cpu
+        # The container's entry point runs its command with bash.
+        run: |
+          docker run --rm --user root -v "$PWD":/src -w /src \
+            nvcr.io/nvidia/quantum/cuda-quantum:cu12-0.17.0 \
+            scripts/cudaq_cpp_check.sh
