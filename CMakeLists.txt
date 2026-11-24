@@ -292,6 +292,69 @@ if(DEFINED QX_WHEEL_LIB_DIR)
   message(STATUS "qx_capi wheel install dir: ${QX_WHEEL_LIB_DIR}")
 endif()
 
+# ── CUDA-Q target "quantx" (M14) ──────────────────────────────────────────────
+# An NVQIR circuit simulator on the block-sparse MPS, so that a CUDA-Q kernel runs on the
+# engine with cudaq.set_target("quantx"). CUDA-Q runs on Linux and macOS. Configure with
+# -DQX_ENABLE_CUDAQ=ON -DNVQIR_DIR=<cudaq>/lib/cmake/nvqir (from pip: the cmake/nvqir directory
+# under site-packages/cudaq_core); `cmake --install` then puts libnvqir-quantx.so and the
+# libquantx.so it calls beside CUDA-Q's own simulators, the only place CUDA-Q 0.17 loads one
+# from, and the target's quantx.yml into CUDA-Q's plugins/quantx/targets beside them.
+option(QX_ENABLE_CUDAQ "Build the CUDA-Q target 'quantx' (an NVQIR simulator; needs CUDA-Q)" OFF)
+if(QX_ENABLE_CUDAQ)
+  find_package(NVQIR REQUIRED)
+  set(QX_CUDAQ_LIB_DIR "" CACHE PATH
+      "The directory of CUDA-Q's libcudaq and simulators (default: found from NVQIR_DIR)")
+  set(_qx_cudaq_lib_dir "${QX_CUDAQ_LIB_DIR}")
+  if(NOT _qx_cudaq_lib_dir)
+    # The installer keeps them with libnvqir; the pip wheels in site-packages/lib, four levels
+    # above cudaq_core's.
+    foreach(_dir "${NVQIR_SIMULATOR_PLUGIN_PATH}" "${NVQIR_SIMULATOR_PLUGIN_PATH}/../../../../lib")
+      get_filename_component(_dir "${_dir}" ABSOLUTE)
+      if(EXISTS "${_dir}/libcudaq${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        set(_qx_cudaq_lib_dir "${_dir}")
+        break()
+      endif()
+    endforeach()
+  endif()
+  if(NOT _qx_cudaq_lib_dir)
+    message(FATAL_ERROR "No libcudaq next to ${NVQIR_SIMULATOR_PLUGIN_PATH}: set QX_CUDAQ_LIB_DIR "
+                        "to the directory that holds CUDA-Q's libcudaq and libnvqir-*")
+  endif()
+  # The version the target declares, as CUDA-Q warns on a target built for another one: the
+  # CUDA-Q that Python imports, unless given.
+  set(QX_CUDAQ_VERSION "" CACHE STRING "The CUDA-Q version the target is built for")
+  set(_qx_cudaq_version "${QX_CUDAQ_VERSION}")
+  if(NOT _qx_cudaq_version)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+      execute_process(
+        COMMAND "${Python3_EXECUTABLE}" -c
+          "import re, cudaq; print(re.search(r'Version ([0-9][0-9.]*)', cudaq.__version__).group(1))"
+        OUTPUT_VARIABLE _qx_cudaq_version OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
+  endif()
+  if(_qx_cudaq_version)
+    set(QX_CUDAQ_VERSION_LINE "cudaq-version: ${_qx_cudaq_version}")
+  else()
+    set(QX_CUDAQ_VERSION_LINE "")
+    message(WARNING "The CUDA-Q version was not found (set QX_CUDAQ_VERSION): CUDA-Q will warn "
+                    "that the target was built for an unknown version")
+  endif()
+  configure_file(src/cudaq/quantx.yml.in "${CMAKE_BINARY_DIR}/quantx.yml" @ONLY)
+  add_library(nvqir-quantx SHARED src/cudaq/quantx_simulator.cpp)
+  target_link_libraries(nvqir-quantx PRIVATE nvqir::nvqir qx_capi nlohmann_json::nlohmann_json)
+  set_target_properties(nvqir-quantx PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+    VISIBILITY_INLINES_HIDDEN YES
+    INSTALL_RPATH "$ORIGIN")
+  qx_set_config_output_dirs(nvqir-quantx)
+  get_filename_component(_qx_cudaq_plugin_root "${_qx_cudaq_lib_dir}/../plugins/quantx" ABSOLUTE)
+  install(TARGETS nvqir-quantx qx_capi LIBRARY DESTINATION "${_qx_cudaq_lib_dir}")
+  install(FILES "${CMAKE_BINARY_DIR}/quantx.yml" DESTINATION "${_qx_cudaq_plugin_root}/targets")
+  message(STATUS "CUDA-Q target quantx (CUDA-Q ${_qx_cudaq_version}): libraries to "
+                 "${_qx_cudaq_lib_dir}, target to ${_qx_cudaq_plugin_root}/targets")
+endif()
+
 add_executable(qx_smoke tests/test_engine.cpp)
 target_link_libraries(qx_smoke PRIVATE qx_core)
 if(NOT WIN32)

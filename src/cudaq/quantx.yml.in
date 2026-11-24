@@ -1,0 +1,12 @@
+# The CUDA-Q target "quantx" (M14): kernels on QuantX's block-sparse MPS, with the number of
+# qubits in |1> as an exact charge when the kernel conserves it. See quantx_simulator.cpp for
+# its options (QUANTX_MAX_BOND, QUANTX_CUTOFF, QUANTX_CONSERVE, QUANTX_SVD, QUANTX_VERBOSE).
+# CMake writes the CUDA-Q version below, the one the target was built against.
+
+version: 1
+name: quantx
+description: "QuantX block-sparse MPS: a particle-number-conserving kernel keeps the number exactly"
+@QX_CUDAQ_VERSION_LINE@
+config:
+  nvqir-simulation-backend: quantx
+  preprocessor-defines: ["-D CUDAQ_SIMULATION_SCALAR_FP64"]

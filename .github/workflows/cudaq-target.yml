@@ -1,0 +1,72 @@
+name: CUDA-Q target
+
+# M14: the CUDA-Q target "quantx" (src/cudaq/), built against CUDA-Q's pip packages and run
+# against CUDA-Q's own CPU state vector, qpp-cpu (python/quantx_engine/tests/test_cudaq_target.py).
+# cudaq-core carries the headers and the CMake configuration a native backend builds against;
+# cuda-quantum-cu12 adds the Python front end. Everything runs on the runner's CPU.
+
+on:
+  push:
+    branches: ["master", "main"]
+    paths:
+      - "src/**"
+      - "include/**"
+      - "CMakeLists.txt"
+      - "python/quantx_engine/tests/test_cudaq_target.py"
+      - ".github/workflows/cudaq-target.yml"
+  pull_request:
+    branches: ["master", "main"]
+    paths:
+      - "src/**"
+      - "include/**"
+      - "CMakeLists.txt"
+      - "python/quantx_engine/tests/test_cudaq_target.py"
+      - ".github/workflows/cudaq-target.yml"
+  workflow_dispatch:
+
+jobs:
+  cudaq-target:
+    name: CUDA-Q target (M14)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install CUDA-Q and the build tools
+        # Without the GPU libraries cuda-quantum-cu12 depends on (cuStateVec, cuTensorNet, CuPy,
+        # cuBLAS, ...): the job runs on the CPU, and qpp-cpu and quantx need none of them.
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake g++ ninja-build libgomp1
+          python -m pip install --no-deps "cuda-quantum-cu12==0.17.0" "cudaq-core==0.17.0"
+          python -m pip install numpy scipy astpretty requests pytest
+
+      - name: Configure against CUDA-Q
+        run: |
+          NVQIR_CONFIG="$(find "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" \
+                          -name NVQIRConfig.cmake | head -n1)"
+          echo "NVQIR config: $NVQIR_CONFIG"
+          test -n "$NVQIR_CONFIG"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DQX_ENABLE_CUDA=OFF \
+            -DQX_ENABLE_CUDAQ=ON \
+            -DNVQIR_DIR="$(dirname "$NVQIR_CONFIG")"
+
+      - name: Build the target
+        run: cmake --build build --target nvqir-quantx --parallel $(nproc)
+
+      - name: Install it into CUDA-Q
+        run: cmake --install build
+
+      - name: CUDA-Q kernels on quantx against qpp-cpu
+        # QX_REQUIRE_CUDAQ=1: a target that did not install fails the job instead of
+        # skipping the tests.
+        env:
+          QX_REQUIRE_CUDAQ: "1"
+        run: python -m pytest python/quantx_engine/tests/test_cudaq_target.py -v
