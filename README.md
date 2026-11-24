@@ -18,13 +18,16 @@ checked. Everything else in the package is marked experimental below.
 | The gradient of an HVA circuit's energy in every angle, by the adjoint method: one pass back through the circuit, with no circuit per angle | `hva.circuit(..., gradient=True)` | the exact gradient of the same independent state vector, to 1e-10 with `svd="direct"` (1e-6 on the default, faster route, whose rounding puts it a few 1e-9 off), and central differences of the engine's own energy, to 1e-8; from a product start |
 | Finite-temperature statics, the dynamical structure factor S(k, ω, T) and the optical conductivity σ(ω, T) of the XXZ, spin-1 and Hubbard chains | `thermal.statics`, `thermal.structure_factor(...).spectrum()`, `thermal.current_correlation(...).conductivity()` | exact diagonalisation of the whole Hilbert space, to the second-order Trotter error of the steps: below 1e-3 at the default step 0.05, and falling by 4 at half the step; the transforms against Lehmann sums to 1e-8 |
 | PennyLane circuits on the engine's state vector, up to 25 qubits, with adjoint gradients run in the engine | `qml.device("quantx.statevector", wires=n)` | PennyLane's own device test suite, analytic and at finite shots, and its demos; every gate, measurement and gradient against `default.qubit`; the kernels against an independent state vector to 1e-12, and the backward pass against central differences to 1e-8 |
+| CUDA-Q kernels on the engine's block-sparse MPS, at any width, with the number of `\|1>`s as an exact charge when CUDA-Q's decomposed gates fuse into conserving ones | `cudaq.set_target("quantx")`, or from C++ `nvq++ --target quantx` (built into a CUDA-Q 0.17 installation with `-DQX_ENABLE_CUDAQ=ON`; tested on Linux) | CUDA-Q's own CPU state vector, `qpp-cpu`: amplitudes and exact expectation values to 1e-10, sampled distributions, mid-circuit measurement and reset, gates with many controls, and the examples of CUDA-Q's documentation; at 40 to 100 qubits, answers known in closed form; from C++, a program compiled by `nvq++` for both |
 | PennyLane circuits on the engine's block-sparse MPS, at any width, with the number of `\|1>`s as an exact charge when the gates conserve it | `qml.device("quantx.mps", wires=n, max_bond=chi)` | PennyLane's own device test suite, analytic and at finite shots, and its demos; at an exact bond, gates and measurements against `default.qubit`, and the kernels against an independent state vector to 1e-11, with and without the charge; at 100 qubits, answers known in closed form |
 
 These checks run in CI against a fresh Linux build of the engine (`test_models_ed.py`,
 `test_hva_statevector.py`, `test_hva_gradient.py`, `test_thermal_ed.py`,
 `test_pennylane_statevector.py`, `test_pennylane_mps.py` and `test_pennylane_demos.py` in
-`python/quantx_engine/tests/`). The macOS and Windows wheels are checked only for loading
-the engine.
+`python/quantx_engine/tests/`), and the CUDA-Q target's against CUDA-Q 0.17 from pip
+(`test_cudaq_target.py`, `test_cudaq_examples.py`) and in CUDA-Q's container, from C++ as well
+(`test_cudaq_cpp.py`). The macOS and Windows wheels are checked
+only for loading the engine.
 
 ## Install
 

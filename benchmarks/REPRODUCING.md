@@ -82,6 +82,13 @@ PennyLane's own devices are the other comparison, and they have no TeNPy in them
 They need `pennylane>=0.45`, which brings `lightning.qubit`, `quimb` for `default.tensor`, and
 an install of this package, for the entry points of the devices.
 
+| Claim, and where | Script | QuantX side |
+|---|---|---|
+| The CUDA-Q target `quantx` on a Trotterised XXZ chain written with `exp_pauli`, two threads: with the charge it recovers by fusion, 0.40 and 1.53 s at caps 64 and 128 on 48 qubits and 0.91 s at cap 64 on 96, against 5.70, 28.95 and 12.98 s for the same kernel on the same engine without it (7–19× across the table); at 16 qubits and an exact bond, the energy matches `qpp-cpu` to 1.2e-12 ([CHANGELOG](../CHANGELOG.md), M14) | `cudaq_target.py` | CUDA-Q target |
+
+It needs CUDA-Q 0.17 with the target installed (`cmake -DQX_ENABLE_CUDAQ=ON`, then `cmake
+--install`; see the CUDA-Q section of the API reference), so Linux.
+
 ## Quick checks
 
 Each runs its script end to end at a small size, in seconds unless noted; the
@@ -102,6 +109,7 @@ BENCH_PLAN=12:32 BENCH_STEPS=5 python benchmarks/gpu_vs_tenpy_quench.py   # N:ch
 BENCH_N=8 BENCH_PLAN=32 python benchmarks/hubbard_dmrg_vs_itensor.py     # minutes: Julia
 python benchmarks/pennylane_gradient.py --quick
 python benchmarks/pennylane_mps.py --quick
+python benchmarks/cudaq_target.py --quick
 ```
 
 TeNPy stops a ground-state run whose truncation error passes its `max_trunc_err`

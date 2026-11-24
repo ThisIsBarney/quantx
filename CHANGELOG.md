@@ -13,6 +13,33 @@ bug-fixes and packaging corrections only.
 
 ### Added
 
+- **The CUDA-Q target `quantx`** (M14): `cudaq.set_target("quantx")` runs a CUDA-Q kernel on the
+  block-sparse MPS, and so do `CUDAQ_DEFAULT_SIMULATOR=quantx` and `--target quantx` with
+  `cudaq.parse_args()`; from C++, `nvq++ --target quantx` compiles a program for it. It is an
+  NVQIR simulator (`src/cudaq/`), built against a CUDA-Q 0.17 installation with
+  `-DQX_ENABLE_CUDAQ=ON` and installed into it by `cmake --install`; from pip, `cudaq-core`
+  carries what it builds against. `nvq++` takes a target from outside CUDA-Q's catalogue only as
+  a compiled description, which the build generates with CUDA-Q's `cudaq-target-db-gen` where
+  the installation has it (it ships with `nvq++`, not with the pip packages, which get a YAML
+  description for Python). CUDA-Q hands a simulator its gates decomposed (an
+  `exp_pauli` into basis changes, a CNOT ladder and an Rz), so the target fuses them, greedily,
+  into clusters of at most two qubits that each conserve the number of qubits in `|1>`: when every
+  cluster closes, that number is an exact charge and the tensors split into blocks; when one
+  cannot, the kernel runs on the same kernels without it. Either way, consecutive gates within
+  two qubits are merged into one truncating update. `observe` evaluates every term as a Pauli
+  string in the engine; `sample` and `run` draw by perfect sampling; mid-circuit measurement,
+  reset and qubits allocated after a measurement keep the charge; a gate on one target may have
+  up to eight controls; `get_state` reads up to 24 qubits. The options are environment variables
+  (`QUANTX_MAX_BOND`, `QUANTX_CUTOFF`, `QUANTX_CONSERVE`, `QUANTX_SVD`, `QUANTX_VERBOSE`). A new
+  CI workflow, `cudaq-target.yml`, checks it against CUDA-Q's `qpp-cpu`: amplitudes and exact
+  expectation values to 1e-10, sampled distributions, mid-circuit measurement and reset, the
+  examples of CUDA-Q's documentation, and at 40 to 100 qubits answers known in closed form; from
+  pip, and in CUDA-Q's container, where a C++ program compiled by `nvq++` for both targets
+  prints the same amplitudes, expectation values and samples. On a
+  Trotterised XXZ chain written with `exp_pauli`, on two threads, the charge takes the kernel
+  from 5.70 to 0.40 s at a bond cap of 64 on 48 qubits, and from 28.95 to 1.53 s at 128; 7–19×
+  across `benchmarks/cudaq_target.py`, at the same bond and truncation.
+
 - **`quantx.statevector` runs on the native engine** (M15): `qml.device("quantx.statevector",
   wires=n)`, up to 25 qubits. The engine evolves the state and PennyLane's own code measures
   it, so every measurement and shot setting behaves as on `default.qubit`. A gate on up to
