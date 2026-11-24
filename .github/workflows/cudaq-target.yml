@@ -1,7 +1,8 @@
 name: CUDA-Q target
 
 # M14: the CUDA-Q target "quantx" (src/cudaq/), built against CUDA-Q's pip packages and run
-# against CUDA-Q's own CPU state vector, qpp-cpu (python/quantx_engine/tests/test_cudaq_target.py).
+# against CUDA-Q's own CPU state vector, qpp-cpu (python/quantx_engine/tests/test_cudaq_target.py,
+# and test_cudaq_examples.py for the examples of CUDA-Q's documentation).
 # cudaq-core carries the headers and the CMake configuration a native backend builds against;
 # cuda-quantum-cu12 adds the Python front end. Everything runs on the runner's CPU.
 
@@ -13,6 +14,7 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - "python/quantx_engine/tests/test_cudaq_target.py"
+      - "python/quantx_engine/tests/test_cudaq_examples.py"
       - ".github/workflows/cudaq-target.yml"
   pull_request:
     branches: ["master", "main"]
@@ -21,6 +23,7 @@ on:
       - "include/**"
       - "CMakeLists.txt"
       - "python/quantx_engine/tests/test_cudaq_target.py"
+      - "python/quantx_engine/tests/test_cudaq_examples.py"
       - ".github/workflows/cudaq-target.yml"
   workflow_dispatch:
 
@@ -69,4 +72,7 @@ jobs:
         # skipping the tests.
         env:
           QX_REQUIRE_CUDAQ: "1"
-        run: python -m pytest python/quantx_engine/tests/test_cudaq_target.py -v
+        run: |
+          python -m pytest -v \
+            python/quantx_engine/tests/test_cudaq_target.py \
+            python/quantx_engine/tests/test_cudaq_examples.py
